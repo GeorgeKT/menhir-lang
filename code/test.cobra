@@ -1,0 +1,20 @@
+import "another_file.cobra"
+
+var Y = 8888
+const X = 7777
+
+func test(a: int) -> int:
+    print("A is $a")
+    if a > 5:
+        return a + 1
+    else:
+        return a - 1
+
+    var i = 0
+    while i < 5:
+        print("Count: $i")
+        i++
+
+    # This is a comment
+    for j in 0..10:
+        print("")
