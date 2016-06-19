@@ -17,4 +17,4 @@ func test(a: int) -> int:
 
     # This is a comment
     for j in 0..10:
-        print("")
+        print("foo\n")

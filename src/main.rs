@@ -1,15 +1,26 @@
-mod ast;
+//mod ast;
 mod compileerror;
 mod lexer;
 
 use std::env;
 use std::fs;
 use std::process;
-use lexer::lex;
+use lexer::Lexer;
+
+use compileerror::CompileError;
 
 fn usage()
 {
     println!("Usage: cobra <input-file>");
+}
+
+fn parse_file(filename: &str) -> Result<(), CompileError>
+{
+    let mut file = try!(fs::File::open(filename));
+    let mut l = Lexer::new();
+    try!(l.read(&mut file));
+    l.dump();
+    Ok(())
 }
 
 fn main()
@@ -22,17 +33,10 @@ fn main()
     }
 
     let filename = args.nth(1).expect("Missing file argument");
-    match fs::File::open(&filename)
-        .map(|mut file| lex(&mut file).map(|prog| prog.dump()))
+
+    match parse_file(&filename)
     {
         Err(e) => println!("Error: {}", e),
-        Ok(_) => println!("OK"),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
+        Ok(_) => {},
     }
 }

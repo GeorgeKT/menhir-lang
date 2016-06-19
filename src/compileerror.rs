@@ -1,17 +1,19 @@
 use std::error::Error;
+use std::convert::From;
+use std::io;
 use std::fmt;
 
 #[derive(Debug)]
 pub struct CompileError
 {
-    line: u32,
-    offset: u32,
+    line: usize,
+    offset: usize,
     message: String,
 }
 
 impl CompileError
 {
-    pub fn new(line: u32, offset: u32, msg: &str) -> CompileError
+    pub fn new(line: usize, offset: usize, msg: &str) -> CompileError
     {
         CompileError{
             line: line,
@@ -34,5 +36,17 @@ impl Error for CompileError
     fn description(&self) -> &str
     {
         &self.message
+    }
+}
+
+impl From<io::Error> for CompileError
+{
+    fn from(e: io::Error) -> Self
+    {
+        CompileError{
+            line: 0,
+            offset: 0,
+            message: format!("IO Error: {}", e),
+        }
     }
 }
