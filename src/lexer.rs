@@ -28,7 +28,7 @@ pub enum Operator
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum Token
+pub enum TokenKind
 {
     Import,
     Var,
@@ -49,6 +49,27 @@ pub enum Token
     Indent(usize),
     Operator(Operator),
 }
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Token
+{
+    pub kind: TokenKind,
+    pub line: usize,
+    pub offset: usize,
+}
+
+impl Token
+{
+    fn new(kind: TokenKind, line: usize, offset: usize) -> Token
+    {
+        Token{
+            kind: kind,
+            line: line,
+            offset: offset,
+        }
+    }
+}
+
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 enum LexState
@@ -101,6 +122,12 @@ impl Lexer
         }
     }
 
+    fn add(&mut self, tok: TokenKind)
+    {
+        self.tokens.push_back(Token::new(tok, self.line, self.offset));
+    }
+
+
     fn start(&mut self, c: char, ns: LexState)
     {
         self.state = ns;
@@ -114,18 +141,14 @@ impl Lexer
         {
             ' ' | '\t' | '\n' => Ok(()),
             _ => {
-                self.tokens.push_back(Token::Indent(self.offset));
+                let offset = self.offset;
+                self.add(TokenKind::Indent(offset));
                 self.state = LexState::Idle;
                 self.idle(c)
             },
         }
     }
 
-    fn add(&mut self, tok: Token) -> Result<(), CompileError>
-    {
-        self.tokens.push_back(tok);
-        Ok(())
-    }
 
     fn idle(&mut self, c: char) -> Result<(), CompileError>
     {
@@ -134,10 +157,10 @@ impl Lexer
             '\n' => {self.state = LexState::StartOfLine; Ok(())},
             ' ' | '\t' => Ok(()),
             '#' => {self.state = LexState::Comment; Ok(())},
-            ':' => self.add(Token::Colon),
-            ',' => self.add(Token::Comma),
-            '(' => self.add(Token::OpenParen),
-            ')' => self.add(Token::CloseParen),
+            ':' => {self.add(TokenKind::Colon); Ok(())},
+            ',' => {self.add(TokenKind::Comma); Ok(())},
+            '(' => {self.add(TokenKind::OpenParen); Ok(())},
+            ')' => {self.add(TokenKind::CloseParen); Ok(())},
             '0'...'9' => {self.start(c, LexState::Number); Ok(())},
             '\"' => {self.start(c, LexState::InString); Ok(())},
             ch if is_identifier_start(ch) => {self.start(c, LexState::Identifier); Ok(())},
@@ -154,20 +177,20 @@ impl Lexer
         Ok(())
     }
 
-    fn add_identifier(&mut self) -> Token
+    fn add_identifier(&mut self) -> TokenKind
     {
         let tok = match &self.data[..]
         {
-            "import" => Token::Import,
-            "var" => Token::Var,
-            "const" => Token::Const,
-            "for" => Token::For,
-            "while" => Token::While,
-            "if" => Token::If,
-            "else" => Token::Else,
-            "func" => Token::Func,
-            "return" => Token::Return,
-            _ => Token::Identifier(mem::replace(&mut self.data, String::new())),
+            "import" => TokenKind::Import,
+            "var" => TokenKind::Var,
+            "const" => TokenKind::Const,
+            "for" => TokenKind::For,
+            "while" => TokenKind::While,
+            "if" => TokenKind::If,
+            "else" => TokenKind::Else,
+            "func" => TokenKind::Func,
+            "return" => TokenKind::Return,
+            _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
         };
 
         self.data.clear();
@@ -185,7 +208,7 @@ impl Lexer
         {
             self.state = LexState::Idle;
             let tok = self.add_identifier();
-            self.tokens.push_back(tok);
+            self.add(tok);
             self.idle(c)
         }
     }
@@ -200,7 +223,8 @@ impl Lexer
         else
         {
             self.state = LexState::Idle;
-            self.tokens.push_back(Token::Number(mem::replace(&mut self.data, String::new())));
+            let num = mem::replace(&mut self.data, String::new());
+            self.add(TokenKind::Number(num));
             self.idle(c)
         }
     }
@@ -238,7 +262,7 @@ impl Lexer
         {
             let op = try!(self.data_to_operator());
             self.state = LexState::Idle;
-            self.tokens.push_back(Token::Operator(op));
+            self.add(TokenKind::Operator(op));
             self.idle(c)
         }
         else
@@ -270,7 +294,8 @@ impl Lexer
         }
         else if c == '"'
         {
-            self.tokens.push_back(Token::StringLiteral(mem::replace(&mut self.data, String::new())));
+            let s = mem::replace(&mut self.data, String::new());
+            self.add(TokenKind::StringLiteral(s));
             self.escape_code = false;
             self.state = LexState::Idle;
             Ok(())
@@ -348,18 +373,18 @@ mod tests
         let mut lexer = Lexer::new();
         assert!(lexer.read(&mut cursor).is_ok());
 
-        let tokens = lexer.collect::<Vec<Token>>();
+        let tokens = lexer.map(|tok| tok.kind).collect::<Vec<TokenKind>>();
         assert_eq!(tokens, vec![
-            Token::Indent(1),
-            Token::Import,
-            Token::Var,
-            Token::Const,
-            Token::Func,
-            Token::If,
-            Token::Else,
-            Token::While,
-            Token::For,
-            Token::Return,
+            TokenKind::Indent(1),
+            TokenKind::Import,
+            TokenKind::Var,
+            TokenKind::Const,
+            TokenKind::Func,
+            TokenKind::If,
+            TokenKind::Else,
+            TokenKind::While,
+            TokenKind::For,
+            TokenKind::Return,
         ]);
     }
 
@@ -370,12 +395,12 @@ mod tests
         let mut lexer = Lexer::new();
         assert!(lexer.read(&mut cursor).is_ok());
 
-        let tokens = lexer.collect::<Vec<Token>>();
+        let tokens = lexer.map(|tok| tok.kind).collect::<Vec<TokenKind>>();
         assert_eq!(tokens, vec![
-            Token::Indent(1),
-            Token::Identifier("blaat".into()),
-            Token::Number("8888".into()),
-            Token::Identifier("_foo_16".into()),
+            TokenKind::Indent(1),
+            TokenKind::Identifier("blaat".into()),
+            TokenKind::Number("8888".into()),
+            TokenKind::Identifier("_foo_16".into()),
         ]);
     }
 
@@ -386,30 +411,30 @@ mod tests
         let mut lexer = Lexer::new();
         assert!(lexer.read(&mut cursor).is_ok());
 
-        let tokens = lexer.collect::<Vec<Token>>();
+        let tokens = lexer.map(|tok| tok.kind).collect::<Vec<TokenKind>>();
         assert_eq!(tokens, vec![
-            Token::Indent(1),
-            Token::Operator(Operator::Increment),
-            Token::Operator(Operator::Decrement),
-            Token::Operator(Operator::Add),
-            Token::Operator(Operator::Sub),
-            Token::Operator(Operator::Mul),
-            Token::Operator(Operator::Div),
-            Token::Operator(Operator::Mod),
-            Token::Operator(Operator::LessThan),
-            Token::Operator(Operator::LessThanEquals),
-            Token::Operator(Operator::GreaterThan),
-            Token::Operator(Operator::GreaterThanEquals),
-            Token::Operator(Operator::Equals),
-            Token::Operator(Operator::Assign),
-            Token::Operator(Operator::NotEquals),
-            Token::Operator(Operator::Not),
-            Token::Operator(Operator::Or),
-            Token::Operator(Operator::And),
-            Token::Operator(Operator::Range),
-            Token::Operator(Operator::Arrow),
-            Token::Colon,
-            Token::Comma,
+            TokenKind::Indent(1),
+            TokenKind::Operator(Operator::Increment),
+            TokenKind::Operator(Operator::Decrement),
+            TokenKind::Operator(Operator::Add),
+            TokenKind::Operator(Operator::Sub),
+            TokenKind::Operator(Operator::Mul),
+            TokenKind::Operator(Operator::Div),
+            TokenKind::Operator(Operator::Mod),
+            TokenKind::Operator(Operator::LessThan),
+            TokenKind::Operator(Operator::LessThanEquals),
+            TokenKind::Operator(Operator::GreaterThan),
+            TokenKind::Operator(Operator::GreaterThanEquals),
+            TokenKind::Operator(Operator::Equals),
+            TokenKind::Operator(Operator::Assign),
+            TokenKind::Operator(Operator::NotEquals),
+            TokenKind::Operator(Operator::Not),
+            TokenKind::Operator(Operator::Or),
+            TokenKind::Operator(Operator::And),
+            TokenKind::Operator(Operator::Range),
+            TokenKind::Operator(Operator::Arrow),
+            TokenKind::Colon,
+            TokenKind::Comma,
         ]);
     }
 
@@ -420,12 +445,12 @@ mod tests
         let mut lexer = Lexer::new();
         assert!(lexer.read(&mut cursor).is_ok());
 
-        let tokens = lexer.collect::<Vec<Token>>();
+        let tokens = lexer.map(|tok| tok.kind).collect::<Vec<TokenKind>>();
         assert_eq!(tokens, vec![
-            Token::Indent(1),
-            Token::StringLiteral("This is a string".into()),
-            Token::StringLiteral("Blaat\n".into()),
-            Token::StringLiteral("$a".into()),
+            TokenKind::Indent(1),
+            TokenKind::StringLiteral("This is a string".into()),
+            TokenKind::StringLiteral("Blaat\n".into()),
+            TokenKind::StringLiteral("$a".into()),
         ]);
     }
 }
