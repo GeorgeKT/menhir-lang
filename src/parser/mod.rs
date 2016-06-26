@@ -331,3 +331,20 @@ if 1: print("true")
         assert!(false);
     }
 }
+
+#[test]
+fn test_return()
+{
+    let stmt = th_statement(r#"
+return 5
+    ""#);
+
+    if let Statement::Return(w) = stmt
+    {
+        assert!(w.expr == Expression::Number("5".into()));
+    }
+    else
+    {
+        assert!(false);
+    }
+}
