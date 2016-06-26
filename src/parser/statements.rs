@@ -23,6 +23,7 @@ fn parse_optional_type(tq: &mut TokenQueue) -> Result<Option<Type>, CompileError
     if tq.is_next(TokenKind::Colon)
     {
         // variable with type declaration
+        try!(tq.pop());
         Ok(Some(try!(parse_type(tq))))
     }
     else
@@ -57,8 +58,6 @@ fn parse_vars(tq: &mut TokenQueue, indent_level: usize, constants: bool) -> Resu
 
     Ok(Statement::VariableDeclaration(vars))
 }
-
-
 
 pub fn parse_block(tq: &mut TokenQueue, indent_level: usize) -> Result<Block, CompileError>
 {

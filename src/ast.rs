@@ -53,7 +53,7 @@ impl Variable
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Type
 {
     Void,

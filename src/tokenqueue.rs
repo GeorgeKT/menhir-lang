@@ -110,7 +110,7 @@ impl TokenQueue
         }
         else
         {
-            Err(CompileError::new(tok.pos, format!("Invalid token {}, expecting string litteral", tok.kind)))
+            Err(CompileError::new(tok.pos, format!("Invalid token {}, expecting identifier", tok.kind)))
         }
     }
 

@@ -11,12 +11,10 @@ use self::statements::*;
 
 pub use self::expressions::parse_expression;
 
-
 pub fn err<T: Sized>(pos: Pos, msg: String) -> Result<T, CompileError>
 {
     Err(CompileError::new(pos, msg))
 }
-
 
 pub fn parse_program<Input: Read>(input: &mut Input) -> Result<Program, CompileError>
 {
@@ -49,6 +47,52 @@ fn test_simple_var()
         assert!(v.name == "x");
         assert!(v.typ.is_none());
         assert!(!v.is_const);
+        if let Expression::Number(ref n) = v.init {
+            assert!(n == "7");
+        } else {
+            assert!(false);
+        }
+    }
+    else
+    {
+        assert!(false);
+    }
+}
+
+#[test]
+fn test_simple_var_with_type()
+{
+    let stmt = th_statement("var x: int = 7");
+    if let Statement::VariableDeclaration(vars) = stmt
+    {
+        assert!(vars.len() == 1);
+        let v = &vars[0];
+        assert!(v.name == "x");
+        assert!(v.typ == Some(Type::Primitive("int".into())));
+        assert!(!v.is_const);
+        if let Expression::Number(ref n) = v.init {
+            assert!(n == "7");
+        } else {
+            assert!(false);
+        }
+    }
+    else
+    {
+        assert!(false);
+    }
+}
+
+#[test]
+fn test_simple_const()
+{
+    let stmt = th_statement("const x = 7");
+    if let Statement::VariableDeclaration(vars) = stmt
+    {
+        assert!(vars.len() == 1);
+        let v = &vars[0];
+        assert!(v.name == "x");
+        assert!(v.typ.is_none());
+        assert!(v.is_const);
         if let Expression::Number(ref n) = v.init {
             assert!(n == "7");
         } else {
