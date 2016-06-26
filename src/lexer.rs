@@ -1,74 +1,8 @@
 use std::io::{Read, BufReader, BufRead};
 use std::mem;
-use std::collections::VecDeque;
-use compileerror::CompileError;
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum Operator
-{
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    LessThan,
-    GreaterThan,
-    LessThanEquals,
-    GreaterThanEquals,
-    Equals,
-    NotEquals,
-    Not,
-    And,
-    Or,
-    Assign,
-    Arrow,
-    Range,
-    Increment,
-    Decrement,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum TokenKind
-{
-    Import,
-    Var,
-    Const,
-    Func,
-    If,
-    Else,
-    While,
-    For,
-    Return,
-    Identifier(String),
-    Colon,
-    Comma,
-    OpenParen,
-    CloseParen,
-    Number(String),
-    StringLiteral(String),
-    Indent(usize),
-    Operator(Operator),
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Token
-{
-    pub kind: TokenKind,
-    pub line: usize,
-    pub offset: usize,
-}
-
-impl Token
-{
-    fn new(kind: TokenKind, line: usize, offset: usize) -> Token
-    {
-        Token{
-            kind: kind,
-            line: line,
-            offset: offset,
-        }
-    }
-}
+use compileerror::{Pos, CompileError};
+use tokens::*;
+use tokenqueue::TokenQueue;
 
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -86,9 +20,8 @@ enum LexState
 pub struct Lexer
 {
     state: LexState,
-    tokens: VecDeque<Token>,
-    line: usize,
-    offset: usize,
+    tokens: TokenQueue,
+    pos: Pos,
     data: String,
     escape_code: bool,
 }
@@ -114,18 +47,13 @@ impl Lexer
     {
         Lexer {
             state: LexState::StartOfLine,
-            tokens: VecDeque::new(),
-            line: 1,
-            offset: 1,
+            tokens: TokenQueue::new(),
+            pos: Pos::new(1, 1),
             data: String::new(),
             escape_code: false,
         }
     }
 
-    fn add(&mut self, tok: TokenKind)
-    {
-        self.tokens.push_back(Token::new(tok, self.line, self.offset));
-    }
 
 
     fn start(&mut self, c: char, ns: LexState)
@@ -141,7 +69,7 @@ impl Lexer
         {
             ' ' | '\t' | '\n' => Ok(()),
             _ => {
-                let offset = self.offset;
+                let offset = self.pos.offset;
                 self.add(TokenKind::Indent(offset));
                 self.state = LexState::Idle;
                 self.idle(c)
@@ -166,7 +94,7 @@ impl Lexer
             ch if is_identifier_start(ch) => {self.start(c, LexState::Identifier); Ok(())},
             ch if is_operator_start(ch) => {self.start(c, LexState::Operator); Ok(())}
             _ => {
-                Err(CompileError::new(self.line, self.offset + 1, &format!("Unexpected token {}", c)))
+                Err(CompileError::new(self.pos, format!("Unexpected token {}", c)))
             }
         }
     }
@@ -190,6 +118,9 @@ impl Lexer
             "else" => TokenKind::Else,
             "func" => TokenKind::Func,
             "return" => TokenKind::Return,
+            "pub" => TokenKind::Pub,
+            "struct" => TokenKind::Struct,
+            "in" => TokenKind::In,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
         };
 
@@ -252,7 +183,7 @@ impl Lexer
             ".." => Ok(Operator::Range),
             "--" => Ok(Operator::Decrement),
             "++" => Ok(Operator::Increment),
-            _ => Err(CompileError::new(self.line, self.offset, &format!("Invalid operator {}", self.data))),
+            _ => Err(CompileError::new(self.pos, format!("Invalid operator {}", self.data))),
         }
     }
 
@@ -321,42 +252,33 @@ impl Lexer
         }
     }
 
-    pub fn read<Input: Read>(&mut self, input: &mut Input) -> Result<(), CompileError>
+    fn add(&mut self, tok: TokenKind)
+    {
+        self.tokens.add(Token::new(tok, self.pos));
+    }
+
+    pub fn read<Input: Read>(&mut self, input: &mut Input) -> Result<TokenQueue, CompileError>
     {
         for line in BufReader::new(input).lines()
         {
             for c in try!(line).chars()
             {
                 try!(self.feed(c));
-                self.offset += 1;
+                self.pos.offset += 1;
             }
 
             try!(self.feed('\n'));
-            self.offset = 1;
-            self.line += 1;
+            self.pos.offset = 1;
+            self.pos.line += 1;
         }
 
-        Ok(())
-    }
-
-    pub fn dump(&self)
-    {
-        for tok in &self.tokens
-        {
-            println!("{:?}", tok);
-        }
+        self.add(TokenKind::EOF);
+        self.tokens.dump();
+        Ok(mem::replace(&mut self.tokens, TokenQueue::new()))
     }
 }
 
-impl Iterator for Lexer
-{
-    type Item = Token;
 
-    fn next(&mut self) -> Option<Self::Item>
-    {
-        self.tokens.pop_front()
-    }
-}
 
 
 
@@ -365,15 +287,19 @@ mod tests
 {
     use super::*;
     use std::io::Cursor;
+    use tokens::*;
 
     #[test]
     fn test_keywords()
     {
-        let mut cursor = Cursor::new("import var const func if else while for return");
+        let mut cursor = Cursor::new("import var const func if else while for return pub struct in");
         let mut lexer = Lexer::new();
-        assert!(lexer.read(&mut cursor).is_ok());
+        let tokens: Vec<TokenKind> = lexer
+            .read(&mut cursor)
+            .expect("Lexing failed")
+            .map(|tok| tok.kind)
+            .collect();
 
-        let tokens = lexer.map(|tok| tok.kind).collect::<Vec<TokenKind>>();
         assert_eq!(tokens, vec![
             TokenKind::Indent(1),
             TokenKind::Import,
@@ -385,6 +311,10 @@ mod tests
             TokenKind::While,
             TokenKind::For,
             TokenKind::Return,
+            TokenKind::Pub,
+            TokenKind::Struct,
+            TokenKind::In,
+            TokenKind::EOF,
         ]);
     }
 
@@ -392,15 +322,18 @@ mod tests
     fn test_identifiers_and_numbers()
     {
         let mut cursor = Cursor::new("blaat 8888 _foo_16");
-        let mut lexer = Lexer::new();
-        assert!(lexer.read(&mut cursor).is_ok());
-
-        let tokens = lexer.map(|tok| tok.kind).collect::<Vec<TokenKind>>();
+        let tokens: Vec<TokenKind> = Lexer::new()
+            .read(&mut cursor)
+            .expect("Lexing failed")
+            .map(|tok| tok.kind)
+            .collect();
+            
         assert_eq!(tokens, vec![
             TokenKind::Indent(1),
             TokenKind::Identifier("blaat".into()),
             TokenKind::Number("8888".into()),
             TokenKind::Identifier("_foo_16".into()),
+            TokenKind::EOF,
         ]);
     }
 
@@ -408,10 +341,12 @@ mod tests
     fn test_operators()
     {
         let mut cursor = Cursor::new("++ -- + - * / % < <= > >= == = != ! || && .. -> : ,");
-        let mut lexer = Lexer::new();
-        assert!(lexer.read(&mut cursor).is_ok());
+        let tokens: Vec<TokenKind> = Lexer::new()
+            .read(&mut cursor)
+            .expect("Lexing failed")
+            .map(|tok| tok.kind)
+            .collect();
 
-        let tokens = lexer.map(|tok| tok.kind).collect::<Vec<TokenKind>>();
         assert_eq!(tokens, vec![
             TokenKind::Indent(1),
             TokenKind::Operator(Operator::Increment),
@@ -435,6 +370,7 @@ mod tests
             TokenKind::Operator(Operator::Arrow),
             TokenKind::Colon,
             TokenKind::Comma,
+            TokenKind::EOF,
         ]);
     }
 
@@ -442,15 +378,18 @@ mod tests
     fn test_string()
     {
         let mut cursor = Cursor::new(r#""This is a string" "Blaat\n" "$a""#);
-        let mut lexer = Lexer::new();
-        assert!(lexer.read(&mut cursor).is_ok());
+        let tokens: Vec<TokenKind> = Lexer::new()
+            .read(&mut cursor)
+            .expect("Lexing failed")
+            .map(|tok| tok.kind)
+            .collect();
 
-        let tokens = lexer.map(|tok| tok.kind).collect::<Vec<TokenKind>>();
         assert_eq!(tokens, vec![
             TokenKind::Indent(1),
             TokenKind::StringLiteral("This is a string".into()),
             TokenKind::StringLiteral("Blaat\n".into()),
             TokenKind::StringLiteral("$a".into()),
+            TokenKind::EOF,
         ]);
     }
 }

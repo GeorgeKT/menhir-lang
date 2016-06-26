@@ -1,7 +1,22 @@
 import "another_file.cobra"
 
-var Y = 8888
+var
+    Y = 8888
+    A = 18
+
 const X = 7777
+
+trait Clone:
+    func clone(self) -> Self
+
+
+struct Foo:
+    pub x: int = 0
+    pub y: int = 0
+    z: float = 0.0
+
+func bla(b: int) -> int: if b == 6: return b + 1 else: return b - 1 
+
 
 func test(a: int) -> int:
     print("A is $a")
@@ -10,6 +25,7 @@ func test(a: int) -> int:
     else:
         return a - 1
 
+    const f = Foo(x, y, z=0.5)
     var i = 0
     while i < 5:
         print("Count: $i")

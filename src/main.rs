@@ -1,12 +1,16 @@
-//mod ast;
+mod ast;
 mod compileerror;
 mod lexer;
+mod parser;
+mod tokens;
+mod tokenqueue;
 
 use std::env;
 use std::fs;
 use std::process;
-use lexer::Lexer;
 
+use ast::Program;
+use parser::parse_program;
 use compileerror::CompileError;
 
 fn usage()
@@ -14,13 +18,10 @@ fn usage()
     println!("Usage: cobra <input-file>");
 }
 
-fn parse_file(filename: &str) -> Result<(), CompileError>
+fn parse_file(filename: &str) -> Result<Program, CompileError>
 {
     let mut file = try!(fs::File::open(filename));
-    let mut l = Lexer::new();
-    try!(l.read(&mut file));
-    l.dump();
-    Ok(())
+    parse_program(&mut file)
 }
 
 fn main()
