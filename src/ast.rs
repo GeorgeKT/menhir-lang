@@ -82,7 +82,7 @@ pub enum Type
 pub struct Argument
 {
     pub name: String,
-    pub arg_type: Type,
+    pub typ: Type,
     pub constant: bool,
 }
 
@@ -92,7 +92,7 @@ impl Argument
     {
         Argument{
             name: name,
-            arg_type: typ,
+            typ: typ,
             constant: constant,
         }
     }

@@ -103,9 +103,18 @@ fn parse_func(tq: &mut TokenQueue, indent_level: usize) -> Result<Statement, Com
         let (arg_name, _) = try!(tq.expect_identifier());
         try!(tq.expect(TokenKind::Colon));
         args.push(Argument::new(arg_name, try!(parse_type(tq)), const_arg));
+
+        if !tq.is_next(TokenKind::Comma) {
+            break;
+        }
+
+        try!(tq.expect(TokenKind::Comma));
     }
 
+    try!(tq.expect(TokenKind::CloseParen));
+
     let ret_type = if tq.is_next(TokenKind::Operator(Operator::Arrow)) {
+        try!(tq.pop());
         try!(parse_type(tq))
     } else {
         Type::Void

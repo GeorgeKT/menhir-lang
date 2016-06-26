@@ -348,3 +348,72 @@ return 5
         assert!(false);
     }
 }
+
+#[test]
+fn test_func()
+{
+    let stmt = th_statement(r#"
+func blaat():
+    print("true")
+    return 5
+    ""#);
+
+    if let Statement::Function(f) = stmt
+    {
+        assert!(f.name == "blaat");
+        assert!(f.args.is_empty());
+        assert!(f.return_type == Type::Void);
+        assert!(f.block.statements.len() == 2);
+        let s = &f.block.statements[0];
+        assert!(*s == Statement::Call(
+            Call::new(
+                "print".into(),
+                vec![Expression::StringLiteral("true".into())]
+            )));
+
+        let s = &f.block.statements[1];
+        assert!(*s == Statement::Return(
+            Return::new(Expression::Number("5".into()))
+        ));
+    }
+    else
+    {
+        assert!(false);
+    }
+}
+
+#[test]
+fn test_func_with_args_and_return_type()
+{
+    let stmt = th_statement(r#"
+func blaat(x: int, const y: int) -> int:
+    print("true")
+    return 5
+    ""#);
+
+    if let Statement::Function(f) = stmt
+    {
+        assert!(f.name == "blaat");
+        assert!(f.args.len() == 2);
+        assert!(f.args[0] == Argument::new("x".into(), Type::Primitive("int".into()), false));
+        assert!(f.args[1] == Argument::new("y".into(), Type::Primitive("int".into()), true));
+        assert!(f.return_type == Type::Primitive("int".into()));
+        assert!(f.block.statements.len() == 2);
+
+        let s = &f.block.statements[0];
+        assert!(*s == Statement::Call(
+            Call::new(
+                "print".into(),
+                vec![Expression::StringLiteral("true".into())]
+            )));
+
+        let s = &f.block.statements[1];
+        assert!(*s == Statement::Return(
+            Return::new(Expression::Number("5".into()))
+        ));
+    }
+    else
+    {
+        assert!(false);
+    }
+}
