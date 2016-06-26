@@ -62,6 +62,11 @@ impl TokenQueue
         self.tokens.front()
     }
 
+    pub fn peek_at(&self, index: usize) -> Option<&Token>
+    {
+        self.tokens.iter().nth(index)
+    }
+
     pub fn expect(&mut self, kind: TokenKind) -> Result<Token, CompileError>
     {
         self.pop()
@@ -123,12 +128,21 @@ impl TokenQueue
         }
     }
 
-    pub fn is_next_indent(&self) -> bool
+    pub fn is_next_at(&self, index: usize, kind: TokenKind) -> bool
+    {
+        match self.peek_at(index)
+        {
+            Some(tok) => tok.kind == kind,
+            None => false,
+        }
+    }
+
+    pub fn next_indent(&self) -> Option<usize>
     {
         match self.tokens.front()
         {
-            Some(tok) => if let TokenKind::Indent(_) = tok.kind {true} else {false},
-            _ => false,
+            Some(tok) => if let TokenKind::Indent(lvl) = tok.kind {Some(lvl)} else {None},
+            _ => None,
         }
     }
 }

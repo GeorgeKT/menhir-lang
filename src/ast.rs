@@ -2,7 +2,7 @@
 use compileerror::Pos;
 use tokens::Operator;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Import
 {
     path: String,
@@ -20,18 +20,36 @@ impl Import
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
+pub struct Call
+{
+    pub name: String,
+    pub args: Vec<Expression>,
+}
+
+impl Call
+{
+    pub fn new(name: String, args: Vec<Expression>) -> Call
+    {
+        Call{
+            name: name,
+            args: args,
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
 pub enum Expression
 {
     Number(String),
     StringLiteral(String),
     UnaryOp((Operator, Box<Expression>)),
     BinaryOp((Operator, Box<Expression>, Box<Expression>)),
-    Call((String, Vec<Expression>)),
+    Call(Call),
     NameRef(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Variable
 {
     pub name: String,
@@ -60,7 +78,7 @@ pub enum Type
     Primitive(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Argument
 {
     pub name: String,
@@ -80,7 +98,7 @@ impl Argument
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Function
 {
     pub name: String,
@@ -102,18 +120,77 @@ impl Function
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
+pub struct While
+{
+    pub cond: Expression,
+    pub block: Block,
+}
+
+impl While
+{
+    pub fn new(cond: Expression, block: Block) -> While
+    {
+        While{
+            cond: cond,
+            block: block,
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct If
+{
+    pub cond: Expression,
+    pub if_block: Block,
+    pub else_block: Option<Block>,
+}
+
+impl If
+{
+    pub fn new(cond: Expression, if_block: Block, else_block: Option<Block>) -> If
+    {
+        If{
+            cond: cond,
+            if_block: if_block,
+            else_block: else_block,
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct Return
+{
+    pub expr: Expression,
+}
+
+impl Return
+{
+    pub fn new(expr: Expression) -> Return
+    {
+        Return{
+            expr: expr,
+        }
+    }
+}
+
+
+#[derive(Debug, Eq, PartialEq)]
 pub enum Statement
 {
     Import(Import),
-    VariableDeclaration(Vec<Variable>),
-    FunctionDeclaration(Function),
+    Variable(Vec<Variable>),
+    Function(Function),
+    While(While),
+    If(If),
+    Return(Return),
+    Call(Call),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Block
 {
-    statements: Vec<Statement>,
+    pub statements: Vec<Statement>,
 }
 
 impl Block
@@ -124,10 +201,9 @@ impl Block
             statements: s,
         }
     }
-
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Program
 {
     block: Block,

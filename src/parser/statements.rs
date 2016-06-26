@@ -56,24 +56,30 @@ fn parse_vars(tq: &mut TokenQueue, indent_level: usize, constants: bool) -> Resu
         }
     }
 
-    Ok(Statement::VariableDeclaration(vars))
+    Ok(Statement::Variable(vars))
 }
 
 pub fn parse_block(tq: &mut TokenQueue, indent_level: usize) -> Result<Block, CompileError>
 {
     let mut statements = Vec::new();
-    if !tq.is_next_indent() {
+    if tq.next_indent().is_none() {
         statements.push(try!(parse_statement(tq, indent_level)));
     }
 
     loop {
-        let is_higher_level = |tok: &Token| if let TokenKind::Indent(lvl) = tok.kind {lvl > indent_level} else {false};
-        let id = try!(tq.pop_if(is_higher_level));
-        if id.is_none() {
-            break;
-        }
+        match tq.next_indent()
+        {
+            Some(lvl) if lvl > indent_level => {
+                try!(tq.pop());
 
-        statements.push(try!(parse_statement(tq, indent_level)));
+                if tq.is_next(TokenKind::EOF) {
+                    break;
+                }
+
+                statements.push(try!(parse_statement(tq, lvl)));
+            },
+            _ => break,
+        }
     }
 
     Ok(Block::new(statements))
@@ -107,13 +113,47 @@ fn parse_func(tq: &mut TokenQueue, indent_level: usize) -> Result<Statement, Com
 
     try!(tq.expect(TokenKind::Colon));
 
-    Ok(Statement::FunctionDeclaration(
+    Ok(Statement::Function(
         Function::new(
             name,
             ret_type,
             args,
             try!(parse_block(tq, indent_level))
         )))
+}
+
+fn parse_while(tq: &mut TokenQueue, indent_level: usize) -> Result<Statement, CompileError>
+{
+    let cond = try!(parse_expression(tq, indent_level));
+    try!(tq.expect(TokenKind::Colon));
+    let block = try!(parse_block(tq, indent_level));
+    Ok(Statement::While(While::new(cond, block)))
+}
+
+fn parse_if(tq: &mut TokenQueue, indent_level: usize) -> Result<Statement, CompileError>
+{
+    let cond = try!(parse_expression(tq, indent_level));
+    try!(tq.expect(TokenKind::Colon));
+    let if_block = try!(parse_block(tq, indent_level));
+    let mut else_block = None;
+
+    if let Some(lvl) = tq.next_indent() {
+        if lvl == indent_level && tq.is_next_at(1, TokenKind::Else) {
+            try!(tq.pop()); // indent
+            try!(tq.pop()); // else
+            try!(tq.expect(TokenKind::Colon));
+            else_block = Some(try!(parse_block(tq, indent_level)));
+        }
+    }
+
+    Ok(Statement::If(If::new(cond, if_block, else_block)))
+}
+
+
+fn parse_return(tq: &mut TokenQueue, indent_level: usize) -> Result<Statement, CompileError>
+{
+    let e = try!(parse_expression(tq, indent_level));
+    Ok(Statement::Return(Return::new(e)))
 }
 
 pub fn parse_statement(tq: &mut TokenQueue, indent_level: usize) -> Result<Statement, CompileError>
@@ -125,6 +165,10 @@ pub fn parse_statement(tq: &mut TokenQueue, indent_level: usize) -> Result<State
         TokenKind::Var => parse_vars(tq, indent_level, false),
         TokenKind::Const => parse_vars(tq, indent_level, true),
         TokenKind::Func => parse_func(tq, indent_level),
-        _ => err(tok.pos, format!("Unexpected token {}, expected import, var, const or func", tok.kind))
+        TokenKind::While => parse_while(tq, indent_level),
+        TokenKind::If => parse_if(tq, indent_level),
+        TokenKind::Return => parse_return(tq, indent_level),
+        TokenKind::Identifier(id) => parse_function_call(tq, indent_level, id).map(|c| Statement::Call(c)),
+        _ => err(tok.pos, format!("Unexpected token {}, expected begin of new statement", tok.kind))
     }
 }

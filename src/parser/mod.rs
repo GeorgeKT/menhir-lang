@@ -9,7 +9,7 @@ use compileerror::{Pos, CompileError};
 
 use self::statements::*;
 
-pub use self::expressions::parse_expression;
+pub use self::expressions::{parse_function_call, parse_expression};
 
 pub fn err<T: Sized>(pos: Pos, msg: String) -> Result<T, CompileError>
 {
@@ -40,7 +40,7 @@ fn th_statement(data: &str) -> Statement
 fn test_simple_var()
 {
     let stmt = th_statement("var x = 7");
-    if let Statement::VariableDeclaration(vars) = stmt
+    if let Statement::Variable(vars) = stmt
     {
         assert!(vars.len() == 1);
         let v = &vars[0];
@@ -63,7 +63,7 @@ fn test_simple_var()
 fn test_simple_var_with_type()
 {
     let stmt = th_statement("var x: int = 7");
-    if let Statement::VariableDeclaration(vars) = stmt
+    if let Statement::Variable(vars) = stmt
     {
         assert!(vars.len() == 1);
         let v = &vars[0];
@@ -86,7 +86,7 @@ fn test_simple_var_with_type()
 fn test_simple_const()
 {
     let stmt = th_statement("const x = 7");
-    if let Statement::VariableDeclaration(vars) = stmt
+    if let Statement::Variable(vars) = stmt
     {
         assert!(vars.len() == 1);
         let v = &vars[0];
@@ -110,7 +110,7 @@ fn test_multiple_var()
 {
     let stmt = th_statement("var x = 7, z = 888");
 
-    if let Statement::VariableDeclaration(vars) = stmt
+    if let Statement::Variable(vars) = stmt
     {
         assert!(vars.len() == 2);
         let v = &vars[0];
@@ -146,7 +146,7 @@ fn test_multiple_var_with_indentation()
 var
     x = 7
     z = 888"#);
-    if let Statement::VariableDeclaration(vars) = stmt
+    if let Statement::Variable(vars) = stmt
     {
         assert!(vars.len() == 2);
         let v = &vars[0];
@@ -168,6 +168,163 @@ var
         } else {
             assert!(false);
         }
+    }
+    else
+    {
+        assert!(false);
+    }
+}
+
+#[test]
+fn test_while()
+{
+    let stmt = th_statement(r#"
+while 1:
+    print("true")
+    print("something else")
+    ""#);
+
+    if let Statement::While(w) = stmt
+    {
+        assert!(w.cond == Expression::Number("1".into()));
+        assert!(w.block.statements.len() == 2);
+
+        let s = &w.block.statements[0];
+        assert!(*s == Statement::Call(
+            Call::new(
+                "print".into(),
+                vec![Expression::StringLiteral("true".into())]
+            )));
+
+        let s = &w.block.statements[1];
+        assert!(*s == Statement::Call(
+            Call::new(
+                "print".into(),
+                vec![Expression::StringLiteral("something else".into())]
+            )));
+    }
+    else
+    {
+        assert!(false);
+    }
+}
+
+
+#[test]
+fn test_while_single_line()
+{
+    let stmt = th_statement(r#"
+while 1: print("true")
+    ""#);
+
+    if let Statement::While(w) = stmt
+    {
+        assert!(w.cond == Expression::Number("1".into()));
+        assert!(w.block.statements.len() == 1);
+
+        let s = &w.block.statements[0];
+        assert!(*s == Statement::Call(
+            Call::new(
+                "print".into(),
+                vec![Expression::StringLiteral("true".into())]
+            )));
+    }
+    else
+    {
+        assert!(false);
+    }
+}
+
+#[test]
+fn test_if()
+{
+    let stmt = th_statement(r#"
+if 1:
+    print("true")
+    ""#);
+
+    if let Statement::If(w) = stmt
+    {
+        assert!(w.cond == Expression::Number("1".into()));
+        assert!(w.if_block.statements.len() == 1);
+        assert!(w.else_block.is_none());
+
+        let s = &w.if_block.statements[0];
+        assert!(*s == Statement::Call(
+            Call::new(
+                "print".into(),
+                vec![Expression::StringLiteral("true".into())]
+            )));
+    }
+    else
+    {
+        assert!(false);
+    }
+}
+
+#[test]
+fn test_if_else()
+{
+    let stmt = th_statement(r#"
+if 1:
+    print("true")
+else:
+    print("false")
+    ""#);
+
+    if let Statement::If(w) = stmt
+    {
+        assert!(w.cond == Expression::Number("1".into()));
+        assert!(w.if_block.statements.len() == 1);
+        assert!(w.else_block.is_some());
+
+        let s = &w.if_block.statements[0];
+        assert!(*s == Statement::Call(
+            Call::new(
+                "print".into(),
+                vec![Expression::StringLiteral("true".into())]
+            )));
+
+        if let Some(eb) = w.else_block
+        {
+            assert!(eb.statements.len() == 1);
+            let s = &eb.statements[0];
+            assert!(*s == Statement::Call(
+                Call::new(
+                    "print".into(),
+                    vec![Expression::StringLiteral("false".into())]
+                )));
+        }
+        else
+        {
+            assert!(false);
+        }
+    }
+    else
+    {
+        assert!(false);
+    }
+}
+
+#[test]
+fn test_single_line_if()
+{
+    let stmt = th_statement(r#"
+if 1: print("true")
+    ""#);
+
+    if let Statement::If(w) = stmt
+    {
+        assert!(w.cond == Expression::Number("1".into()));
+        assert!(w.if_block.statements.len() == 1);
+        assert!(w.else_block.is_none());
+
+        let s = &w.if_block.statements[0];
+        assert!(*s == Statement::Call(
+            Call::new(
+                "print".into(),
+                vec![Expression::StringLiteral("true".into())]
+            )));
     }
     else
     {

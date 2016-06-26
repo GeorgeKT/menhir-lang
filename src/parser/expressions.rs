@@ -43,7 +43,7 @@ fn parse_binary_expression(tq: &mut TokenQueue, lhs: Expression) -> Result<Expre
     err(tq.pos(), format!("NYI"))
 }
 
-fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: String) -> Result<Expression, CompileError>
+pub fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: String) -> Result<Call, CompileError>
 {
     try!(tq.expect(TokenKind::OpenParen));
 
@@ -59,7 +59,7 @@ fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: String) -
     }
 
     try!(tq.pop());
-    Ok(Expression::Call((name, args)))
+    Ok(Call::new(name, args))
 }
 
 fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token) -> Result<Expression, CompileError>
@@ -76,7 +76,7 @@ fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token
             let next_kind = tq.peek().map(|tok| tok.kind.clone());
             match next_kind
             {
-                Some(TokenKind::OpenParen) => parse_function_call(tq, indent_level, id),
+                Some(TokenKind::OpenParen) => parse_function_call(tq, indent_level, id).map(|c| Expression::Call(c)),
                 Some(TokenKind::Operator(_)) => parse_binary_expression(tq, Expression::NameRef(id)),
                 _ => Ok(Expression::NameRef(id)),
             }
