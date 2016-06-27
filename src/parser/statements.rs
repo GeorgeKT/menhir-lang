@@ -51,7 +51,7 @@ fn parse_vars(tq: &mut TokenQueue, indent_level: usize, constants: bool) -> Resu
             TokenKind::Comma => continue,
             TokenKind::EOF => break,
             _ => {
-                return err(tok.pos, format!("Unexpected token {}, expected identifier or identation", tok.kind));
+                return err(tok.pos, ErrorType::UnexpectedToken(tok));
             }
         }
     }
@@ -178,6 +178,6 @@ pub fn parse_statement(tq: &mut TokenQueue, indent_level: usize) -> Result<State
         TokenKind::If => parse_if(tq, indent_level),
         TokenKind::Return => parse_return(tq, indent_level),
         TokenKind::Identifier(id) => parse_function_call(tq, indent_level, id).map(|c| Statement::Call(c)),
-        _ => err(tok.pos, format!("Unexpected token {}, expected begin of new statement", tok.kind))
+        _ => err(tok.pos, ErrorType::UnexpectedToken(tok)),
     }
 }

@@ -5,15 +5,15 @@ use std::io::Read;
 
 use lexer::{Lexer};
 use ast::*;
-use compileerror::{Pos, CompileError};
+use compileerror::{Pos, CompileError, ErrorType};
 
 use self::statements::*;
 
 pub use self::expressions::{parse_function_call, parse_expression};
 
-pub fn err<T: Sized>(pos: Pos, msg: String) -> Result<T, CompileError>
+pub fn err<T: Sized>(pos: Pos, e: ErrorType) -> Result<T, CompileError>
 {
-    Err(CompileError::new(pos, msg))
+    Err(CompileError::new(pos, e))
 }
 
 pub fn parse_program<Input: Read>(input: &mut Input) -> Result<Program, CompileError>

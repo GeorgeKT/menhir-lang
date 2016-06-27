@@ -1,6 +1,6 @@
 use std::io::{Read, BufReader, BufRead};
 use std::mem;
-use compileerror::{Pos, CompileError};
+use compileerror::{Pos, CompileError, ErrorType};
 use tokens::*;
 use tokenqueue::TokenQueue;
 
@@ -94,7 +94,7 @@ impl Lexer
             ch if is_identifier_start(ch) => {self.start(c, LexState::Identifier); Ok(())},
             ch if is_operator_start(ch) => {self.start(c, LexState::Operator); Ok(())}
             _ => {
-                Err(CompileError::new(self.pos, format!("Unexpected token {}", c)))
+                Err(CompileError::new(self.pos, ErrorType::UnexpectedChar(c)))
             }
         }
     }
@@ -183,7 +183,7 @@ impl Lexer
             ".." => Ok(Operator::Range),
             "--" => Ok(Operator::Decrement),
             "++" => Ok(Operator::Increment),
-            _ => Err(CompileError::new(self.pos, format!("Invalid operator {}", self.data))),
+            _ => Err(CompileError::new(self.pos, ErrorType::InvalidOperator(self.data.clone()))),
         }
     }
 
@@ -327,7 +327,7 @@ mod tests
             .expect("Lexing failed")
             .map(|tok| tok.kind)
             .collect();
-            
+
         assert_eq!(tokens, vec![
             TokenKind::Indent(1),
             TokenKind::Identifier("blaat".into()),

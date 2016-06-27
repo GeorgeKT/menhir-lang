@@ -2,6 +2,7 @@ use std::error::Error;
 use std::convert::From;
 use std::io;
 use std::fmt;
+use tokens::{Operator, Token};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Pos
@@ -29,21 +30,35 @@ impl fmt::Display for Pos
     }
 }
 
+#[derive(Debug)]
+pub enum ErrorType
+{
+    UnexpectedEOF,
+    IOError(io::Error),
+    UnexpectedChar(char),
+    UnexpectedToken(Token),
+    ExpectedIndent,
+    ExpectedIdentifier,
+    ExpectedStringLiteral,
+    InvalidOperator(String),
+    InvalidUnaryOperator(Operator),
+}
+
 
 #[derive(Debug)]
 pub struct CompileError
 {
     pos: Pos,
-    message: String,
+    error: ErrorType,
 }
 
 impl CompileError
 {
-    pub fn new(pos: Pos, msg: String) -> CompileError
+    pub fn new(pos: Pos, error: ErrorType) -> CompileError
     {
         CompileError{
             pos: pos,
-            message: msg
+            error: error,
         }
     }
 }
@@ -52,7 +67,18 @@ impl fmt::Display for CompileError
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
-        write!(f, "{} : {}", self.pos, self.message)
+        match self.error
+        {
+            ErrorType::UnexpectedEOF => write!(f, "{}: Unexpected end of file", self.pos),
+            ErrorType::IOError(ref e) =>  write!(f, "{}: {}", self.pos, e.description()),
+            ErrorType::UnexpectedChar(c) =>  write!(f, "{}: Unexpected character {}", self.pos, c),
+            ErrorType::UnexpectedToken(ref tok) =>  write!(f, "{}: Unexpected token {:?}", self.pos, tok),
+            ErrorType::InvalidOperator(ref s) =>  write!(f, "{}: Invalid operator {}", self.pos, s),
+            ErrorType::InvalidUnaryOperator(op) =>  write!(f, "{}: Invalid operator {}", self.pos, op),
+            ErrorType::ExpectedIdentifier =>  write!(f, "{}: Expected identifier", self.pos),
+            ErrorType::ExpectedIndent =>  write!(f, "{}: Expected indentation", self.pos),
+            ErrorType::ExpectedStringLiteral =>  write!(f, "{}: Expected string literal", self.pos),
+        }
     }
 }
 
@@ -60,7 +86,8 @@ impl Error for CompileError
 {
     fn description(&self) -> &str
     {
-        &self.message
+        "Compile error"
+
     }
 }
 
@@ -70,7 +97,7 @@ impl From<io::Error> for CompileError
     {
         CompileError{
             pos: Pos::new(0, 0),
-            message: format!("IO Error: {}", e),
+            error: ErrorType::IOError(e),
         }
     }
 }

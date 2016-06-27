@@ -34,13 +34,13 @@ fn parse_unary_expression(tq: &mut TokenQueue, indent_level: usize, op: Operator
         let se = try!(parse_expression(tq, indent_level));
         Ok(Expression::UnaryOp((op, Box::new(se))))
     } else {
-        err(op_pos, format!("Invalid unary operator {}", op))
+        err(op_pos, ErrorType::InvalidUnaryOperator(op))
     }
 }
 
 fn parse_binary_expression(tq: &mut TokenQueue, lhs: Expression) -> Result<Expression, CompileError>
 {
-    err(tq.pos(), format!("NYI"))
+    err(tq.pos(), ErrorType::UnexpectedEOF)
 }
 
 pub fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: String) -> Result<Call, CompileError>
@@ -102,7 +102,7 @@ fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token
 
         TokenKind::Operator(op) => parse_unary_expression(tq, indent_level, op, tok.pos),
 
-        _ => err(tok.pos, format!("Unexpected token {}", tok.kind)),
+        _ => err(tok.pos, ErrorType::UnexpectedToken(tok)),
     }
 }
 
@@ -114,6 +114,6 @@ pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize) -> Result<Expr
     }
     else
     {
-        err(tq.pos(), format!("Unexpected end of input, expected an expression"))
+        err(tq.pos(), ErrorType::UnexpectedEOF)
     }
 }
