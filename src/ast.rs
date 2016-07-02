@@ -55,17 +55,19 @@ pub struct Variable
     pub name: String,
     pub typ: Option<Type>,
     pub is_const: bool,
+    pub public: bool,
     pub init: Expression,
 }
 
 impl Variable
 {
-    pub fn new(name: String, typ: Option<Type>, is_const: bool, init: Expression) -> Variable
+    pub fn new(name: String, typ: Option<Type>, is_const: bool, public: bool, init: Expression) -> Variable
     {
         Variable{
             name: name,
             typ: typ,
             is_const: is_const,
+            public: public,
             init: init,
         }
     }
@@ -104,17 +106,19 @@ pub struct Function
     pub name: String,
     pub return_type: Type,
     pub args: Vec<Argument>,
+    pub public: bool,
     pub block: Block,
 }
 
 impl Function
 {
-    pub fn new(name: String, ret: Type, args: Vec<Argument>, block: Block) -> Function
+    pub fn new(name: String, ret: Type, args: Vec<Argument>, public: bool, block: Block) -> Function
     {
         Function{
             name: name,
             return_type: ret,
             args: args,
+            public: public,
             block: block,
         }
     }

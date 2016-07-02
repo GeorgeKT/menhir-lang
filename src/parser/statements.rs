@@ -33,7 +33,7 @@ fn parse_optional_type(tq: &mut TokenQueue) -> Result<Option<Type>, CompileError
 }
 
 
-fn parse_vars(tq: &mut TokenQueue, indent_level: usize, constants: bool) -> Result<Statement, CompileError>
+fn parse_vars(tq: &mut TokenQueue, indent_level: usize, constants: bool, public: bool) -> Result<Statement, CompileError>
 {
     let mut vars = Vec::new();
     loop
@@ -45,7 +45,7 @@ fn parse_vars(tq: &mut TokenQueue, indent_level: usize, constants: bool) -> Resu
                 let type_of_var = try!(parse_optional_type(tq));
                 try!(tq.expect(TokenKind::Operator(Operator::Assign)));
                 let expr = try!(parse_expression(tq, indent_level));
-                vars.push(Variable::new(id, type_of_var, constants, expr));
+                vars.push(Variable::new(id, type_of_var, constants, public, expr));
             },
             TokenKind::Indent(level) => if level > indent_level {continue;} else {break;},
             TokenKind::Comma => continue,
@@ -85,7 +85,7 @@ pub fn parse_block(tq: &mut TokenQueue, indent_level: usize) -> Result<Block, Co
     Ok(Block::new(statements))
 }
 
-fn parse_func(tq: &mut TokenQueue, indent_level: usize) -> Result<Statement, CompileError>
+fn parse_func(tq: &mut TokenQueue, indent_level: usize, public: bool) -> Result<Statement, CompileError>
 {
     let (name, _) = try!(tq.expect_identifier());
     let mut args = Vec::new();
@@ -127,6 +127,7 @@ fn parse_func(tq: &mut TokenQueue, indent_level: usize) -> Result<Statement, Com
             name,
             ret_type,
             args,
+            public,
             try!(parse_block(tq, indent_level))
         )))
 }
@@ -184,13 +185,23 @@ pub fn parse_statement(tq: &mut TokenQueue, indent_level: usize) -> Result<State
     match tok.kind
     {
         TokenKind::Import => parse_import(tq),
-        TokenKind::Var => parse_vars(tq, indent_level, false),
-        TokenKind::Const => parse_vars(tq, indent_level, true),
-        TokenKind::Func => parse_func(tq, indent_level),
+        TokenKind::Var => parse_vars(tq, indent_level, false, false),
+        TokenKind::Const => parse_vars(tq, indent_level, true, false),
+        TokenKind::Func => parse_func(tq, indent_level, false),
         TokenKind::While => parse_while(tq, indent_level),
         TokenKind::If => parse_if(tq, indent_level).map(|i| Statement::If(i)),
         TokenKind::Return => parse_return(tq, indent_level),
         TokenKind::Identifier(id) => parse_function_call(tq, indent_level, id).map(|c| Statement::Call(c)),
+        TokenKind::Pub => {
+            let next = try!(tq.pop());
+            match next.kind
+            {
+                TokenKind::Var => parse_vars(tq, indent_level, false, true),
+                TokenKind::Const => parse_vars(tq, indent_level, true, true),
+                TokenKind::Func => parse_func(tq, indent_level, true),
+                _ => err(tok.pos, ErrorType::UnexpectedToken(next)),
+            }
+        },
         _ => err(tok.pos, ErrorType::UnexpectedToken(tok)),
     }
 }

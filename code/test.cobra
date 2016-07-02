@@ -6,16 +6,22 @@ var
 
 const X = 7777
 
-trait Clone:
-    func clone(self) -> Self
-
 
 struct Foo:
-    pub x: int = 0
-    pub y: int = 0
-    z: float = 0.0
+    var x: int = 0, y: int = 0
+    pub const z: float = 0.0
 
-func bla(b: int) -> int: if b == 6: return b + 1 else: return b - 1
+    pub func from_string(s: string) -> Foo:
+        return Foo(88, 99, 1.0)
+
+    func test(self, a: int):
+        x += a
+
+    func __destroy__():
+        print("This is the destructor")
+
+
+
 
 
 func test(a: int) -> int:

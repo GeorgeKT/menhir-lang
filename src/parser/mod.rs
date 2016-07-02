@@ -70,6 +70,7 @@ fn test_simple_var_with_type()
         assert!(v.name == "x");
         assert!(v.typ == Some(Type::Primitive("int".into())));
         assert!(!v.is_const);
+        assert!(!v.public);
         if let Expression::Number(ref n) = v.init {
             assert!(n == "7");
         } else {
@@ -85,7 +86,7 @@ fn test_simple_var_with_type()
 #[test]
 fn test_simple_const()
 {
-    let stmt = th_statement("const x = 7");
+    let stmt = th_statement("pub const x = 7");
     if let Statement::Variable(vars) = stmt
     {
         assert!(vars.len() == 1);
@@ -93,6 +94,7 @@ fn test_simple_const()
         assert!(v.name == "x");
         assert!(v.typ.is_none());
         assert!(v.is_const);
+        assert!(v.public);
         if let Expression::Number(ref n) = v.init {
             assert!(n == "7");
         } else {
@@ -108,7 +110,7 @@ fn test_simple_const()
 #[test]
 fn test_multiple_var()
 {
-    let stmt = th_statement("var x = 7, z = 888");
+    let stmt = th_statement("pub var x = 7, z = 888");
 
     if let Statement::Variable(vars) = stmt
     {
@@ -117,6 +119,7 @@ fn test_multiple_var()
         assert!(v.name == "x");
         assert!(v.typ.is_none());
         assert!(!v.is_const);
+        assert!(v.public);
         if let Expression::Number(ref n) = v.init {
             assert!(n == "7");
         } else {
@@ -153,6 +156,7 @@ var
         assert!(v.name == "x");
         assert!(v.typ.is_none());
         assert!(!v.is_const);
+        assert!(!v.public);
         if let Expression::Number(ref n) = v.init {
             assert!(n == "7");
         } else {
@@ -409,6 +413,7 @@ func blaat():
         assert!(f.name == "blaat");
         assert!(f.args.is_empty());
         assert!(f.return_type == Type::Void);
+        assert!(!f.public);
         assert!(f.block.statements.len() == 2);
         let s = &f.block.statements[0];
         assert!(*s == Statement::Call(
@@ -432,7 +437,7 @@ func blaat():
 fn test_func_with_args_and_return_type()
 {
     let stmt = th_statement(r#"
-func blaat(x: int, const y: int) -> int:
+pub func blaat(x: int, const y: int) -> int:
     print("true")
     return 5
     ""#);
@@ -445,6 +450,7 @@ func blaat(x: int, const y: int) -> int:
         assert!(f.args[1] == Argument::new("y".into(), Type::Primitive("int".into()), true));
         assert!(f.return_type == Type::Primitive("int".into()));
         assert!(f.block.statements.len() == 2);
+        assert!(f.public);
 
         let s = &f.block.statements[0];
         assert!(*s == Statement::Call(
