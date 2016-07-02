@@ -42,6 +42,7 @@ pub enum ErrorType
     ExpectedStringLiteral,
     InvalidOperator(String),
     InvalidUnaryOperator(Operator),
+    SelfNotAllowed,
 }
 
 
@@ -78,6 +79,7 @@ impl fmt::Display for CompileError
             ErrorType::ExpectedIdentifier =>  write!(f, "{}: Expected identifier", self.pos),
             ErrorType::ExpectedIndent =>  write!(f, "{}: Expected indentation", self.pos),
             ErrorType::ExpectedStringLiteral =>  write!(f, "{}: Expected string literal", self.pos),
+            ErrorType::SelfNotAllowed => write!(f, "{}: A self argument is only allowed as the first argument of a member function", self.pos),
         }
     }
 }

@@ -469,3 +469,73 @@ pub func blaat(x: int, const y: int) -> int:
         assert!(false);
     }
 }
+
+
+
+#[test]
+fn test_struct()
+{
+    let stmt = th_statement(r#"
+pub struct Blaat:
+    var x = 7, y = 9
+    pub const z = 99
+
+    pub func foo(self):
+        print("foo")
+
+    func bar(self):
+        print("bar")
+    ""#);
+
+    if let Statement::Struct(s) = stmt
+    {
+        println!("Struct: {:?}", s);
+        assert!(s.name == "Blaat");
+        assert!(s.functions.len() == 2);
+
+        assert!(s.variables == vec![
+            Variable::new("x".into(), None, false, false, Expression::Number("7".into())),
+            Variable::new("y".into(), None, false, false, Expression::Number("9".into())),
+            Variable::new("z".into(), None, true, true, Expression::Number("99".into())),
+        ]);
+
+        assert!(s.functions == vec![
+            Function::new(
+                "foo".into(),
+                Type::Void,
+                vec![
+                    Argument::new("self".into(), Type::Struct("Blaat".into()), false),
+                ],
+                true,
+                Block::new(vec![
+                    Statement::Call(
+                        Call::new(
+                            "print".into(),
+                            vec![Expression::StringLiteral("foo".into())]
+                        )
+                    )
+                ])
+            ),
+            Function::new(
+                "bar".into(),
+                Type::Void,
+                vec![
+                    Argument::new("self".into(), Type::Struct("Blaat".into()), false),
+                ],
+                false,
+                Block::new(vec![
+                    Statement::Call(
+                        Call::new(
+                            "print".into(),
+                            vec![Expression::StringLiteral("bar".into())]
+                        )
+                    )
+                ])
+            ),
+        ]);
+    }
+    else
+    {
+        assert!(false);
+    }
+}

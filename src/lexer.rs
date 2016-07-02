@@ -251,7 +251,7 @@ impl Lexer
             LexState::InString => self.in_string(c),
         }
     }
-
+    
     fn add(&mut self, tok: TokenKind)
     {
         self.tokens.add(Token::new(tok, self.pos));

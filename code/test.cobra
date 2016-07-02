@@ -1,5 +1,6 @@
 import "another_file.cobra"
 
+
 var
     Y = 8888
     A = 18
@@ -17,12 +18,8 @@ struct Foo:
     func test(self, a: int):
         x += a
 
-    func __destroy__():
+    func __destroy__(self):
         print("This is the destructor")
-
-
-
-
 
 func test(a: int) -> int:
     print("A is $a")
@@ -33,7 +30,7 @@ func test(a: int) -> int:
     else:
         return a - 1
 
-    const f = Foo(x, y, z=0.5)
+    var f = Foo(x, y, z=0.5)
     var i = 0
     while i < 5:
         print("Count: $i")

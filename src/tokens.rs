@@ -113,4 +113,13 @@ impl Token
             pos: pos,
         }
     }
+
+    pub fn is_indent(&self) -> bool
+    {
+        match self.kind
+        {
+            TokenKind::Indent(_) => true,
+            _ => false,
+        }
+    }
 }

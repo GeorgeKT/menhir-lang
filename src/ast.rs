@@ -73,11 +73,12 @@ impl Variable
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Type
 {
     Void,
     Primitive(String),
+    Struct(String),
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -186,6 +187,28 @@ impl Return
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub struct Struct
+{
+    pub name: String,
+    pub variables: Vec<Variable>,
+    pub functions: Vec<Function>,
+    pub public: bool,
+}
+
+impl Struct
+{
+    pub fn new(name: String, public: bool) -> Struct
+    {
+        Struct{
+            name: name,
+            variables: Vec::new(),
+            functions: Vec::new(),
+            public: public,
+        }
+    }
+}
+
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Statement
@@ -197,6 +220,7 @@ pub enum Statement
     If(If),
     Return(Return),
     Call(Call),
+    Struct(Struct),
 }
 
 #[derive(Debug, Eq, PartialEq)]

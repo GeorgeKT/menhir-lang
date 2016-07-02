@@ -23,6 +23,16 @@ impl TokenQueue
     pub fn add(&mut self, tok: Token)
     {
         self.last_pos = tok.pos;
+
+        // Remove consecutive indents
+        if let Some(last) = self.tokens.back_mut()
+        {
+            if tok.is_indent() && last.is_indent() {
+                *last = tok;
+                return;
+            }
+        }
+
         self.tokens.push_back(tok);
     }
 
