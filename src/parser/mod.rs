@@ -247,7 +247,7 @@ if 1:
     {
         assert!(w.cond == Expression::Number("1".into()));
         assert!(w.if_block.statements.len() == 1);
-        assert!(w.else_block.is_none());
+        assert!(w.else_part == ElsePart::Empty);
 
         let s = &w.if_block.statements[0];
         assert!(*s == Statement::Call(
@@ -276,7 +276,6 @@ else:
     {
         assert!(w.cond == Expression::Number("1".into()));
         assert!(w.if_block.statements.len() == 1);
-        assert!(w.else_block.is_some());
 
         let s = &w.if_block.statements[0];
         assert!(*s == Statement::Call(
@@ -285,7 +284,7 @@ else:
                 vec![Expression::StringLiteral("true".into())]
             )));
 
-        if let Some(eb) = w.else_block
+        if let ElsePart::Block(eb) = w.else_part
         {
             assert!(eb.statements.len() == 1);
             let s = &eb.statements[0];
@@ -294,6 +293,53 @@ else:
                     "print".into(),
                     vec![Expression::StringLiteral("false".into())]
                 )));
+        }
+        else
+        {
+            assert!(false);
+        }
+    }
+    else
+    {
+        assert!(false);
+    }
+}
+
+
+#[test]
+fn test_else_if()
+{
+    let stmt = th_statement(r#"
+if 1:
+    print("true")
+else if 0:
+    print("nada")
+    ""#);
+
+    if let Statement::If(w) = stmt
+    {
+        assert!(w.cond == Expression::Number("1".into()));
+        assert!(w.if_block.statements.len() == 1);
+
+        let s = &w.if_block.statements[0];
+        assert!(*s == Statement::Call(
+            Call::new(
+                "print".into(),
+                vec![Expression::StringLiteral("true".into())]
+            )));
+
+        if let ElsePart::If(else_if) = w.else_part
+        {
+            assert!(else_if.cond == Expression::Number("0".into()));
+            assert!(else_if.if_block.statements.len() == 1);
+            let s = &else_if.if_block.statements[0];
+            assert!(*s == Statement::Call(
+                Call::new(
+                    "print".into(),
+                    vec![Expression::StringLiteral("nada".into())]
+                )));
+
+            assert!(else_if.else_part == ElsePart::Empty);
         }
         else
         {
@@ -317,7 +363,7 @@ if 1: print("true")
     {
         assert!(w.cond == Expression::Number("1".into()));
         assert!(w.if_block.statements.len() == 1);
-        assert!(w.else_block.is_none());
+        assert!(w.else_part == ElsePart::Empty);
 
         let s = &w.if_block.statements[0];
         assert!(*s == Statement::Call(

@@ -139,21 +139,29 @@ impl While
 }
 
 #[derive(Debug, Eq, PartialEq)]
+pub enum ElsePart
+{
+    Empty,
+    Block(Block),
+    If(Box<If>),
+}
+
+#[derive(Debug, Eq, PartialEq)]
 pub struct If
 {
     pub cond: Expression,
     pub if_block: Block,
-    pub else_block: Option<Block>,
+    pub else_part: ElsePart,
 }
 
 impl If
 {
-    pub fn new(cond: Expression, if_block: Block, else_block: Option<Block>) -> If
+    pub fn new(cond: Expression, if_block: Block, ep: ElsePart) -> If
     {
         If{
             cond: cond,
             if_block: if_block,
-            else_block: else_block,
+            else_part: ep,
         }
     }
 }

@@ -139,23 +139,36 @@ fn parse_while(tq: &mut TokenQueue, indent_level: usize) -> Result<Statement, Co
     Ok(Statement::While(While::new(cond, block)))
 }
 
-fn parse_if(tq: &mut TokenQueue, indent_level: usize) -> Result<Statement, CompileError>
+fn parse_else(tq: &mut TokenQueue, indent_level: usize) -> Result<ElsePart, CompileError>
+{
+    if tq.is_next(TokenKind::If)
+    {
+        try!(tq.pop());
+        Ok(ElsePart::If(Box::new(try!(parse_if(tq, indent_level)))))
+    }
+    else
+    {
+        try!(tq.expect(TokenKind::Colon));
+        Ok(ElsePart::Block(try!(parse_block(tq, indent_level))))
+    }
+}
+
+fn parse_if(tq: &mut TokenQueue, indent_level: usize) -> Result<If, CompileError>
 {
     let cond = try!(parse_expression(tq, indent_level));
     try!(tq.expect(TokenKind::Colon));
     let if_block = try!(parse_block(tq, indent_level));
-    let mut else_block = None;
+    let mut else_part = ElsePart::Empty;
 
     if let Some(lvl) = tq.next_indent() {
         if lvl == indent_level && tq.is_next_at(1, TokenKind::Else) {
             try!(tq.pop()); // indent
             try!(tq.pop()); // else
-            try!(tq.expect(TokenKind::Colon));
-            else_block = Some(try!(parse_block(tq, indent_level)));
+            else_part = try!(parse_else(tq, indent_level));
         }
     }
 
-    Ok(Statement::If(If::new(cond, if_block, else_block)))
+    Ok(If::new(cond, if_block, else_part))
 }
 
 
@@ -175,7 +188,7 @@ pub fn parse_statement(tq: &mut TokenQueue, indent_level: usize) -> Result<State
         TokenKind::Const => parse_vars(tq, indent_level, true),
         TokenKind::Func => parse_func(tq, indent_level),
         TokenKind::While => parse_while(tq, indent_level),
-        TokenKind::If => parse_if(tq, indent_level),
+        TokenKind::If => parse_if(tq, indent_level).map(|i| Statement::If(i)),
         TokenKind::Return => parse_return(tq, indent_level),
         TokenKind::Identifier(id) => parse_function_call(tq, indent_level, id).map(|c| Statement::Call(c)),
         _ => err(tok.pos, ErrorType::UnexpectedToken(tok)),
