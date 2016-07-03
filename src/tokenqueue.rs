@@ -147,6 +147,15 @@ impl TokenQueue
         }
     }
 
+    pub fn is_next_identifier(&self) -> bool
+    {
+        match self.tokens.front()
+        {
+            Some(tok) => if let TokenKind::Identifier(_) = tok.kind {true} else {false},
+            None => false,
+        }
+    }
+
     pub fn next_indent(&self) -> Option<usize>
     {
         match self.tokens.front()

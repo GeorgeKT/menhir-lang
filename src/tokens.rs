@@ -69,6 +69,8 @@ pub enum TokenKind
     Struct,
     Pub,
     In,
+    Match,
+    Union, 
     Identifier(String),
     Colon,
     Comma,

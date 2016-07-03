@@ -7,6 +7,24 @@ var
 
 const X = 7777
 
+union Action:
+    Move(x: int, y: int)
+    MoveUp(dist: int)
+    MoveDown(dist: int)
+
+    pub func perform(self):
+        match self:
+            Move(x, y):
+                pass
+            MoveUp(d):
+                pass
+            MoveDown(d):
+                pass
+
+        if self == MoveUp(dist):
+            print("Moving up by $dist")
+
+
 
 struct Foo:
     var x: int = 0, y: int = 0

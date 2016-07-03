@@ -121,6 +121,8 @@ impl Lexer
             "pub" => TokenKind::Pub,
             "struct" => TokenKind::Struct,
             "in" => TokenKind::In,
+            "match" => TokenKind::Match,
+            "union" => TokenKind::Union,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
         };
 
@@ -251,7 +253,7 @@ impl Lexer
             LexState::InString => self.in_string(c),
         }
     }
-    
+
     fn add(&mut self, tok: TokenKind)
     {
         self.tokens.add(Token::new(tok, self.pos));
@@ -292,7 +294,7 @@ mod tests
     #[test]
     fn test_keywords()
     {
-        let mut cursor = Cursor::new("import var const func if else while for return pub struct in");
+        let mut cursor = Cursor::new("import var const func if else while for return pub struct in match union");
         let mut lexer = Lexer::new();
         let tokens: Vec<TokenKind> = lexer
             .read(&mut cursor)
@@ -314,6 +316,8 @@ mod tests
             TokenKind::Pub,
             TokenKind::Struct,
             TokenKind::In,
+            TokenKind::Match,
+            TokenKind::Union,
             TokenKind::EOF,
         ]);
     }

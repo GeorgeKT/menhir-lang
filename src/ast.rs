@@ -79,6 +79,7 @@ pub enum Type
     Void,
     Primitive(String),
     Struct(String),
+    Union(String),
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -211,6 +212,84 @@ impl Struct
 
 
 #[derive(Debug, Eq, PartialEq)]
+pub struct UnionCase
+{
+    pub name: String,
+    pub vars: Vec<Argument>,
+}
+
+impl UnionCase
+{
+    pub fn new(name: String) -> UnionCase
+    {
+        UnionCase{
+            name: name,
+            vars: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct Union
+{
+    pub name: String,
+    pub public: bool,
+    pub cases: Vec<UnionCase>,
+    pub functions: Vec<Function>,
+}
+
+impl Union
+{
+    pub fn new(name: String, public: bool) -> Union
+    {
+        Union{
+            name: name,
+            public: public,
+            cases: Vec::new(),
+            functions: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct MatchCase
+{
+    pub name: String,
+    pub bindings: Vec<String>,
+    pub block: Block,
+}
+
+impl MatchCase
+{
+    pub fn new(name: String, bindings: Vec<String>, block: Block) -> MatchCase
+    {
+        MatchCase{
+            name: name,
+            bindings: bindings,
+            block: block,
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct Match
+{
+    pub expr: Expression,
+    pub cases: Vec<MatchCase>,
+}
+
+impl Match
+{
+    pub fn new(expr: Expression) -> Match
+    {
+        Match{
+            expr: expr,
+            cases: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
 pub enum Statement
 {
     Import(Import),
@@ -221,6 +300,8 @@ pub enum Statement
     Return(Return),
     Call(Call),
     Struct(Struct),
+    Union(Union),
+    Match(Match),
 }
 
 #[derive(Debug, Eq, PartialEq)]

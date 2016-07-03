@@ -470,8 +470,6 @@ pub func blaat(x: int, const y: int) -> int:
     }
 }
 
-
-
 #[test]
 fn test_struct()
 {
@@ -531,6 +529,156 @@ pub struct Blaat:
                         )
                     )
                 ])
+            ),
+        ]);
+    }
+    else
+    {
+        assert!(false);
+    }
+}
+
+
+#[test]
+fn test_union()
+{
+    let stmt = th_statement(r#"
+pub union Blaat:
+    Foo(x: int, y: int)
+    Bar, Baz
+
+    pub func foo(self):
+        print("foo")
+    ""#);
+
+    if let Statement::Union(u) = stmt
+    {
+        println!("Union: {:?}", u);
+        assert!(u.name == "Blaat");
+        assert!(u.public);
+
+        assert!(u.cases == vec![
+            UnionCase{
+                name: "Foo".into(),
+                vars: vec![
+                    Argument::new("x".into(), Type::Primitive("int".into()), false),
+                    Argument::new("y".into(), Type::Primitive("int".into()), false),
+                ]
+            },
+            UnionCase::new("Bar".into()),
+            UnionCase::new("Baz".into()),
+        ]);
+
+        assert!(u.functions == vec![
+            Function::new(
+                "foo".into(),
+                Type::Void,
+                vec![
+                    Argument::new("self".into(), Type::Union("Blaat".into()), false),
+                ],
+                true,
+                Block::new(vec![
+                    Statement::Call(
+                        Call::new(
+                            "print".into(),
+                            vec![Expression::StringLiteral("foo".into())]
+                        )
+                    )
+                ])
+            ),
+        ]);
+    }
+    else
+    {
+        assert!(false);
+    }
+}
+
+#[test]
+fn test_single_line_union()
+{
+    let stmt = th_statement(r#"
+union Blaat: Bar, Baz, Foo
+    ""#);
+
+    if let Statement::Union(u) = stmt
+    {
+        println!("Union: {:?}", u);
+        assert!(u.name == "Blaat");
+        assert!(!u.public);
+
+        assert!(u.cases == vec![
+            UnionCase::new("Bar".into()),
+            UnionCase::new("Baz".into()),
+            UnionCase::new("Foo".into()),
+        ]);
+    }
+    else
+    {
+        assert!(false);
+    }
+}
+
+
+
+#[test]
+fn test_match()
+{
+    let stmt = th_statement(r#"
+match bla:
+    Foo(x, y): print("foo")
+    Bar:
+        print("bar")
+    Baz:
+        print("baz")
+    ""#);
+
+    if let Statement::Match(m) = stmt
+    {
+        println!("Match: {:?}", m);
+        assert!(m.expr == Expression::NameRef("bla".into()));
+        assert!(m.cases == vec![
+            MatchCase::new(
+                "Foo".into(),
+                vec!["x".into(), "y".into()],
+                Block::new(
+                    vec![
+                        Statement::Call(
+                            Call::new(
+                                "print".into(),
+                                vec![Expression::StringLiteral("foo".into())]
+                            )
+                        )
+                    ]
+                )
+            ),
+            MatchCase::new(
+                "Bar".into(),
+                Vec::new(),
+                Block::new(
+                    vec![
+                        Statement::Call(
+                            Call::new(
+                                "print".into(),
+                                vec![Expression::StringLiteral("bar".into())]
+                            )
+                        )
+                    ]
+                )
+            ),
+            MatchCase::new(
+                "Baz".into(),
+                Vec::new(),
+                Block::new(
+                    vec![
+                        Statement::Call(
+                            Call::new(
+                                "print".into(),
+                                vec![Expression::StringLiteral("baz".into())]
+                            )
+                        )
+                    ]
+                )
             ),
         ]);
     }
