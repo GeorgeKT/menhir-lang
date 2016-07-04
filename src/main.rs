@@ -9,7 +9,7 @@ use std::env;
 use std::fs;
 use std::process;
 
-use ast::Program;
+use ast::{TreePrinter, Program};
 use parser::parse_program;
 use compileerror::CompileError;
 
@@ -37,7 +37,9 @@ fn main()
 
     match parse_file(&filename)
     {
-        Err(e) => println!("Error: {}", e),
-        Ok(_) => {},
+        Err(e) => println!("Error: {:?}", e),
+        Ok(p) => {
+            p.print(0);
+        },
     }
 }

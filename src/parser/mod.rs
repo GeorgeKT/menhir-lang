@@ -9,7 +9,7 @@ use compileerror::{Pos, CompileError, ErrorType};
 
 use self::statements::*;
 
-pub use self::expressions::{parse_function_call, parse_expression};
+pub use self::expressions::parse_expression;
 
 pub fn err<T: Sized>(pos: Pos, e: ErrorType) -> Result<T, CompileError>
 {
@@ -19,8 +19,7 @@ pub fn err<T: Sized>(pos: Pos, e: ErrorType) -> Result<T, CompileError>
 pub fn parse_program<Input: Read>(input: &mut Input) -> Result<Program, CompileError>
 {
     let mut tq = try!(Lexer::new().read(input));
-    let indent = try!(tq.expect_indent());
-    let block = try!(parse_block(&mut tq, indent));
+    let block = try!(parse_block(&mut tq, 0));
     Ok(Program::new(block))
 }
 
@@ -179,6 +178,18 @@ var
     }
 }
 
+#[cfg(test)]
+fn call(name: &str, args: Vec<Expression>) -> Statement
+{
+    Statement::Expression(Expression::Call(Call::new(name.into(), args)))
+}
+
+#[cfg(test)]
+fn str_lit(s: &str) -> Expression
+{
+    Expression::StringLiteral(s.into())
+}
+
 #[test]
 fn test_while()
 {
@@ -194,18 +205,10 @@ while 1:
         assert!(w.block.statements.len() == 2);
 
         let s = &w.block.statements[0];
-        assert!(*s == Statement::Call(
-            Call::new(
-                "print".into(),
-                vec![Expression::StringLiteral("true".into())]
-            )));
+        assert!(*s == call("print", vec![str_lit("true")]));
 
         let s = &w.block.statements[1];
-        assert!(*s == Statement::Call(
-            Call::new(
-                "print".into(),
-                vec![Expression::StringLiteral("something else".into())]
-            )));
+        assert!(*s == call("print", vec![str_lit("something else")]));
     }
     else
     {
@@ -227,11 +230,7 @@ while 1: print("true")
         assert!(w.block.statements.len() == 1);
 
         let s = &w.block.statements[0];
-        assert!(*s == Statement::Call(
-            Call::new(
-                "print".into(),
-                vec![Expression::StringLiteral("true".into())]
-            )));
+        assert!(*s == call("print", vec![str_lit("true")]));
     }
     else
     {
@@ -254,11 +253,7 @@ if 1:
         assert!(w.else_part == ElsePart::Empty);
 
         let s = &w.if_block.statements[0];
-        assert!(*s == Statement::Call(
-            Call::new(
-                "print".into(),
-                vec![Expression::StringLiteral("true".into())]
-            )));
+        assert!(*s == call("print", vec![str_lit("true")]));
     }
     else
     {
@@ -282,21 +277,13 @@ else:
         assert!(w.if_block.statements.len() == 1);
 
         let s = &w.if_block.statements[0];
-        assert!(*s == Statement::Call(
-            Call::new(
-                "print".into(),
-                vec![Expression::StringLiteral("true".into())]
-            )));
+        assert!(*s == call("print", vec![str_lit("true")]));
 
         if let ElsePart::Block(eb) = w.else_part
         {
             assert!(eb.statements.len() == 1);
             let s = &eb.statements[0];
-            assert!(*s == Statement::Call(
-                Call::new(
-                    "print".into(),
-                    vec![Expression::StringLiteral("false".into())]
-                )));
+            assert!(*s == call("print", vec![str_lit("false")]));
         }
         else
         {
@@ -326,23 +313,14 @@ else if 0:
         assert!(w.if_block.statements.len() == 1);
 
         let s = &w.if_block.statements[0];
-        assert!(*s == Statement::Call(
-            Call::new(
-                "print".into(),
-                vec![Expression::StringLiteral("true".into())]
-            )));
+        assert!(*s == call("print", vec![str_lit("true")]));
 
         if let ElsePart::If(else_if) = w.else_part
         {
             assert!(else_if.cond == Expression::Number("0".into()));
             assert!(else_if.if_block.statements.len() == 1);
             let s = &else_if.if_block.statements[0];
-            assert!(*s == Statement::Call(
-                Call::new(
-                    "print".into(),
-                    vec![Expression::StringLiteral("nada".into())]
-                )));
-
+            assert!(*s == call("print", vec![str_lit("nada")]));
             assert!(else_if.else_part == ElsePart::Empty);
         }
         else
@@ -370,11 +348,7 @@ if 1: print("true")
         assert!(w.else_part == ElsePart::Empty);
 
         let s = &w.if_block.statements[0];
-        assert!(*s == Statement::Call(
-            Call::new(
-                "print".into(),
-                vec![Expression::StringLiteral("true".into())]
-            )));
+        assert!(*s == call("print", vec![str_lit("true")]));
     }
     else
     {
@@ -416,11 +390,7 @@ func blaat():
         assert!(!f.public);
         assert!(f.block.statements.len() == 2);
         let s = &f.block.statements[0];
-        assert!(*s == Statement::Call(
-            Call::new(
-                "print".into(),
-                vec![Expression::StringLiteral("true".into())]
-            )));
+        assert!(*s == call("print", vec![str_lit("true")]));
 
         let s = &f.block.statements[1];
         assert!(*s == Statement::Return(
@@ -453,11 +423,7 @@ pub func blaat(x: int, const y: int) -> int:
         assert!(f.public);
 
         let s = &f.block.statements[0];
-        assert!(*s == Statement::Call(
-            Call::new(
-                "print".into(),
-                vec![Expression::StringLiteral("true".into())]
-            )));
+        assert!(*s == call("print", vec![str_lit("true")]));
 
         let s = &f.block.statements[1];
         assert!(*s == Statement::Return(
@@ -506,12 +472,7 @@ pub struct Blaat:
                 ],
                 true,
                 Block::new(vec![
-                    Statement::Call(
-                        Call::new(
-                            "print".into(),
-                            vec![Expression::StringLiteral("foo".into())]
-                        )
-                    )
+                    call("print", vec![str_lit("foo")])
                 ])
             ),
             Function::new(
@@ -522,12 +483,7 @@ pub struct Blaat:
                 ],
                 false,
                 Block::new(vec![
-                    Statement::Call(
-                        Call::new(
-                            "print".into(),
-                            vec![Expression::StringLiteral("bar".into())]
-                        )
-                    )
+                    call("print", vec![str_lit("bar")])
                 ])
             ),
         ]);
@@ -578,12 +534,7 @@ pub union Blaat:
                 ],
                 true,
                 Block::new(vec![
-                    Statement::Call(
-                        Call::new(
-                            "print".into(),
-                            vec![Expression::StringLiteral("foo".into())]
-                        )
-                    )
+                    call("print", vec![str_lit("foo")])
                 ])
             ),
         ]);
@@ -643,12 +594,7 @@ match bla:
                 vec!["x".into(), "y".into()],
                 Block::new(
                     vec![
-                        Statement::Call(
-                            Call::new(
-                                "print".into(),
-                                vec![Expression::StringLiteral("foo".into())]
-                            )
-                        )
+                        call("print", vec![str_lit("foo")])
                     ]
                 )
             ),
@@ -657,12 +603,7 @@ match bla:
                 Vec::new(),
                 Block::new(
                     vec![
-                        Statement::Call(
-                            Call::new(
-                                "print".into(),
-                                vec![Expression::StringLiteral("bar".into())]
-                            )
-                        )
+                        call("print", vec![str_lit("bar")])
                     ]
                 )
             ),
@@ -671,12 +612,7 @@ match bla:
                 Vec::new(),
                 Block::new(
                     vec![
-                        Statement::Call(
-                            Call::new(
-                                "print".into(),
-                                vec![Expression::StringLiteral("baz".into())]
-                            )
-                        )
+                        call("print", vec![str_lit("baz")])
                     ]
                 )
             ),

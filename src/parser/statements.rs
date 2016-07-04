@@ -73,7 +73,7 @@ pub fn parse_block(tq: &mut TokenQueue, indent_level: usize) -> Result<Block, Co
         match tq.next_indent()
         {
             Some(lvl) if lvl > indent_level => {
-                try!(tq.pop());
+                try!(tq.expect_indent());
 
                 if tq.is_next(TokenKind::EOF) {
                     break;
@@ -331,7 +331,7 @@ fn parse_match(tq: &mut TokenQueue, indent_level: usize) -> Result<Statement, Co
         try!(tq.pop()); // indent
 
         if tq.is_next(TokenKind::EOF) {break;}
-        
+
         m.cases.push(try!(parse_match_case(tq, level)));
     }
 
@@ -353,7 +353,10 @@ pub fn parse_statement(tq: &mut TokenQueue, indent_level: usize) -> Result<State
         TokenKind::If => parse_if(tq, indent_level).map(|i| Statement::If(i)),
         TokenKind::Return => parse_return(tq, indent_level),
         TokenKind::Match => parse_match(tq, indent_level),
-        TokenKind::Identifier(id) => parse_function_call(tq, indent_level, id).map(|c| Statement::Call(c)),
+        TokenKind::Identifier(id) => {
+            tq.push_front(Token::new(TokenKind::Identifier(id), tok.pos));
+            parse_expression(tq, indent_level).map(|e| Statement::Expression(e))
+        },
         TokenKind::Pub => {
             let next = try!(tq.pop());
             match next.kind

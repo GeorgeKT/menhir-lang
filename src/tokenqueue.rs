@@ -50,6 +50,11 @@ impl TokenQueue
         }
     }
 
+    pub fn push_front(&mut self, tok: Token)
+    {
+        self.tokens.push_front(tok)
+    }
+
     pub fn pop(&mut self) -> Result<Token, CompileError>
     {
         self.tokens.pop_front()

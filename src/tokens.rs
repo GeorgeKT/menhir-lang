@@ -19,10 +19,15 @@ pub enum Operator
     And,
     Or,
     Assign,
+    AddAssign,
+    SubAssign,
+    MulAssign,
+    DivAssign,
     Arrow,
     Range,
     Increment,
     Decrement,
+    Dot,
 }
 
 pub const TOP_PRECEDENCE: usize = 2000;
@@ -33,7 +38,8 @@ impl Operator
     {
         match *self
         {
-            Operator::Not | Operator::Assign | Operator::Arrow |
+            Operator::Not | Operator::Assign | Operator::Arrow | Operator::Dot |
+            Operator::AddAssign | Operator::SubAssign | Operator::MulAssign | Operator::DivAssign |
             Operator::Increment | Operator::Decrement | Operator::Range => TOP_PRECEDENCE,
             Operator::Mul | Operator::Div | Operator::Mod => TOP_PRECEDENCE - 100,
             Operator::Add | Operator::Sub => TOP_PRECEDENCE - 200,
@@ -80,6 +86,11 @@ impl Display for Operator
             Operator::Range => write!(fmt, ".."),
             Operator::Increment => write!(fmt, "++"),
             Operator::Decrement => write!(fmt, "--"),
+            Operator::AddAssign => write!(fmt, "+="),
+            Operator::SubAssign => write!(fmt, "-="),
+            Operator::DivAssign => write!(fmt, "*="),
+            Operator::MulAssign => write!(fmt, "/="),
+            Operator::Dot => write!(fmt, "."),
         }
     }
 }

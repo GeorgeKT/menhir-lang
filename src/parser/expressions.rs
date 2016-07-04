@@ -33,8 +33,6 @@ fn parse_binary_op_rhs(tq: &mut TokenQueue, indent_level: usize, mut lhs: Expres
 {
     loop
     {
-        println!("parse_binary_op_rhs: lhs {:?}", lhs);
-
         if tq.peek().map(|tok| is_end_of_expression(tok, indent_level)).unwrap_or(false) {
             return Ok(lhs);
         }
@@ -47,17 +45,12 @@ fn parse_binary_op_rhs(tq: &mut TokenQueue, indent_level: usize, mut lhs: Expres
             }
         }).unwrap_or(0);
 
-        println!("parse_binary_op_rhs: p {} {}", prec, lhs.precedence());
         if prec < lhs.precedence() {
             return Ok(lhs);
         }
 
         let op = try!(tq.expect_operator());
-        println!("parse_binary_op_rhs: op {:?}", op);
-
         let rhs = try!(parse_expression(tq, indent_level));
-        println!("parse_binary_op_rhs: rhs {:?}", rhs);
-
         match rhs
         {
             Expression::BinaryOp((rhs_op, left, right)) => {
@@ -76,7 +69,7 @@ fn parse_binary_op_rhs(tq: &mut TokenQueue, indent_level: usize, mut lhs: Expres
     }
 }
 
-pub fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: String) -> Result<Call, CompileError>
+fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: String) -> Result<Call, CompileError>
 {
     try!(tq.expect(TokenKind::OpenParen));
 
@@ -175,6 +168,7 @@ pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize) -> Result<Expr
 
 #[cfg(test)]
 use std::io::Cursor;
+#[cfg(test)]
 use lexer::Lexer;
 
 #[cfg(test)]
@@ -401,5 +395,22 @@ fn test_precedence_11()
             "c".into(),
             vec![number("6")],
         ))
+    ));
+}
+
+#[test]
+fn test_precedence_12()
+{
+    let e = th_expr("b.d + a.c(6)");
+    println!("Expr: {:?}", e);
+    assert!(e == bin_op(
+        Operator::Add,
+        bin_op(Operator::Dot, name_ref("b"), name_ref("d")),
+        bin_op(Operator::Dot, name_ref("a"),
+            Expression::Call(Call::new(
+                "c".into(),
+                vec![number("6")],
+            ))
+        )
     ));
 }

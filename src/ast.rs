@@ -1,6 +1,20 @@
-
+use std::fmt;
 use compileerror::Pos;
 use tokens::Operator;
+
+fn prefix(level: usize) -> String
+{
+    let mut s = String::with_capacity(level);
+    for _ in 0..level {
+        s.push(' ')
+    }
+    s
+}
+
+pub trait TreePrinter
+{
+    fn print(&self, level: usize);
+}
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Import
@@ -20,6 +34,14 @@ impl Import
     }
 }
 
+impl TreePrinter for Import
+{
+    fn print(&self, level: usize)
+    {
+        println!("{}import {}", prefix(level), self.path);
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct Call
 {
@@ -34,6 +56,18 @@ impl Call
         Call{
             name: name,
             args: args,
+        }
+    }
+}
+
+impl TreePrinter for Call
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        println!("{}call {}", p, self.name);
+        for a in &self.args {
+            a.print(level + 1);
         }
     }
 }
@@ -63,6 +97,44 @@ impl Expression
     }
 }
 
+impl TreePrinter for Expression
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        match *self
+        {
+            Expression::Number(ref s) => {
+                println!("{}number {}", p, s);
+            },
+            Expression::StringLiteral(ref s) => {
+                println!("{}string {}", p, s);
+            },
+            Expression::UnaryOp((ref op, ref e)) => {
+                println!("{}unary {}", p, op);
+                e.print(level + 1)
+            },
+            Expression::PostFixUnaryOp((ref op, ref e)) => {
+                println!("{}postfix unary {}", p, op);
+                e.print(level + 1)
+            },
+            Expression::BinaryOp((ref op, ref left, ref right)) => {
+                println!("{}binary {}", p, op);
+                left.print(level + 1);
+                right.print(level + 1)
+            },
+            Expression::Enclosed(ref e) => {
+                println!("{}enclosed", p);
+                e.print(level + 1);
+            },
+            Expression::Call(ref c) => c.print(level),
+            Expression::NameRef(ref s) => {
+                println!("{}name {}", p, s);
+            }
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct Variable
 {
@@ -87,6 +159,16 @@ impl Variable
     }
 }
 
+impl TreePrinter for Variable
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        println!("{}var {}: {:?} (public: {}, constant: {}) =", p, self.name, self.typ, self.public, self.is_const);
+        self.init.print(level + 1);
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Type
 {
@@ -94,6 +176,20 @@ pub enum Type
     Primitive(String),
     Struct(String),
     Union(String),
+}
+
+impl fmt::Display for Type
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
+    {
+        match *self
+        {
+            Type::Void => write!(f, "void"),
+            Type::Primitive(ref t) => write!(f, "primitive {}", t),
+            Type::Struct(ref s) => write!(f, "struct {}", s),
+            Type::Union(ref u) => write!(f, "union {}", u),
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -113,6 +209,15 @@ impl Argument
             typ: typ,
             constant: constant,
         }
+    }
+}
+
+impl TreePrinter for Argument
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        println!("{}{}: {} (constant {})", p, self.name, self.typ, self.constant);
     }
 }
 
@@ -140,6 +245,21 @@ impl Function
     }
 }
 
+impl TreePrinter for Function
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        println!("{}function {} (public: {})", p, self.name, self.public);
+        println!("{} return_type: {}", p, self.return_type);
+        println!("{} args:", p);
+        for a in &self.args {
+            a.print(level + 2);
+        }
+        self.block.print(level + 1)
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct While
 {
@@ -158,12 +278,41 @@ impl While
     }
 }
 
+impl TreePrinter for While
+{
+    fn print(&self, level: usize)
+    {
+        println!("{}while", prefix(level));
+        self.cond.print(level + 1);
+        self.block.print(level + 1);
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum ElsePart
 {
     Empty,
     Block(Block),
     If(Box<If>),
+}
+
+impl TreePrinter for ElsePart
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        match *self
+        {
+            ElsePart::Empty => {
+                println!("{}no else", p);
+            },
+            ElsePart::Block(ref b) => {
+                println!("{}else", p);
+                b.print(level + 1);
+            },
+            ElsePart::If(ref i) => i.print(level),
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -186,6 +335,18 @@ impl If
     }
 }
 
+impl TreePrinter for If
+{
+    fn print(&self, level: usize)
+    {
+        println!("{}if", prefix(level));
+        self.cond.print(level + 1);
+        self.if_block.print(level + 1);
+        self.else_part.print(level + 1);
+    }
+}
+
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct Return
 {
@@ -199,6 +360,15 @@ impl Return
         Return{
             expr: expr,
         }
+    }
+}
+
+impl TreePrinter for Return
+{
+    fn print(&self, level: usize)
+    {
+        println!("{}return", prefix(level));
+        self.expr.print(level + 1)
     }
 }
 
@@ -224,6 +394,20 @@ impl Struct
     }
 }
 
+impl TreePrinter for Struct
+{
+    fn print(&self, level: usize)
+    {
+        println!("{}struct {} (public: {})", prefix(level), self.name, self.public);
+        for v in &self.variables {
+            v.print(level + 1);
+        }
+
+        for fun in &self.functions {
+            fun.print(level + 1);
+        }
+    }
+}
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct UnionCase
@@ -239,6 +423,17 @@ impl UnionCase
         UnionCase{
             name: name,
             vars: Vec::new(),
+        }
+    }
+}
+
+impl TreePrinter for UnionCase
+{
+    fn print(&self, level: usize)
+    {
+        println!("{}case {}", prefix(level), self.name);
+        for v in &self.vars {
+            v.print(level + 1);
         }
     }
 }
@@ -265,6 +460,21 @@ impl Union
     }
 }
 
+impl TreePrinter for Union
+{
+    fn print(&self, level: usize)
+    {
+        println!("{}union {} (public: {})", prefix(level), self.name, self.public);
+        for c in &self.cases {
+            c.print(level + 1);
+        }
+
+        for fun in &self.functions {
+            fun.print(level + 1);
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct MatchCase
 {
@@ -282,6 +492,15 @@ impl MatchCase
             bindings: bindings,
             block: block,
         }
+    }
+}
+
+impl TreePrinter for MatchCase
+{
+    fn print(&self, level: usize)
+    {
+        println!("{}case {} {:?}", prefix(level), self.name, self.bindings);
+        self.block.print(level)
     }
 }
 
@@ -303,6 +522,18 @@ impl Match
     }
 }
 
+impl TreePrinter for Match
+{
+    fn print(&self, level: usize)
+    {
+        println!("{}match", prefix(level));
+        self.expr.print(level + 1);
+        for c in &self.cases {
+            c.print(level + 1);
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum Statement
 {
@@ -312,10 +543,34 @@ pub enum Statement
     While(While),
     If(If),
     Return(Return),
-    Call(Call),
     Struct(Struct),
     Union(Union),
     Match(Match),
+    Expression(Expression),
+}
+
+impl TreePrinter for Statement
+{
+    fn print(&self, level: usize)
+    {
+        match *self
+        {
+            Statement::Import(ref i) => i.print(level),
+            Statement::Variable(ref vars) => {
+                for v in vars {
+                    v.print(level);
+                }
+            },
+            Statement::Function(ref fun) => fun.print(level),
+            Statement::While(ref w) => w.print(level),
+            Statement::If(ref i) => i.print(level),
+            Statement::Return(ref r) => r.print(level),
+            Statement::Struct(ref s) => s.print(level),
+            Statement::Union(ref u) => u.print(level),
+            Statement::Match(ref m) => m.print(level),
+            Statement::Expression(ref e) => e.print(level),
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -334,6 +589,18 @@ impl Block
     }
 }
 
+impl TreePrinter for Block
+{
+    fn print(&self, level: usize)
+    {
+        println!("{}block: ", prefix(level));
+        for s in &self.statements
+        {
+            s.print(level + 1);
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct Program
 {
@@ -348,10 +615,12 @@ impl Program
             block: block,
         }
     }
+}
 
-    #[allow(dead_code)]
-    pub fn dump(&self)
+impl TreePrinter for Program
+{
+    fn print(&self, level: usize)
     {
-        println!("{:?}", self);
+        self.block.print(level + 1)
     }
 }

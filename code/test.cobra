@@ -1,5 +1,4 @@
-import "another_file.cobra"
-
+import "cobra/std/io"
 
 var
     Y = 8888
@@ -15,45 +14,43 @@ union Action:
     pub func perform(self):
         match self:
             Move(x, y):
-                pass
+                print("move $x $y")
             MoveUp(d):
-                pass
+                print("move up $d")
             MoveDown(d):
-                pass
-
-        if self == MoveUp(dist):
-            print("Moving up by $dist")
+                print("move down $d")
 
 
 
 struct Foo:
-    var x: int = 0, y: int = 0
-    pub const z: float = 0.0
-
-    pub func from_string(s: string) -> Foo:
-        return Foo(88, 99, 1.0)
+    var x: int = 0
+    var y: int = 0
+    var z: int = 0
 
     func test(self, a: int):
-        x += a
+        if a > 5:
+            x += a
+        else if a == 5:
+            y += a
+        else:
+            z += a
+
+    func sum(self) -> int:
+        return self.x + self.y + self.z
 
     func __destroy__(self):
         print("This is the destructor")
 
 func test(a: int) -> int:
     print("A is $a")
-    if a > 5:
-        return a + 1
-    else if a == 5:
-        return a
-    else:
-        return a - 1
-
-    var f = Foo(x, y, z=0.5)
+    var f = Foo(1, 2, 3)
     var i = 0
-    while i < 5:
-        print("Count: $i")
+    while i < a:
+        f.test(i)
         i++
+    # this is a comment
+    return f.sum()
 
-    # This is a comment
-    for j in 0..10:
-        print("foo\n")
+func main() -> int:
+    const b = test(5)
+    print("bar $b\n")

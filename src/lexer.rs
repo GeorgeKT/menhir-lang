@@ -185,6 +185,11 @@ impl Lexer
             ".." => Ok(Operator::Range),
             "--" => Ok(Operator::Decrement),
             "++" => Ok(Operator::Increment),
+            "+=" => Ok(Operator::AddAssign),
+            "-=" => Ok(Operator::SubAssign),
+            "*=" => Ok(Operator::MulAssign),
+            "/=" => Ok(Operator::DivAssign),
+            "." => Ok(Operator::Dot),
             _ => Err(CompileError::new(self.pos, ErrorType::InvalidOperator(self.data.clone()))),
         }
     }
@@ -275,7 +280,7 @@ impl Lexer
         }
 
         self.add(TokenKind::EOF);
-        self.tokens.dump();
+        //self.tokens.dump();
         Ok(mem::replace(&mut self.tokens, TokenQueue::new()))
     }
 }
@@ -344,7 +349,7 @@ mod tests
     #[test]
     fn test_operators()
     {
-        let mut cursor = Cursor::new("++ -- + - * / % < <= > >= == = != ! || && .. -> : ,");
+        let mut cursor = Cursor::new("++ -- + - * / % < <= > >= == = != ! || && .. -> += -= *= /= . : ,");
         let tokens: Vec<TokenKind> = Lexer::new()
             .read(&mut cursor)
             .expect("Lexing failed")
@@ -372,6 +377,11 @@ mod tests
             TokenKind::Operator(Operator::And),
             TokenKind::Operator(Operator::Range),
             TokenKind::Operator(Operator::Arrow),
+            TokenKind::Operator(Operator::AddAssign),
+            TokenKind::Operator(Operator::SubAssign),
+            TokenKind::Operator(Operator::MulAssign),
+            TokenKind::Operator(Operator::DivAssign),
+            TokenKind::Operator(Operator::Dot),
             TokenKind::Colon,
             TokenKind::Comma,
             TokenKind::EOF,
