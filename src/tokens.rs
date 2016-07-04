@@ -25,6 +25,36 @@ pub enum Operator
     Decrement,
 }
 
+pub const TOP_PRECEDENCE: usize = 2000;
+
+impl Operator
+{
+    pub fn precedence(&self) -> usize
+    {
+        match *self
+        {
+            Operator::Not | Operator::Assign | Operator::Arrow |
+            Operator::Increment | Operator::Decrement | Operator::Range => TOP_PRECEDENCE,
+            Operator::Mul | Operator::Div | Operator::Mod => TOP_PRECEDENCE - 100,
+            Operator::Add | Operator::Sub => TOP_PRECEDENCE - 200,
+            Operator::LessThan | Operator::GreaterThan | Operator::LessThanEquals |
+            Operator::GreaterThanEquals | Operator::Equals | Operator::NotEquals => TOP_PRECEDENCE - 300,
+            Operator::And => TOP_PRECEDENCE - 400,
+            Operator::Or => TOP_PRECEDENCE - 500,
+        }
+    }
+
+    pub fn is_binary_operator(&self) -> bool
+    {
+        match *self
+        {
+            Operator::Increment | Operator::Decrement | Operator::Not |
+            Operator::Assign | Operator::Arrow => false,
+            _ => true,
+        }
+    }
+}
+
 impl Display for Operator
 {
     fn fmt(&self, fmt: &mut Formatter) -> Result<(), Error>
@@ -70,7 +100,7 @@ pub enum TokenKind
     Pub,
     In,
     Match,
-    Union, 
+    Union,
     Identifier(String),
     Colon,
     Comma,

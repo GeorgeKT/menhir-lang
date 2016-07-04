@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use compileerror::{Pos, CompileError, ErrorType};
-use tokens::{Token, TokenKind};
+use tokens::{Token, TokenKind, Operator};
 
 
 
@@ -126,6 +126,19 @@ impl TokenQueue
         else
         {
             Err(CompileError::new(tok.pos, ErrorType::ExpectedIdentifier))
+        }
+    }
+
+    pub fn expect_operator(&mut self) -> Result<Operator, CompileError>
+    {
+        let tok = try!(self.pop());
+        if let TokenKind::Operator(op) = tok.kind
+        {
+            Ok(op)
+        }
+        else
+        {
+            Err(CompileError::new(tok.pos, ErrorType::ExpectedOperator))
         }
     }
 

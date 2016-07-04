@@ -44,9 +44,23 @@ pub enum Expression
     Number(String),
     StringLiteral(String),
     UnaryOp((Operator, Box<Expression>)),
+    PostFixUnaryOp((Operator, Box<Expression>)), // post increment and decrement
     BinaryOp((Operator, Box<Expression>, Box<Expression>)),
+    Enclosed(Box<Expression>), // Expression enclosed between parens
     Call(Call),
     NameRef(String),
+}
+
+impl Expression
+{
+    pub fn precedence(&self) -> usize
+    {
+        match *self
+        {
+            Expression::BinaryOp((op, _, _)) => op.precedence(),
+            _ => 0,
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
