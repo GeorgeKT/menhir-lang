@@ -17,11 +17,25 @@ pub fn cstr(s: &str) -> *const c_char
     CString::new(s).expect("Valid C string").as_ptr()
 }
 
+pub struct StackFrame
+{
+    pub function: LLVMValueRef,
+}
+
+impl StackFrame
+{
+    pub unsafe fn return_type(&self) -> LLVMTypeRef
+    {
+        LLVMGetReturnType(LLVMGetElementType(LLVMTypeOf(self.function)))
+    }
+}
+
 pub struct Context
 {
     pub context: LLVMContextRef,
     pub module: LLVMModuleRef,
     pub builder: LLVMBuilderRef,
+    pub stack: Vec<StackFrame>,
 }
 
 impl Context
@@ -35,10 +49,25 @@ impl Context
                 context: context,
                 module: LLVMModuleCreateWithName(cname.as_ptr()),
                 builder: LLVMCreateBuilderInContext(context),
+                stack: Vec::new(),
             }
         }
     }
 
+    pub fn push_stack_frame(&mut self, fun: LLVMValueRef)
+    {
+        self.stack.push(StackFrame{function: fun});
+    }
+
+    pub fn pop_stack_frame(&mut self)
+    {
+        self.stack.pop();
+    }
+
+    pub fn top_stack_frame(&mut self) -> Option<&mut StackFrame>
+    {
+        self.stack.last_mut()
+    }
 
     pub unsafe fn dump(&self)
     {

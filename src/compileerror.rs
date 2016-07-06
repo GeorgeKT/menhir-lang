@@ -97,6 +97,7 @@ impl fmt::Display for Span
     }
 }
 
+#[cfg(test)]
 pub fn span(start_line: usize, start_offset: usize, end_line: usize, end_offset: usize) -> Span
 {
     Span::new(Pos::new(start_line, start_offset), Pos::new(end_line, end_offset))
@@ -118,6 +119,7 @@ pub enum ErrorType
     InvalidUnaryOperator(Operator),
     InvalidFloatingPoint,
     InvalidInteger,
+    TypeError(String),
     SelfNotAllowed,
 }
 
@@ -164,6 +166,7 @@ impl fmt::Display for CompileError
             ErrorType::SelfNotAllowed => write!(f, "{}: A self argument is only allowed as the first argument of a member function", self.pos),
             ErrorType::InvalidFloatingPoint => write!(f, "{}: Invalid floating point number", self.pos),
             ErrorType::InvalidInteger => write!(f, "{}: Invalid integer", self.pos),
+            ErrorType::TypeError(ref s) => write!(f, "{}: Wrong type: {}", self.pos, s),
         }
     }
 }

@@ -6,6 +6,21 @@ use codegen::*;
 use compileerror::*;
 use tokens::Operator;
 
+unsafe fn is_integer(ctx: LLVMContextRef, tr: LLVMTypeRef) -> bool
+{
+    tr == LLVMInt64TypeInContext(ctx)
+}
+
+unsafe fn is_floating_point(ctx: LLVMContextRef, tr: LLVMTypeRef) -> bool
+{
+    tr == LLVMDoubleTypeInContext(ctx)
+}
+
+unsafe fn const_int(ctx: &mut Context, v: u64) -> LLVMValueRef
+{
+    LLVMConstInt(LLVMInt64TypeInContext(ctx.context), v, 0)
+}
+
 unsafe fn gen_number(ctx: &mut Context, num: &str, span: &Span) -> Result<LLVMValueRef, CompileError>
 {
     if num.find('.').is_some() || num.find('e').is_some() {
@@ -16,28 +31,60 @@ unsafe fn gen_number(ctx: &mut Context, num: &str, span: &Span) -> Result<LLVMVa
     } else {
         // Should be an integer
         match num.parse::<u64>() {
-            Ok(i) => Ok(LLVMConstInt(LLVMInt64TypeInContext(ctx.context), i, 0)),
+            Ok(i) => Ok(const_int(ctx, i)),
             Err(_) => err(span.start, ErrorType::InvalidInteger)
         }
     }
 }
 
-#[allow(unused_variables)]
-fn gen_string_literal(ctx: &mut Context, s: &str, span: &Span) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_string_literal(_ctx: &mut Context, s: &str, _span: &Span) -> Result<LLVMValueRef, CompileError>
 {
-    err(span.start, ErrorType::UnexpectedEOF)
+    Ok(LLVMConstString(cstr(s), s.len() as u32, 0))
 }
 
-#[allow(unused_variables)]
-fn gen_unary(ctx: &mut Context, op: Operator, e: &Box<Expression>, span: &Span) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_unary(ctx: &mut Context, op: Operator, e: &Box<Expression>, span: &Span) -> Result<LLVMValueRef, CompileError>
 {
-    err(span.start, ErrorType::UnexpectedEOF)
+    let e_val = try!(gen_expression(ctx, e));
+    let e_type = LLVMTypeOf(e_val);
+    match op {
+        Operator::Sub => {
+            if !is_integer(ctx.context, e_type) && !is_floating_point(ctx.context, e_type) {
+                err(span.start, ErrorType::TypeError("Operator '-', expects and integer or floating point expression as argument".into()))
+            } else {
+                Ok(LLVMBuildNeg(ctx.builder, e_val, cstr("neg")))
+            }
+        },
+        Operator::Not => {
+            if !is_integer(ctx.context, e_type) {
+                err(span.start, ErrorType::TypeError("Operator '!', expects an integer or boolean expression".into()))
+            } else {
+                Ok(LLVMBuildNot(ctx.builder, e_val, cstr("not")))
+            }
+        },
+        Operator::Increment => {
+            if !is_integer(ctx.context, e_type) {
+                err(span.start, ErrorType::TypeError("Operator '++', expects an integer expression".into()))
+            } else {
+                Ok(LLVMBuildAdd(ctx.builder, e_val, const_int(ctx, 1), cstr("inc")))
+            }
+        },
+        Operator::Decrement => {
+            if !is_integer(ctx.context, e_type) {
+                err(span.start, ErrorType::TypeError("Operator '--', expects an integer expression".into()))
+            } else {
+                Ok(LLVMBuildSub(ctx.builder, e_val, const_int(ctx, 1), cstr("dec")))
+            }
+        },
+        _ => err(span.start, ErrorType::InvalidUnaryOperator(op)),
+    }
 }
 
-#[allow(unused_variables)]
-fn gen_pf_unary(ctx: &mut Context, op: Operator, e: &Box<Expression>, span: &Span) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_pf_unary(ctx: &mut Context, op: Operator, e: &Box<Expression>, span: &Span) -> Result<LLVMValueRef, CompileError>
 {
-    err(span.start, ErrorType::UnexpectedEOF)
+    match op {
+        Operator::Increment | Operator::Decrement => gen_unary(ctx, op, e, span),
+        _ => err(span.start, ErrorType::InvalidUnaryOperator(op)),
+    }
 }
 
 #[allow(unused_variables)]
