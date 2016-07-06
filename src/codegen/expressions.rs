@@ -16,6 +16,11 @@ unsafe fn is_floating_point(ctx: LLVMContextRef, tr: LLVMTypeRef) -> bool
     tr == LLVMDoubleTypeInContext(ctx)
 }
 
+unsafe fn is_numeric(ctx: LLVMContextRef, tr: LLVMTypeRef) -> bool
+{
+    is_integer(ctx, tr) || is_floating_point(ctx, tr)
+}
+
 unsafe fn const_int(ctx: &mut Context, v: u64) -> LLVMValueRef
 {
     LLVMConstInt(LLVMInt64TypeInContext(ctx.context), v, 0)
@@ -48,7 +53,7 @@ unsafe fn gen_unary(ctx: &mut Context, op: Operator, e: &Box<Expression>, span: 
     let e_type = LLVMTypeOf(e_val);
     match op {
         Operator::Sub => {
-            if !is_integer(ctx.context, e_type) && !is_floating_point(ctx.context, e_type) {
+            if !is_numeric(ctx.context, e_type) {
                 err(span.start, ErrorType::TypeError("Operator '-', expects and integer or floating point expression as argument".into()))
             } else {
                 Ok(LLVMBuildNeg(ctx.builder, e_val, cstr("neg")))
@@ -87,16 +92,93 @@ unsafe fn gen_pf_unary(ctx: &mut Context, op: Operator, e: &Box<Expression>, spa
     }
 }
 
-#[allow(unused_variables)]
-fn gen_binary(ctx: &mut Context, op: Operator, left: &Expression, right: &Expression, span: &Span) -> Result<LLVMValueRef, CompileError>
+unsafe fn check_numeric_operands(ctx: &mut Context, op: Operator, left_type: LLVMTypeRef, right_type: LLVMTypeRef, pos: Pos) -> Result<(), CompileError>
 {
-    err(span.start, ErrorType::UnexpectedEOF)
+    if left_type != right_type {
+        err(pos, ErrorType::TypeError(format!("Operator '{}', expects both operands to be of the same type", op)))
+    } else if !is_numeric(ctx.context, left_type) || !is_numeric(ctx.context, right_type){
+        err(pos, ErrorType::TypeError(format!("Operator '{}', expects integer or floating point expression as operands", op)))
+    } else {
+        Ok(())
+    }
 }
 
-#[allow(unused_variables)]
-fn gen_enclosed(ctx: &mut Context, e: &Expression, span: &Span) -> Result<LLVMValueRef, CompileError>
+unsafe fn check_bool_operands(ctx: &mut Context, op: Operator, left_type: LLVMTypeRef, right_type: LLVMTypeRef, pos: Pos) -> Result<(), CompileError>
 {
-    err(span.start, ErrorType::UnexpectedEOF)
+    if left_type != right_type {
+        err(pos, ErrorType::TypeError(format!("Operator '{}', expects both operands to be of the same type", op, )))
+    } else if !is_integer(ctx.context, left_type) || !is_integer(ctx.context, right_type){
+        err(pos, ErrorType::TypeError(format!("Operator '{}', expects integer or boolean point expression as operands", op)))
+    } else {
+        Ok(())
+    }
+}
+
+
+unsafe fn gen_binary(ctx: &mut Context, op: Operator, left: &Expression, right: &Expression, span: &Span) -> Result<LLVMValueRef, CompileError>
+{
+    let left_val = try!(gen_expression(ctx, left));
+    let right_val = try!(gen_expression(ctx, right));
+    let left_type = LLVMTypeOf(left_val);
+    let right_type = LLVMTypeOf(right_val);
+
+    match op {
+        Operator::Add => {
+            try!(check_numeric_operands(ctx, op, left_type, right_type, span.start));
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFAdd(ctx.builder, left_val, right_val, cstr("add")))
+            } else {
+                Ok(LLVMBuildAdd(ctx.builder, left_val, right_val, cstr("add")))
+            }
+        },
+        Operator::Sub => {
+            try!(check_numeric_operands(ctx, op, left_type, right_type, span.start));
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFSub(ctx.builder, left_val, right_val, cstr("sub")))
+            } else {
+                Ok(LLVMBuildSub(ctx.builder, left_val, right_val, cstr("sub")))
+            }
+        },
+        Operator::Div => {
+            try!(check_numeric_operands(ctx, op, left_type, right_type, span.start));
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFDiv(ctx.builder, left_val, right_val, cstr("div")))
+            } else {
+                Ok(LLVMBuildUDiv(ctx.builder, left_val, right_val, cstr("div")))
+            }
+        },
+        Operator::Mod => {
+            try!(check_numeric_operands(ctx, op, left_type, right_type, span.start));
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFRem(ctx.builder, left_val, right_val, cstr("mod")))
+            } else {
+                Ok(LLVMBuildURem(ctx.builder, left_val, right_val, cstr("mod")))
+            }
+        },
+        Operator::Mul => {
+            try!(check_numeric_operands(ctx, op, left_type, right_type, span.start));
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFMul(ctx.builder, left_val, right_val, cstr("mul")))
+            } else {
+                Ok(LLVMBuildMul(ctx.builder, left_val, right_val, cstr("mul")))
+            }
+        },
+        Operator::And => {
+            try!(check_bool_operands(ctx, op, left_type, right_type, span.start));
+            Ok(LLVMBuildAnd(ctx.builder, left_val, right_val, cstr("and")))
+        },
+        Operator::Or => {
+            try!(check_bool_operands(ctx, op, left_type, right_type, span.start));
+            Ok(LLVMBuildOr(ctx.builder, left_val, right_val, cstr("or")))
+        },
+        _ => err(span.start, ErrorType::InvalidBinaryOperator(op)),
+    }
+
+}
+
+unsafe fn gen_enclosed(ctx: &mut Context, e: &Expression, _span: &Span) -> Result<LLVMValueRef, CompileError>
+{
+    gen_expression(ctx, e)
 }
 
 #[allow(unused_variables)]
