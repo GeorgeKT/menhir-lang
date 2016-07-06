@@ -122,6 +122,8 @@ pub enum ErrorType
     InvalidInteger,
     TypeError(String),
     SelfNotAllowed,
+    RedefinitionOfVariable(String),
+    UnknownVariable(String),
 }
 
 
@@ -169,6 +171,8 @@ impl fmt::Display for CompileError
             ErrorType::InvalidFloatingPoint => write!(f, "{}: Invalid floating point number", self.pos),
             ErrorType::InvalidInteger => write!(f, "{}: Invalid integer", self.pos),
             ErrorType::TypeError(ref s) => write!(f, "{}: Wrong type: {}", self.pos, s),
+            ErrorType::RedefinitionOfVariable(ref v) =>  write!(f, "{}: Attempting to redefine variable {}", self.pos, v),
+            ErrorType::UnknownVariable(ref n) => write!(f, "{}: Unknown variable '{}'", self.pos, n),
         }
     }
 }

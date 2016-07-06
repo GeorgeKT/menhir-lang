@@ -187,10 +187,13 @@ fn gen_call(ctx: &mut Context, c: &Call) -> Result<LLVMValueRef, CompileError>
     err(c.span.start, ErrorType::UnexpectedEOF)
 }
 
-#[allow(unused_variables)]
-fn gen_name_ref(ctx: &mut Context, nr: &str, span: &Span) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_name_ref(ctx: &mut Context, nr: &str, span: &Span) -> Result<LLVMValueRef, CompileError>
 {
-    err(span.start, ErrorType::UnexpectedEOF)
+    if let Some(ref v) = ctx.get_variable(nr) {
+        Ok(LLVMBuildLoad(ctx.builder, v.value, cstr("load")))
+    } else {
+        err(span.start, ErrorType::UnknownVariable(nr.into()))
+    }
 }
 
 pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<LLVMValueRef, CompileError>

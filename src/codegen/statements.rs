@@ -21,10 +21,31 @@ fn gen_import(ctx: &mut Context, import: &Import) -> Result<(), CompileError>
      err(Pos::new(0, 0), ErrorType::UnexpectedEOF)
 }
 
-#[allow(unused_variables)]
-fn gen_variable(ctx: &mut Context, v: &Variable) -> Result<(), CompileError>
+unsafe fn gen_variable(ctx: &mut Context, v: &Variable) -> Result<(), CompileError>
 {
-     err(Pos::new(0, 0), ErrorType::UnexpectedEOF)
+    if ctx.has_variable(&v.name) {
+        return err(v.span.start, ErrorType::RedefinitionOfVariable(v.name.clone()));
+    }
+
+    let initial_value = try!(gen_expression(ctx, &v.init));
+    let initial_value_type = LLVMTypeOf(initial_value);
+
+    if let Some(ref tr) = v.typ {
+        if let Some(llvm_type_ref) = ctx.resolve_type(&tr) {
+            if llvm_type_ref != initial_value_type {
+                return err(v.span.start, ErrorType::TypeError(format!("Mismatched types in initialization")))
+            }
+        } else {
+            return err(v.span.start, ErrorType::TypeError(format!("Unknown type '{}'", tr)));
+        }
+    }
+
+    let var = LLVMBuildAlloca(ctx.builder, initial_value_type, cstr("var"));
+    LLVMBuildStore(ctx.builder, initial_value, var);
+
+    let mut sf = ctx.top_stack_frame().expect("No stack frame");
+    sf.add_variable(&v.name, var, v.is_const);
+    Ok(())
 }
 
 #[allow(unused_variables)]
@@ -107,7 +128,7 @@ pub unsafe fn gen_program(ctx: &mut Context, prog: &Program) -> Result<(), Compi
 {
     let main_ret_type = LLVMInt64TypeInContext(ctx.context);
     let function_type = LLVMFunctionType(main_ret_type, ptr::null_mut(), 0, 0);
-    let function = LLVMAddFunction(ctx.module, cstr("main"), function_type);
+    let function = LLVMAddFunction(ctx.module, cstr("_start"), function_type);
     let bb = LLVMAppendBasicBlockInContext(ctx.context, function, cstr("entry"));
     LLVMPositionBuilderAtEnd(ctx.builder, bb);
 

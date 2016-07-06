@@ -45,11 +45,11 @@ fn main()
 
     match parse_file(&filename)
     {
-        Err(e) => println!("Error: {:?}", e),
+        Err(e) => println!("Error: {}", e),
         Ok(p) => {
             //p.print(0);
             if let Err(e) = codegen(&p) {
-                println!("Error: {:?}", e);
+                println!("Error: {}", e);
             }
         },
     }
