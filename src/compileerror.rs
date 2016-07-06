@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::cmp;
 use std::convert::From;
 use std::io;
 use std::fmt;
@@ -20,6 +21,11 @@ impl Pos
             offset: offset,
         }
     }
+
+    pub fn zero() -> Pos
+    {
+        Pos::new(0, 0)
+    }
 }
 
 impl fmt::Display for Pos
@@ -29,6 +35,73 @@ impl fmt::Display for Pos
         write!(f, "{}:{}", self.line, self.offset)
     }
 }
+
+impl cmp::PartialOrd for Pos
+{
+    fn partial_cmp(&self, other: &Pos) -> Option<cmp::Ordering>
+    {
+        Some(self.cmp(other))
+    }
+}
+
+impl cmp::Ord for Pos
+{
+    fn cmp(&self, other: &Self) -> cmp::Ordering
+    {
+        let o = self.line.cmp(&other.line);
+        if o == cmp::Ordering::Equal {
+            self.offset.cmp(&other.offset)
+        } else {
+            o
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct Span
+{
+    pub start: Pos,
+    pub end: Pos,
+}
+
+impl Span
+{
+    pub fn new(start: Pos, end: Pos) -> Span
+    {
+        Span{start: start, end: end}
+    }
+
+    pub fn single(start: Pos) -> Span
+    {
+        Span{start: start, end: start}
+    }
+
+    pub fn zero() -> Span
+    {
+        Span::new(Pos::zero(), Pos::zero())
+    }
+
+    pub fn merge(a: &Span, b: &Span) -> Span
+    {
+        let s = if a.start < b.start {a.start} else {b.start};
+        let e = if a.end >= b.end {a.end} else {b.end};
+        Span::new(s, e)
+    }
+}
+
+impl fmt::Display for Span
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
+    {
+        write!(f, "{} -> {}", self.start, self.end)
+    }
+}
+
+pub fn span(start_line: usize, start_offset: usize, end_line: usize, end_offset: usize) -> Span
+{
+    Span::new(Pos::new(start_line, start_offset), Pos::new(end_line, end_offset))
+}
+
 
 #[derive(Debug)]
 pub enum ErrorType
@@ -43,6 +116,8 @@ pub enum ErrorType
     ExpectedOperator,
     InvalidOperator(String),
     InvalidUnaryOperator(Operator),
+    InvalidFloatingPoint,
+    InvalidInteger,
     SelfNotAllowed,
 }
 
@@ -65,6 +140,11 @@ impl CompileError
     }
 }
 
+pub fn err<T: Sized>(pos: Pos, e: ErrorType) -> Result<T, CompileError>
+{
+    Err(CompileError::new(pos, e))
+}
+
 impl fmt::Display for CompileError
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
@@ -82,6 +162,8 @@ impl fmt::Display for CompileError
             ErrorType::ExpectedStringLiteral =>  write!(f, "{}: Expected string literal", self.pos),
             ErrorType::ExpectedOperator => write!(f, "{}: Expected operator", self.pos),
             ErrorType::SelfNotAllowed => write!(f, "{}: A self argument is only allowed as the first argument of a member function", self.pos),
+            ErrorType::InvalidFloatingPoint => write!(f, "{}: Invalid floating point number", self.pos),
+            ErrorType::InvalidInteger => write!(f, "{}: Invalid integer", self.pos),
         }
     }
 }

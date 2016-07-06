@@ -5,22 +5,19 @@ use std::io::Read;
 
 use lexer::{Lexer};
 use ast::*;
-use compileerror::{Pos, CompileError, ErrorType};
+use compileerror::*;
 
 use self::statements::*;
 
-pub use self::expressions::parse_expression;
+pub use self::expressions::*;
 
-pub fn err<T: Sized>(pos: Pos, e: ErrorType) -> Result<T, CompileError>
-{
-    Err(CompileError::new(pos, e))
-}
 
-pub fn parse_program<Input: Read>(input: &mut Input) -> Result<Program, CompileError>
+
+pub fn parse_program<Input: Read>(input: &mut Input, name: &str) -> Result<Program, CompileError>
 {
     let mut tq = try!(Lexer::new().read(input));
     let block = try!(parse_block(&mut tq, 0));
-    Ok(Program::new(block))
+    Ok(Program::new(name, block))
 }
 
 #[cfg(test)]
@@ -35,6 +32,25 @@ fn th_statement(data: &str) -> Statement
     parse_statement(&mut tq, lvl).expect("Parsing failed")
 }
 
+#[cfg(test)]
+fn type_struct(typ: &str, pos: Pos) -> Type
+{
+    Type::Struct(pos, typ.into())
+}
+
+#[cfg(test)]
+fn type_primitve(typ: &str, pos: Pos) -> Type
+{
+    Type::Primitive(pos, typ.into())
+}
+
+#[cfg(test)]
+fn arg(name: &str, typ: &str, tp: Pos, constant: bool, span: Span) -> Argument
+{
+    Argument::new(name.into(), type_primitve(typ, tp), constant, span)
+}
+
+
 #[test]
 fn test_simple_var()
 {
@@ -46,7 +62,7 @@ fn test_simple_var()
         assert!(v.name == "x");
         assert!(v.typ.is_none());
         assert!(!v.is_const);
-        if let Expression::Number(ref n) = v.init {
+        if let Expression::Number(_, ref n) = v.init {
             assert!(n == "7");
         } else {
             assert!(false);
@@ -67,10 +83,10 @@ fn test_simple_var_with_type()
         assert!(vars.len() == 1);
         let v = &vars[0];
         assert!(v.name == "x");
-        assert!(v.typ == Some(Type::Primitive("int".into())));
+        assert!(v.typ == Some(Type::Primitive(Pos::new(1, 8), "int".into())));
         assert!(!v.is_const);
         assert!(!v.public);
-        if let Expression::Number(ref n) = v.init {
+        if let Expression::Number(_, ref n) = v.init {
             assert!(n == "7");
         } else {
             assert!(false);
@@ -94,7 +110,7 @@ fn test_simple_const()
         assert!(v.typ.is_none());
         assert!(v.is_const);
         assert!(v.public);
-        if let Expression::Number(ref n) = v.init {
+        if let Expression::Number(_, ref n) = v.init {
             assert!(n == "7");
         } else {
             assert!(false);
@@ -119,7 +135,7 @@ fn test_multiple_var()
         assert!(v.typ.is_none());
         assert!(!v.is_const);
         assert!(v.public);
-        if let Expression::Number(ref n) = v.init {
+        if let Expression::Number(_, ref n) = v.init {
             assert!(n == "7");
         } else {
             assert!(false);
@@ -129,7 +145,7 @@ fn test_multiple_var()
         assert!(v.name == "z");
         assert!(v.typ.is_none());
         assert!(!v.is_const);
-        if let Expression::Number(ref n) = v.init {
+        if let Expression::Number(_, ref n) = v.init {
             assert!(n == "888");
         } else {
             assert!(false);
@@ -156,7 +172,7 @@ var
         assert!(v.typ.is_none());
         assert!(!v.is_const);
         assert!(!v.public);
-        if let Expression::Number(ref n) = v.init {
+        if let Expression::Number(_, ref n) = v.init {
             assert!(n == "7");
         } else {
             assert!(false);
@@ -166,7 +182,7 @@ var
         assert!(v.name == "z");
         assert!(v.typ.is_none());
         assert!(!v.is_const);
-        if let Expression::Number(ref n) = v.init {
+        if let Expression::Number(_, ref n) = v.init {
             assert!(n == "888");
         } else {
             assert!(false);
@@ -179,15 +195,15 @@ var
 }
 
 #[cfg(test)]
-fn call(name: &str, args: Vec<Expression>) -> Statement
+fn call(name: &str, args: Vec<Expression>, span: Span) -> Statement
 {
-    Statement::Expression(Expression::Call(Call::new(name.into(), args)))
+    Statement::Expression(Expression::Call(Call::new(name.into(), args, span)))
 }
 
 #[cfg(test)]
-fn str_lit(s: &str) -> Expression
+fn str_lit(s: &str, span: Span) -> Expression
 {
-    Expression::StringLiteral(s.into())
+    Expression::StringLiteral(span, s.into())
 }
 
 #[test]
@@ -201,14 +217,15 @@ while 1:
 
     if let Statement::While(w) = stmt
     {
-        assert!(w.cond == Expression::Number("1".into()));
+        w.print(0);
+        assert!(w.cond == number("1", span(2, 7, 2, 7)));
         assert!(w.block.statements.len() == 2);
 
         let s = &w.block.statements[0];
-        assert!(*s == call("print", vec![str_lit("true")]));
+        assert!(*s == call("print", vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
 
         let s = &w.block.statements[1];
-        assert!(*s == call("print", vec![str_lit("something else")]));
+        assert!(*s == call("print", vec![str_lit("something else", span(4, 11, 4, 26))], span(4, 5, 4, 27)));
     }
     else
     {
@@ -226,11 +243,12 @@ while 1: print("true")
 
     if let Statement::While(w) = stmt
     {
-        assert!(w.cond == Expression::Number("1".into()));
+        w.print(0);
+        assert!(w.cond == number("1", span(2, 7, 2, 7)));
         assert!(w.block.statements.len() == 1);
 
         let s = &w.block.statements[0];
-        assert!(*s == call("print", vec![str_lit("true")]));
+        assert!(*s == call("print", vec![str_lit("true", span(2, 16, 2, 21))], span(2, 10, 2, 22)));
     }
     else
     {
@@ -248,12 +266,12 @@ if 1:
 
     if let Statement::If(w) = stmt
     {
-        assert!(w.cond == Expression::Number("1".into()));
+        assert!(w.cond == number("1", span(2, 4, 2, 4)));
         assert!(w.if_block.statements.len() == 1);
         assert!(w.else_part == ElsePart::Empty);
 
         let s = &w.if_block.statements[0];
-        assert!(*s == call("print", vec![str_lit("true")]));
+        assert!(*s == call("print", vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
     }
     else
     {
@@ -273,17 +291,18 @@ else:
 
     if let Statement::If(w) = stmt
     {
-        assert!(w.cond == Expression::Number("1".into()));
+        w.print(0);
+        assert!(w.cond == number("1", span(2, 4, 2, 4)));
         assert!(w.if_block.statements.len() == 1);
 
         let s = &w.if_block.statements[0];
-        assert!(*s == call("print", vec![str_lit("true")]));
+        assert!(*s == call("print", vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
 
         if let ElsePart::Block(eb) = w.else_part
         {
             assert!(eb.statements.len() == 1);
             let s = &eb.statements[0];
-            assert!(*s == call("print", vec![str_lit("false")]));
+            assert!(*s == call("print", vec![str_lit("false", span(5, 11, 5, 17))], span(5, 5, 5, 18)));
         }
         else
         {
@@ -309,18 +328,20 @@ else if 0:
 
     if let Statement::If(w) = stmt
     {
-        assert!(w.cond == Expression::Number("1".into()));
+        w.print(0);
+        assert!(w.cond == number("1", span(2, 4, 2, 4)));
         assert!(w.if_block.statements.len() == 1);
 
         let s = &w.if_block.statements[0];
-        assert!(*s == call("print", vec![str_lit("true")]));
+        assert!(*s == call("print", vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
 
         if let ElsePart::If(else_if) = w.else_part
         {
-            assert!(else_if.cond == Expression::Number("0".into()));
+            else_if.print(1);
+            assert!(else_if.cond == number("0", span(4, 9, 4, 9)));
             assert!(else_if.if_block.statements.len() == 1);
             let s = &else_if.if_block.statements[0];
-            assert!(*s == call("print", vec![str_lit("nada")]));
+            assert!(*s == call("print", vec![str_lit("nada", span(5, 11, 5, 16))], span(5, 5, 5, 17)));
             assert!(else_if.else_part == ElsePart::Empty);
         }
         else
@@ -343,12 +364,13 @@ if 1: print("true")
 
     if let Statement::If(w) = stmt
     {
-        assert!(w.cond == Expression::Number("1".into()));
+        w.print(0);
+        assert!(w.cond == number("1", span(2, 4, 2, 4)));
         assert!(w.if_block.statements.len() == 1);
         assert!(w.else_part == ElsePart::Empty);
 
         let s = &w.if_block.statements[0];
-        assert!(*s == call("print", vec![str_lit("true")]));
+        assert!(*s == call("print", vec![str_lit("true", span(2, 13, 2, 18))], span(2, 7, 2, 19)));
     }
     else
     {
@@ -365,7 +387,7 @@ return 5
 
     if let Statement::Return(w) = stmt
     {
-        assert!(w.expr == Expression::Number("5".into()));
+        assert!(w.expr == number("5", span(2, 8, 2, 8)));
     }
     else
     {
@@ -384,17 +406,18 @@ func blaat():
 
     if let Statement::Function(f) = stmt
     {
+        f.print(0);
         assert!(f.name == "blaat");
         assert!(f.args.is_empty());
         assert!(f.return_type == Type::Void);
         assert!(!f.public);
         assert!(f.block.statements.len() == 2);
         let s = &f.block.statements[0];
-        assert!(*s == call("print", vec![str_lit("true")]));
+        assert!(*s == call("print", vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
 
         let s = &f.block.statements[1];
         assert!(*s == Statement::Return(
-            Return::new(Expression::Number("5".into()))
+            Return::new(number("5", span(4, 12, 4, 12)), span(4, 5, 4, 12))
         ));
     }
     else
@@ -414,20 +437,21 @@ pub func blaat(x: int, const y: int) -> int:
 
     if let Statement::Function(f) = stmt
     {
+        f.print(0);
         assert!(f.name == "blaat");
         assert!(f.args.len() == 2);
-        assert!(f.args[0] == Argument::new("x".into(), Type::Primitive("int".into()), false));
-        assert!(f.args[1] == Argument::new("y".into(), Type::Primitive("int".into()), true));
-        assert!(f.return_type == Type::Primitive("int".into()));
+        assert!(f.args[0] == arg("x", "int", Pos::new(2, 19), false, span(2, 16, 2, 21)));
+        assert!(f.args[1] == arg("y", "int", Pos::new(2, 33), true, span(2, 30, 2, 35)));
+        assert!(f.return_type == type_primitve("int", Pos::new(2, 41)));
         assert!(f.block.statements.len() == 2);
         assert!(f.public);
 
         let s = &f.block.statements[0];
-        assert!(*s == call("print", vec![str_lit("true")]));
+        assert!(*s == call("print", vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
 
         let s = &f.block.statements[1];
         assert!(*s == Statement::Return(
-            Return::new(Expression::Number("5".into()))
+            Return::new(number("5", span(4, 12, 4, 12)), span(4, 5, 4, 12))
         ));
     }
     else
@@ -453,14 +477,14 @@ pub struct Blaat:
 
     if let Statement::Struct(s) = stmt
     {
-        println!("Struct: {:?}", s);
+        s.print(0);
         assert!(s.name == "Blaat");
         assert!(s.functions.len() == 2);
 
         assert!(s.variables == vec![
-            Variable::new("x".into(), None, false, false, Expression::Number("7".into())),
-            Variable::new("y".into(), None, false, false, Expression::Number("9".into())),
-            Variable::new("z".into(), None, true, true, Expression::Number("99".into())),
+            Variable::new("x".into(), None, false, false, number("7", span(3, 13, 3, 13)), span(3, 9, 3, 13)),
+            Variable::new("y".into(), None, false, false, number("9", span(3, 20, 3, 20)), span(3, 16, 3, 20)),
+            Variable::new("z".into(), None, true, true, number("99", span(4, 19, 4, 20)), span(4, 15, 4, 20)),
         ]);
 
         assert!(s.functions == vec![
@@ -468,23 +492,25 @@ pub struct Blaat:
                 "foo".into(),
                 Type::Void,
                 vec![
-                    Argument::new("self".into(), Type::Struct("Blaat".into()), false),
+                    Argument::new("self".into(), type_struct("Blaat", Pos::new(6, 9)), false, span(6, 18, 6, 18)),
                 ],
                 true,
                 Block::new(vec![
-                    call("print", vec![str_lit("foo")])
-                ])
+                    call("print", vec![str_lit("foo", span(7, 15, 7, 19))], span(7, 9, 7, 20))
+                ]),
+                span(6, 14, 7, 20),
             ),
             Function::new(
                 "bar".into(),
                 Type::Void,
                 vec![
-                    Argument::new("self".into(), Type::Struct("Blaat".into()), false),
+                    Argument::new("self".into(), type_struct("Blaat", Pos::new(9, 5)), false, span(9, 14, 9, 14)),
                 ],
                 false,
                 Block::new(vec![
-                    call("print", vec![str_lit("bar")])
-                ])
+                    call("print", vec![str_lit("bar", span(10, 15, 10, 19))], span(10, 9, 10, 20))
+                ]),
+                span(9, 10, 10, 20),
             ),
         ]);
     }
@@ -509,7 +535,7 @@ pub union Blaat:
 
     if let Statement::Union(u) = stmt
     {
-        println!("Union: {:?}", u);
+        u.print(0);
         assert!(u.name == "Blaat");
         assert!(u.public);
 
@@ -517,12 +543,13 @@ pub union Blaat:
             UnionCase{
                 name: "Foo".into(),
                 vars: vec![
-                    Argument::new("x".into(), Type::Primitive("int".into()), false),
-                    Argument::new("y".into(), Type::Primitive("int".into()), false),
-                ]
+                    arg("x", "int", Pos::new(3, 12), false, span(3, 9, 3, 14)),
+                    arg("y", "int", Pos::new(3, 20), false, span(3, 17, 3, 22)),
+                ],
+                span: span(3, 5, 3, 23),
             },
-            UnionCase::new("Bar".into()),
-            UnionCase::new("Baz".into()),
+            UnionCase::new("Bar".into(), span(4, 5, 4, 8)),
+            UnionCase::new("Baz".into(), span(4, 10, 4, 12)),
         ]);
 
         assert!(u.functions == vec![
@@ -530,12 +557,13 @@ pub union Blaat:
                 "foo".into(),
                 Type::Void,
                 vec![
-                    Argument::new("self".into(), Type::Union("Blaat".into()), false),
+                    Argument::new("self".into(), Type::Union(Pos::new(6, 5), "Blaat".into()), false, span(6, 18, 6, 18)),
                 ],
                 true,
                 Block::new(vec![
-                    call("print", vec![str_lit("foo")])
-                ])
+                    call("print", vec![str_lit("foo", span(7, 15, 7, 19))], span(7, 9, 7, 20))
+                ]),
+                span(6, 14, 7, 20),
             ),
         ]);
     }
@@ -554,14 +582,14 @@ union Blaat: Bar, Baz, Foo
 
     if let Statement::Union(u) = stmt
     {
-        println!("Union: {:?}", u);
+        u.print(0);
         assert!(u.name == "Blaat");
         assert!(!u.public);
 
         assert!(u.cases == vec![
-            UnionCase::new("Bar".into()),
-            UnionCase::new("Baz".into()),
-            UnionCase::new("Foo".into()),
+            UnionCase::new("Bar".into(), span(2, 14, 2, 17)),
+            UnionCase::new("Baz".into(), span(2, 19, 2, 22)),
+            UnionCase::new("Foo".into(), span(2, 24, 2, 26)),
         ]);
     }
     else
@@ -586,35 +614,38 @@ match bla:
 
     if let Statement::Match(m) = stmt
     {
-        println!("Match: {:?}", m);
-        assert!(m.expr == Expression::NameRef("bla".into()));
+        m.print(0);
+        assert!(m.expr == Expression::NameRef(span(2, 7, 2, 9), "bla".into()));
         assert!(m.cases == vec![
             MatchCase::new(
                 "Foo".into(),
                 vec!["x".into(), "y".into()],
                 Block::new(
                     vec![
-                        call("print", vec![str_lit("foo")])
+                        call("print", vec![str_lit("foo", span(3, 22, 3, 26))], span(3, 16, 3, 27))
                     ]
-                )
+                ),
+                span(3, 5, 3, 27),
             ),
             MatchCase::new(
                 "Bar".into(),
                 Vec::new(),
                 Block::new(
                     vec![
-                        call("print", vec![str_lit("bar")])
+                        call("print", vec![str_lit("bar", span(5, 15, 5, 19))], span(5, 9, 5, 20))
                     ]
-                )
+                ),
+                span(4, 5, 5, 20),
             ),
             MatchCase::new(
                 "Baz".into(),
                 Vec::new(),
                 Block::new(
                     vec![
-                        call("print", vec![str_lit("baz")])
+                        call("print", vec![str_lit("baz", span(7, 15, 7, 19))], span(7, 9, 7, 20))
                     ]
-                )
+                ),
+                span(6, 5, 7, 20),
             ),
         ]);
     }

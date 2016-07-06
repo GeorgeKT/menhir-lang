@@ -2,7 +2,6 @@ use ast::*;
 use tokenqueue::TokenQueue;
 use compileerror::*;
 use tokens::*;
-use parser::*;
 
 
 fn is_end_of_expression(tok: &Token, indent_level: usize) -> bool
@@ -23,7 +22,7 @@ fn parse_unary_expression(tq: &mut TokenQueue, indent_level: usize, op: Operator
 {
     if op == Operator::Not || op == Operator::Sub || op == Operator::Increment || op == Operator::Decrement {
         let se = try!(parse_expression(tq, indent_level));
-        Ok(Expression::UnaryOp((op, Box::new(se))))
+        Ok(Expression::UnaryOp(Span::new(op_pos, tq.pos()), op, Box::new(se)))
     } else {
         err(op_pos, ErrorType::InvalidUnaryOperator(op))
     }
@@ -53,23 +52,28 @@ fn parse_binary_op_rhs(tq: &mut TokenQueue, indent_level: usize, mut lhs: Expres
         let rhs = try!(parse_expression(tq, indent_level));
         match rhs
         {
-            Expression::BinaryOp((rhs_op, left, right)) => {
+            Expression::BinaryOp(span, rhs_op, left, right) => {
+
                 if rhs_op.precedence() <= prec {
-                    let e = Expression::BinaryOp((op, Box::new(lhs), left));
-                    lhs = Expression::BinaryOp((rhs_op, Box::new(e), right));
+                    let span = Span::merge(&lhs.span(), &left.span());
+                    let e = Expression::BinaryOp(span, op, Box::new(lhs), left);
+                    let span = Span::merge(&span, &right.span());
+                    lhs = Expression::BinaryOp(span, rhs_op, Box::new(e), right);
                 } else {
-                    let e = Expression::BinaryOp((rhs_op, left, right));
-                    lhs = Expression::BinaryOp((op, Box::new(lhs), Box::new(e)));
+                    let lhs_span = Span::merge(&span, &lhs.span());
+                    let e = Expression::BinaryOp(span, rhs_op, left, right);
+                    lhs = Expression::BinaryOp(lhs_span, op, Box::new(lhs), Box::new(e));
                 }
             },
             _ => {
-                lhs = Expression::BinaryOp((op, Box::new(lhs), Box::new(rhs)));
+                let span = Span::merge(&lhs.span(), &rhs.span());
+                lhs = Expression::BinaryOp(span, op, Box::new(lhs), Box::new(rhs));
             },
         }
     }
 }
 
-fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: String) -> Result<Call, CompileError>
+fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: String, pos: Pos) -> Result<Call, CompileError>
 {
     try!(tq.expect(TokenKind::OpenParen));
 
@@ -85,7 +89,7 @@ fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: String) -
     }
 
     try!(tq.pop());
-    Ok(Call::new(name, args))
+    Ok(Call::new(name, args, Span::new(pos, tq.pos())))
 }
 
 
@@ -96,21 +100,22 @@ fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token
         TokenKind::OpenParen => {
             let expr = try!(parse_expression(tq, indent_level));
             try!(tq.expect(TokenKind::CloseParen));
-            Ok(Expression::Enclosed(Box::new(expr)))
+            Ok(Expression::Enclosed(Span::new(tok.span.start, tq.pos()), Box::new(expr)))
         },
 
         TokenKind::Identifier(id) => {
             let next_kind = tq.peek().map(|tok| tok.kind.clone());
             match next_kind
             {
-                Some(TokenKind::OpenParen) => parse_function_call(tq, indent_level, id).map(|c| Expression::Call(c)),
-                Some(TokenKind::Operator(op)) =>
+                Some(TokenKind::OpenParen) => parse_function_call(tq, indent_level, id, tok.span.start).map(|c| Expression::Call(c)),
+                Some(TokenKind::Operator(op)) => {
                     if op.is_binary_operator() {
-                        parse_binary_op_rhs(tq, indent_level, Expression::NameRef(id))
+                        parse_binary_op_rhs(tq, indent_level, Expression::NameRef(tok.span, id))
                     } else {
-                         Ok(Expression::NameRef(id))
-                    },
-                _ => Ok(Expression::NameRef(id)),
+                         Ok(Expression::NameRef(tok.span, id))
+                    }
+                },
+                _ => Ok(Expression::NameRef(tok.span, id)),
             }
         },
 
@@ -118,13 +123,14 @@ fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token
             let next_kind = tq.peek().map(|tok| tok.kind.clone());
             match next_kind
             {
-                Some(TokenKind::Operator(op)) =>
+                Some(TokenKind::Operator(op)) => {
                     if op.is_binary_operator() {
-                        parse_binary_op_rhs(tq, indent_level, Expression::StringLiteral(s))
+                        parse_binary_op_rhs(tq, indent_level, Expression::StringLiteral(tok.span, s))
                     } else {
-                        Ok(Expression::StringLiteral(s))
-                    },
-                _ => Ok(Expression::StringLiteral(s)),
+                        Ok(Expression::StringLiteral(tok.span, s))
+                    }
+                },
+                _ => Ok(Expression::StringLiteral(tok.span, s)),
             }
         },
 
@@ -132,19 +138,20 @@ fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token
             let next_kind = tq.peek().map(|tok| tok.kind.clone());
             match next_kind
             {
-                Some(TokenKind::Operator(op)) =>
+                Some(TokenKind::Operator(op)) => {
                     if op.is_binary_operator() {
-                        parse_binary_op_rhs(tq, indent_level, Expression::Number(n))
+                        parse_binary_op_rhs(tq, indent_level, Expression::Number(tok.span, n))
                     } else {
-                        Ok(Expression::Number(n))
-                    },
-                _ => Ok(Expression::Number(n)),
+                        Ok(Expression::Number(tok.span, n))
+                    }
+                },
+                _ => Ok(Expression::Number(tok.span, n)),
             }
         },
 
-        TokenKind::Operator(op) => parse_unary_expression(tq, indent_level, op, tok.pos),
+        TokenKind::Operator(op) => parse_unary_expression(tq, indent_level, op, tok.span.start),
 
-        _ => err(tok.pos, ErrorType::UnexpectedToken(tok)),
+        _ => err(tok.span.start, ErrorType::UnexpectedToken(tok)),
     }
 }
 
@@ -152,10 +159,11 @@ pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize) -> Result<Expr
 {
     if let Some(tok) = try!(tq.pop_if(|tok| !is_end_of_expression(tok, indent_level)))
     {
+        let tok_pos = tok.span.start;
         let e = try!(parse_primary_expression(tq, indent_level, tok));
         if tq.is_next(TokenKind::Operator(Operator::Increment)) || tq.is_next(TokenKind::Operator(Operator::Decrement)) {
             let op = try!(tq.expect_operator());
-            Ok(Expression::PostFixUnaryOp((op, Box::new(e))))
+            Ok(Expression::PostFixUnaryOp(Span::new(tok_pos, tq.pos()), op, Box::new(e)))
         } else {
             Ok(e)
         }
@@ -177,57 +185,61 @@ fn th_expr(data: &str) -> Expression
     let mut cursor = Cursor::new(data);
     let mut tq = Lexer::new().read(&mut cursor).expect("Lexing failed");
     let lvl = tq.expect_indent().expect("Missing indentation");
-    parse_expression(&mut tq, lvl).expect("Parsing failed")
+    let e = parse_expression(&mut tq, lvl).expect("Parsing failed");
+    e.print(0);
+    e
 }
 
 #[cfg(test)]
-fn bin_op(op: Operator, left: Expression, right: Expression) -> Expression
+fn bin_op(op: Operator, span: Span, left: Expression, right: Expression) -> Expression
 {
-    Expression::BinaryOp((op,
+    Expression::BinaryOp(
+        span,
+        op,
         Box::new(left),
         Box::new(right),
-    ))
+    )
 }
 
 #[cfg(test)]
-fn unary_op(op: Operator, left: Expression) -> Expression
+fn unary_op(op: Operator, span: Span, left: Expression) -> Expression
 {
-    Expression::UnaryOp((op, Box::new(left)))
+    Expression::UnaryOp(span, op, Box::new(left))
 }
 
 #[cfg(test)]
-fn pf_unary_op(op: Operator, left: Expression) -> Expression
+fn pf_unary_op(op: Operator, span: Span, left: Expression) -> Expression
 {
-    Expression::PostFixUnaryOp((op, Box::new(left)))
+    Expression::PostFixUnaryOp(span, op, Box::new(left))
 }
 
 #[cfg(test)]
-fn name_ref(left: &str) -> Expression
+fn name_ref(left: &str, span: Span) -> Expression
 {
-    Expression::NameRef(left.into())
+    Expression::NameRef(span, left.into())
 }
 
 #[cfg(test)]
-fn number(left: &str) -> Expression
+pub fn number(left: &str, span: Span) -> Expression
 {
-    Expression::Number(left.into())
+    Expression::Number(span, left.into())
 }
 
 #[cfg(test)]
-fn enclosed(left: Expression) -> Expression
+fn enclosed(span: Span, left: Expression) -> Expression
 {
-    Expression::Enclosed(Box::new(left))
+    Expression::Enclosed(span, Box::new(left))
 }
 
 #[test]
 fn test_basic_expressions()
 {
-    assert!(th_expr("1000") == number("1000"));
-    assert!(th_expr("id") == name_ref("id"));
-    assert!(th_expr("-1000") == unary_op(Operator::Sub, number("1000")));
-    assert!(th_expr("!id") == unary_op(Operator::Not, name_ref("id")));
-    assert!(th_expr("++id") == unary_op(Operator::Increment, name_ref("id")));
-    assert!(th_expr("--id") == unary_op(Operator::Decrement, name_ref("id")));
+    assert!(th_expr("1000") == number("1000", span(1, 1, 1, 4)));
+    assert!(th_expr("id") == name_ref("id", span(1, 1, 1, 2)));
+    assert!(th_expr("-1000") == unary_op(Operator::Sub, span(1, 1, 1, 5), number("1000", span(1, 2, 1, 5))));
+    assert!(th_expr("!id") == unary_op(Operator::Not, span(1, 1, 1, 3), name_ref("id", span(1, 2, 1, 3))));
+    assert!(th_expr("++id") == unary_op(Operator::Increment, span(1, 1, 1, 4), name_ref("id", span(1, 3, 1, 4))));
+    assert!(th_expr("--id") == unary_op(Operator::Decrement, span(1, 1, 1, 4), name_ref("id", span(1, 3, 1, 4))));
 }
 
 #[test]
@@ -251,9 +263,9 @@ fn test_binary_ops()
 
     for &(op, op_txt) in &ops
     {
-        let e = th_expr(&format!("a {} b", op_txt));
-        println!("Expr: {:?}", e);
-        assert!(e == bin_op(op, name_ref("a"), name_ref("b")));
+        let e_txt = format!("a {} b", op_txt);
+        let e = th_expr(&e_txt);
+        assert!(e == bin_op(op, span(1, 1, 1, e_txt.len()), name_ref("a", span(1, 1, 1, 1)), name_ref("b", span(1, e_txt.len(), 1, e_txt.len()))));
     }
 }
 
@@ -261,11 +273,11 @@ fn test_binary_ops()
 fn test_precedence()
 {
     let e = th_expr("a + b * c");
-    println!("Expr: {:?}", e);
     assert!(e == bin_op(
         Operator::Add,
-        name_ref("a"),
-        bin_op(Operator::Mul, name_ref("b"), name_ref("c")),
+        span(1, 1, 1, 9),
+        name_ref("a", span(1, 1, 1, 1)),
+        bin_op(Operator::Mul, span(1, 5, 1, 9), name_ref("b", span(1, 5, 1, 5)), name_ref("c", span(1, 9, 1, 9))),
     ));
 }
 
@@ -274,11 +286,11 @@ fn test_precedence()
 fn test_precedence_2()
 {
     let e = th_expr("a * b + c ");
-    println!("Expr: {:?}", e);
     assert!(e == bin_op(
         Operator::Add,
-        bin_op(Operator::Mul, name_ref("a"), name_ref("b")),
-        name_ref("c"),
+        span(1, 1, 1, 9),
+        bin_op(Operator::Mul, span(1, 1, 1, 5), name_ref("a", span(1, 1, 1, 1)), name_ref("b", span(1, 5, 1, 5))),
+        name_ref("c", span(1, 9, 1, 9)),
     ));
 }
 
@@ -286,11 +298,11 @@ fn test_precedence_2()
 fn test_precedence_3()
 {
     let e = th_expr("a * b + c / d ");
-    println!("Expr: {:?}", e);
     assert!(e == bin_op(
         Operator::Add,
-        bin_op(Operator::Mul, name_ref("a"), name_ref("b")),
-        bin_op(Operator::Div, name_ref("c"), name_ref("d")),
+        span(1, 1, 1, 13),
+        bin_op(Operator::Mul, span(1, 1, 1, 5), name_ref("a", span(1, 1, 1, 1)), name_ref("b", span(1, 5, 1, 5))),
+        bin_op(Operator::Div, span(1, 9, 1, 13), name_ref("c", span(1, 9, 1, 9)), name_ref("d", span(1, 13, 1, 13))),
     ));
 }
 
@@ -298,11 +310,11 @@ fn test_precedence_3()
 fn test_precedence_4()
 {
     let e = th_expr("a && b || c && d ");
-    println!("Expr: {:?}", e);
     assert!(e == bin_op(
         Operator::Or,
-        bin_op(Operator::And, name_ref("a"), name_ref("b")),
-        bin_op(Operator::And, name_ref("c"), name_ref("d")),
+        span(1, 1, 1, 16),
+        bin_op(Operator::And, span(1, 1, 1, 6), name_ref("a", span(1, 1, 1, 1)), name_ref("b", span(1, 6, 1, 6))),
+        bin_op(Operator::And, span(1, 11, 1, 16), name_ref("c", span(1, 11, 1, 11)), name_ref("d", span(1, 16, 1, 16))),
     ));
 }
 
@@ -310,11 +322,11 @@ fn test_precedence_4()
 fn test_precedence_5()
 {
     let e = th_expr("a >= b && c < d");
-    println!("Expr: {:?}", e);
     assert!(e == bin_op(
         Operator::And,
-        bin_op(Operator::GreaterThanEquals, name_ref("a"), name_ref("b")),
-        bin_op(Operator::LessThan, name_ref("c"), name_ref("d")),
+        span(1, 1, 1, 15),
+        bin_op(Operator::GreaterThanEquals, span(1, 1, 1, 6), name_ref("a", span(1, 1, 1, 1)), name_ref("b", span(1, 6, 1, 6))),
+        bin_op(Operator::LessThan, span(1, 11, 1, 15), name_ref("c", span(1, 11, 1, 11)), name_ref("d", span(1, 15, 1, 15))),
     ));
 }
 
@@ -322,11 +334,13 @@ fn test_precedence_5()
 fn test_precedence_6()
 {
     let e = th_expr("a * (b + c)");
-    println!("Expr: {:?}", e);
     assert!(e == bin_op(
         Operator::Mul,
-        name_ref("a"),
-        enclosed(bin_op(Operator::Add, name_ref("b"), name_ref("c"))),
+        span(1, 1, 1, 11),
+        name_ref("a", span(1, 1, 1, 1)),
+        enclosed(
+            span(1, 5, 1, 11),
+            bin_op(Operator::Add, span(1, 6, 1, 10), name_ref("b", span(1, 6, 1, 6)), name_ref("c", span(1, 10, 1, 10)))),
     ));
 }
 
@@ -334,11 +348,11 @@ fn test_precedence_6()
 fn test_precedence_7()
 {
     let e = th_expr("b + -c");
-    println!("Expr: {:?}", e);
     assert!(e == bin_op(
         Operator::Add,
-        name_ref("b"),
-        unary_op(Operator::Sub, name_ref("c")),
+        span(1, 1, 1, 6),
+        name_ref("b", span(1, 1, 1, 1)),
+        unary_op(Operator::Sub, span(1, 5, 1, 6), name_ref("c", span(1, 6, 1, 6))),
     ));
 }
 
@@ -346,11 +360,11 @@ fn test_precedence_7()
 fn test_precedence_8()
 {
     let e = th_expr("b + c++");
-    println!("Expr: {:?}", e);
     assert!(e == bin_op(
         Operator::Add,
-        name_ref("b"),
-        pf_unary_op(Operator::Increment, name_ref("c")),
+        span(1, 1, 1, 7),
+        name_ref("b", span(1, 1, 1, 1)),
+        pf_unary_op(Operator::Increment, span(1, 5, 1, 7), name_ref("c", span(1, 5, 1, 5))),
     ));
 }
 
@@ -358,14 +372,16 @@ fn test_precedence_8()
 fn test_precedence_9()
 {
     let e = th_expr("(b + c)++");
-    println!("Expr: {:?}", e);
     assert!(e == pf_unary_op(
         Operator::Increment,
+        span(1, 1, 1, 9),
         enclosed(
+            span(1, 1, 1, 7),
             bin_op(
                 Operator::Add,
-                name_ref("b"),
-                name_ref("c"),
+                span(1, 2, 1, 6),
+                name_ref("b", span(1, 2, 1, 2)),
+                name_ref("c", span(1, 6, 1, 6)),
             )
         )
     ));
@@ -375,11 +391,11 @@ fn test_precedence_9()
 fn test_precedence_10()
 {
     let e = th_expr("b + c++");
-    println!("Expr: {:?}", e);
     assert!(e == bin_op(
         Operator::Add,
-        name_ref("b"),
-        pf_unary_op(Operator::Increment, name_ref("c"))
+        span(1, 1, 1, 7),
+        name_ref("b", span(1, 1, 1, 1)),
+        pf_unary_op(Operator::Increment, span(1, 5, 1, 7), name_ref("c", span(1, 5, 1, 5)))
     ));
 }
 
@@ -387,13 +403,14 @@ fn test_precedence_10()
 fn test_precedence_11()
 {
     let e = th_expr("b + c(6)");
-    println!("Expr: {:?}", e);
     assert!(e == bin_op(
         Operator::Add,
-        name_ref("b"),
+        span(1, 1, 1, 8),
+        name_ref("b", span(1, 1, 1, 1)),
         Expression::Call(Call::new(
             "c".into(),
-            vec![number("6")],
+            vec![number("6", span(1, 7, 1, 7))],
+            span(1, 5, 1, 8)
         ))
     ));
 }
@@ -402,14 +419,15 @@ fn test_precedence_11()
 fn test_precedence_12()
 {
     let e = th_expr("b.d + a.c(6)");
-    println!("Expr: {:?}", e);
     assert!(e == bin_op(
         Operator::Add,
-        bin_op(Operator::Dot, name_ref("b"), name_ref("d")),
-        bin_op(Operator::Dot, name_ref("a"),
+        span(1, 1, 1, 12),
+        bin_op(Operator::Dot, span(1, 1, 1, 3), name_ref("b", span(1, 1, 1, 1)), name_ref("d", span(1, 3, 1, 3))),
+        bin_op(Operator::Dot, span(1, 7, 1, 12), name_ref("a", span(1, 7, 1, 7)),
             Expression::Call(Call::new(
                 "c".into(),
-                vec![number("6")],
+                vec![number("6", span(1, 11, 1, 11))],
+                span(1, 9, 1, 12),
             ))
         )
     ));

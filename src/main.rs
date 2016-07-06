@@ -1,4 +1,7 @@
+extern crate llvm_sys as llvm;
+
 mod ast;
+mod codegen;
 mod compileerror;
 mod lexer;
 mod parser;
@@ -6,10 +9,13 @@ mod tokens;
 mod tokenqueue;
 
 use std::env;
+use std::ffi::OsStr;
 use std::fs;
+use std::path;
 use std::process;
 
-use ast::{TreePrinter, Program};
+use ast::*;
+use codegen::codegen;
 use parser::parse_program;
 use compileerror::CompileError;
 
@@ -18,10 +24,12 @@ fn usage()
     println!("Usage: cobra <input-file>");
 }
 
-fn parse_file(filename: &str) -> Result<Program, CompileError>
+fn parse_file(file_path: &str) -> Result<Program, CompileError>
 {
-    let mut file = try!(fs::File::open(filename));
-    parse_program(&mut file)
+    let mut file = try!(fs::File::open(file_path));
+    let path = path::Path::new(file_path);
+    let filename: &OsStr = path.file_name().expect("Invalid filename");
+    parse_program(&mut file, filename.to_str().expect("Invalid UTF8 filename"))
 }
 
 fn main()
@@ -39,7 +47,10 @@ fn main()
     {
         Err(e) => println!("Error: {:?}", e),
         Ok(p) => {
-            p.print(0);
+            //p.print(0);
+            if let Err(e) = codegen(&p) {
+                println!("Error: {:?}", e);
+            }
         },
     }
 }

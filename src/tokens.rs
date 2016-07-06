@@ -1,5 +1,5 @@
 use std::fmt::{Formatter, Display, Error};
-use compileerror::Pos;
+use compileerror::{Span};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Operator
@@ -144,16 +144,16 @@ impl Display for TokenKind
 pub struct Token
 {
     pub kind: TokenKind,
-    pub pos: Pos,
+    pub span: Span,
 }
 
 impl Token
 {
-    pub fn new(kind: TokenKind, pos: Pos) -> Token
+    pub fn new(kind: TokenKind, span: Span) -> Token
     {
         Token{
             kind: kind,
-            pos: pos,
+            span: span,
         }
     }
 

@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use compileerror::{Pos, CompileError, ErrorType};
+use compileerror::{Pos, CompileError, ErrorType, err};
 use tokens::{Token, TokenKind, Operator};
 
 
@@ -22,8 +22,6 @@ impl TokenQueue
 
     pub fn add(&mut self, tok: Token)
     {
-        self.last_pos = tok.pos;
-
         // Remove consecutive indents
         if let Some(last) = self.tokens.back_mut()
         {
@@ -57,8 +55,12 @@ impl TokenQueue
 
     pub fn pop(&mut self) -> Result<Token, CompileError>
     {
-        self.tokens.pop_front()
-            .ok_or(CompileError::new(self.last_pos, ErrorType::UnexpectedEOF))
+        if let Some(tok) = self.tokens.pop_front() {
+            self.last_pos = tok.span.end;
+            Ok(tok)
+        } else {
+            err(self.last_pos, ErrorType::UnexpectedEOF)
+        }
     }
 
     pub fn pop_if<P>(&mut self, predicate: P) ->  Result<Option<Token>, CompileError>
@@ -91,7 +93,7 @@ impl TokenQueue
                 }
                 else
                 {
-                    Err(CompileError::new(tok.pos, ErrorType::UnexpectedToken(tok)))
+                    Err(CompileError::new(tok.span.start, ErrorType::UnexpectedToken(tok)))
                 })
     }
 
@@ -104,7 +106,7 @@ impl TokenQueue
         }
         else
         {
-            Err(CompileError::new(tok.pos, ErrorType::ExpectedIndent))
+            Err(CompileError::new(tok.span.start, ErrorType::ExpectedIndent))
         }
     }
 
@@ -113,11 +115,11 @@ impl TokenQueue
         let tok = try!(self.pop());
         if let TokenKind::StringLiteral(s) = tok.kind
         {
-            Ok((s, tok.pos))
+            Ok((s, tok.span.start))
         }
         else
         {
-            Err(CompileError::new(tok.pos, ErrorType::ExpectedStringLiteral))
+            Err(CompileError::new(tok.span.start, ErrorType::ExpectedStringLiteral))
         }
     }
 
@@ -126,11 +128,11 @@ impl TokenQueue
         let tok = try!(self.pop());
         if let TokenKind::Identifier(s) = tok.kind
         {
-            Ok((s, tok.pos))
+            Ok((s, tok.span.start))
         }
         else
         {
-            Err(CompileError::new(tok.pos, ErrorType::ExpectedIdentifier))
+            Err(CompileError::new(tok.span.start, ErrorType::ExpectedIdentifier))
         }
     }
 
@@ -143,7 +145,7 @@ impl TokenQueue
         }
         else
         {
-            Err(CompileError::new(tok.pos, ErrorType::ExpectedOperator))
+            Err(CompileError::new(tok.span.start, ErrorType::ExpectedOperator))
         }
     }
 
