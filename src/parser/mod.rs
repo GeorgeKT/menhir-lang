@@ -1,15 +1,20 @@
 mod statements;
 mod expressions;
+mod lexer;
+mod tokens;
+mod tokenqueue;
 
 use std::io::Read;
 
-use lexer::{Lexer};
+
 use ast::*;
 use compileerror::*;
-
 use self::statements::*;
 
+pub use self::lexer::Lexer;
+pub use self::tokenqueue::TokenQueue;
 pub use self::expressions::*;
+pub use self::tokens::*;
 
 
 

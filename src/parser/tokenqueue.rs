@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use compileerror::{Pos, CompileError, ErrorType, err};
-use tokens::{Token, TokenKind, Operator};
+use parser::{Token, TokenKind, Operator};
 
 
 

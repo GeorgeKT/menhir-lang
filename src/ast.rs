@@ -1,6 +1,6 @@
 use std::fmt;
 use compileerror::{Span, Pos};
-use tokens::Operator;
+use parser::Operator;
 
 fn prefix(level: usize) -> String
 {

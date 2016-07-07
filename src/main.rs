@@ -6,10 +6,8 @@ extern crate rustc_serialize;
 mod ast;
 mod codegen;
 mod compileerror;
-mod lexer;
 mod parser;
-mod tokens;
-mod tokenqueue;
+
 
 use std::ffi::OsStr;
 use std::fs;

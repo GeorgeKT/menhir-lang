@@ -3,7 +3,7 @@ use std::cmp;
 use std::convert::From;
 use std::io;
 use std::fmt;
-use tokens::{Operator, Token};
+use parser::{Operator, Token};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Pos

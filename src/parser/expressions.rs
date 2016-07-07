@@ -1,7 +1,6 @@
 use ast::*;
-use tokenqueue::TokenQueue;
 use compileerror::*;
-use tokens::*;
+use parser::*;
 
 
 fn is_end_of_expression(tok: &Token, indent_level: usize) -> bool
@@ -176,8 +175,7 @@ pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize) -> Result<Expr
 
 #[cfg(test)]
 use std::io::Cursor;
-#[cfg(test)]
-use lexer::Lexer;
+
 
 #[cfg(test)]
 fn th_expr(data: &str) -> Expression

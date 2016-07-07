@@ -1,8 +1,7 @@
 use std::io::{Read, BufReader, BufRead};
 use std::mem;
 use compileerror::{Pos, Span, CompileError, ErrorType};
-use tokens::*;
-use tokenqueue::TokenQueue;
+use parser::*;
 
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -309,9 +308,8 @@ impl Lexer
 #[cfg(test)]
 mod tests
 {
-    use super::*;
     use std::io::Cursor;
-    use tokens::*;
+    use parser::*;
     use compileerror::*;
 
     fn tok(kind: TokenKind, sline: usize, soffset: usize, eline: usize, eoffset: usize) -> Token

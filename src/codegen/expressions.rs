@@ -5,7 +5,7 @@ use libc;
 use ast::*;
 use codegen::*;
 use compileerror::*;
-use tokens::Operator;
+use parser::Operator;
 
 unsafe fn is_integer(ctx: LLVMContextRef, tr: LLVMTypeRef) -> bool
 {
