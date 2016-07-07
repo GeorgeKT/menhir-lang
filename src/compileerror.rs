@@ -123,7 +123,10 @@ pub enum ErrorType
     TypeError(String),
     SelfNotAllowed,
     RedefinitionOfVariable(String),
+    RedefinitionOfFunction(String),
     UnknownVariable(String),
+    UnknownFunction(String),
+    ArgumentCountMismatch(String),
 }
 
 
@@ -172,7 +175,10 @@ impl fmt::Display for CompileError
             ErrorType::InvalidInteger => write!(f, "{}: Invalid integer", self.pos),
             ErrorType::TypeError(ref s) => write!(f, "{}: Wrong type: {}", self.pos, s),
             ErrorType::RedefinitionOfVariable(ref v) =>  write!(f, "{}: Attempting to redefine variable {}", self.pos, v),
+            ErrorType::RedefinitionOfFunction(ref v) =>  write!(f, "{}: Attempting to redefine function {}", self.pos, v),
             ErrorType::UnknownVariable(ref n) => write!(f, "{}: Unknown variable '{}'", self.pos, n),
+            ErrorType::UnknownFunction(ref n) => write!(f, "{}: Unknown function '{}'", self.pos, n),
+            ErrorType::ArgumentCountMismatch(ref msg) => write!(f, "{}: {}", self.pos, msg),
         }
     }
 }

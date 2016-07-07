@@ -2,6 +2,7 @@ use std::ptr;
 use std::ffi::CStr;
 use llvm::core::*;
 use llvm::prelude::*;
+use libc;
 
 use ast::*;
 use codegen::*;
@@ -43,15 +44,61 @@ unsafe fn gen_variable(ctx: &mut Context, v: &Variable) -> Result<(), CompileErr
     let var = LLVMBuildAlloca(ctx.builder, initial_value_type, cstr("var"));
     LLVMBuildStore(ctx.builder, initial_value, var);
 
-    let mut sf = ctx.top_stack_frame().expect("No stack frame");
+    let mut sf = ctx.top_stack_frame();
     sf.add_variable(&v.name, var, v.is_const);
     Ok(())
 }
 
-#[allow(unused_variables)]
-fn gen_function(ctx: &mut Context, f: &Function) -> Result<(), CompileError>
+unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<(), CompileError>
 {
-     err(Pos::new(0, 0), ErrorType::UnexpectedEOF)
+    if ctx.has_function(&f.name) {
+        return err(f.span.start, ErrorType::RedefinitionOfFunction(f.name.clone()));
+    }
+
+    let ret_type = try!(ctx
+        .resolve_type(&f.return_type)
+        .ok_or(CompileError::new(f.span.start, ErrorType::TypeError(format!("Cannot resolve the return type of function '{}'", f.name)))));
+    let mut arg_types = Vec::new();
+    for arg in &f.args {
+        let arg_type = try!(ctx
+            .resolve_type(&arg.typ)
+            .ok_or(CompileError::new(arg.span.start, ErrorType::TypeError(format!("Cannot resolve the type of argument '{}'", arg.name)))));
+        arg_types.push(arg_type);
+    }
+
+    let function_type = LLVMFunctionType(ret_type, arg_types.as_mut_ptr(), arg_types.len() as libc::c_uint, 0);
+    let function = LLVMAddFunction(ctx.module, cstr(&f.name), function_type);
+    let bb = LLVMAppendBasicBlockInContext(ctx.context, function, cstr("entry"));
+    LLVMPositionBuilderAtEnd(ctx.builder, bb);
+
+
+    ctx.top_stack_frame().add_function(FunctionInstance{
+        name: f.name.clone(),
+        args: arg_types.clone(),
+        return_type: ret_type,
+        function: function,
+    });
+
+    ctx.push_stack_frame(function, bb);
+
+    for (i, arg) in f.args.iter().enumerate() {
+        let var = LLVMGetParam(function, i as libc::c_uint);
+        let alloc = LLVMBuildAlloca(ctx.builder, arg_types[i], cstr("argtmp"));
+        LLVMBuildStore(ctx.builder, var, alloc);
+        ctx.top_stack_frame().add_variable(&arg.name, alloc, arg.constant);
+    }
+
+    for s in &f.block.statements {
+        try!(gen_statement(ctx, s));
+    }
+
+    if f.return_type == Type::Void {
+        LLVMBuildRetVoid(ctx.builder);
+    }
+
+    ctx.pop_stack_frame();
+    LLVMPositionBuilderAtEnd(ctx.builder, ctx.top_stack_frame().get_current_bb());
+    Ok(())
 }
 
 #[allow(unused_variables)]
@@ -70,18 +117,15 @@ unsafe fn gen_return(ctx: &mut Context, f: &Return) -> Result<(), CompileError>
 {
     let ret = try!(gen_expression(ctx, &f.expr));
     let builder = ctx.builder;
-    if let Some(ref sf) = ctx.top_stack_frame() {
-        let ret_type =  LLVMTypeOf(ret);
-        let func_type = sf.return_type();
-        if ret_type != func_type {
-            err(f.span.start, ErrorType::TypeError(
-                format!("Attempting to return type '{}' expecting '{}'", type_name(ret_type), type_name(func_type))))
-        } else {
-            LLVMBuildRet(builder, ret);
-            Ok(())
-        }
+    let sf = ctx.top_stack_frame();
+    let ret_type =  LLVMTypeOf(ret);
+    let func_type = sf.return_type();
+    if ret_type != func_type {
+        err(f.span.start, ErrorType::TypeError(
+            format!("Attempting to return type '{}' expecting '{}'", type_name(ret_type), type_name(func_type))))
     } else {
-        err(f.span.start, ErrorType::UnexpectedEOF)
+        LLVMBuildRet(builder, ret);
+        Ok(())
     }
 }
 
@@ -128,11 +172,11 @@ pub unsafe fn gen_program(ctx: &mut Context, prog: &Program) -> Result<(), Compi
 {
     let main_ret_type = LLVMInt64TypeInContext(ctx.context);
     let function_type = LLVMFunctionType(main_ret_type, ptr::null_mut(), 0, 0);
-    let function = LLVMAddFunction(ctx.module, cstr("_start"), function_type);
+    let function = LLVMAddFunction(ctx.module, cstr("main"), function_type);
     let bb = LLVMAppendBasicBlockInContext(ctx.context, function, cstr("entry"));
     LLVMPositionBuilderAtEnd(ctx.builder, bb);
 
-    ctx.push_stack_frame(function);
+    ctx.push_stack_frame(function, bb);
     for s in &prog.block.statements {
         try!(gen_statement(ctx, s));
     }

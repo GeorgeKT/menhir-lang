@@ -5,3 +5,4 @@ authors = ["Joris Guisson <joris.guisson@gmail.com>"]
 
 [dependencies]
 llvm-sys = "0.3"
+libc = "*"

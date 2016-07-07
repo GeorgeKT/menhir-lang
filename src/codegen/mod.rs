@@ -26,10 +26,20 @@ pub struct VariableInstance
     pub constant: bool,
 }
 
+pub struct FunctionInstance
+{
+    pub function: LLVMValueRef,
+    pub name: String,
+    pub args: Vec<LLVMTypeRef>,
+    pub return_type: LLVMTypeRef,
+}
+
 pub struct StackFrame
 {
     function: LLVMValueRef,
     vars: HashMap<String, VariableInstance>,
+    funcs: HashMap<String, FunctionInstance>,
+    current_bb: LLVMBasicBlockRef,
 }
 
 impl StackFrame
@@ -52,6 +62,27 @@ impl StackFrame
     pub fn get_variable(&self, name: &str) -> Option<&VariableInstance>
     {
         self.vars.get(name)
+    }
+
+    pub fn add_function(&mut self, f: FunctionInstance)
+    {
+        let name = f.name.clone();
+        self.funcs.insert(name, f);
+    }
+
+    pub fn get_function(&self, name: &str) -> Option<&FunctionInstance>
+    {
+        self.funcs.get(name)
+    }
+
+    pub fn set_current_bb(&mut self, bb: LLVMBasicBlockRef)
+    {
+        self.current_bb = bb;
+    }
+
+    pub fn get_current_bb(&self) -> LLVMBasicBlockRef
+    {
+        self.current_bb
     }
 }
 
@@ -81,11 +112,13 @@ impl<'a> Context<'a>
         }
     }
 
-    pub fn push_stack_frame(&mut self, fun: LLVMValueRef)
+    pub fn push_stack_frame(&mut self, fun: LLVMValueRef, bb: LLVMBasicBlockRef)
     {
         self.stack.push(StackFrame{
             function: fun,
             vars: HashMap::new(),
+            funcs: HashMap::new(),
+            current_bb: bb,
         });
     }
 
@@ -94,9 +127,9 @@ impl<'a> Context<'a>
         self.stack.pop();
     }
 
-    pub fn top_stack_frame(&mut self) -> Option<&mut StackFrame>
+    pub fn top_stack_frame(&mut self) -> &mut StackFrame
     {
-        self.stack.last_mut()
+        self.stack.last_mut().expect("Empty stack")
     }
 
     pub unsafe fn dump(&self)
@@ -132,10 +165,27 @@ impl<'a> Context<'a>
         self.get_variable(name).is_some()
     }
 
+    pub fn get_function(&'a self, name: &str) -> Option<&'a FunctionInstance>
+    {
+        for sf in self.stack.iter().rev() {
+            let f = sf.get_function(name);
+            if f.is_some() {
+                return f;
+            }
+        }
+        None
+    }
+
+    pub fn has_function(&self, name: &str) -> bool
+    {
+        self.get_function(name).is_some()
+    }
+
     pub unsafe fn resolve_type(&self, typ: &Type) -> Option<LLVMTypeRef>
     {
         match *typ
         {
+            Type::Void => Some(LLVMVoidTypeInContext(self.context)),
             Type::Primitive(_, ref name) =>
                 match &name[..] {
                     "uint8" | "int8" | "char" | "byte" => Some(LLVMInt8TypeInContext(self.context)),

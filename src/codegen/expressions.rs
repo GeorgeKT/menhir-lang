@@ -1,5 +1,6 @@
 use llvm::core::*;
 use llvm::prelude::*;
+use libc;
 
 use ast::*;
 use codegen::*;
@@ -181,10 +182,32 @@ unsafe fn gen_enclosed(ctx: &mut Context, e: &Expression, _span: &Span) -> Resul
     gen_expression(ctx, e)
 }
 
-#[allow(unused_variables)]
-fn gen_call(ctx: &mut Context, c: &Call) -> Result<LLVMValueRef, CompileError>
+
+unsafe fn gen_call(ctx: &mut Context, c: &Call) -> Result<LLVMValueRef, CompileError>
 {
-    err(c.span.start, ErrorType::UnexpectedEOF)
+    let mut arg_vals = Vec::with_capacity(c.args.len());
+    for arg in &c.args {
+        arg_vals.push(try!(gen_expression(ctx, arg)));
+    }
+
+    let func: &FunctionInstance = try!(ctx
+        .get_function(&c.name)
+        .ok_or(CompileError::new(c.span.start, ErrorType::UnknownFunction(c.name.clone()))));
+
+    if c.args.len() != func.args.len() {
+        return err(c.span.start, ErrorType::ArgumentCountMismatch(
+            format!("Function '{}', expects {} arguments, {} are provided",
+                c.name, func.args.len(), c.args.len())));
+    }
+
+    for (i, arg) in c.args.iter().enumerate() {
+        let val_type = LLVMTypeOf(arg_vals[i]);
+        if val_type != func.args[i] {
+            return err(arg.span().start, ErrorType::TypeError(format!("Argument {} of function has the wrong type", i)));
+        }
+    }
+
+    Ok(LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr("call")))
 }
 
 unsafe fn gen_name_ref(ctx: &mut Context, nr: &str, span: &Span) -> Result<LLVMValueRef, CompileError>

@@ -1,4 +1,5 @@
 extern crate llvm_sys as llvm;
+extern crate libc;
 
 mod ast;
 mod codegen;
