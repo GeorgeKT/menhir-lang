@@ -49,7 +49,7 @@ unsafe fn gen_variable(ctx: &mut Context, v: &Variable) -> Result<(), CompileErr
     Ok(())
 }
 
-unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, span: &Span) -> Result<(LLVMValueRef, LLVMTypeRef, Vec<LLVMTypeRef>), CompileError>
+unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, span: &Span) -> Result<(LLVMValueRef, Vec<LLVMTypeRef>), CompileError>
 {
     let ret_type = try!(ctx
         .resolve_type(&sig.return_type)
@@ -65,7 +65,15 @@ unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, span: &Sp
 
     let function_type = LLVMFunctionType(ret_type, arg_types.as_mut_ptr(), arg_types.len() as libc::c_uint, 0);
     let function = LLVMAddFunction(ctx.module, cstr(&sig.name), function_type);
-    Ok((function, ret_type, arg_types))
+
+    ctx.top_stack_frame().add_function(FunctionInstance{
+        name: sig.name.clone(),
+        args: arg_types.clone(),
+        return_type: ret_type,
+        function: function,
+    });
+
+    Ok((function, arg_types))
 }
 
 unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<(), CompileError>
@@ -74,17 +82,9 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<(), CompileErr
         return err(f.span.start, ErrorType::RedefinitionOfFunction(f.sig.name.clone()));
     }
 
-    let (function, ret_type, arg_types) = try!(gen_function_sig(ctx, &f.sig, &f.span));
+    let (function, arg_types) = try!(gen_function_sig(ctx, &f.sig, &f.span));
     let bb = LLVMAppendBasicBlockInContext(ctx.context, function, cstr("entry"));
     LLVMPositionBuilderAtEnd(ctx.builder, bb);
-
-
-    ctx.top_stack_frame().add_function(FunctionInstance{
-        name: f.sig.name.clone(),
-        args: arg_types.clone(),
-        return_type: ret_type,
-        function: function,
-    });
 
     ctx.push_stack_frame(function, bb);
 
@@ -111,14 +111,7 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<(), CompileErr
 #[allow(unused_variables)]
 unsafe fn gen_external_function(ctx: &mut Context, f: &ExternalFunction) -> Result<(), CompileError>
 {
-    let (function, ret_type, arg_types) = try!(gen_function_sig(ctx, &f.sig, &f.span));
-
-    ctx.top_stack_frame().add_function(FunctionInstance{
-        name: f.sig.name.clone(),
-        args: arg_types.clone(),
-        return_type: ret_type,
-        function: function,
-    });
+    let _ = try!(gen_function_sig(ctx, &f.sig, &f.span));
     Ok(())
 }
 
