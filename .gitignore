@@ -1,3 +1,5 @@
 *.o
 *.a
 target
+Cargo.lock
+cobra-build
