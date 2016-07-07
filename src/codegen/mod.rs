@@ -2,12 +2,14 @@ mod statements;
 mod expressions;
 
 use std::collections::HashMap;
-use std::ffi::{CString};
+use std::ffi::{CString, CStr};
 use std::os::raw::c_char;
+use std::ptr;
 use std::marker::PhantomData;
 
 use llvm::prelude::*;
 use llvm::core::*;
+use llvm::target_machine::*;
 
 use ast::*;
 use compileerror::*;
@@ -18,6 +20,11 @@ pub use self::expressions::gen_expression;
 pub fn cstr(s: &str) -> *const c_char
 {
     CString::new(s).expect("Valid C string").as_ptr()
+}
+
+pub fn cstr_mut(s: &str) -> *mut c_char
+{
+    CString::new(s).expect("Valid C string").into_raw()
 }
 
 pub struct VariableInstance
@@ -90,6 +97,7 @@ pub struct Context<'a>
 {
     pub context: LLVMContextRef,
     pub module: LLVMModuleRef,
+    pub module_name: String,
     pub builder: LLVMBuilderRef,
     pub stack: Vec<StackFrame>,
     _pd: PhantomData<&'a i32>,
@@ -105,6 +113,7 @@ impl<'a> Context<'a>
             Context{
                 context: context,
                 module: LLVMModuleCreateWithName(cname.as_ptr()),
+                module_name: name.into(),
                 builder: LLVMCreateBuilderInContext(context),
                 stack: Vec::new(),
                 _pd: PhantomData{},
@@ -199,6 +208,8 @@ impl<'a> Context<'a>
             _ => None,
         }
     }
+
+
 }
 
 impl<'a> Drop for Context<'a>
@@ -213,14 +224,89 @@ impl<'a> Drop for Context<'a>
     }
 }
 
+unsafe fn llvm_init()
+{
+    use llvm::initialization::*;
+    use llvm::target::*;
 
-pub fn codegen(prog: &Program) -> Result<(), CompileError>
+    LLVM_InitializeAllTargetInfos();
+    LLVM_InitializeAllTargets();
+    LLVM_InitializeAllTargetMCs();
+    LLVM_InitializeAllAsmPrinters();
+    LLVM_InitializeAllAsmParsers();
+
+    let pass_registry = LLVMGetGlobalPassRegistry();
+    LLVMInitializeCore(pass_registry);
+    LLVMInitializeTransformUtils(pass_registry);
+    LLVMInitializeScalarOpts(pass_registry);
+    LLVMInitializeObjCARCOpts(pass_registry);
+    LLVMInitializeVectorization(pass_registry);
+    LLVMInitializeInstCombine(pass_registry);
+    LLVMInitializeIPO(pass_registry);
+    LLVMInitializeInstrumentation(pass_registry);
+    LLVMInitializeAnalysis(pass_registry);
+    LLVMInitializeIPA(pass_registry);
+    LLVMInitializeCodeGen(pass_registry);
+    LLVMInitializeTarget(pass_registry);
+}
+
+unsafe fn gen_obj_files(ctx: &Context) -> Result<(), CompileError>
+{
+    let target_triple = CStr::from_ptr(LLVMGetDefaultTargetTriple());
+    let target_triple_str = target_triple.to_str().expect("Invalid target triple");
+    println!("Compiling for {}", target_triple_str);
+
+    let mut target: LLVMTargetRef = ptr::null_mut();
+    let mut error_message: *mut c_char = ptr::null_mut();
+    if LLVMGetTargetFromTriple(target_triple.as_ptr(), &mut target, &mut error_message) != 0 {
+        let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
+        let e = format!("Unable to get an LLVM target reference for {}: {}", target_triple_str, msg);
+        LLVMDisposeMessage(error_message);
+        return err(Pos::zero(), ErrorType::CodegenError(e));
+    }
+
+    let target_machine = LLVMCreateTargetMachine(
+        target,
+        target_triple.as_ptr(),
+        cstr(""),
+        cstr(""),
+        LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault,
+        LLVMRelocMode::LLVMRelocDefault,
+        LLVMCodeModel::LLVMCodeModelDefault,
+    );
+    if target_machine == ptr::null_mut() {
+        let e = format!("Unable to get an LLVM target machine for {}", target_triple_str);
+        return err(Pos::zero(), ErrorType::CodegenError(e));
+    }
+
+    let obj_file_name = format!("{}.o", ctx.module_name);
+    if LLVMTargetMachineEmitToFile(target_machine, ctx.module, cstr_mut(&obj_file_name), LLVMCodeGenFileType::LLVMObjectFile, &mut error_message) != 0 {
+        let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
+        let e = format!("Unable to create object file: {}", msg);
+        LLVMDisposeMessage(error_message);
+        LLVMDisposeTargetMachine(target_machine);
+        return err(Pos::zero(), ErrorType::CodegenError(e));
+    }
+
+    LLVMDisposeTargetMachine(target_machine);
+    Ok(())
+}
+
+pub struct CodeGenOptions
+{
+    pub dump_ir: bool,
+}
+
+pub fn codegen(prog: &Program, opts: &CodeGenOptions) -> Result<(), CompileError>
 {
     unsafe {
+        llvm_init();
         // Set up a context, module and builder in that context.
         let mut ctx = Context::new(&prog.name);
         try!(gen_program(&mut ctx, prog));
-        ctx.dump();
-        Ok(())
+        if opts.dump_ir {
+            ctx.dump();
+        }
+        gen_obj_files(&ctx)
     }
 }

@@ -127,6 +127,7 @@ pub enum ErrorType
     UnknownVariable(String),
     UnknownFunction(String),
     ArgumentCountMismatch(String),
+    CodegenError(String),
 }
 
 
@@ -179,6 +180,7 @@ impl fmt::Display for CompileError
             ErrorType::UnknownVariable(ref n) => write!(f, "{}: Unknown variable '{}'", self.pos, n),
             ErrorType::UnknownFunction(ref n) => write!(f, "{}: Unknown function '{}'", self.pos, n),
             ErrorType::ArgumentCountMismatch(ref msg) => write!(f, "{}: {}", self.pos, msg),
+            ErrorType::CodegenError(ref msg) => write!(f, "Code generation failed: {}", msg),
         }
     }
 }
@@ -188,7 +190,6 @@ impl Error for CompileError
     fn description(&self) -> &str
     {
         "Compile error"
-
     }
 }
 

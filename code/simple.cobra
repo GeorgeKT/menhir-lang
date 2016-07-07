@@ -1,0 +1,7 @@
+#!/usr/bin/cobra
+
+func blaat(a: int, b: int) -> int:
+    return 2 * a + b * b
+
+var x = 17, y = x * 2
+return blaat(x, y)
