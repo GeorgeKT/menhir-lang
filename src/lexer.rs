@@ -128,6 +128,7 @@ impl Lexer
             "in" => TokenKind::In,
             "match" => TokenKind::Match,
             "union" => TokenKind::Union,
+            "extern" => TokenKind::Extern,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
         };
 
@@ -321,7 +322,7 @@ mod tests
     #[test]
     fn test_keywords()
     {
-        let mut cursor = Cursor::new("import var const func if else while for return pub struct in match union");
+        let mut cursor = Cursor::new("import var const func if else while for return pub struct in match union extern");
         let mut lexer = Lexer::new();
         let tokens: Vec<Token> = lexer
             .read(&mut cursor)
@@ -344,6 +345,7 @@ mod tests
             tok(TokenKind::In, 1, 59, 1, 60),
             tok(TokenKind::Match, 1, 62, 1, 66),
             tok(TokenKind::Union, 1, 68, 1, 72),
+            tok(TokenKind::Extern, 1, 74, 1, 79),
             tok(TokenKind::EOF, 2, 1, 2, 1),
         ]);
     }

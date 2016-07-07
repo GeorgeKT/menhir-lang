@@ -1,7 +1,10 @@
 #!/usr/bin/cobra
 
+extern func exit(ec: int)
+
 func blaat(a: int, b: int) -> int:
     return 2 * a + b * b
 
 var x = 17, y = x * 2
+exit(5)
 return blaat(x, y)

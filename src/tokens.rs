@@ -112,6 +112,7 @@ pub enum TokenKind
     In,
     Match,
     Union,
+    Extern,
     Identifier(String),
     Colon,
     Comma,

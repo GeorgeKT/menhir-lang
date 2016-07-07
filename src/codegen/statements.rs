@@ -49,17 +49,14 @@ unsafe fn gen_variable(ctx: &mut Context, v: &Variable) -> Result<(), CompileErr
     Ok(())
 }
 
-unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<(), CompileError>
+unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, span: &Span) -> Result<(LLVMValueRef, LLVMTypeRef, Vec<LLVMTypeRef>), CompileError>
 {
-    if ctx.has_function(&f.name) {
-        return err(f.span.start, ErrorType::RedefinitionOfFunction(f.name.clone()));
-    }
-
     let ret_type = try!(ctx
-        .resolve_type(&f.return_type)
-        .ok_or(CompileError::new(f.span.start, ErrorType::TypeError(format!("Cannot resolve the return type of function '{}'", f.name)))));
+        .resolve_type(&sig.return_type)
+        .ok_or(CompileError::new(span.start, ErrorType::TypeError(format!("Cannot resolve the return type of function '{}'", sig.name)))));
+
     let mut arg_types = Vec::new();
-    for arg in &f.args {
+    for arg in &sig.args {
         let arg_type = try!(ctx
             .resolve_type(&arg.typ)
             .ok_or(CompileError::new(arg.span.start, ErrorType::TypeError(format!("Cannot resolve the type of argument '{}'", arg.name)))));
@@ -67,13 +64,23 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<(), CompileErr
     }
 
     let function_type = LLVMFunctionType(ret_type, arg_types.as_mut_ptr(), arg_types.len() as libc::c_uint, 0);
-    let function = LLVMAddFunction(ctx.module, cstr(&f.name), function_type);
+    let function = LLVMAddFunction(ctx.module, cstr(&sig.name), function_type);
+    Ok((function, ret_type, arg_types))
+}
+
+unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<(), CompileError>
+{
+    if ctx.has_function(&f.sig.name) {
+        return err(f.span.start, ErrorType::RedefinitionOfFunction(f.sig.name.clone()));
+    }
+
+    let (function, ret_type, arg_types) = try!(gen_function_sig(ctx, &f.sig, &f.span));
     let bb = LLVMAppendBasicBlockInContext(ctx.context, function, cstr("entry"));
     LLVMPositionBuilderAtEnd(ctx.builder, bb);
 
 
     ctx.top_stack_frame().add_function(FunctionInstance{
-        name: f.name.clone(),
+        name: f.sig.name.clone(),
         args: arg_types.clone(),
         return_type: ret_type,
         function: function,
@@ -81,7 +88,7 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<(), CompileErr
 
     ctx.push_stack_frame(function, bb);
 
-    for (i, arg) in f.args.iter().enumerate() {
+    for (i, arg) in f.sig.args.iter().enumerate() {
         let var = LLVMGetParam(function, i as libc::c_uint);
         let alloc = LLVMBuildAlloca(ctx.builder, arg_types[i], cstr("argtmp"));
         LLVMBuildStore(ctx.builder, var, alloc);
@@ -92,12 +99,26 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<(), CompileErr
         try!(gen_statement(ctx, s));
     }
 
-    if f.return_type == Type::Void {
+    if f.sig.return_type == Type::Void {
         LLVMBuildRetVoid(ctx.builder);
     }
 
     ctx.pop_stack_frame();
     LLVMPositionBuilderAtEnd(ctx.builder, ctx.top_stack_frame().get_current_bb());
+    Ok(())
+}
+
+#[allow(unused_variables)]
+unsafe fn gen_external_function(ctx: &mut Context, f: &ExternalFunction) -> Result<(), CompileError>
+{
+    let (function, ret_type, arg_types) = try!(gen_function_sig(ctx, &f.sig, &f.span));
+
+    ctx.top_stack_frame().add_function(FunctionInstance{
+        name: f.sig.name.clone(),
+        args: arg_types.clone(),
+        return_type: ret_type,
+        function: function,
+    });
     Ok(())
 }
 
@@ -158,6 +179,7 @@ unsafe fn gen_statement(ctx: &mut Context, stmt: &Statement) -> Result<(), Compi
             Ok(())
         },
         Statement::Function(ref fun) => gen_function(ctx, fun),
+        Statement::ExternalFunction(ref fun) => gen_external_function(ctx, fun),
         Statement::While(ref w) => gen_while(ctx, w),
         Statement::If(ref i) => gen_if(ctx, i),
         Statement::Return(ref r) => gen_return(ctx, r),

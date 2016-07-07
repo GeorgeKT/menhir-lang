@@ -10,7 +10,6 @@ fn parse_import(tq: &mut TokenQueue, pos: Pos) -> Result<Statement, CompileError
     Ok(Statement::Import(Import::new(file, Span::new(pos, end_pos))))
 }
 
-
 fn parse_type(tq: &mut TokenQueue) -> Result<Type, CompileError>
 {
     let (name, pos) = try!(tq.expect_identifier());
@@ -30,7 +29,6 @@ fn parse_optional_type(tq: &mut TokenQueue) -> Result<Option<Type>, CompileError
         Ok(None)
     }
 }
-
 
 fn parse_vars(tq: &mut TokenQueue, indent_level: usize, constants: bool, public: bool) -> Result<Vec<Variable>, CompileError>
 {
@@ -95,9 +93,9 @@ pub fn parse_block(tq: &mut TokenQueue, indent_level: usize) -> Result<Block, Co
     Ok(Block::new(statements))
 }
 
-fn parse_func(tq: &mut TokenQueue, indent_level: usize, public: bool, self_type: Type) -> Result<Function, CompileError>
+fn parse_func_signature(tq: &mut TokenQueue, self_type: Type) -> Result<FunctionSignature, CompileError>
 {
-    let (name, name_pos) = try!(tq.expect_identifier());
+    let (name, _) = try!(tq.expect_identifier());
     let mut args = Vec::new();
 
     try!(tq.expect(TokenKind::OpenParen));
@@ -140,17 +138,32 @@ fn parse_func(tq: &mut TokenQueue, indent_level: usize, public: bool, self_type:
         Type::Void
     };
 
+    Ok(FunctionSignature{
+        name: name,
+        return_type: ret_type,
+        args: args,
+    })
+}
+
+fn parse_func(tq: &mut TokenQueue, start_pos: Pos, indent_level: usize, public: bool, self_type: Type) -> Result<Function, CompileError>
+{
+    let sig = try!(parse_func_signature(tq, self_type));
     try!(tq.expect(TokenKind::Colon));
 
     let block = try!(parse_block(tq, indent_level));
     Ok(Function::new(
-        name,
-        ret_type,
-        args,
+        sig,
         public,
         block,
-        Span::new(name_pos, tq.pos())
+        Span::new(start_pos, tq.pos())
     ))
+}
+
+fn parse_external_func(tq: &mut TokenQueue,  start_pos: Pos) -> Result<ExternalFunction, CompileError>
+{
+    try!(tq.expect(TokenKind::Func));
+    let sig = try!(parse_func_signature(tq, Type::Void));
+    Ok(ExternalFunction::new(sig, Span::new(start_pos, tq.pos())))
 }
 
 fn parse_while(tq: &mut TokenQueue, indent_level: usize, pos: Pos) -> Result<Statement, CompileError>
@@ -211,7 +224,7 @@ fn parse_struct_member(s: &mut Struct, tq: &mut TokenQueue, indent_level: usize,
         },
         TokenKind::Func => {
             let st = Type::Struct(tok.span.start, s.name.clone());
-            s.functions.push(try!(parse_func(tq, indent_level, public, st)));
+            s.functions.push(try!(parse_func(tq, tok.span.start, indent_level, public, st)));
         },
         TokenKind::Var => {
             let vars = try!(parse_vars(tq, indent_level, false, public));
@@ -282,7 +295,7 @@ fn parse_union_member(tq: &mut TokenQueue, indent_level: usize, public: bool, ut
     match tok.kind
     {
         TokenKind::Pub => parse_union_member(tq, indent_level, true, ut),
-        TokenKind::Func => parse_func(tq, indent_level, public, ut),
+        TokenKind::Func => parse_func(tq, tok.span.start, indent_level, public, ut),
         _ => err(tok.span.start, ErrorType::UnexpectedToken(tok)),
     }
 }
@@ -362,13 +375,14 @@ pub fn parse_statement(tq: &mut TokenQueue, indent_level: usize) -> Result<State
         TokenKind::Import => parse_import(tq, tok.span.start),
         TokenKind::Var => parse_vars(tq, indent_level, false, false).map(|v| Statement::Variable(v)),
         TokenKind::Const => parse_vars(tq, indent_level, true, false).map(|v| Statement::Variable(v)),
-        TokenKind::Func => parse_func(tq, indent_level, false, Type::Void).map(|f| Statement::Function(f)),
+        TokenKind::Func => parse_func(tq, tok.span.start, indent_level, false, Type::Void).map(|f| Statement::Function(f)),
         TokenKind::Struct => parse_struct(tq, indent_level, false, tok.span.start).map(|s| Statement::Struct(s)),
         TokenKind::Union => parse_union(tq, indent_level, false).map(|u| Statement::Union(u)),
         TokenKind::While => parse_while(tq, indent_level, tok.span.start),
         TokenKind::If => parse_if(tq, indent_level, tok.span.start).map(|i| Statement::If(i)),
         TokenKind::Return => parse_return(tq, indent_level, tok.span.start),
         TokenKind::Match => parse_match(tq, indent_level, tok.span.start),
+        TokenKind::Extern => parse_external_func(tq, tok.span.start).map(|f| Statement::ExternalFunction(f)),
         TokenKind::Identifier(id) => {
             tq.push_front(Token::new(TokenKind::Identifier(id), tok.span));
             parse_expression(tq, indent_level).map(|e| Statement::Expression(e))
@@ -379,7 +393,7 @@ pub fn parse_statement(tq: &mut TokenQueue, indent_level: usize) -> Result<State
             {
                 TokenKind::Var => parse_vars(tq, indent_level, false, true).map(|v| Statement::Variable(v)),
                 TokenKind::Const => parse_vars(tq, indent_level, true, true).map(|v| Statement::Variable(v)),
-                TokenKind::Func => parse_func(tq, indent_level, true, Type::Void).map(|f| Statement::Function(f)),
+                TokenKind::Func => parse_func(tq, next.span.start, indent_level, true, Type::Void).map(|f| Statement::Function(f)),
                 TokenKind::Struct => parse_struct(tq, indent_level, true, next.span.start).map(|s| Statement::Struct(s)),
                 TokenKind::Union => parse_union(tq, indent_level, true).map(|u| Statement::Union(u)),
                 _ => err(tok.span.start, ErrorType::UnexpectedToken(next)),

@@ -50,6 +50,15 @@ fn arg(name: &str, typ: &str, tp: Pos, constant: bool, span: Span) -> Argument
     Argument::new(name.into(), type_primitve(typ, tp), constant, span)
 }
 
+#[cfg(test)]
+fn sig(name: &str, ret: Type, args: Vec<Argument>) -> FunctionSignature
+{
+    FunctionSignature{
+        name: name.into(),
+        return_type: ret,
+        args: args,
+    }
+}
 
 #[test]
 fn test_simple_var()
@@ -407,9 +416,9 @@ func blaat():
     if let Statement::Function(f) = stmt
     {
         f.print(0);
-        assert!(f.name == "blaat");
-        assert!(f.args.is_empty());
-        assert!(f.return_type == Type::Void);
+        assert!(f.sig.name == "blaat");
+        assert!(f.sig.args.is_empty());
+        assert!(f.sig.return_type == Type::Void);
         assert!(!f.public);
         assert!(f.block.statements.len() == 2);
         let s = &f.block.statements[0];
@@ -438,11 +447,11 @@ pub func blaat(x: int, const y: int) -> int:
     if let Statement::Function(f) = stmt
     {
         f.print(0);
-        assert!(f.name == "blaat");
-        assert!(f.args.len() == 2);
-        assert!(f.args[0] == arg("x", "int", Pos::new(2, 19), false, span(2, 16, 2, 21)));
-        assert!(f.args[1] == arg("y", "int", Pos::new(2, 33), true, span(2, 30, 2, 35)));
-        assert!(f.return_type == type_primitve("int", Pos::new(2, 41)));
+        assert!(f.sig.name == "blaat");
+        assert!(f.sig.args.len() == 2);
+        assert!(f.sig.args[0] == arg("x", "int", Pos::new(2, 19), false, span(2, 16, 2, 21)));
+        assert!(f.sig.args[1] == arg("y", "int", Pos::new(2, 33), true, span(2, 30, 2, 35)));
+        assert!(f.sig.return_type == type_primitve("int", Pos::new(2, 41)));
         assert!(f.block.statements.len() == 2);
         assert!(f.public);
 
@@ -453,6 +462,27 @@ pub func blaat(x: int, const y: int) -> int:
         assert!(*s == Statement::Return(
             Return::new(number("5", span(4, 12, 4, 12)), span(4, 5, 4, 12))
         ));
+    }
+    else
+    {
+        assert!(false);
+    }
+}
+
+#[test]
+fn test_external_func()
+{
+    let stmt = th_statement(r#"
+extern func blaat()
+    ""#);
+
+    if let Statement::ExternalFunction(f) = stmt
+    {
+        f.print(0);
+        assert!(f.sig.name == "blaat");
+        assert!(f.sig.args.is_empty());
+        assert!(f.sig.return_type == Type::Void);
+        assert!(f.span == span(2, 1, 2, 19));
     }
     else
     {
@@ -489,28 +519,24 @@ pub struct Blaat:
 
         assert!(s.functions == vec![
             Function::new(
-                "foo".into(),
-                Type::Void,
-                vec![
+                sig("foo", Type::Void, vec![
                     Argument::new("self".into(), type_struct("Blaat", Pos::new(6, 9)), false, span(6, 18, 6, 18)),
-                ],
+                ]),
                 true,
                 Block::new(vec![
                     call("print", vec![str_lit("foo", span(7, 15, 7, 19))], span(7, 9, 7, 20))
                 ]),
-                span(6, 14, 7, 20),
+                span(6, 9, 7, 20),
             ),
             Function::new(
-                "bar".into(),
-                Type::Void,
-                vec![
+                sig("bar", Type::Void, vec![
                     Argument::new("self".into(), type_struct("Blaat", Pos::new(9, 5)), false, span(9, 14, 9, 14)),
-                ],
+                ]),
                 false,
                 Block::new(vec![
                     call("print", vec![str_lit("bar", span(10, 15, 10, 19))], span(10, 9, 10, 20))
                 ]),
-                span(9, 10, 10, 20),
+                span(9, 5, 10, 20),
             ),
         ]);
     }
@@ -554,16 +580,14 @@ pub union Blaat:
 
         assert!(u.functions == vec![
             Function::new(
-                "foo".into(),
-                Type::Void,
-                vec![
+                sig("foo",Type::Void, vec![
                     Argument::new("self".into(), Type::Union(Pos::new(6, 5), "Blaat".into()), false, span(6, 18, 6, 18)),
-                ],
+                ]),
                 true,
                 Block::new(vec![
                     call("print", vec![str_lit("foo", span(7, 15, 7, 19))], span(7, 9, 7, 20))
                 ]),
-                span(6, 14, 7, 20),
+                span(6, 9, 7, 20),
             ),
         ]);
     }

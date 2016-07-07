@@ -198,21 +198,6 @@ pub enum Type
     Union(Pos, String),
 }
 
-impl Type
-{
-    /*
-    pub fn pos(&self) -> Pos
-    {
-        match *self {
-            Type::Void => Pos::new(0, 0),
-            Type::Primitive(p, _) => p,
-            Type::Struct(p, _) => p,
-            Type::Union(p, _) => p,
-        }
-    }
-    */
-}
-
 impl fmt::Display for Type
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
@@ -259,11 +244,17 @@ impl TreePrinter for Argument
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct Function
+pub struct FunctionSignature
 {
     pub name: String,
     pub return_type: Type,
     pub args: Vec<Argument>,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct Function
+{
+    pub sig: FunctionSignature,
     pub public: bool,
     pub block: Block,
     pub span: Span,
@@ -271,12 +262,10 @@ pub struct Function
 
 impl Function
 {
-    pub fn new(name: String, ret: Type, args: Vec<Argument>, public: bool, block: Block, span: Span) -> Function
+    pub fn new(sig: FunctionSignature, public: bool, block: Block, span: Span) -> Function
     {
         Function{
-            name: name,
-            return_type: ret,
-            args: args,
+            sig: sig,
             public: public,
             block: block,
             span: span,
@@ -289,15 +278,49 @@ impl TreePrinter for Function
     fn print(&self, level: usize)
     {
         let p = prefix(level);
-        println!("{}function {} (public: {}, span: {})", p, self.name, self.public, self.span);
-        println!("{} return_type: {}", p, self.return_type);
+        println!("{}function {} (public: {}, span: {})", p, self.sig.name, self.public, self.span);
+        println!("{} return_type: {}", p, self.sig.return_type);
         println!("{} args:", p);
-        for a in &self.args {
+        for a in &self.sig.args {
             a.print(level + 2);
         }
         self.block.print(level + 1)
     }
 }
+
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct ExternalFunction
+{
+    pub sig: FunctionSignature,
+    pub span: Span,
+}
+
+impl ExternalFunction
+{
+    pub fn new(sig: FunctionSignature, span: Span) -> ExternalFunction
+    {
+        ExternalFunction{
+            sig: sig,
+            span: span,
+        }
+    }
+}
+
+impl TreePrinter for ExternalFunction
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        println!("{}external function {} (span: {})", p, self.sig.name, self.span);
+        println!("{} return_type: {}", p, self.sig.return_type);
+        println!("{} args:", p);
+        for a in &self.sig.args {
+            a.print(level + 2);
+        }
+    }
+}
+
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct While
@@ -595,6 +618,7 @@ pub enum Statement
     Import(Import),
     Variable(Vec<Variable>),
     Function(Function),
+    ExternalFunction(ExternalFunction),
     While(While),
     If(If),
     Return(Return),
@@ -602,31 +626,6 @@ pub enum Statement
     Union(Union),
     Match(Match),
     Expression(Expression),
-}
-
-impl Statement
-{
-    /*
-    pub fn span(&self) -> Span
-    {
-        match *self
-        {
-            Statement::Import(ref i) => i.span,
-            Statement::Variable(ref vars) => {
-                Span::new(
-                    vars.first().map(|v| v.span.start).unwrap_or(Pos::new(0, 0)),
-                    vars.last().map(|v| v.span.end).unwrap_or(Pos::new(0, 0)))
-            },
-            Statement::Function(ref f) => f.span,
-            Statement::While(ref w) => w.span,
-            Statement::If(ref i) => i.span,
-            Statement::Return(ref r) => r.span,
-            Statement::Struct(ref s) => s.span,
-            Statement::Union(ref u) => u.span,
-            Statement::Match(ref m) => m.span,
-            Statement::Expression(ref e) => e.span(),
-        }
-    }*/
 }
 
 impl TreePrinter for Statement
@@ -643,6 +642,7 @@ impl TreePrinter for Statement
                 }
             },
             Statement::Function(ref fun) => fun.print(level),
+            Statement::ExternalFunction(ref fun) => fun.print(level),
             Statement::While(ref w) => w.print(level),
             Statement::If(ref i) => i.print(level),
             Statement::Return(ref r) => r.print(level),
@@ -668,15 +668,6 @@ impl Block
             statements: s,
         }
     }
-/*
-    pub fn span(&self) -> Span
-    {
-        Span::new(
-            self.statements.first().map(|s| s.span().start).unwrap_or(Pos::new(0, 0)),
-            self.statements.last().map(|s| s.span().end).unwrap_or(Pos::new(0, 0)),
-        )
-    }
-    */
 }
 
 impl TreePrinter for Block
