@@ -119,6 +119,12 @@ fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token
             match next_kind
             {
                 Some(TokenKind::OpenParen) => parse_function_call(tq, indent_level, id, tok.span.start).map(|c| Expression::Call(c)),
+                Some(TokenKind::Operator(op)) if op == Operator::Increment || op == Operator::Decrement => {
+                    // Turn x++ in x += 1, and x-- in x -= 1
+                    try!(tq.pop());
+                    let new_op = if op == Operator::Increment {Operator::AddAssign} else {Operator::SubAssign};
+                    Ok(Expression::Assignment(tok.span, new_op, id, Box::new(Expression::Number(tok.span, "1".into()))))
+                },
                 Some(TokenKind::Operator(op)) if op.is_assignment() => {
                     parse_assignemnt(tq, indent_level, id, op, tok.span.start)
                 },

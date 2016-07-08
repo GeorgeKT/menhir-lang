@@ -117,10 +117,28 @@ unsafe fn gen_external_function(ctx: &mut Context, f: &ExternalFunction) -> Resu
     Ok(())
 }
 
-#[allow(unused_variables)]
-fn gen_while(ctx: &mut Context, f: &While) -> Result<(), CompileError>
+unsafe fn gen_while(ctx: &mut Context, f: &While) -> Result<(), CompileError>
 {
-     err(Pos::new(0, 0), ErrorType::UnexpectedEOF)
+    let func = ctx.top_stack_frame().get_current_function();
+    let loop_cond_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("loop_cond"));
+    let loop_body_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("loop_body"));
+    let post_loop_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("loop_done"));
+
+    LLVMBuildBr(ctx.builder, loop_cond_bb);
+    LLVMPositionBuilderAtEnd(ctx.builder, loop_cond_bb);
+    let cond = try!(gen_expression(ctx, &f.cond));
+    LLVMBuildCondBr(ctx.builder, cond, loop_body_bb, post_loop_bb);
+    LLVMPositionBuilderAtEnd(ctx.builder, loop_body_bb);
+    ctx.top_stack_frame().set_current_bb(loop_body_bb);
+
+    for s in &f.block.statements {
+        try!(gen_statement(ctx, s));
+    }
+
+    LLVMBuildBr(ctx.builder, loop_cond_bb);
+    LLVMPositionBuilderAtEnd(ctx.builder, post_loop_bb);
+    ctx.top_stack_frame().set_current_bb(post_loop_bb);
+    Ok(())
 }
 
 #[allow(unused_variables)]

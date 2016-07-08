@@ -180,6 +180,54 @@ unsafe fn gen_binary(ctx: &mut Context, op: Operator, left: &Expression, right: 
             try!(check_bool_operands(ctx, op, left_type, right_type, span.start));
             Ok(LLVMBuildOr(ctx.builder, left_val, right_val, cstr("or")))
         },
+        Operator::LessThan => {
+            try!(check_numeric_operands(ctx, op, left_type, right_type, span.start));
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLT, left_val, right_val, cstr("cmp")))
+            } else {
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, left_val, right_val, cstr("cmp")))
+            }
+        },
+        Operator::LessThanEquals => {
+            try!(check_numeric_operands(ctx, op, left_type, right_type, span.start));
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLE, left_val, right_val, cstr("cmp")))
+            } else {
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLE, left_val, right_val, cstr("cmp")))
+            }
+        },
+        Operator::GreaterThan => {
+            try!(check_numeric_operands(ctx, op, left_type, right_type, span.start));
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGT, left_val, right_val, cstr("cmp")))
+            } else {
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, left_val, right_val, cstr("cmp")))
+            }
+        },
+        Operator::GreaterThanEquals => {
+            try!(check_numeric_operands(ctx, op, left_type, right_type, span.start));
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGE, left_val, right_val, cstr("cmp")))
+            } else {
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGE, left_val, right_val, cstr("cmp")))
+            }
+        },
+        Operator::Equals => {
+            try!(check_numeric_operands(ctx, op, left_type, right_type, span.start));
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, left_val, right_val, cstr("cmp")))
+            } else {
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left_val, right_val, cstr("cmp")))
+            }
+        },
+        Operator::NotEquals => {
+            try!(check_numeric_operands(ctx, op, left_type, right_type, span.start));
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealONE, left_val, right_val, cstr("cmp")))
+            } else {
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left_val, right_val, cstr("cmp")))
+            }
+        },
         _ => err(span.start, ErrorType::InvalidBinaryOperator(op)),
     }
 

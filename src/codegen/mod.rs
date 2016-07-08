@@ -76,15 +76,19 @@ impl StackFrame
         self.funcs.get(name)
     }
 
-/*
     pub fn set_current_bb(&mut self, bb: LLVMBasicBlockRef)
     {
         self.current_bb = bb;
     }
-*/
+
     pub fn get_current_bb(&self) -> LLVMBasicBlockRef
     {
         self.current_bb
+    }
+
+    pub fn get_current_function(&self) -> LLVMValueRef
+    {
+        self.function
     }
 }
 
