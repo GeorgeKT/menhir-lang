@@ -27,6 +27,7 @@ Usage: cobra [options] <input-file>
 options:
   --help                                       Show this message.
   -d, --debug                                  Debug mode.
+  -O, --optimize                               Optimize the code.
   -o <output-file>, --output=<output-file>     Name of binary to create (by default input-file without the extensions)
 ";
 
@@ -35,6 +36,7 @@ options:
 struct Args
 {
     flag_debug: Option<bool>,
+    flag_optimize: Option<bool>,
     arg_input_file: Option<String>,
     flag_output: Option<String>,
 }
@@ -94,6 +96,7 @@ fn main()
                 build_dir: "cobra-build".into(),
                 program_name: output_file,
                 runtime_library: find_runtime_library().expect("Unable to find the cobra runtime library"),
+                optimize: args.flag_optimize.unwrap_or(false),
             };
 
             if let Err(e) = codegen(&p, &opts) {

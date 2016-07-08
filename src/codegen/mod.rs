@@ -222,7 +222,33 @@ pub struct CodeGenOptions
     pub program_name: String,
     pub runtime_library: String,
     pub dump_ir: bool,
+    pub optimize: bool,
 }
+
+
+unsafe fn optimize_module(ctx: &Context) -> Result<(), CompileError>
+{
+    use std::ptr;
+    use llvm::transforms::pass_manager_builder::*;
+
+    let pmb = LLVMPassManagerBuilderCreate();
+    let pm = LLVMCreateFunctionPassManagerForModule(ctx.module);
+    LLVMInitializeFunctionPassManager(pm);
+
+    LLVMPassManagerBuilderSetOptLevel(pmb, 2);
+    LLVMPassManagerBuilderPopulateFunctionPassManager(pmb, pm);
+
+    let mut func = LLVMGetFirstFunction(ctx.module);
+    while func != ptr::null_mut() {
+        LLVMRunFunctionPassManager(pm, func);
+        func = LLVMGetNextFunction(func);
+    }
+
+    LLVMDisposePassManager(pm);
+    LLVMPassManagerBuilderDispose(pmb);
+    Ok(())
+}
+
 
 pub fn codegen(prog: &Program, opts: &CodeGenOptions) -> Result<(), CompileError>
 {
@@ -233,11 +259,17 @@ pub fn codegen(prog: &Program, opts: &CodeGenOptions) -> Result<(), CompileError
         // Set up a context, module and builder in that context.
         let mut ctx = Context::new(&prog.name);
         try!(gen_program(&mut ctx, prog));
+
+        if opts.optimize {
+            try!(optimize_module(&mut ctx));
+        }
+
         if opts.dump_ir {
             println!("LLVM IR:");
             ctx.dump();
             println!("----------------------");
         }
+
         link(&ctx, &opts.build_dir, &opts.program_name, &opts.runtime_library)
     }
 }
