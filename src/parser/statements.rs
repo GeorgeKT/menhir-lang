@@ -11,8 +11,15 @@ fn parse_import(tq: &mut TokenQueue, pos: Pos) -> Result<Statement, CompileError
 
 fn parse_type(tq: &mut TokenQueue) -> Result<Type, CompileError>
 {
-    let (name, pos) = try!(tq.expect_identifier());
-    Ok(Type::Primitive(pos, name))
+    if tq.is_next(TokenKind::Operator(Operator::Mul)) {
+        let tok = try!(tq.pop());
+        let st = try!(parse_type(tq));
+        Ok(Type::Pointer(tok.span.start, Box::new(st)))
+    } else {
+        let (name, pos) = try!(tq.expect_identifier());
+        Ok(Type::Primitive(pos, name))
+    }
+
 }
 
 fn parse_optional_type(tq: &mut TokenQueue) -> Result<Option<Type>, CompileError>

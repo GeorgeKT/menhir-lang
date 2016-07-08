@@ -1,3 +1,4 @@
+use llvm::*;
 use llvm::core::*;
 use llvm::prelude::*;
 use libc;
@@ -22,9 +23,9 @@ unsafe fn is_numeric(ctx: LLVMContextRef, tr: LLVMTypeRef) -> bool
     is_integer(ctx, tr) || is_floating_point(ctx, tr)
 }
 
-unsafe fn const_int(ctx: &mut Context, v: u64) -> LLVMValueRef
+unsafe fn const_int(ctx: LLVMContextRef, v: u64) -> LLVMValueRef
 {
-    LLVMConstInt(LLVMInt64TypeInContext(ctx.context), v, 0)
+    LLVMConstInt(LLVMInt64TypeInContext(ctx), v, 0)
 }
 
 unsafe fn gen_number(ctx: &mut Context, num: &str, span: &Span) -> Result<LLVMValueRef, CompileError>
@@ -37,15 +38,22 @@ unsafe fn gen_number(ctx: &mut Context, num: &str, span: &Span) -> Result<LLVMVa
     } else {
         // Should be an integer
         match num.parse::<u64>() {
-            Ok(i) => Ok(const_int(ctx, i)),
+            Ok(i) => Ok(const_int(ctx.context, i)),
             Err(_) => err(span.start, ErrorType::InvalidInteger)
         }
     }
 }
 
-unsafe fn gen_string_literal(_ctx: &mut Context, s: &str, _span: &Span) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_string_literal(ctx: &mut Context, s: &str, _span: &Span) -> Result<LLVMValueRef, CompileError>
 {
-    Ok(LLVMConstString(cstr(s), s.len() as u32, 0))
+    let glob = LLVMAddGlobal(ctx.module, LLVMArrayType(LLVMInt8TypeInContext(ctx.context), s.len() as u32), cstr("string"));
+
+    LLVMSetLinkage(glob, LLVMLinkage::LLVMInternalLinkage);
+    LLVMSetGlobalConstant(glob, 1);
+
+    // Initialize with string:
+    LLVMSetInitializer(glob, LLVMConstStringInContext(ctx.context, s.as_ptr() as *const i8, s.len() as u32, 1));
+    Ok(glob)
 }
 
 unsafe fn gen_unary(ctx: &mut Context, op: Operator, e: &Box<Expression>, span: &Span) -> Result<LLVMValueRef, CompileError>
@@ -71,14 +79,14 @@ unsafe fn gen_unary(ctx: &mut Context, op: Operator, e: &Box<Expression>, span: 
             if !is_integer(ctx.context, e_type) {
                 err(span.start, ErrorType::TypeError("Operator '++', expects an integer expression".into()))
             } else {
-                Ok(LLVMBuildAdd(ctx.builder, e_val, const_int(ctx, 1), cstr("inc")))
+                Ok(LLVMBuildAdd(ctx.builder, e_val, const_int(ctx.context, 1), cstr("inc")))
             }
         },
         Operator::Decrement => {
             if !is_integer(ctx.context, e_type) {
                 err(span.start, ErrorType::TypeError("Operator '--', expects an integer expression".into()))
             } else {
-                Ok(LLVMBuildSub(ctx.builder, e_val, const_int(ctx, 1), cstr("dec")))
+                Ok(LLVMBuildSub(ctx.builder, e_val, const_int(ctx.context, 1), cstr("dec")))
             }
         },
         _ => err(span.start, ErrorType::InvalidUnaryOperator(op)),
@@ -182,6 +190,31 @@ unsafe fn gen_enclosed(ctx: &mut Context, e: &Expression, _span: &Span) -> Resul
     gen_expression(ctx, e)
 }
 
+unsafe fn is_same_kind(a: LLVMTypeKind, b: LLVMTypeKind) -> bool 
+{
+    (a as usize) == (b as usize)
+}
+
+// Convert a value to a different type, if possible
+unsafe fn convert(b: LLVMBuilderRef, from: LLVMValueRef, to: LLVMTypeRef) ->  Option<LLVMValueRef>
+{
+    let from_type = LLVMTypeOf(from);
+    if from_type == to {
+        return Some(from); // Same types, so no problem
+    }
+
+    let array_to_ptr = 
+        is_same_kind(LLVMGetTypeKind(from_type), LLVMTypeKind::LLVMPointerTypeKind) && 
+        is_same_kind(LLVMGetTypeKind(to), LLVMTypeKind::LLVMPointerTypeKind) && 
+        is_same_kind(LLVMGetTypeKind(LLVMGetElementType(from_type)), LLVMTypeKind::LLVMArrayTypeKind) &&
+        LLVMGetElementType(LLVMGetElementType(from_type)) == LLVMGetElementType(to);
+    if array_to_ptr {
+        let cast = LLVMBuildBitCast(b, from, to, cstr("cast"));
+        return Some(cast);
+    }
+
+    None
+}
 
 unsafe fn gen_call(ctx: &mut Context, c: &Call) -> Result<LLVMValueRef, CompileError>
 {
@@ -201,13 +234,21 @@ unsafe fn gen_call(ctx: &mut Context, c: &Call) -> Result<LLVMValueRef, CompileE
     }
 
     for (i, arg) in c.args.iter().enumerate() {
-        let val_type = LLVMTypeOf(arg_vals[i]);
-        if val_type != func.args[i] {
-            return err(arg.span().start, ErrorType::TypeError(format!("Argument {} of function has the wrong type", i)));
+        let nval = convert(ctx.builder, arg_vals[i], func.args[i]);
+        match nval {
+            Some(val) => {
+                arg_vals[i] = val;
+            },
+            None => {
+                let val_type = LLVMTypeOf(arg_vals[i]);
+                let msg = format!("Argument {} of function '{}' has the wrong type\n  Expecting {}, got {}", 
+                                i, c.name, type_name(func.args[i]), type_name(val_type));
+                return err(arg.span().start, ErrorType::TypeError(msg));
+            },
         }
     }
 
-    Ok(LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr("call")))
+    Ok(LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr("")))
 }
 
 unsafe fn gen_name_ref(ctx: &mut Context, nr: &str, span: &Span) -> Result<LLVMValueRef, CompileError>

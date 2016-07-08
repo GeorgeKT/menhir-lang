@@ -34,7 +34,7 @@ pub unsafe fn llvm_init()
     LLVMInitializeAnalysis(pass_registry);
     LLVMInitializeIPA(pass_registry);
     LLVMInitializeCodeGen(pass_registry);
-    LLVMInitializeTarget(pass_registry);
+    LLVMInitializeTarget(pass_registry); 
 }
 
 unsafe fn gen_obj_files(ctx: &Context, build_dir: &str) -> Result<Vec<String>, CompileError>
@@ -100,7 +100,9 @@ pub fn link(ctx: &Context, build_dir: &str, program_name: &str, runtime_lib: &st
 	let program_path = format!("{}/{}", build_dir, program_name);
 
 	let mut cmd = Command::new("ld");
+	cmd.arg("--gc-sections");
 	cmd.arg("-o").arg(&program_path);
+
 	for obj_file in &obj_files {
 		cmd.arg(obj_file);
 	}

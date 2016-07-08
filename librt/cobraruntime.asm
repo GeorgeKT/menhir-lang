@@ -4,7 +4,7 @@ bits 64
 ; Compiler will generate this
 extern main
 
-global _start, exit
+global _start, exit, read, write
 
 _start:
     call main
@@ -12,10 +12,22 @@ _start:
     call exit
     ret
 
-%define SYSCALL_EXIT 60
+%define SYSCALL_EXIT 		60
+%define SYSCALL_READ 		0
+%define SYSCALL_WRITE 		1
+
 
 exit:
-    ; rdi already contains the exit code
     mov rax, SYSCALL_EXIT
     syscall
     ret
+
+write: 
+	mov rax, SYSCALL_WRITE
+	syscall 
+	ret
+
+read: 
+	mov rax, SYSCALL_READ
+	syscall
+	ret

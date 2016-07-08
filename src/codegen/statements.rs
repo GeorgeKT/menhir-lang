@@ -1,7 +1,9 @@
 use std::ptr;
 use std::ffi::CStr;
+use std::os::raw::c_char;
 use llvm::core::*;
 use llvm::prelude::*;
+use llvm::analysis::*;
 use libc;
 
 use ast::*;
@@ -183,6 +185,19 @@ unsafe fn gen_statement(ctx: &mut Context, stmt: &Statement) -> Result<(), Compi
     }
 }
 
+pub unsafe fn verify_module(ctx: &Context) -> Result<(), CompileError>
+{
+    let mut error_message: *mut c_char = ptr::null_mut();
+    if LLVMVerifyModule(ctx.module, LLVMVerifierFailureAction::LLVMReturnStatusAction, &mut error_message) != 0 {
+        let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
+        let e = format!("Module verification error: {}", msg);
+        LLVMDisposeMessage(error_message);
+        err(Pos::zero(), ErrorType::CodegenError(e))
+    } else {
+        Ok(())
+    }
+}
+
 pub unsafe fn gen_program(ctx: &mut Context, prog: &Program) -> Result<(), CompileError>
 {
     let main_ret_type = LLVMInt64TypeInContext(ctx.context);
@@ -195,5 +210,9 @@ pub unsafe fn gen_program(ctx: &mut Context, prog: &Program) -> Result<(), Compi
     for s in &prog.block.statements {
         try!(gen_statement(ctx, s));
     }
+
+    // TODO check terminator 
+
+    try!(verify_module(ctx));
     Ok(())
 }

@@ -1,10 +1,11 @@
 #!/usr/bin/cobra
 
+const STDOUT = 1 
+
 extern func exit(ec: int)
+extern func write(fd: int, const buf: *char, count: uint) -> int
 
-func blaat(a: int, b: int) -> int:
-    return 2 * a + b * b
 
-var x = 17, y = x * 2
-exit(5)
-return blaat(x, y)
+write(STDOUT, "Hello World\n", 12)
+exit(0)
+return 0

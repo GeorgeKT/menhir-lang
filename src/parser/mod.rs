@@ -208,6 +208,32 @@ var
     }
 }
 
+
+#[test]
+fn test_var_with_pointer_type()
+{
+    let stmt = th_statement("var x: *char = 0");
+    if let Statement::Variable(vars) = stmt
+    {
+        assert!(vars.len() == 1);
+        let v = &vars[0];
+        assert!(v.name == "x");
+        assert!(v.typ == Some(Type::Pointer(Pos::new(1, 8), Box::new(Type::Primitive(Pos::new(1, 9), "char".into())))));
+        assert!(!v.is_const);
+        assert!(!v.public);
+        if let Expression::Number(_, ref n) = v.init {
+            assert!(n == "0");
+        } else {
+            assert!(false);
+        }
+    }
+    else
+    {
+        assert!(false);
+    }
+}
+
+
 #[cfg(test)]
 fn call(name: &str, args: Vec<Expression>, span: Span) -> Statement
 {

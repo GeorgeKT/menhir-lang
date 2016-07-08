@@ -196,6 +196,7 @@ pub enum Type
     Primitive(Pos, String),
     Struct(Pos, String),
     Union(Pos, String),
+    Pointer(Pos, Box<Type>),
 }
 
 impl fmt::Display for Type
@@ -208,6 +209,7 @@ impl fmt::Display for Type
             Type::Primitive(_, ref t) => write!(f, "primitive {}", t),
             Type::Struct(_, ref s) => write!(f, "struct {}", s),
             Type::Union(_, ref u) => write!(f, "union {}", u),
+            Type::Pointer(_, ref st) => write!(f, "pointer to {}", st),
         }
     }
 }

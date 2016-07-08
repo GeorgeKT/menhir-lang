@@ -13,7 +13,7 @@ use llvm::core::*;
 use ast::*;
 use compileerror::*;
 
-use self::statements::*;
+pub use self::statements::*;
 pub use self::expressions::gen_expression;
 
 pub fn cstr(s: &str) -> *const c_char
@@ -111,7 +111,7 @@ impl<'a> Context<'a>
             let context = LLVMContextCreate();
             Context{
                 context: context,
-                module: LLVMModuleCreateWithName(cname.as_ptr()),
+                module: LLVMModuleCreateWithNameInContext(cname.as_ptr(), context),
                 module_name: name.into(),
                 builder: LLVMCreateBuilderInContext(context),
                 stack: Vec::new(),
@@ -204,6 +204,10 @@ impl<'a> Context<'a>
                     "double" => Some(LLVMDoubleTypeInContext(self.context)),
                     _ => None,
                 },
+           
+            Type::Pointer(_, ref st) => {
+                self.resolve_type(&st).map(|t| LLVMPointerType(t, 0))
+            },
             _ => None,
         }
     }
@@ -241,7 +245,9 @@ pub fn codegen(prog: &Program, opts: &CodeGenOptions) -> Result<(), CompileError
         let mut ctx = Context::new(&prog.name);
         try!(gen_program(&mut ctx, prog));
         if opts.dump_ir {
+            println!("LLVM IR:");
             ctx.dump();
+            println!("----------------------");
         }
         link(&ctx, &opts.build_dir, &opts.program_name, &opts.runtime_library)
     }
