@@ -23,7 +23,7 @@ unsafe fn is_numeric(ctx: LLVMContextRef, tr: LLVMTypeRef) -> bool
     is_integer(ctx, tr) || is_floating_point(ctx, tr)
 }
 
-unsafe fn const_int(ctx: LLVMContextRef, v: u64) -> LLVMValueRef
+pub unsafe fn const_int(ctx: LLVMContextRef, v: u64) -> LLVMValueRef
 {
     LLVMConstInt(LLVMInt64TypeInContext(ctx), v, 0)
 }
@@ -190,7 +190,7 @@ unsafe fn gen_enclosed(ctx: &mut Context, e: &Expression, _span: &Span) -> Resul
     gen_expression(ctx, e)
 }
 
-unsafe fn is_same_kind(a: LLVMTypeKind, b: LLVMTypeKind) -> bool 
+fn is_same_kind(a: LLVMTypeKind, b: LLVMTypeKind) -> bool 
 {
     (a as usize) == (b as usize)
 }

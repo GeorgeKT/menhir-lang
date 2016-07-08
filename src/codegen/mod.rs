@@ -14,7 +14,7 @@ use ast::*;
 use compileerror::*;
 
 pub use self::statements::*;
-pub use self::expressions::gen_expression;
+pub use self::expressions::*;
 
 pub fn cstr(s: &str) -> *const c_char
 {

@@ -211,7 +211,9 @@ pub unsafe fn gen_program(ctx: &mut Context, prog: &Program) -> Result<(), Compi
         try!(gen_statement(ctx, s));
     }
 
-    // TODO check terminator 
+    if LLVMIsATerminatorInst(LLVMGetLastInstruction(ctx.top_stack_frame().get_current_bb())) == ptr::null_mut() {
+        LLVMBuildRet(ctx.builder, const_int(ctx.context, 0));
+    }
 
     try!(verify_module(ctx));
     Ok(())

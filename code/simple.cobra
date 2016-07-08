@@ -7,5 +7,3 @@ extern func write(fd: int, const buf: *char, count: uint) -> int
 
 
 write(STDOUT, "Hello World\n", 12)
-exit(0)
-return 0
