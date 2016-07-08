@@ -7,5 +7,10 @@ extern func write(fd: int, const buf: *char, count: uint) -> int
 
 var x = 0
 while x < 5:
-    write(STDOUT, "Hello World\n", 12)
+    if x == 3:
+        write(STDOUT, "Hello World\n", 12)
+    else if x == 4:
+        write(STDOUT, "Goodbye World\n", 14)
+    else:
+        write(STDOUT, "X\n", 2)
     x++

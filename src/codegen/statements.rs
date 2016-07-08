@@ -117,6 +117,14 @@ unsafe fn gen_external_function(ctx: &mut Context, f: &ExternalFunction) -> Resu
     Ok(())
 }
 
+unsafe fn gen_block(ctx: &mut Context, b: &Block) -> Result<(), CompileError>
+{
+    for s in &b.statements {
+        try!(gen_statement(ctx, s));
+    }
+    Ok(())
+}
+
 unsafe fn gen_while(ctx: &mut Context, f: &While) -> Result<(), CompileError>
 {
     let func = ctx.top_stack_frame().get_current_function();
@@ -131,9 +139,7 @@ unsafe fn gen_while(ctx: &mut Context, f: &While) -> Result<(), CompileError>
     LLVMPositionBuilderAtEnd(ctx.builder, loop_body_bb);
     ctx.top_stack_frame().set_current_bb(loop_body_bb);
 
-    for s in &f.block.statements {
-        try!(gen_statement(ctx, s));
-    }
+    try!(gen_block(ctx, &f.block));
 
     LLVMBuildBr(ctx.builder, loop_cond_bb);
     LLVMPositionBuilderAtEnd(ctx.builder, post_loop_bb);
@@ -141,10 +147,40 @@ unsafe fn gen_while(ctx: &mut Context, f: &While) -> Result<(), CompileError>
     Ok(())
 }
 
-#[allow(unused_variables)]
-fn gen_if(ctx: &mut Context, f: &If) -> Result<(), CompileError>
+unsafe fn gen_if(ctx: &mut Context, f: &If) -> Result<(), CompileError>
 {
-     err(Pos::new(0, 0), ErrorType::UnexpectedEOF)
+    let func = ctx.top_stack_frame().get_current_function();
+    let if_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("if_bb"));
+    let after_if_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("after_if_bb"));
+    let else_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("else_bb"));
+    let cond = try!(gen_expression(ctx, &f.cond));
+
+    LLVMBuildCondBr(ctx.builder, cond, if_bb, else_bb);
+    LLVMPositionBuilderAtEnd(ctx.builder, if_bb);
+
+    try!(gen_block(ctx, &f.if_block));
+    LLVMBuildBr(ctx.builder, after_if_bb);
+
+    match f.else_part {
+        ElsePart::Block(ref else_block) => {
+            LLVMPositionBuilderAtEnd(ctx.builder, else_bb);
+            try!(gen_block(ctx, else_block));
+            LLVMBuildBr(ctx.builder, after_if_bb);
+        },
+        ElsePart::Empty => {
+            LLVMPositionBuilderAtEnd(ctx.builder, else_bb);
+            LLVMBuildBr(ctx.builder, after_if_bb);
+        },
+        ElsePart::If(ref next_if) => {
+            LLVMPositionBuilderAtEnd(ctx.builder, else_bb);
+            try!(gen_if(ctx, next_if));
+            LLVMBuildBr(ctx.builder, after_if_bb);
+        }
+    }
+
+    LLVMPositionBuilderAtEnd(ctx.builder, after_if_bb);
+    ctx.top_stack_frame().set_current_bb(after_if_bb);
+    Ok(())
 }
 
 unsafe fn gen_return(ctx: &mut Context, f: &Return) -> Result<(), CompileError>
@@ -225,9 +261,7 @@ pub unsafe fn gen_program(ctx: &mut Context, prog: &Program) -> Result<(), Compi
     LLVMPositionBuilderAtEnd(ctx.builder, bb);
 
     ctx.push_stack_frame(function, bb);
-    for s in &prog.block.statements {
-        try!(gen_statement(ctx, s));
-    }
+    try!(gen_block(ctx, &prog.block));
 
     if LLVMIsATerminatorInst(LLVMGetLastInstruction(ctx.top_stack_frame().get_current_bb())) == ptr::null_mut() {
         LLVMBuildRet(ctx.builder, const_int(ctx.context, 0));
