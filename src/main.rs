@@ -29,7 +29,7 @@ options:
   -d, --debug                                  Debug mode.
   -o <output-file>, --output=<output-file>     Name of binary to create (by default input-file without the extensions)
 ";
-  
+
 
 #[derive(RustcDecodable, Debug)]
 struct Args
@@ -47,7 +47,7 @@ fn parse_file(file_path: &str) -> Result<Program, CompileError>
     parse_program(&mut file, filename.to_str().expect("Invalid UTF8 filename"))
 }
 
-fn find_runtime_library() -> Option<String> 
+fn find_runtime_library() -> Option<String>
 {
     let paths = [
         "/usr/lib/libcobraruntime.a",
@@ -88,6 +88,7 @@ fn main()
     {
         Err(e) => println!("Error: {}", e),
         Ok(p) => {
+            //p.print(0);
             let opts = CodeGenOptions{
                 dump_ir: args.flag_debug.unwrap_or(false),
                 build_dir: "cobra-build".into(),

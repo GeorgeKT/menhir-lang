@@ -190,7 +190,7 @@ unsafe fn gen_enclosed(ctx: &mut Context, e: &Expression, _span: &Span) -> Resul
     gen_expression(ctx, e)
 }
 
-fn is_same_kind(a: LLVMTypeKind, b: LLVMTypeKind) -> bool 
+fn is_same_kind(a: LLVMTypeKind, b: LLVMTypeKind) -> bool
 {
     (a as usize) == (b as usize)
 }
@@ -203,9 +203,9 @@ unsafe fn convert(b: LLVMBuilderRef, from: LLVMValueRef, to: LLVMTypeRef) ->  Op
         return Some(from); // Same types, so no problem
     }
 
-    let array_to_ptr = 
-        is_same_kind(LLVMGetTypeKind(from_type), LLVMTypeKind::LLVMPointerTypeKind) && 
-        is_same_kind(LLVMGetTypeKind(to), LLVMTypeKind::LLVMPointerTypeKind) && 
+    let array_to_ptr =
+        is_same_kind(LLVMGetTypeKind(from_type), LLVMTypeKind::LLVMPointerTypeKind) &&
+        is_same_kind(LLVMGetTypeKind(to), LLVMTypeKind::LLVMPointerTypeKind) &&
         is_same_kind(LLVMGetTypeKind(LLVMGetElementType(from_type)), LLVMTypeKind::LLVMArrayTypeKind) &&
         LLVMGetElementType(LLVMGetElementType(from_type)) == LLVMGetElementType(to);
     if array_to_ptr {
@@ -241,7 +241,7 @@ unsafe fn gen_call(ctx: &mut Context, c: &Call) -> Result<LLVMValueRef, CompileE
             },
             None => {
                 let val_type = LLVMTypeOf(arg_vals[i]);
-                let msg = format!("Argument {} of function '{}' has the wrong type\n  Expecting {}, got {}", 
+                let msg = format!("Argument {} of function '{}' has the wrong type\n  Expecting {}, got {}",
                                 i, c.name, type_name(func.args[i]), type_name(val_type));
                 return err(arg.span().start, ErrorType::TypeError(msg));
             },
@@ -260,6 +260,76 @@ unsafe fn gen_name_ref(ctx: &mut Context, nr: &str, span: &Span) -> Result<LLVMV
     }
 }
 
+unsafe fn assign(ctx: &mut Context, op: Operator, var: LLVMValueRef, val: LLVMValueRef, span: &Span) -> Result<LLVMValueRef, CompileError>
+{
+    if op == Operator::Assign {
+        return Ok(LLVMBuildStore(ctx.builder, val, var));
+    }
+
+    let var_type = LLVMTypeOf(var);
+    try!(check_numeric_operands(ctx, op, LLVMGetElementType(var_type), LLVMTypeOf(val), span.start));
+    let var_val = LLVMBuildLoad(ctx.builder, var, cstr("loadtmp"));
+    let new_val = match op
+    {
+        Operator::AddAssign => {
+            if is_floating_point(ctx.context, var_type) {
+                LLVMBuildFAdd(ctx.builder, var_val, val, cstr("op"))
+            } else {
+                LLVMBuildAdd(ctx.builder, var_val, val, cstr("op"))
+            }
+        },
+        Operator::SubAssign => {
+            if is_floating_point(ctx.context, var_type) {
+                LLVMBuildFSub(ctx.builder, var_val, val, cstr("op"))
+            } else {
+                LLVMBuildSub(ctx.builder, var_val, val, cstr("op"))
+            }
+        },
+        Operator::MulAssign => {
+            if is_floating_point(ctx.context, var_type) {
+                LLVMBuildFMul(ctx.builder, var_val, val, cstr("op"))
+            } else {
+                LLVMBuildMul(ctx.builder, var_val, val, cstr("op"))
+            }
+        },
+        Operator::DivAssign =>  {
+            if is_floating_point(ctx.context, var_type) {
+                LLVMBuildFDiv(ctx.builder, var_val, val, cstr("op"))
+            } else {
+                LLVMBuildUDiv(ctx.builder, var_val, val, cstr("op"))
+            }
+        },
+        _ => {
+            return err(span.start, ErrorType::InvalidOperator(format!("'{}' isn't an assigment operator", op)));
+        }
+    };
+
+    Ok(LLVMBuildStore(ctx.builder, new_val, var))
+}
+
+unsafe fn gen_assignment(ctx: &mut Context, op: Operator, target: &str, rhs: &Expression, span: &Span) -> Result<LLVMValueRef, CompileError>
+{
+    if !ctx.has_variable(target) {
+        return err(span.start, ErrorType::UnknownVariable(target.into()));
+    }
+
+    let rhs_val = try!(gen_expression(ctx, rhs));
+    let rhs_type = LLVMTypeOf(rhs_val);
+    let (var, constant) = ctx.get_variable(target).map(|v| (v.value, v.constant)).unwrap();
+    if constant {
+        return err(span.start, ErrorType::ConstantModification(target.into()));
+    }
+
+    let var_type = LLVMTypeOf(var);
+    if let Some(cv) = convert(ctx.builder, rhs_val, LLVMGetElementType(var_type)) {
+        assign(ctx, op, var, cv, span)
+    } else {
+        let msg = format!("Attempting to assign an expression of type '{}' to a variable of type '{}'",
+            type_name(rhs_type), type_name(var_type));
+        err(span.start, ErrorType::TypeError(msg))
+    }
+}
+
 pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<LLVMValueRef, CompileError>
 {
     match *e
@@ -272,5 +342,6 @@ pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<LLVMVa
         Expression::Enclosed(ref span, ref e) => gen_enclosed(ctx, e, span),
         Expression::Call(ref c) => gen_call(ctx, c),
         Expression::NameRef(ref span, ref s) => gen_name_ref(ctx, s, span),
+        Expression::Assignment(ref span, ref op, ref target, ref e) => gen_assignment(ctx, *op, target, e, span),
     }
 }

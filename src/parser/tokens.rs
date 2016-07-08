@@ -38,8 +38,7 @@ impl Operator
     {
         match *self
         {
-            Operator::Not | Operator::Assign | Operator::Arrow | Operator::Dot |
-            Operator::AddAssign | Operator::SubAssign | Operator::MulAssign | Operator::DivAssign |
+            Operator::Not | Operator::Arrow | Operator::Dot |
             Operator::Increment | Operator::Decrement | Operator::Range => TOP_PRECEDENCE,
             Operator::Mul | Operator::Div | Operator::Mod => TOP_PRECEDENCE - 100,
             Operator::Add | Operator::Sub => TOP_PRECEDENCE - 200,
@@ -47,6 +46,8 @@ impl Operator
             Operator::GreaterThanEquals | Operator::Equals | Operator::NotEquals => TOP_PRECEDENCE - 300,
             Operator::And => TOP_PRECEDENCE - 400,
             Operator::Or => TOP_PRECEDENCE - 500,
+            Operator::Assign | Operator::AddAssign | Operator::SubAssign |
+            Operator::MulAssign | Operator::DivAssign => TOP_PRECEDENCE - 600,
         }
     }
 
@@ -54,9 +55,18 @@ impl Operator
     {
         match *self
         {
-            Operator::Increment | Operator::Decrement | Operator::Not |
-            Operator::Assign | Operator::Arrow => false,
+            Operator::Increment | Operator::Decrement | Operator::Not | Operator::Arrow => false,
             _ => true,
+        }
+    }
+
+    pub fn is_assignment(&self) -> bool
+    {
+        match *self
+        {
+            Operator::Assign | Operator::AddAssign | Operator::SubAssign |
+            Operator::MulAssign | Operator::DivAssign => true,
+            _ => false,
         }
     }
 }

@@ -60,11 +60,6 @@ impl StackFrame
         self.vars.insert(name.into(), VariableInstance{value: value, constant: constant});
     }
 
-    pub fn get_variable_mut(&mut self, name: &str) -> Option<&mut VariableInstance>
-    {
-        self.vars.get_mut(name)
-    }
-
     pub fn get_variable(&self, name: &str) -> Option<&VariableInstance>
     {
         self.vars.get(name)
@@ -81,11 +76,12 @@ impl StackFrame
         self.funcs.get(name)
     }
 
+/*
     pub fn set_current_bb(&mut self, bb: LLVMBasicBlockRef)
     {
         self.current_bb = bb;
     }
-
+*/
     pub fn get_current_bb(&self) -> LLVMBasicBlockRef
     {
         self.current_bb
@@ -146,17 +142,6 @@ impl<'a> Context<'a>
         LLVMDumpModule(self.module);
     }
 
-    pub fn get_variable_mut(&'a mut self, name: &str) -> Option<&'a mut VariableInstance>
-    {
-        for sf in self.stack.iter_mut().rev() {
-            let v = sf.get_variable_mut(name);
-            if v.is_some() {
-                return v;
-            }
-        }
-        None
-    }
-
     pub fn get_variable(&'a self, name: &str) -> Option<&'a VariableInstance>
     {
         for sf in self.stack.iter().rev() {
@@ -204,7 +189,7 @@ impl<'a> Context<'a>
                     "double" => Some(LLVMDoubleTypeInContext(self.context)),
                     _ => None,
                 },
-           
+
             Type::Pointer(_, ref st) => {
                 self.resolve_type(&st).map(|t| LLVMPointerType(t, 0))
             },

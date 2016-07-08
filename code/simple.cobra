@@ -1,9 +1,13 @@
 #!/usr/bin/cobra
 
-const STDOUT = 1 
+const STDOUT = 1
 
 extern func exit(ec: int)
 extern func write(fd: int, const buf: *char, count: uint) -> int
 
+var x = 0
+x = 5 + 7
+x += 2 * x
 
 write(STDOUT, "Hello World\n", 12)
+exit(x)

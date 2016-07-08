@@ -128,6 +128,7 @@ pub enum ErrorType
     UnknownFunction(String),
     ArgumentCountMismatch(String),
     CodegenError(String),
+    ConstantModification(String),
 }
 
 
@@ -181,6 +182,7 @@ impl fmt::Display for CompileError
             ErrorType::UnknownFunction(ref n) => write!(f, "{}: Unknown function '{}'", self.pos, n),
             ErrorType::ArgumentCountMismatch(ref msg) => write!(f, "{}: {}", self.pos, msg),
             ErrorType::CodegenError(ref msg) => write!(f, "Code generation failed: {}", msg),
+            ErrorType::ConstantModification(ref name) => write!(f, "Attempting to modify constant '{}'", name),
         }
     }
 }

@@ -91,6 +91,18 @@ fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: String, p
     Ok(Call::new(name, args, Span::new(pos, tq.pos())))
 }
 
+fn parse_assignemnt(tq: &mut TokenQueue, indent_level: usize, lhs: String, op: Operator, pos: Pos) -> Result<Expression, CompileError>
+{
+    try!(tq.pop()); // pop operator
+    let e = try!(parse_expression(tq, indent_level));
+
+    Ok(Expression::Assignment(
+        Span::new(pos, tq.pos()),
+        op,
+        lhs,
+        Box::new(e),
+    ))
+}
 
 fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token) -> Result<Expression, CompileError>
 {
@@ -107,12 +119,11 @@ fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token
             match next_kind
             {
                 Some(TokenKind::OpenParen) => parse_function_call(tq, indent_level, id, tok.span.start).map(|c| Expression::Call(c)),
-                Some(TokenKind::Operator(op)) => {
-                    if op.is_binary_operator() {
-                        parse_binary_op_rhs(tq, indent_level, Expression::NameRef(tok.span, id))
-                    } else {
-                         Ok(Expression::NameRef(tok.span, id))
-                    }
+                Some(TokenKind::Operator(op)) if op.is_assignment() => {
+                    parse_assignemnt(tq, indent_level, id, op, tok.span.start)
+                },
+                Some(TokenKind::Operator(op)) if op.is_binary_operator() => {
+                    parse_binary_op_rhs(tq, indent_level, Expression::NameRef(tok.span, id))
                 },
                 _ => Ok(Expression::NameRef(tok.span, id)),
             }
@@ -122,12 +133,8 @@ fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token
             let next_kind = tq.peek().map(|tok| tok.kind.clone());
             match next_kind
             {
-                Some(TokenKind::Operator(op)) => {
-                    if op.is_binary_operator() {
-                        parse_binary_op_rhs(tq, indent_level, Expression::StringLiteral(tok.span, s))
-                    } else {
-                        Ok(Expression::StringLiteral(tok.span, s))
-                    }
+                Some(TokenKind::Operator(op)) if op.is_binary_operator() => {
+                    parse_binary_op_rhs(tq, indent_level, Expression::StringLiteral(tok.span, s))
                 },
                 _ => Ok(Expression::StringLiteral(tok.span, s)),
             }
@@ -428,5 +435,20 @@ fn test_precedence_12()
                 span(1, 9, 1, 12),
             ))
         )
+    ));
+}
+
+#[test]
+fn test_assign()
+{
+    let e = th_expr("a = 6 + 9");
+    assert!(e == Expression::Assignment(
+        span(1, 1, 1, 9),
+        Operator::Assign,
+        "a".into(),
+        Box::new(bin_op(Operator::Add, span(1, 5, 1, 9),
+            number("6", span(1, 5, 1, 5)),
+            number("9", span(1, 9, 1, 9))
+        )),
     ));
 }

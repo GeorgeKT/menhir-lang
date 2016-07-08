@@ -85,6 +85,7 @@ pub enum Expression
     Enclosed(Span, Box<Expression>), // Expression enclosed between parens
     Call(Call),
     NameRef(Span, String),
+    Assignment(Span, Operator, String, Box<Expression>),
 }
 
 impl Expression
@@ -110,6 +111,7 @@ impl Expression
             Expression::Enclosed(span, _) => span,
             Expression::Call(ref c) => c.span,
             Expression::NameRef(span, _) => span,
+            Expression::Assignment(span, _, _, _) => span,
         }
     }
 }
@@ -147,7 +149,11 @@ impl TreePrinter for Expression
             Expression::Call(ref c) => c.print(level),
             Expression::NameRef(ref span, ref s) => {
                 println!("{}name {} ({})", p, s, span);
-            }
+            },
+            Expression::Assignment(ref span, ref op, ref target, ref e) => {
+                println!("{}{} {} ({})", p, target, op, span);
+                e.print(level + 1);
+            },
         }
     }
 }
