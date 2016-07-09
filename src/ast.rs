@@ -1,5 +1,5 @@
 use std::fmt;
-use compileerror::{Span, Pos};
+use compileerror::{Span};
 use parser::Operator;
 
 fn prefix(level: usize) -> String
@@ -121,9 +121,7 @@ impl Expression
     {
         match *self
         {
-            Expression::Number(_, n) => {
-                if
-            },
+            Expression::IntLiteral(_, _) => Type::Primitive,
             Expression::StringLiteral(span, _) => span,
             Expression::UnaryOp(span, _, _) => span,
             Expression::PostFixUnaryOp(span, _, _) => span,
@@ -133,8 +131,7 @@ impl Expression
             Expression::NameRef(span, _) => span,
             Expression::Assignment(span, _, _, _) => span,
         }
-    }
-    */
+    }*/
 }
 
 impl TreePrinter for Expression
@@ -224,10 +221,10 @@ pub enum Type
 {
     Void,
     Unknown,
-    Primitive(Pos, String),
-    Struct(Pos, String),
-    Union(Pos, String),
-    Pointer(Pos, Box<Type>),
+    Primitive(String),
+    Struct(String),
+    Union(String),
+    Pointer(Box<Type>),
 }
 
 impl fmt::Display for Type
@@ -238,10 +235,10 @@ impl fmt::Display for Type
         {
             Type::Void => write!(f, "void"),
             Type::Unknown => write!(f, "unknown"),
-            Type::Primitive(_, ref t) => write!(f, "primitive {}", t),
-            Type::Struct(_, ref s) => write!(f, "struct {}", s),
-            Type::Union(_, ref u) => write!(f, "union {}", u),
-            Type::Pointer(_, ref st) => write!(f, "pointer to {}", st),
+            Type::Primitive(ref t) => write!(f, "primitive {}", t),
+            Type::Struct(ref s) => write!(f, "struct {}", s),
+            Type::Union(ref u) => write!(f, "union {}", u),
+            Type::Pointer(ref st) => write!(f, "pointer to {}", st),
         }
     }
 }

@@ -12,12 +12,12 @@ fn parse_import(tq: &mut TokenQueue, pos: Pos) -> Result<Statement, CompileError
 fn parse_type(tq: &mut TokenQueue) -> Result<Type, CompileError>
 {
     if tq.is_next(TokenKind::Operator(Operator::Mul)) {
-        let tok = try!(tq.pop());
+        try!(tq.pop());
         let st = try!(parse_type(tq));
-        Ok(Type::Pointer(tok.span.start, Box::new(st)))
+        Ok(Type::Pointer(Box::new(st)))
     } else {
-        let (name, pos) = try!(tq.expect_identifier());
-        Ok(Type::Primitive(pos, name))
+        let (name, _pos) = try!(tq.expect_identifier());
+        Ok(Type::Primitive(name))
     }
 
 }
@@ -229,7 +229,7 @@ fn parse_struct_member(s: &mut Struct, tq: &mut TokenQueue, indent_level: usize,
             return parse_struct_member(s, tq, indent_level, true);
         },
         TokenKind::Func => {
-            let st = Type::Struct(tok.span.start, s.name.clone());
+            let st = Type::Struct(s.name.clone());
             s.functions.push(try!(parse_func(tq, tok.span.start, indent_level, public, st)));
         },
         TokenKind::Var => {
@@ -323,8 +323,7 @@ fn parse_union(tq: &mut TokenQueue, indent_level: usize, public: bool) -> Result
         } else if tq.is_next(TokenKind::EOF) {
             break;
         } else {
-            let pos = tq.pos();
-            u.functions.push(try!(parse_union_member(tq, indent, false, Type::Union(pos, u.name.clone()))));
+            u.functions.push(try!(parse_union_member(tq, indent, false, Type::Union(u.name.clone()))));
         }
     }
 

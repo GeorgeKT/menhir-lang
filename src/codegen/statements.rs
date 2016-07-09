@@ -199,7 +199,7 @@ unsafe fn gen_return(ctx: &mut Context, f: &Return) -> Result<(), CompileError>
     }
 }
 
-
+#[allow(unused_variables)]
 fn gen_struct(ctx: &mut Context, f: &Struct) -> Result<(), CompileError>
 {/*
     for v in &f.variables {

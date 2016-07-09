@@ -38,21 +38,21 @@ fn th_statement(data: &str) -> Statement
 }
 
 #[cfg(test)]
-fn type_struct(typ: &str, pos: Pos) -> Type
+fn type_struct(typ: &str) -> Type
 {
-    Type::Struct(pos, typ.into())
+    Type::Struct(typ.into())
 }
 
 #[cfg(test)]
-fn type_primitve(typ: &str, pos: Pos) -> Type
+fn type_primitve(typ: &str) -> Type
 {
-    Type::Primitive(pos, typ.into())
+    Type::Primitive(typ.into())
 }
 
 #[cfg(test)]
-fn arg(name: &str, typ: &str, tp: Pos, constant: bool, span: Span) -> Argument
+fn arg(name: &str, typ: &str, constant: bool, span: Span) -> Argument
 {
-    Argument::new(name.into(), type_primitve(typ, tp), constant, span)
+    Argument::new(name.into(), type_primitve(typ), constant, span)
 }
 
 #[cfg(test)]
@@ -93,7 +93,7 @@ fn test_simple_var_with_type()
         assert!(vars.len() == 1);
         let v = &vars[0];
         assert!(v.name == "x");
-        assert!(v.typ == Type::Primitive(Pos::new(1, 8), "int".into()));
+        assert!(v.typ == Type::Primitive("int".into()));
         assert!(!v.is_const);
         assert!(!v.public);
         assert!(v.init == number(7, span(1, 14, 1, 14)));
@@ -193,7 +193,7 @@ fn test_var_with_pointer_type()
         let v = &vars[0];
         v.print(0);
         assert!(v.name == "x");
-        assert!(v.typ == Type::Pointer(Pos::new(1, 8), Box::new(Type::Primitive(Pos::new(1, 9), "char".into()))));
+        assert!(v.typ == Type::Pointer(Box::new(Type::Primitive("char".into()))));
         assert!(!v.is_const);
         assert!(!v.public);
         assert!(v.init == number(0, span(1, 16, 1, 16)));
@@ -451,9 +451,9 @@ pub func blaat(x: int, const y: int) -> int:
         f.print(0);
         assert!(f.sig.name == "blaat");
         assert!(f.sig.args.len() == 2);
-        assert!(f.sig.args[0] == arg("x", "int", Pos::new(2, 19), false, span(2, 16, 2, 21)));
-        assert!(f.sig.args[1] == arg("y", "int", Pos::new(2, 33), true, span(2, 30, 2, 35)));
-        assert!(f.sig.return_type == type_primitve("int", Pos::new(2, 41)));
+        assert!(f.sig.args[0] == arg("x", "int", false, span(2, 16, 2, 21)));
+        assert!(f.sig.args[1] == arg("y", "int", true, span(2, 30, 2, 35)));
+        assert!(f.sig.return_type == type_primitve("int"));
         assert!(f.block.statements.len() == 2);
         assert!(f.public);
 
@@ -522,7 +522,7 @@ pub struct Blaat:
         assert!(s.functions == vec![
             Function::new(
                 sig("foo", Type::Void, vec![
-                    Argument::new("self".into(), type_struct("Blaat", Pos::new(6, 9)), false, span(6, 18, 6, 18)),
+                    Argument::new("self".into(), type_struct("Blaat"), false, span(6, 18, 6, 18)),
                 ]),
                 true,
                 Block::new(vec![
@@ -532,7 +532,7 @@ pub struct Blaat:
             ),
             Function::new(
                 sig("bar", Type::Void, vec![
-                    Argument::new("self".into(), type_struct("Blaat", Pos::new(9, 5)), false, span(9, 14, 9, 14)),
+                    Argument::new("self".into(), type_struct("Blaat"), false, span(9, 14, 9, 14)),
                 ]),
                 false,
                 Block::new(vec![
@@ -571,8 +571,8 @@ pub union Blaat:
             UnionCase{
                 name: "Foo".into(),
                 vars: vec![
-                    arg("x", "int", Pos::new(3, 12), false, span(3, 9, 3, 14)),
-                    arg("y", "int", Pos::new(3, 20), false, span(3, 17, 3, 22)),
+                    arg("x", "int", false, span(3, 9, 3, 14)),
+                    arg("y", "int", false, span(3, 17, 3, 22)),
                 ],
                 span: span(3, 5, 3, 23),
             },
@@ -583,7 +583,7 @@ pub union Blaat:
         assert!(u.functions == vec![
             Function::new(
                 sig("foo",Type::Void, vec![
-                    Argument::new("self".into(), Type::Union(Pos::new(6, 5), "Blaat".into()), false, span(6, 18, 6, 18)),
+                    Argument::new("self".into(), Type::Union("Blaat".into()), false, span(6, 18, 6, 18)),
                 ]),
                 true,
                 Block::new(vec![

@@ -183,7 +183,7 @@ impl<'a> Context<'a>
         match *typ
         {
             Type::Void => Some(LLVMVoidTypeInContext(self.context)),
-            Type::Primitive(_, ref name) =>
+            Type::Primitive(ref name) =>
                 match &name[..] {
                     "uint8" | "int8" | "char" | "byte" => Some(LLVMInt8TypeInContext(self.context)),
                     "uint16" | "int16" => Some(LLVMInt16TypeInContext(self.context)),
@@ -194,7 +194,7 @@ impl<'a> Context<'a>
                     _ => None,
                 },
 
-            Type::Pointer(_, ref st) => {
+            Type::Pointer(ref st) => {
                 self.resolve_type(&st).map(|t| LLVMPointerType(t, 0))
             },
             _ => None,
