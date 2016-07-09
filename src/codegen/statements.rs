@@ -33,13 +33,13 @@ unsafe fn gen_variable(ctx: &mut Context, v: &Variable) -> Result<(), CompileErr
     let initial_value = try!(gen_expression(ctx, &v.init));
     let initial_value_type = LLVMTypeOf(initial_value);
 
-    if let Some(ref tr) = v.typ {
-        if let Some(llvm_type_ref) = ctx.resolve_type(&tr) {
+    if v.typ != Type::Unknown {
+        if let Some(llvm_type_ref) = ctx.resolve_type(&v.typ) {
             if llvm_type_ref != initial_value_type {
                 return err(v.span.start, ErrorType::TypeError(format!("Mismatched types in initialization")))
             }
         } else {
-            return err(v.span.start, ErrorType::TypeError(format!("Unknown type '{}'", tr)));
+            return err(v.span.start, ErrorType::TypeError(format!("Unknown type '{}'", v.typ)));
         }
     }
 
@@ -202,7 +202,7 @@ unsafe fn gen_return(ctx: &mut Context, f: &Return) -> Result<(), CompileError>
 #[allow(unused_variables)]
 fn gen_struct(ctx: &mut Context, f: &Struct) -> Result<(), CompileError>
 {
-     err(Pos::new(0, 0), ErrorType::UnexpectedEOF)
+err(Pos::new(0, 0), ErrorType::UnexpectedEOF)
 }
 
 #[allow(unused_variables)]

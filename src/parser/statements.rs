@@ -22,17 +22,17 @@ fn parse_type(tq: &mut TokenQueue) -> Result<Type, CompileError>
 
 }
 
-fn parse_optional_type(tq: &mut TokenQueue) -> Result<Option<Type>, CompileError>
+fn parse_optional_type(tq: &mut TokenQueue) -> Result<Type, CompileError>
 {
     if tq.is_next(TokenKind::Colon)
     {
         // variable with type declaration
         try!(tq.pop());
-        Ok(Some(try!(parse_type(tq))))
+        Ok(try!(parse_type(tq)))
     }
     else
     {
-        Ok(None)
+        Ok(Type::Unknown)
     }
 }
 

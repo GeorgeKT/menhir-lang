@@ -74,7 +74,7 @@ fn test_simple_var()
         assert!(vars.len() == 1);
         let v = &vars[0];
         assert!(v.name == "x");
-        assert!(v.typ.is_none());
+        assert!(v.typ == Type::Unknown);
         assert!(!v.is_const);
         if let Expression::Number(_, ref n) = v.init {
             assert!(n == "7");
@@ -97,7 +97,7 @@ fn test_simple_var_with_type()
         assert!(vars.len() == 1);
         let v = &vars[0];
         assert!(v.name == "x");
-        assert!(v.typ == Some(Type::Primitive(Pos::new(1, 8), "int".into())));
+        assert!(v.typ == Type::Primitive(Pos::new(1, 8), "int".into()));
         assert!(!v.is_const);
         assert!(!v.public);
         if let Expression::Number(_, ref n) = v.init {
@@ -121,7 +121,7 @@ fn test_simple_const()
         assert!(vars.len() == 1);
         let v = &vars[0];
         assert!(v.name == "x");
-        assert!(v.typ.is_none());
+        assert!(v.typ == Type::Unknown);
         assert!(v.is_const);
         assert!(v.public);
         if let Expression::Number(_, ref n) = v.init {
@@ -146,7 +146,7 @@ fn test_multiple_var()
         assert!(vars.len() == 2);
         let v = &vars[0];
         assert!(v.name == "x");
-        assert!(v.typ.is_none());
+        assert!(v.typ == Type::Unknown);
         assert!(!v.is_const);
         assert!(v.public);
         if let Expression::Number(_, ref n) = v.init {
@@ -157,7 +157,7 @@ fn test_multiple_var()
 
         let v = &vars[1];
         assert!(v.name == "z");
-        assert!(v.typ.is_none());
+        assert!(v.typ == Type::Unknown);
         assert!(!v.is_const);
         if let Expression::Number(_, ref n) = v.init {
             assert!(n == "888");
@@ -183,7 +183,7 @@ var
         assert!(vars.len() == 2);
         let v = &vars[0];
         assert!(v.name == "x");
-        assert!(v.typ.is_none());
+        assert!(v.typ == Type::Unknown);
         assert!(!v.is_const);
         assert!(!v.public);
         if let Expression::Number(_, ref n) = v.init {
@@ -194,7 +194,7 @@ var
 
         let v = &vars[1];
         assert!(v.name == "z");
-        assert!(v.typ.is_none());
+        assert!(v.typ == Type::Unknown);
         assert!(!v.is_const);
         if let Expression::Number(_, ref n) = v.init {
             assert!(n == "888");
@@ -218,7 +218,7 @@ fn test_var_with_pointer_type()
         assert!(vars.len() == 1);
         let v = &vars[0];
         assert!(v.name == "x");
-        assert!(v.typ == Some(Type::Pointer(Pos::new(1, 8), Box::new(Type::Primitive(Pos::new(1, 9), "char".into())))));
+        assert!(v.typ == Type::Pointer(Pos::new(1, 8), Box::new(Type::Primitive(Pos::new(1, 9), "char".into()))));
         assert!(!v.is_const);
         assert!(!v.public);
         if let Expression::Number(_, ref n) = v.init {
@@ -543,9 +543,9 @@ pub struct Blaat:
         assert!(s.functions.len() == 2);
 
         assert!(s.variables == vec![
-            Variable::new("x".into(), None, false, false, number("7", span(3, 13, 3, 13)), span(3, 9, 3, 13)),
-            Variable::new("y".into(), None, false, false, number("9", span(3, 20, 3, 20)), span(3, 16, 3, 20)),
-            Variable::new("z".into(), None, true, true, number("99", span(4, 19, 4, 20)), span(4, 15, 4, 20)),
+            Variable::new("x".into(), Type::Unknown, false, false, number("7", span(3, 13, 3, 13)), span(3, 9, 3, 13)),
+            Variable::new("y".into(), Type::Unknown, false, false, number("9", span(3, 20, 3, 20)), span(3, 16, 3, 20)),
+            Variable::new("z".into(), Type::Unknown, true, true, number("99", span(4, 19, 4, 20)), span(4, 15, 4, 20)),
         ]);
 
         assert!(s.functions == vec![

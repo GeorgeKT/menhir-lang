@@ -162,7 +162,7 @@ impl TreePrinter for Expression
 pub struct Variable
 {
     pub name: String,
-    pub typ: Option<Type>,
+    pub typ: Type,
     pub is_const: bool,
     pub public: bool,
     pub init: Expression,
@@ -171,7 +171,7 @@ pub struct Variable
 
 impl Variable
 {
-    pub fn new(name: String, typ: Option<Type>, is_const: bool, public: bool, init: Expression, span: Span) -> Variable
+    pub fn new(name: String, typ: Type, is_const: bool, public: bool, init: Expression, span: Span) -> Variable
     {
         Variable{
             name: name,
@@ -199,6 +199,7 @@ impl TreePrinter for Variable
 pub enum Type
 {
     Void,
+    Unknown,
     Primitive(Pos, String),
     Struct(Pos, String),
     Union(Pos, String),
@@ -212,6 +213,7 @@ impl fmt::Display for Type
         match *self
         {
             Type::Void => write!(f, "void"),
+            Type::Unknown => write!(f, "unknown"),
             Type::Primitive(_, ref t) => write!(f, "primitive {}", t),
             Type::Struct(_, ref s) => write!(f, "struct {}", s),
             Type::Union(_, ref u) => write!(f, "union {}", u),
