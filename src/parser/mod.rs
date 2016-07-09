@@ -76,11 +76,7 @@ fn test_simple_var()
         assert!(v.name == "x");
         assert!(v.typ == Type::Unknown);
         assert!(!v.is_const);
-        if let Expression::Number(_, ref n) = v.init {
-            assert!(n == "7");
-        } else {
-            assert!(false);
-        }
+        assert!(v.init == number(7, span(1, 9, 1, 9)));
     }
     else
     {
@@ -100,11 +96,7 @@ fn test_simple_var_with_type()
         assert!(v.typ == Type::Primitive(Pos::new(1, 8), "int".into()));
         assert!(!v.is_const);
         assert!(!v.public);
-        if let Expression::Number(_, ref n) = v.init {
-            assert!(n == "7");
-        } else {
-            assert!(false);
-        }
+        assert!(v.init == number(7, span(1, 14, 1, 14)));
     }
     else
     {
@@ -124,11 +116,7 @@ fn test_simple_const()
         assert!(v.typ == Type::Unknown);
         assert!(v.is_const);
         assert!(v.public);
-        if let Expression::Number(_, ref n) = v.init {
-            assert!(n == "7");
-        } else {
-            assert!(false);
-        }
+        assert!(v.init == number(7, span(1, 15, 1, 15)));
     }
     else
     {
@@ -149,21 +137,13 @@ fn test_multiple_var()
         assert!(v.typ == Type::Unknown);
         assert!(!v.is_const);
         assert!(v.public);
-        if let Expression::Number(_, ref n) = v.init {
-            assert!(n == "7");
-        } else {
-            assert!(false);
-        }
+        assert!(v.init == number(7, span(1, 13, 1, 13)));
 
         let v = &vars[1];
         assert!(v.name == "z");
         assert!(v.typ == Type::Unknown);
         assert!(!v.is_const);
-        if let Expression::Number(_, ref n) = v.init {
-            assert!(n == "888");
-        } else {
-            assert!(false);
-        }
+        assert!(v.init == number(888, span(1, 20, 1, 22)));
     }
     else
     {
@@ -182,25 +162,19 @@ var
     {
         assert!(vars.len() == 2);
         let v = &vars[0];
+        v.print(0);
         assert!(v.name == "x");
         assert!(v.typ == Type::Unknown);
         assert!(!v.is_const);
         assert!(!v.public);
-        if let Expression::Number(_, ref n) = v.init {
-            assert!(n == "7");
-        } else {
-            assert!(false);
-        }
+        assert!(v.init == number(7, span(3, 9, 3, 9)));
 
         let v = &vars[1];
+        v.print(0);
         assert!(v.name == "z");
         assert!(v.typ == Type::Unknown);
         assert!(!v.is_const);
-        if let Expression::Number(_, ref n) = v.init {
-            assert!(n == "888");
-        } else {
-            assert!(false);
-        }
+        assert!(v.init == number(888, span(4, 9, 4, 11)));
     }
     else
     {
@@ -217,15 +191,12 @@ fn test_var_with_pointer_type()
     {
         assert!(vars.len() == 1);
         let v = &vars[0];
+        v.print(0);
         assert!(v.name == "x");
         assert!(v.typ == Type::Pointer(Pos::new(1, 8), Box::new(Type::Primitive(Pos::new(1, 9), "char".into()))));
         assert!(!v.is_const);
         assert!(!v.public);
-        if let Expression::Number(_, ref n) = v.init {
-            assert!(n == "0");
-        } else {
-            assert!(false);
-        }
+        assert!(v.init == number(0, span(1, 16, 1, 16)));
     }
     else
     {
@@ -258,7 +229,7 @@ while 1:
     if let Statement::While(w) = stmt
     {
         w.print(0);
-        assert!(w.cond == number("1", span(2, 7, 2, 7)));
+        assert!(w.cond == number(1, span(2, 7, 2, 7)));
         assert!(w.block.statements.len() == 2);
 
         let s = &w.block.statements[0];
@@ -284,7 +255,7 @@ while 1: print("true")
     if let Statement::While(w) = stmt
     {
         w.print(0);
-        assert!(w.cond == number("1", span(2, 7, 2, 7)));
+        assert!(w.cond == number(1, span(2, 7, 2, 7)));
         assert!(w.block.statements.len() == 1);
 
         let s = &w.block.statements[0];
@@ -306,7 +277,7 @@ if 1:
 
     if let Statement::If(w) = stmt
     {
-        assert!(w.cond == number("1", span(2, 4, 2, 4)));
+        assert!(w.cond == number(1, span(2, 4, 2, 4)));
         assert!(w.if_block.statements.len() == 1);
         assert!(w.else_part == ElsePart::Empty);
 
@@ -332,7 +303,7 @@ else:
     if let Statement::If(w) = stmt
     {
         w.print(0);
-        assert!(w.cond == number("1", span(2, 4, 2, 4)));
+        assert!(w.cond == number(1, span(2, 4, 2, 4)));
         assert!(w.if_block.statements.len() == 1);
 
         let s = &w.if_block.statements[0];
@@ -369,7 +340,7 @@ else if 0:
     if let Statement::If(w) = stmt
     {
         w.print(0);
-        assert!(w.cond == number("1", span(2, 4, 2, 4)));
+        assert!(w.cond == number(1, span(2, 4, 2, 4)));
         assert!(w.if_block.statements.len() == 1);
 
         let s = &w.if_block.statements[0];
@@ -378,7 +349,7 @@ else if 0:
         if let ElsePart::If(else_if) = w.else_part
         {
             else_if.print(1);
-            assert!(else_if.cond == number("0", span(4, 9, 4, 9)));
+            assert!(else_if.cond == number(0, span(4, 9, 4, 9)));
             assert!(else_if.if_block.statements.len() == 1);
             let s = &else_if.if_block.statements[0];
             assert!(*s == call("print", vec![str_lit("nada", span(5, 11, 5, 16))], span(5, 5, 5, 17)));
@@ -405,7 +376,7 @@ if 1: print("true")
     if let Statement::If(w) = stmt
     {
         w.print(0);
-        assert!(w.cond == number("1", span(2, 4, 2, 4)));
+        assert!(w.cond == number(1, span(2, 4, 2, 4)));
         assert!(w.if_block.statements.len() == 1);
         assert!(w.else_part == ElsePart::Empty);
 
@@ -427,7 +398,7 @@ return 5
 
     if let Statement::Return(w) = stmt
     {
-        assert!(w.expr == number("5", span(2, 8, 2, 8)));
+        assert!(w.expr == number(5, span(2, 8, 2, 8)));
     }
     else
     {
@@ -457,7 +428,7 @@ func blaat():
 
         let s = &f.block.statements[1];
         assert!(*s == Statement::Return(
-            Return::new(number("5", span(4, 12, 4, 12)), span(4, 5, 4, 12))
+            Return::new(number(5, span(4, 12, 4, 12)), span(4, 5, 4, 12))
         ));
     }
     else
@@ -491,7 +462,7 @@ pub func blaat(x: int, const y: int) -> int:
 
         let s = &f.block.statements[1];
         assert!(*s == Statement::Return(
-            Return::new(number("5", span(4, 12, 4, 12)), span(4, 5, 4, 12))
+            Return::new(number(5, span(4, 12, 4, 12)), span(4, 5, 4, 12))
         ));
     }
     else
@@ -543,9 +514,9 @@ pub struct Blaat:
         assert!(s.functions.len() == 2);
 
         assert!(s.variables == vec![
-            Variable::new("x".into(), Type::Unknown, false, false, number("7", span(3, 13, 3, 13)), span(3, 9, 3, 13)),
-            Variable::new("y".into(), Type::Unknown, false, false, number("9", span(3, 20, 3, 20)), span(3, 16, 3, 20)),
-            Variable::new("z".into(), Type::Unknown, true, true, number("99", span(4, 19, 4, 20)), span(4, 15, 4, 20)),
+            Variable::new("x".into(), Type::Unknown, false, false, number(7, span(3, 13, 3, 13)), span(3, 9, 3, 13)),
+            Variable::new("y".into(), Type::Unknown, false, false, number(9, span(3, 20, 3, 20)), span(3, 16, 3, 20)),
+            Variable::new("z".into(), Type::Unknown, true, true, number(99, span(4, 19, 4, 20)), span(4, 15, 4, 20)),
         ]);
 
         assert!(s.functions == vec![

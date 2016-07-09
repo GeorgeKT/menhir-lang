@@ -199,10 +199,18 @@ unsafe fn gen_return(ctx: &mut Context, f: &Return) -> Result<(), CompileError>
     }
 }
 
-#[allow(unused_variables)]
+
 fn gen_struct(ctx: &mut Context, f: &Struct) -> Result<(), CompileError>
-{
-err(Pos::new(0, 0), ErrorType::UnexpectedEOF)
+{/*
+    for v in &f.variables {
+        if v.typ == Type::Unknown {
+
+        }
+    }
+
+    let struct_type = LLVMStructTypeInContext(ctx.context, &mut element_types, f.variables.len(), 0);
+    */
+    Ok(())
 }
 
 #[allow(unused_variables)]

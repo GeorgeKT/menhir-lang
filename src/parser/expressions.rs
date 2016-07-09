@@ -104,6 +104,22 @@ fn parse_assignemnt(tq: &mut TokenQueue, indent_level: usize, lhs: String, op: O
     ))
 }
 
+fn parse_number(num: &str, span: Span) -> Result<Expression, CompileError>
+{
+    if num.find('.').is_some() || num.find('e').is_some() {
+        match num.parse::<f64>() {
+            Ok(_) => Ok(Expression::FloatLiteral(span, num.into())),
+            Err(_) => err(span.start, ErrorType::InvalidFloatingPoint)
+        }
+    } else {
+        // Should be an integer
+        match num.parse::<u64>() {
+            Ok(i) => Ok(Expression::IntLiteral(span, i)),
+            Err(_) => err(span.start, ErrorType::InvalidInteger)
+        }
+    }
+}
+
 fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token) -> Result<Expression, CompileError>
 {
     match tok.kind
@@ -123,7 +139,7 @@ fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token
                     // Turn x++ in x += 1, and x-- in x -= 1
                     try!(tq.pop());
                     let new_op = if op == Operator::Increment {Operator::AddAssign} else {Operator::SubAssign};
-                    Ok(Expression::Assignment(tok.span, new_op, id, Box::new(Expression::Number(tok.span, "1".into()))))
+                    Ok(Expression::Assignment(tok.span, new_op, id, Box::new(Expression::IntLiteral(tok.span, 1))))
                 },
                 Some(TokenKind::Operator(op)) if op.is_assignment() => {
                     parse_assignemnt(tq, indent_level, id, op, tok.span.start)
@@ -147,17 +163,18 @@ fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token
         },
 
         TokenKind::Number(n) => {
+            let num = try!(parse_number(&n, tok.span));
             let next_kind = tq.peek().map(|tok| tok.kind.clone());
             match next_kind
             {
                 Some(TokenKind::Operator(op)) => {
                     if op.is_binary_operator() {
-                        parse_binary_op_rhs(tq, indent_level, Expression::Number(tok.span, n))
+                        parse_binary_op_rhs(tq, indent_level, num)
                     } else {
-                        Ok(Expression::Number(tok.span, n))
+                        Ok(num)
                     }
                 },
-                _ => Ok(Expression::Number(tok.span, n)),
+                _ => Ok(num),
             }
         },
 
@@ -231,9 +248,9 @@ fn name_ref(left: &str, span: Span) -> Expression
 }
 
 #[cfg(test)]
-pub fn number(left: &str, span: Span) -> Expression
+pub fn number(v: u64, span: Span) -> Expression
 {
-    Expression::Number(span, left.into())
+    Expression::IntLiteral(span, v)
 }
 
 #[cfg(test)]
@@ -245,9 +262,9 @@ fn enclosed(span: Span, left: Expression) -> Expression
 #[test]
 fn test_basic_expressions()
 {
-    assert!(th_expr("1000") == number("1000", span(1, 1, 1, 4)));
+    assert!(th_expr("1000") == number(1000, span(1, 1, 1, 4)));
     assert!(th_expr("id") == name_ref("id", span(1, 1, 1, 2)));
-    assert!(th_expr("-1000") == unary_op(Operator::Sub, span(1, 1, 1, 5), number("1000", span(1, 2, 1, 5))));
+    assert!(th_expr("-1000") == unary_op(Operator::Sub, span(1, 1, 1, 5), number(1000, span(1, 2, 1, 5))));
     assert!(th_expr("!id") == unary_op(Operator::Not, span(1, 1, 1, 3), name_ref("id", span(1, 2, 1, 3))));
     assert!(th_expr("++id") == unary_op(Operator::Increment, span(1, 1, 1, 4), name_ref("id", span(1, 3, 1, 4))));
     assert!(th_expr("--id") == unary_op(Operator::Decrement, span(1, 1, 1, 4), name_ref("id", span(1, 3, 1, 4))));
@@ -379,7 +396,7 @@ fn test_precedence_8()
             span(1, 5, 1, 5),
             Operator::AddAssign,
             "c".into(),
-            Box::new(number("1", span(1, 5, 1, 5))),
+            Box::new(number(1, span(1, 5, 1, 5))),
         )
     ));
 }
@@ -415,7 +432,7 @@ fn test_precedence_10()
             span(1, 5, 1, 5),
             Operator::AddAssign,
             "c".into(),
-            Box::new(number("1", span(1, 5, 1, 5))),
+            Box::new(number(1, span(1, 5, 1, 5))),
         )
     ));
 }
@@ -430,7 +447,7 @@ fn test_precedence_11()
         name_ref("b", span(1, 1, 1, 1)),
         Expression::Call(Call::new(
             "c".into(),
-            vec![number("6", span(1, 7, 1, 7))],
+            vec![number(6, span(1, 7, 1, 7))],
             span(1, 5, 1, 8)
         ))
     ));
@@ -447,7 +464,7 @@ fn test_precedence_12()
         bin_op(Operator::Dot, span(1, 7, 1, 12), name_ref("a", span(1, 7, 1, 7)),
             Expression::Call(Call::new(
                 "c".into(),
-                vec![number("6", span(1, 11, 1, 11))],
+                vec![number(6, span(1, 11, 1, 11))],
                 span(1, 9, 1, 12),
             ))
         )
@@ -463,8 +480,8 @@ fn test_assign()
         Operator::Assign,
         "a".into(),
         Box::new(bin_op(Operator::Add, span(1, 5, 1, 9),
-            number("6", span(1, 5, 1, 5)),
-            number("9", span(1, 9, 1, 9))
+            number(6, span(1, 5, 1, 5)),
+            number(9, span(1, 9, 1, 9))
         )),
     ));
 }

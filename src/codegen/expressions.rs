@@ -28,20 +28,17 @@ pub unsafe fn const_int(ctx: LLVMContextRef, v: u64) -> LLVMValueRef
     LLVMConstInt(LLVMInt64TypeInContext(ctx), v, 0)
 }
 
-unsafe fn gen_number(ctx: &mut Context, num: &str, span: &Span) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_float(ctx: &mut Context, num: &str, span: &Span) -> Result<LLVMValueRef, CompileError>
 {
-    if num.find('.').is_some() || num.find('e').is_some() {
-        match num.parse::<f64>() {
-            Ok(f) => Ok(LLVMConstReal(LLVMDoubleTypeInContext(ctx.context), f)),
-            Err(_) => err(span.start, ErrorType::InvalidFloatingPoint)
-        }
-    } else {
-        // Should be an integer
-        match num.parse::<u64>() {
-            Ok(i) => Ok(const_int(ctx.context, i)),
-            Err(_) => err(span.start, ErrorType::InvalidInteger)
-        }
+    match num.parse::<f64>() {
+        Ok(f) => Ok(LLVMConstReal(LLVMDoubleTypeInContext(ctx.context), f)),
+        Err(_) => err(span.start, ErrorType::InvalidFloatingPoint)
     }
+}
+
+unsafe fn gen_integer(ctx: &mut Context, i: u64, _span: &Span) -> Result<LLVMValueRef, CompileError>
+{
+    Ok(const_int(ctx.context, i))
 }
 
 unsafe fn gen_string_literal(ctx: &mut Context, s: &str, _span: &Span) -> Result<LLVMValueRef, CompileError>
@@ -383,7 +380,8 @@ pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<LLVMVa
 {
     match *e
     {
-        Expression::Number(ref span, ref s) => gen_number(ctx, s, span),
+        Expression::IntLiteral(ref span, integer) => gen_integer(ctx, integer, span),
+        Expression::FloatLiteral(ref span, ref s) => gen_float(ctx, s, span),
         Expression::StringLiteral(ref span, ref s) => gen_string_literal(ctx, s, span),
         Expression::UnaryOp(ref span, ref op, ref e) => gen_unary(ctx, *op, e, span),
         Expression::PostFixUnaryOp(ref span, ref op, ref e) => gen_pf_unary(ctx, *op, e, span),

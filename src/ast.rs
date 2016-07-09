@@ -77,7 +77,8 @@ impl TreePrinter for Call
 #[derive(Debug, Eq, PartialEq)]
 pub enum Expression
 {
-    Number(Span, String),
+    IntLiteral(Span, u64),
+    FloatLiteral(Span, String), // Keep as string until we generate code, so we can compare it
     StringLiteral(Span, String),
     UnaryOp(Span, Operator, Box<Expression>),
     PostFixUnaryOp(Span, Operator, Box<Expression>), // post increment and decrement
@@ -103,7 +104,8 @@ impl Expression
     {
         match *self
         {
-            Expression::Number(span, _) => span,
+            Expression::IntLiteral(span, _) => span,
+            Expression::FloatLiteral(span, _) => span,
             Expression::StringLiteral(span, _) => span,
             Expression::UnaryOp(span, _, _) => span,
             Expression::PostFixUnaryOp(span, _, _) => span,
@@ -114,6 +116,25 @@ impl Expression
             Expression::Assignment(span, _, _, _) => span,
         }
     }
+/*
+    pub fn infer_type(&self) -> Option<Type>
+    {
+        match *self
+        {
+            Expression::Number(_, n) => {
+                if
+            },
+            Expression::StringLiteral(span, _) => span,
+            Expression::UnaryOp(span, _, _) => span,
+            Expression::PostFixUnaryOp(span, _, _) => span,
+            Expression::BinaryOp(span, _, _, _) => span,
+            Expression::Enclosed(span, _) => span,
+            Expression::Call(ref c) => c.span,
+            Expression::NameRef(span, _) => span,
+            Expression::Assignment(span, _, _, _) => span,
+        }
+    }
+    */
 }
 
 impl TreePrinter for Expression
@@ -123,8 +144,11 @@ impl TreePrinter for Expression
         let p = prefix(level);
         match *self
         {
-            Expression::Number(ref span, ref s) => {
-                println!("{}number {} ({})", p, s, span);
+            Expression::IntLiteral(ref span, integer) => {
+                println!("{}int {} ({})", p, integer, span);
+            },
+            Expression::FloatLiteral(ref span, ref s) => {
+                println!("{}float {} ({})", p, s, span);
             },
             Expression::StringLiteral(ref span, ref s) => {
                 println!("{}string \"{}\" ({})", p, s, span);
