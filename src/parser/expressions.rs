@@ -120,6 +120,27 @@ fn parse_number(num: &str, span: Span) -> Result<Expression, CompileError>
     }
 }
 
+fn parse_object_construction(tq: &mut TokenQueue, indent_level: usize, name: &str, pos: Pos) -> Result<Expression, CompileError>
+{
+    try!(tq.expect(TokenKind::OpenCurly));
+    let mut params = Vec::new();
+
+    while !tq.is_next(TokenKind::CloseCurly) {
+        let e = try!(parse_expression(tq, indent_level));
+        params.push(e);
+        if tq.is_next(TokenKind::Comma) {
+            try!(tq.pop());
+        }
+    }
+
+    try!(tq.expect(TokenKind::CloseCurly));
+    Ok(Expression::ObjectConstruction(
+        Span::new(pos, tq.pos()),
+        Type::Complex(name.into()),
+        params,
+    ))
+}
+
 fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token) -> Result<Expression, CompileError>
 {
     match tok.kind
@@ -135,6 +156,7 @@ fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token
             match next_kind
             {
                 Some(TokenKind::OpenParen) => parse_function_call(tq, indent_level, id, tok.span.start).map(|c| Expression::Call(c)),
+                Some(TokenKind::OpenCurly) => parse_object_construction(tq, indent_level, &id, tok.span.start),
                 Some(TokenKind::Operator(op)) if op == Operator::Increment || op == Operator::Decrement => {
                     // Turn x++ in x += 1, and x-- in x -= 1
                     try!(tq.pop());
@@ -483,5 +505,19 @@ fn test_assign()
             number(6, span(1, 5, 1, 5)),
             number(9, span(1, 9, 1, 9))
         )),
+    ));
+}
+
+#[test]
+fn test_object_construction()
+{
+    let e = th_expr("Foo{7, 8}");
+    assert!(e == Expression::ObjectConstruction(
+        span(1, 1, 1, 9),
+        Type::Complex("Foo".into()),
+        vec![
+            number(7, span(1, 5, 1, 5)),
+            number(8, span(1, 8, 1, 8))
+        ],
     ));
 }

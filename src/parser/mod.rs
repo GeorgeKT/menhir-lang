@@ -38,9 +38,9 @@ fn th_statement(data: &str) -> Statement
 }
 
 #[cfg(test)]
-fn type_struct(typ: &str) -> Type
+fn type_complex(typ: &str) -> Type
 {
-    Type::Struct(typ.into())
+    Type::Complex(typ.into())
 }
 
 #[cfg(test)]
@@ -522,7 +522,7 @@ pub struct Blaat:
         assert!(s.functions == vec![
             Function::new(
                 sig("foo", Type::Void, vec![
-                    Argument::new("self".into(), type_struct("Blaat"), false, span(6, 18, 6, 18)),
+                    Argument::new("self".into(), type_complex("Blaat"), false, span(6, 18, 6, 18)),
                 ]),
                 true,
                 Block::new(vec![
@@ -532,7 +532,7 @@ pub struct Blaat:
             ),
             Function::new(
                 sig("bar", Type::Void, vec![
-                    Argument::new("self".into(), type_struct("Blaat"), false, span(9, 14, 9, 14)),
+                    Argument::new("self".into(), type_complex("Blaat"), false, span(9, 14, 9, 14)),
                 ]),
                 false,
                 Block::new(vec![
@@ -583,7 +583,7 @@ pub union Blaat:
         assert!(u.functions == vec![
             Function::new(
                 sig("foo",Type::Void, vec![
-                    Argument::new("self".into(), Type::Union("Blaat".into()), false, span(6, 18, 6, 18)),
+                    Argument::new("self".into(), type_complex("Blaat"), false, span(6, 18, 6, 18)),
                 ]),
                 true,
                 Block::new(vec![

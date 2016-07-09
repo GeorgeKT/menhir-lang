@@ -376,6 +376,12 @@ unsafe fn gen_assignment(ctx: &mut Context, op: Operator, target: &str, rhs: &Ex
     }
 }
 
+#[allow(unused_variables)]
+unsafe fn gen_object_construction(ctx: &mut Context, object_type: &Type, params: &Vec<Expression>, span: &Span) -> Result<LLVMValueRef, CompileError>
+{
+    err(Pos::new(0, 0), ErrorType::UnexpectedEOF)
+}
+
 pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<LLVMValueRef, CompileError>
 {
     match *e
@@ -390,5 +396,6 @@ pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<LLVMVa
         Expression::Call(ref c) => gen_call(ctx, c),
         Expression::NameRef(ref span, ref s) => gen_name_ref(ctx, s, span),
         Expression::Assignment(ref span, ref op, ref target, ref e) => gen_assignment(ctx, *op, target, e, span),
+        Expression::ObjectConstruction(ref span, ref object_type, ref params) => gen_object_construction(ctx, object_type, params, span),
     }
 }

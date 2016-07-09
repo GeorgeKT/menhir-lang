@@ -13,6 +13,9 @@ struct Point:
         y += 1
 
 
+var p = Point{4, 5}
+p.inc()
+
 var x = 0
 while x < 5:
     if x == 3:

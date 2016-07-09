@@ -229,7 +229,7 @@ fn parse_struct_member(s: &mut Struct, tq: &mut TokenQueue, indent_level: usize,
             return parse_struct_member(s, tq, indent_level, true);
         },
         TokenKind::Func => {
-            let st = Type::Struct(s.name.clone());
+            let st = Type::Complex(s.name.clone());
             s.functions.push(try!(parse_func(tq, tok.span.start, indent_level, public, st)));
         },
         TokenKind::Var => {
@@ -323,7 +323,7 @@ fn parse_union(tq: &mut TokenQueue, indent_level: usize, public: bool) -> Result
         } else if tq.is_next(TokenKind::EOF) {
             break;
         } else {
-            u.functions.push(try!(parse_union_member(tq, indent, false, Type::Union(u.name.clone()))));
+            u.functions.push(try!(parse_union_member(tq, indent, false, Type::Complex(u.name.clone()))));
         }
     }
 

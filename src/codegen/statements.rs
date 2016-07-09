@@ -199,17 +199,26 @@ unsafe fn gen_return(ctx: &mut Context, f: &Return) -> Result<(), CompileError>
     }
 }
 
-#[allow(unused_variables)]
-fn gen_struct(ctx: &mut Context, f: &Struct) -> Result<(), CompileError>
-{/*
+unsafe fn gen_struct(ctx: &mut Context, f: &Struct) -> Result<(), CompileError>
+{
+    if let Some(_) = ctx.get_complex_type(&f.name) {
+        return err(f.span.start, ErrorType::RedefinitionOfStruct(f.name.clone()));
+    }
+
+    let mut element_types = Vec::with_capacity(f.variables.len());
     for v in &f.variables {
         if v.typ == Type::Unknown {
-
+            element_types.push(try!(ctx.infer_type(&v.init)));
+        } else if let Some(typ) = ctx.resolve_type(&v.typ) {
+            element_types.push(typ);
+        } else {
+            return err(v.span.start, ErrorType::TypeError(
+                format!("Unable to determine type of member '{}' of struct '{}'", v.name, f.name)));
         }
     }
 
-    let struct_type = LLVMStructTypeInContext(ctx.context, &mut element_types, f.variables.len(), 0);
-    */
+    let struct_type = LLVMStructTypeInContext(ctx.context, element_types.as_mut_ptr(), f.variables.len() as u32, 0);
+    ctx.top_stack_frame().add_complex_type(&f.name, struct_type);
     Ok(())
 }
 

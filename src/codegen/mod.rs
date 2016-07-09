@@ -45,6 +45,7 @@ pub struct StackFrame
     function: LLVMValueRef,
     vars: HashMap<String, VariableInstance>,
     funcs: HashMap<String, FunctionInstance>,
+    complex_types: HashMap<String, LLVMTypeRef>,
     current_bb: LLVMBasicBlockRef,
 }
 
@@ -90,6 +91,16 @@ impl StackFrame
     {
         self.function
     }
+
+    pub fn get_complex_type(&self, name: &str) -> Option<LLVMTypeRef>
+    {
+        self.complex_types.get(name).map(|t| *t)
+    }
+
+    pub fn add_complex_type(&mut self, name: &str, tr: LLVMTypeRef)
+    {
+        self.complex_types.insert(name.into(), tr);
+    }
 }
 
 pub struct Context<'a>
@@ -126,6 +137,7 @@ impl<'a> Context<'a>
             function: fun,
             vars: HashMap::new(),
             funcs: HashMap::new(),
+            complex_types: HashMap::new(),
             current_bb: bb,
         });
     }
@@ -178,6 +190,17 @@ impl<'a> Context<'a>
         self.get_function(name).is_some()
     }
 
+    fn get_complex_type(&'a self, name: &str) -> Option<LLVMTypeRef>
+    {
+        for sf in self.stack.iter().rev() {
+            let f = sf.get_complex_type(name);
+            if f.is_some() {
+                return f;
+            }
+        }
+        None
+    }
+
     pub unsafe fn resolve_type(&self, typ: &Type) -> Option<LLVMTypeRef>
     {
         match *typ
@@ -197,11 +220,57 @@ impl<'a> Context<'a>
             Type::Pointer(ref st) => {
                 self.resolve_type(&st).map(|t| LLVMPointerType(t, 0))
             },
+            Type::Complex(ref name) => {
+                self.get_complex_type(&name)
+            },
             _ => None,
         }
     }
 
-
+    pub unsafe fn infer_type(&self, e: &Expression) -> Result<LLVMTypeRef, CompileError>
+    {
+        match *e
+        {
+            Expression::IntLiteral(_, _) => Ok(LLVMInt64TypeInContext(self.context)),
+            Expression::FloatLiteral(_, _) => Ok(LLVMDoubleTypeInContext(self.context)),
+            Expression::StringLiteral(_, ref s) => Ok(LLVMArrayType(LLVMInt8TypeInContext(self.context), s.len() as u32)),
+            Expression::UnaryOp(_, _, ref e) => self.infer_type(e),
+            Expression::PostFixUnaryOp(_, _, ref e) => self.infer_type(e),
+            Expression::BinaryOp(ref span, op, ref l, ref r) => {
+                let lt = try!(self.infer_type(l));
+                let rt = try!(self.infer_type(r));
+                if lt != rt {
+                    let msg = format!("Type mismatch in '{}' operation  (left hand side {}, right hand side {})", op, type_name(lt), type_name(rt));
+                    err(span.start, ErrorType::TypeError(msg))
+                } else {
+                    Ok(rt)
+                }
+            },
+            Expression::Enclosed(_, ref e) => self.infer_type(e),
+            Expression::Call(ref c) => {
+                if let Some(f) = self.get_function(&c.name) {
+                    Ok(f.return_type)
+                } else {
+                    err(c.span.start, ErrorType::UnknownFunction(c.name.clone()))
+                }
+            },
+            Expression::NameRef(ref span, ref nr) => {
+                if let Some(v) = self.get_variable(&nr) {
+                    Ok(LLVMTypeOf(v.value))
+                } else {
+                    err(span.start, ErrorType::UnknownVariable(nr.clone()))
+                }
+            },
+            Expression::Assignment(_, _, _, ref e) => self.infer_type(e),
+            Expression::ObjectConstruction(ref span, ref object_type, _) => {
+                if let Some(t) = self.resolve_type(&object_type) {
+                    Ok(t)
+                } else {
+                    err(span.start, ErrorType::UnknownType(format!("{}", object_type)))
+                }
+            },
+        }
+    }
 }
 
 impl<'a> Drop for Context<'a>

@@ -87,6 +87,7 @@ pub enum Expression
     Call(Call),
     NameRef(Span, String),
     Assignment(Span, Operator, String, Box<Expression>),
+    ObjectConstruction(Span, Type, Vec<Expression>),
 }
 
 impl Expression
@@ -114,24 +115,9 @@ impl Expression
             Expression::Call(ref c) => c.span,
             Expression::NameRef(span, _) => span,
             Expression::Assignment(span, _, _, _) => span,
+            Expression::ObjectConstruction(span, _, _) => span,
         }
     }
-/*
-    pub fn infer_type(&self) -> Option<Type>
-    {
-        match *self
-        {
-            Expression::IntLiteral(_, _) => Type::Primitive,
-            Expression::StringLiteral(span, _) => span,
-            Expression::UnaryOp(span, _, _) => span,
-            Expression::PostFixUnaryOp(span, _, _) => span,
-            Expression::BinaryOp(span, _, _, _) => span,
-            Expression::Enclosed(span, _) => span,
-            Expression::Call(ref c) => c.span,
-            Expression::NameRef(span, _) => span,
-            Expression::Assignment(span, _, _, _) => span,
-        }
-    }*/
 }
 
 impl TreePrinter for Expression
@@ -174,6 +160,12 @@ impl TreePrinter for Expression
             Expression::Assignment(ref span, ref op, ref target, ref e) => {
                 println!("{}{} {} ({})", p, target, op, span);
                 e.print(level + 1);
+            },
+            Expression::ObjectConstruction(ref span, ref object_type, ref params) => {
+                println!("{}construct {} ({})", p, object_type, span);
+                for p in params {
+                    p.print(level + 1);
+                }
             },
         }
     }
@@ -222,8 +214,7 @@ pub enum Type
     Void,
     Unknown,
     Primitive(String),
-    Struct(String),
-    Union(String),
+    Complex(String),
     Pointer(Box<Type>),
 }
 
@@ -235,9 +226,8 @@ impl fmt::Display for Type
         {
             Type::Void => write!(f, "void"),
             Type::Unknown => write!(f, "unknown"),
-            Type::Primitive(ref t) => write!(f, "primitive {}", t),
-            Type::Struct(ref s) => write!(f, "struct {}", s),
-            Type::Union(ref u) => write!(f, "union {}", u),
+            Type::Primitive(ref t) => write!(f, "{}", t),
+            Type::Complex(ref s) => write!(f, "{}", s),
             Type::Pointer(ref st) => write!(f, "pointer to {}", st),
         }
     }

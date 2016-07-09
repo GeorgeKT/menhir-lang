@@ -128,6 +128,8 @@ pub enum TokenKind
     Comma,
     OpenParen,
     CloseParen,
+    OpenCurly,
+    CloseCurly,
     Number(String),
     StringLiteral(String),
     Indent(usize),
@@ -145,7 +147,7 @@ impl Display for TokenKind
             TokenKind::Number(ref n) => write!(fmt, "number '{}'", n),
             TokenKind::StringLiteral(ref s) => write!(fmt, "string litteral '{}'", s),
             TokenKind::Indent(i) => write!(fmt, "indentation (level {})", i),
-            TokenKind::Operator(ref op) => write!(fmt, "operator {:?}", op),
+            TokenKind::Operator(ref op) => write!(fmt, "operator {}", op),
             _ => write!(fmt, "{:?}", self),
         }
     }
