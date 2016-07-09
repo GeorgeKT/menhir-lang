@@ -352,7 +352,8 @@ unsafe fn assign(ctx: &mut Context, op: Operator, var: LLVMValueRef, val: LLVMVa
         }
     };
 
-    Ok(LLVMBuildStore(ctx.builder, new_val, var))
+    LLVMBuildStore(ctx.builder, new_val, var);
+    Ok(new_val) // Return the new value
 }
 
 unsafe fn gen_assignment(ctx: &mut Context, op: Operator, target: &str, rhs: &Expression, span: &Span) -> Result<LLVMValueRef, CompileError>

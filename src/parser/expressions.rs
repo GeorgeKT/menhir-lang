@@ -373,9 +373,14 @@ fn test_precedence_8()
     let e = th_expr("b + c++");
     assert!(e == bin_op(
         Operator::Add,
-        span(1, 1, 1, 7),
+        span(1, 1, 1, 5),
         name_ref("b", span(1, 1, 1, 1)),
-        pf_unary_op(Operator::Increment, span(1, 5, 1, 7), name_ref("c", span(1, 5, 1, 5))),
+        Expression::Assignment(
+            span(1, 5, 1, 5),
+            Operator::AddAssign,
+            "c".into(),
+            Box::new(number("1", span(1, 5, 1, 5))),
+        )
     ));
 }
 
@@ -404,9 +409,14 @@ fn test_precedence_10()
     let e = th_expr("b + c++");
     assert!(e == bin_op(
         Operator::Add,
-        span(1, 1, 1, 7),
+        span(1, 1, 1, 5),
         name_ref("b", span(1, 1, 1, 1)),
-        pf_unary_op(Operator::Increment, span(1, 5, 1, 7), name_ref("c", span(1, 5, 1, 5)))
+        Expression::Assignment(
+            span(1, 5, 1, 5),
+            Operator::AddAssign,
+            "c".into(),
+            Box::new(number("1", span(1, 5, 1, 5))),
+        )
     ));
 }
 
