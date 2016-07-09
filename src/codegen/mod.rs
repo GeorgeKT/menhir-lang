@@ -2,6 +2,7 @@ mod statements;
 mod expressions;
 mod linker;
 
+use std::rc::Rc;
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::os::raw::c_char;
@@ -29,6 +30,7 @@ pub fn cstr_mut(s: &str) -> *mut c_char
 pub struct VariableInstance
 {
     pub value: LLVMValueRef,
+    pub name: String,
     pub constant: bool,
 }
 
@@ -40,12 +42,28 @@ pub struct FunctionInstance
     pub return_type: LLVMTypeRef,
 }
 
+pub struct StructMemberVar
+{
+    pub name: String,
+    pub typ: LLVMTypeRef,
+    pub constant: bool,
+    pub init: Expression,
+}
+
+pub struct StructType
+{
+    pub name: String,
+    pub typ: LLVMTypeRef,
+    pub members: Vec<StructMemberVar>,
+    pub functions: Vec<FunctionInstance>,
+}
+
 pub struct StackFrame
 {
     function: LLVMValueRef,
     vars: HashMap<String, VariableInstance>,
     funcs: HashMap<String, FunctionInstance>,
-    complex_types: HashMap<String, LLVMTypeRef>,
+    complex_types: HashMap<String, Rc<StructType>>,
     current_bb: LLVMBasicBlockRef,
 }
 
@@ -58,7 +76,7 @@ impl StackFrame
 
     pub fn add_variable(&mut self, name: &str, value: LLVMValueRef, constant: bool)
     {
-        self.vars.insert(name.into(), VariableInstance{value: value, constant: constant});
+        self.vars.insert(name.into(), VariableInstance{value: value, name: name.into(), constant: constant});
     }
 
     pub fn get_variable(&self, name: &str) -> Option<&VariableInstance>
@@ -92,14 +110,14 @@ impl StackFrame
         self.function
     }
 
-    pub fn get_complex_type(&self, name: &str) -> Option<LLVMTypeRef>
+    pub fn get_complex_type(&self, name: &str) -> Option<Rc<StructType>>
     {
-        self.complex_types.get(name).map(|t| *t)
+        self.complex_types.get(name).map(|st| st.clone())
     }
 
-    pub fn add_complex_type(&mut self, name: &str, tr: LLVMTypeRef)
+    pub fn add_complex_type(&mut self, st: StructType)
     {
-        self.complex_types.insert(name.into(), tr);
+        self.complex_types.insert(st.name.clone(), Rc::new(st));
     }
 }
 
@@ -190,7 +208,7 @@ impl<'a> Context<'a>
         self.get_function(name).is_some()
     }
 
-    fn get_complex_type(&'a self, name: &str) -> Option<LLVMTypeRef>
+    fn get_complex_type(&'a self, name: &str) -> Option<Rc<StructType>>
     {
         for sf in self.stack.iter().rev() {
             let f = sf.get_complex_type(name);
@@ -221,7 +239,7 @@ impl<'a> Context<'a>
                 self.resolve_type(&st).map(|t| LLVMPointerType(t, 0))
             },
             Type::Complex(ref name) => {
-                self.get_complex_type(&name)
+                self.get_complex_type(&name).map(|ct| ct.typ)
             },
             _ => None,
         }
@@ -263,7 +281,8 @@ impl<'a> Context<'a>
             },
             Expression::Assignment(_, _, _, ref e) => self.infer_type(e),
             Expression::ObjectConstruction(ref span, ref object_type, _) => {
-                if let Some(t) = self.resolve_type(&object_type) {
+                let ct = Type::Complex(object_type.clone());
+                if let Some(t) = self.resolve_type(&ct) {
                     Ok(t)
                 } else {
                     err(span.start, ErrorType::UnknownType(format!("{}", object_type)))

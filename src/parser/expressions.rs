@@ -136,7 +136,7 @@ fn parse_object_construction(tq: &mut TokenQueue, indent_level: usize, name: &st
     try!(tq.expect(TokenKind::CloseCurly));
     Ok(Expression::ObjectConstruction(
         Span::new(pos, tq.pos()),
-        Type::Complex(name.into()),
+        name.into(),
         params,
     ))
 }
@@ -514,7 +514,7 @@ fn test_object_construction()
     let e = th_expr("Foo{7, 8}");
     assert!(e == Expression::ObjectConstruction(
         span(1, 1, 1, 9),
-        Type::Complex("Foo".into()),
+        "Foo".into(),
         vec![
             number(7, span(1, 5, 1, 5)),
             number(8, span(1, 8, 1, 8))

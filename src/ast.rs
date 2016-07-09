@@ -42,7 +42,7 @@ impl TreePrinter for Import
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Call
 {
     pub name: String,
@@ -74,7 +74,7 @@ impl TreePrinter for Call
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
 {
     IntLiteral(Span, u64),
@@ -87,7 +87,7 @@ pub enum Expression
     Call(Call),
     NameRef(Span, String),
     Assignment(Span, Operator, String, Box<Expression>),
-    ObjectConstruction(Span, Type, Vec<Expression>),
+    ObjectConstruction(Span, String, Vec<Expression>),
 }
 
 impl Expression
@@ -232,6 +232,7 @@ impl fmt::Display for Type
         }
     }
 }
+
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Argument

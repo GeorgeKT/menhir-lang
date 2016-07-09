@@ -376,10 +376,39 @@ unsafe fn gen_assignment(ctx: &mut Context, op: Operator, target: &str, rhs: &Ex
     }
 }
 
-#[allow(unused_variables)]
-unsafe fn gen_object_construction(ctx: &mut Context, object_type: &Type, params: &Vec<Expression>, span: &Span) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_object_construction(ctx: &mut Context, object_type: &str, params: &Vec<Expression>, span: &Span) -> Result<LLVMValueRef, CompileError>
 {
-    err(Pos::new(0, 0), ErrorType::UnexpectedEOF)
+    use std::rc::Rc;
+    let st: Rc<StructType> = try!(ctx.get_complex_type(object_type).ok_or(CompileError::new(span.start, ErrorType::UnknownType(object_type.into()))));
+
+    if params.len() > st.members.len() {
+        return err(span.start, ErrorType::ArgumentCountMismatch(
+            format!("Too many arguments in construction of an object of type '{}', maximum {} allowed",
+                st.name, st.members.len())));
+    }
+
+    let ptr = LLVMBuildAlloca(ctx.builder, st.typ, cstr("newvar"));
+
+    for (idx, m) in st.members.iter().enumerate() {
+        let element = LLVMBuildStructGEP(ctx.builder, ptr, idx as u32, cstr("elptr"));
+
+        let v = if let Some(ref e) = params.get(idx) {
+            try!(gen_expression(ctx, e))
+        } else {
+            // Use default initializer
+            try!(gen_expression(ctx, &m.init))
+        };
+
+        if let Some(cv) = convert(ctx.builder, v, m.typ) {
+            LLVMBuildStore(ctx.builder, cv, element);
+        } else {
+            let msg = format!("Expression to initialize member {} of struct {}, has the wrong type ({}, expected {})",
+                    idx, st.name, type_name(LLVMTypeOf(v)), type_name(m.typ));
+            return err(span.start, ErrorType::TypeError(msg));
+        }
+    }
+
+    Ok(ptr)
 }
 
 pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<LLVMValueRef, CompileError>

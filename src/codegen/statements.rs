@@ -205,20 +205,40 @@ unsafe fn gen_struct(ctx: &mut Context, f: &Struct) -> Result<(), CompileError>
         return err(f.span.start, ErrorType::RedefinitionOfStruct(f.name.clone()));
     }
 
+    let mut members = Vec::with_capacity(f.variables.len());
     let mut element_types = Vec::with_capacity(f.variables.len());
-    for v in &f.variables {
-        if v.typ == Type::Unknown {
-            element_types.push(try!(ctx.infer_type(&v.init)));
+    for v in &f.variables
+    {
+        let typ = if v.typ == Type::Unknown {
+            try!(ctx.infer_type(&v.init))
         } else if let Some(typ) = ctx.resolve_type(&v.typ) {
-            element_types.push(typ);
+            typ
         } else {
+            ptr::null_mut()
+        };
+
+        if typ == ptr::null_mut() {
             return err(v.span.start, ErrorType::TypeError(
                 format!("Unable to determine type of member '{}' of struct '{}'", v.name, f.name)));
         }
+
+        members.push(StructMemberVar{
+            name: v.name.clone(),
+            typ: typ,
+            constant: v.is_const,
+            init: v.init.clone(),
+        });
+        element_types.push(typ);
     }
 
-    let struct_type = LLVMStructTypeInContext(ctx.context, element_types.as_mut_ptr(), f.variables.len() as u32, 0);
-    ctx.top_stack_frame().add_complex_type(&f.name, struct_type);
+    let struct_type = StructType{
+        name: f.name.clone(),
+        typ: LLVMStructTypeInContext(ctx.context, element_types.as_mut_ptr(), f.variables.len() as u32, 0),
+        members: members,
+        functions: Vec::new(),
+    };
+
+    ctx.top_stack_frame().add_complex_type(struct_type);
     Ok(())
 }
 
