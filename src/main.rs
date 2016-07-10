@@ -90,14 +90,18 @@ fn main()
     {
         Err(e) => println!("Error: {}", e),
         Ok(p) => {
-            //p.print(0);
+            let debug_compiler = args.flag_debug.unwrap_or(false);
             let opts = CodeGenOptions{
-                dump_ir: args.flag_debug.unwrap_or(false),
+                dump_ir: debug_compiler,
                 build_dir: "cobra-build".into(),
                 program_name: output_file,
                 runtime_library: find_runtime_library().expect("Unable to find the cobra runtime library"),
                 optimize: args.flag_optimize.unwrap_or(false),
             };
+
+            if debug_compiler {
+                p.print(0);
+            }
 
             if let Err(e) = codegen(&p, &opts) {
                 println!("Error: {}", e);

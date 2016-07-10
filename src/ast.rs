@@ -75,19 +75,199 @@ impl TreePrinter for Call
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
+pub struct UnaryOp
+{
+    pub operator: Operator,
+    pub expression: Box<Expression>,
+    pub span: Span,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct BinaryOp
+{
+    pub operator: Operator,
+    pub left: Box<Expression>,
+    pub right: Box<Expression>,
+    pub span: Span,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct Assignment
+{
+    pub operator: Operator,
+    pub target: String,
+    pub expression: Box<Expression>,
+    pub span: Span,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct NameRef
+{
+    pub name: String,
+    pub span: Span,
+}
+
+impl NameRef
+{
+    pub fn new(name: String, span: Span) -> NameRef
+    {
+        NameRef{
+            name: name,
+            span: span,
+        }
+    }
+}
+
+impl TreePrinter for NameRef
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        println!("{}name {} ({})", p, self.name, self.span);
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct ObjectConstruction
+{
+    pub object_type: String,
+    pub args: Vec<Expression>,
+    pub span: Span,
+}
+
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum Member
+{
+    Call(Call),
+    Nested(Box<MemberAccess>),
+    Var(NameRef),
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct MemberAccess
+{
+    pub name: String,
+    pub member: Member,
+    pub span: Span,
+}
+
+impl MemberAccess
+{
+    pub fn new(name: &str, member: Member, span: Span) -> MemberAccess
+    {
+        MemberAccess{
+            name: name.into(),
+            member: member,
+            span: span,
+        }
+    }
+}
+
+impl TreePrinter for MemberAccess
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        println!("{}member access {} ({})", p, self.name, self.span);
+        match self.member
+        {
+            Member::Call(ref c) => c.print(level + 1),
+            Member::Nested(ref n) => n.print(level + 1),
+            Member::Var(ref n) => n.print(level + 1),
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
 {
     IntLiteral(Span, u64),
     FloatLiteral(Span, String), // Keep as string until we generate code, so we can compare it
     StringLiteral(Span, String),
-    UnaryOp(Span, Operator, Box<Expression>),
-    PostFixUnaryOp(Span, Operator, Box<Expression>), // post increment and decrement
-    BinaryOp(Span, Operator, Box<Expression>, Box<Expression>),
+    UnaryOp(UnaryOp),
+    PostFixUnaryOp(UnaryOp), // post increment and decrement
+    BinaryOp(BinaryOp),
     Enclosed(Span, Box<Expression>), // Expression enclosed between parens
     Call(Call),
-    NameRef(Span, String),
-    Assignment(Span, Operator, String, Box<Expression>),
-    ObjectConstruction(Span, String, Vec<Expression>),
+    NameRef(NameRef),
+    Assignment(Assignment),
+    ObjectConstruction(ObjectConstruction),
+    MemberAccess(MemberAccess),
+}
+
+
+pub fn bin_op(op: Operator, left: Expression, right: Expression, span: Span) -> Expression
+{
+    Expression::BinaryOp(BinaryOp{
+        operator: op,
+        left: Box::new(left),
+        right: Box::new(right),
+        span: span,
+    })
+}
+
+pub fn bin_op2(op: Operator, left: Expression, right: Box<Expression>, span: Span) -> Expression
+{
+    Expression::BinaryOp(BinaryOp{
+        operator: op,
+        left: Box::new(left),
+        right: right,
+        span: span,
+    })
+}
+
+
+pub fn assignment(op: Operator, target: String, expression: Expression, span: Span) -> Expression
+{
+    Expression::Assignment(Assignment{
+        operator: op,
+        target: target,
+        expression: Box::new(expression),
+        span: span,
+    })
+}
+
+
+pub fn name_ref(name: &str, span: Span) -> Expression
+{
+    Expression::NameRef(NameRef{
+        name: name.into(),
+        span: span,
+    })
+}
+
+pub fn object_construction(object_type: String, args: Vec<Expression>, span: Span) -> Expression
+{
+    Expression::ObjectConstruction(ObjectConstruction{
+        object_type: object_type,
+        args: args,
+        span: span,
+    })
+}
+
+pub fn unary_op(operator: Operator, expression: Expression, span: Span) -> Expression
+{
+    Expression::UnaryOp(UnaryOp{
+        operator: operator,
+        expression: Box::new(expression),
+        span: span,
+    })
+}
+
+pub fn pf_unary_op(operator: Operator, expression: Expression, span: Span) -> Expression
+{
+    Expression::PostFixUnaryOp(UnaryOp{
+        operator: operator,
+        expression: Box::new(expression),
+        span: span,
+    })
+}
+
+#[cfg(test)]
+pub fn member_access(name: &str, member: Member, span: Span) -> Expression
+{
+    Expression::MemberAccess(MemberAccess::new(name, member, span))
 }
 
 impl Expression
@@ -96,7 +276,7 @@ impl Expression
     {
         match *self
         {
-            Expression::BinaryOp(_, op, _, _) => op.precedence(),
+            Expression::BinaryOp(ref op) => op.operator.precedence(),
             _ => 0,
         }
     }
@@ -108,14 +288,15 @@ impl Expression
             Expression::IntLiteral(span, _) => span,
             Expression::FloatLiteral(span, _) => span,
             Expression::StringLiteral(span, _) => span,
-            Expression::UnaryOp(span, _, _) => span,
-            Expression::PostFixUnaryOp(span, _, _) => span,
-            Expression::BinaryOp(span, _, _, _) => span,
+            Expression::UnaryOp(ref op) => op.span,
+            Expression::PostFixUnaryOp(ref op) => op.span,
+            Expression::BinaryOp(ref op) => op.span,
             Expression::Enclosed(span, _) => span,
             Expression::Call(ref c) => c.span,
-            Expression::NameRef(span, _) => span,
-            Expression::Assignment(span, _, _, _) => span,
-            Expression::ObjectConstruction(span, _, _) => span,
+            Expression::NameRef(ref nr) => nr.span,
+            Expression::Assignment(ref a) => a.span,
+            Expression::ObjectConstruction(ref oc) => oc.span,
+            Expression::MemberAccess(ref ma) => ma.span,
         }
     }
 }
@@ -136,37 +317,36 @@ impl TreePrinter for Expression
             Expression::StringLiteral(ref span, ref s) => {
                 println!("{}string \"{}\" ({})", p, s, span);
             },
-            Expression::UnaryOp(ref span, ref op, ref e) => {
-                println!("{}unary {} ({})", p, op, span);
-                e.print(level + 1)
+            Expression::UnaryOp(ref op) => {
+                println!("{}unary {} ({})", p, op.operator, op.span);
+                op.expression.print(level + 1)
             },
-            Expression::PostFixUnaryOp(ref span, ref op, ref e) => {
-                println!("{}postfix unary {} ({})", p, op, span);
-                e.print(level + 1)
+            Expression::PostFixUnaryOp(ref op) => {
+                println!("{}postfix unary {} ({})", p, op.operator, op.span);
+                op.expression.print(level + 1)
             },
-            Expression::BinaryOp(ref span, ref op, ref left, ref right) => {
-                println!("{}binary {} ({})", p, op, span);
-                left.print(level + 1);
-                right.print(level + 1)
+            Expression::BinaryOp(ref op) => {
+                println!("{}binary {} ({})", p, op.operator, op.span);
+                op.left.print(level + 1);
+                op.right.print(level + 1)
             },
             Expression::Enclosed(ref span, ref e) => {
                 println!("{}enclosed ({})", p, span);
                 e.print(level + 1);
             },
             Expression::Call(ref c) => c.print(level),
-            Expression::NameRef(ref span, ref s) => {
-                println!("{}name {} ({})", p, s, span);
+            Expression::NameRef(ref nr) => nr.print(level),
+            Expression::Assignment(ref a) => {
+                println!("{}{} {} ({})", p, a.target, a.operator, a.span);
+                a.expression.print(level + 1);
             },
-            Expression::Assignment(ref span, ref op, ref target, ref e) => {
-                println!("{}{} {} ({})", p, target, op, span);
-                e.print(level + 1);
-            },
-            Expression::ObjectConstruction(ref span, ref object_type, ref params) => {
-                println!("{}construct {} ({})", p, object_type, span);
-                for p in params {
+            Expression::ObjectConstruction(ref oc) => {
+                println!("{}construct {} ({})", p, oc.object_type, oc.span);
+                for p in &oc.args {
                     p.print(level + 1);
                 }
             },
+            Expression::MemberAccess(ref ma) => ma.print(level),
         }
     }
 }
@@ -216,6 +396,14 @@ pub enum Type
     Primitive(String),
     Complex(String),
     Pointer(Box<Type>),
+}
+
+impl Type
+{
+    pub fn ptr(t: Type) -> Type
+    {
+        Type::Pointer(Box::new(t))
+    }
 }
 
 impl fmt::Display for Type

@@ -42,7 +42,9 @@ fn parse_vars(tq: &mut TokenQueue, indent_level: usize, constants: bool, public:
     loop
     {
         if let Some(level) = tq.next_indent() {
-            if level <= indent_level {break}
+            if level <= indent_level {
+                break;
+            }
         }
 
         let tok = try!(tq.pop());
@@ -118,7 +120,7 @@ fn parse_func_signature(tq: &mut TokenQueue, self_type: Type) -> Result<Function
 
         if arg_name == "self" {
             if args.is_empty() {
-                args.push(Argument::new(arg_name, self_type.clone(), const_arg, Span::new(arg_pos, arg_pos)));
+                args.push(Argument::new(arg_name, Type::ptr(self_type.clone()), const_arg, Span::new(arg_pos, arg_pos)));
             } else {
                 return err(arg_pos, ErrorType::SelfNotAllowed);
             }
@@ -145,7 +147,7 @@ fn parse_func_signature(tq: &mut TokenQueue, self_type: Type) -> Result<Function
     };
 
     Ok(FunctionSignature{
-        name: name,
+        name: if let Type::Complex(ref type_name) = self_type {format!("{}::{}", type_name, name)} else {name},
         return_type: ret_type,
         args: args,
     })

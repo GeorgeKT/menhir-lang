@@ -40,7 +40,7 @@ fn th_statement(data: &str) -> Statement
 #[cfg(test)]
 fn type_complex(typ: &str) -> Type
 {
-    Type::Complex(typ.into())
+    Type::ptr(Type::Complex(typ.into()))
 }
 
 #[cfg(test)]
@@ -521,7 +521,7 @@ pub struct Blaat:
 
         assert!(s.functions == vec![
             Function::new(
-                sig("foo", Type::Void, vec![
+                sig("Blaat::foo", Type::Void, vec![
                     Argument::new("self".into(), type_complex("Blaat"), false, span(6, 18, 6, 18)),
                 ]),
                 true,
@@ -531,7 +531,7 @@ pub struct Blaat:
                 span(6, 9, 7, 20),
             ),
             Function::new(
-                sig("bar", Type::Void, vec![
+                sig("Blaat::bar", Type::Void, vec![
                     Argument::new("self".into(), type_complex("Blaat"), false, span(9, 14, 9, 14)),
                 ]),
                 false,
@@ -582,7 +582,7 @@ pub union Blaat:
 
         assert!(u.functions == vec![
             Function::new(
-                sig("foo",Type::Void, vec![
+                sig("Blaat::foo",Type::Void, vec![
                     Argument::new("self".into(), type_complex("Blaat"), false, span(6, 18, 6, 18)),
                 ]),
                 true,
@@ -641,7 +641,7 @@ match bla:
     if let Statement::Match(m) = stmt
     {
         m.print(0);
-        assert!(m.expr == Expression::NameRef(span(2, 7, 2, 9), "bla".into()));
+        assert!(m.expr == name_ref("bla", span(2, 7, 2, 9)));
         assert!(m.cases == vec![
             MatchCase::new(
                 "Foo".into(),

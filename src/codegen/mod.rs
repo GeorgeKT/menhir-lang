@@ -55,7 +55,6 @@ pub struct StructType
     pub name: String,
     pub typ: LLVMTypeRef,
     pub members: Vec<StructMemberVar>,
-    pub functions: Vec<FunctionInstance>,
 }
 
 pub struct StackFrame
@@ -252,14 +251,14 @@ impl<'a> Context<'a>
             Expression::IntLiteral(_, _) => Ok(LLVMInt64TypeInContext(self.context)),
             Expression::FloatLiteral(_, _) => Ok(LLVMDoubleTypeInContext(self.context)),
             Expression::StringLiteral(_, ref s) => Ok(LLVMArrayType(LLVMInt8TypeInContext(self.context), s.len() as u32)),
-            Expression::UnaryOp(_, _, ref e) => self.infer_type(e),
-            Expression::PostFixUnaryOp(_, _, ref e) => self.infer_type(e),
-            Expression::BinaryOp(ref span, op, ref l, ref r) => {
-                let lt = try!(self.infer_type(l));
-                let rt = try!(self.infer_type(r));
+            Expression::UnaryOp(ref op) => self.infer_type(&op.expression),
+            Expression::PostFixUnaryOp(ref op) => self.infer_type(&op.expression),
+            Expression::BinaryOp(ref op) => {
+                let lt = try!(self.infer_type(&op.left));
+                let rt = try!(self.infer_type(&op.right));
                 if lt != rt {
-                    let msg = format!("Type mismatch in '{}' operation  (left hand side {}, right hand side {})", op, type_name(lt), type_name(rt));
-                    err(span.start, ErrorType::TypeError(msg))
+                    let msg = format!("Type mismatch in '{}' operation  (left hand side {}, right hand side {})", op.operator, type_name(lt), type_name(rt));
+                    err(op.span.start, ErrorType::TypeError(msg))
                 } else {
                     Ok(rt)
                 }
@@ -272,21 +271,24 @@ impl<'a> Context<'a>
                     err(c.span.start, ErrorType::UnknownFunction(c.name.clone()))
                 }
             },
-            Expression::NameRef(ref span, ref nr) => {
-                if let Some(v) = self.get_variable(&nr) {
+            Expression::NameRef(ref nr) => {
+                if let Some(v) = self.get_variable(&nr.name) {
                     Ok(LLVMTypeOf(v.value))
                 } else {
-                    err(span.start, ErrorType::UnknownVariable(nr.clone()))
+                    err(nr.span.start, ErrorType::UnknownVariable(nr.name.clone()))
                 }
             },
-            Expression::Assignment(_, _, _, ref e) => self.infer_type(e),
-            Expression::ObjectConstruction(ref span, ref object_type, _) => {
-                let ct = Type::Complex(object_type.clone());
+            Expression::Assignment(ref a) => self.infer_type(&a.expression),
+            Expression::ObjectConstruction(ref oc) => {
+                let ct = Type::Complex(oc.object_type.clone());
                 if let Some(t) = self.resolve_type(&ct) {
                     Ok(t)
                 } else {
-                    err(span.start, ErrorType::UnknownType(format!("{}", object_type)))
+                    err(oc.span.start, ErrorType::UnknownType(format!("{}", oc.object_type)))
                 }
+            },
+            Expression::MemberAccess(ref ma) => {
+                err(ma.span.start, ErrorType::UnexpectedEOF)
             },
         }
     }

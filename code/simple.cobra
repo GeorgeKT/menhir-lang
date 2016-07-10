@@ -9,8 +9,8 @@ struct Point:
     var x: int = 0, y: int = 0
 
     pub func inc(self):
-        x += 1
-        y += 1
+        self.x += 1
+        self.y += 1
 
 
 var p = Point{4, 5}
