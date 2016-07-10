@@ -353,25 +353,46 @@ unsafe fn assign(ctx: &mut Context, op: Operator, var: LLVMValueRef, val: LLVMVa
     Ok(new_val) // Return the new value
 }
 
+unsafe fn gen_target(ctx: &mut Context, target: &Expression) -> Result<LLVMValueRef, CompileError>
+{
+    match *target
+    {
+        Expression::NameRef(ref nr) => {
+            if !ctx.has_variable(&nr.name) {
+                return err(nr.span.start, ErrorType::UnknownVariable(nr.name.clone()));
+            }
+
+            let (var, constant) = ctx.get_variable(&nr.name).map(|v| (v.value, v.constant)).unwrap();
+            if constant {
+                return err(nr.span.start, ErrorType::ConstantModification(nr.name.clone()));
+            }
+
+            Ok(var)
+        },
+        /*Expression::MemberAccess(ref ma) => {
+
+        },*/
+        _ => err(target.span().start, ErrorType::TypeError(format!("Invalid left hand side expression"))),
+        /*
+        TODO: call which returns a pointer/ref
+        Expression::Call(ref c) => {
+
+        },
+        */
+    }
+}
+
 unsafe fn gen_assignment(ctx: &mut Context, a: &Assignment) -> Result<LLVMValueRef, CompileError>
 {
-    if !ctx.has_variable(&a.target) {
-        return err(a.span.start, ErrorType::UnknownVariable(a.target.clone()));
-    }
-
+    let target_ptr = try!(gen_target(ctx, &a.target));
     let rhs_val = try!(gen_expression(ctx, &a.expression));
     let rhs_type = LLVMTypeOf(rhs_val);
-    let (var, constant) = ctx.get_variable(&a.target).map(|v| (v.value, v.constant)).unwrap();
-    if constant {
-        return err(a.span.start, ErrorType::ConstantModification(a.target.clone()));
-    }
-
-    let var_type = LLVMTypeOf(var);
-    if let Some(cv) = convert(ctx.builder, rhs_val, LLVMGetElementType(var_type)) {
-        assign(ctx, a.operator, var, cv, &a.span)
+    let target_type = LLVMTypeOf(target_ptr);
+    if let Some(cv) = convert(ctx.builder, rhs_val, LLVMGetElementType(target_type)) {
+        assign(ctx, a.operator, target_ptr, cv, &a.span)
     } else {
         let msg = format!("Attempting to assign an expression of type '{}' to a variable of type '{}'",
-            type_name(rhs_type), type_name(var_type));
+            type_name(rhs_type), type_name(target_type));
         err(a.span.start, ErrorType::TypeError(msg))
     }
 }

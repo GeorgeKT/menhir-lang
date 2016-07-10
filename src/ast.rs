@@ -95,7 +95,7 @@ pub struct BinaryOp
 pub struct Assignment
 {
     pub operator: Operator,
-    pub target: String,
+    pub target: Box<Expression>,
     pub expression: Box<Expression>,
     pub span: Span,
 }
@@ -218,11 +218,11 @@ pub fn bin_op2(op: Operator, left: Expression, right: Box<Expression>, span: Spa
 }
 
 
-pub fn assignment(op: Operator, target: String, expression: Expression, span: Span) -> Expression
+pub fn assignment(op: Operator, target: Expression, expression: Expression, span: Span) -> Expression
 {
     Expression::Assignment(Assignment{
         operator: op,
-        target: target,
+        target: Box::new(target),
         expression: Box::new(expression),
         span: span,
     })
@@ -337,7 +337,8 @@ impl TreePrinter for Expression
             Expression::Call(ref c) => c.print(level),
             Expression::NameRef(ref nr) => nr.print(level),
             Expression::Assignment(ref a) => {
-                println!("{}{} {} ({})", p, a.target, a.operator, a.span);
+                println!("{}assign {} ({})", p, a.operator, a.span);
+                a.target.print(level + 1);
                 a.expression.print(level + 1);
             },
             Expression::ObjectConstruction(ref oc) => {

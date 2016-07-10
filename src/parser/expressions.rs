@@ -90,7 +90,7 @@ fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: String, p
     Ok(Call::new(name, args, Span::new(pos, tq.pos())))
 }
 
-fn parse_assignment(tq: &mut TokenQueue, indent_level: usize, lhs: String, op: Operator, pos: Pos) -> Result<Expression, CompileError>
+fn parse_assignment(tq: &mut TokenQueue, indent_level: usize, lhs: Expression, op: Operator, pos: Pos) -> Result<Expression, CompileError>
 {
     try!(tq.pop()); // pop operator
     let e = try!(parse_expression(tq, indent_level));
@@ -180,10 +180,7 @@ fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token
                     // Turn x++ in x += 1, and x-- in x -= 1
                     try!(tq.pop());
                     let new_op = if op == Operator::Increment {Operator::AddAssign} else {Operator::SubAssign};
-                    Ok(assignment(new_op, id, Expression::IntLiteral(tok.span, 1), tok.span))
-                },
-                Some(TokenKind::Operator(op)) if op.is_assignment() => {
-                    parse_assignment(tq, indent_level, id, op, tok.span.start)
+                    Ok(assignment(new_op, name_ref(&id, tok.span), Expression::IntLiteral(tok.span, 1), tok.span))
                 },
                 _ => Ok(name_ref(&id, tok.span)),
             }
@@ -221,6 +218,10 @@ pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize) -> Result<Expr
         {
             TokenKind::Operator(op) if op == Operator::Increment || op == Operator::Decrement => {
                 lhs = Some(pf_unary_op(op, e, Span::new(tok_pos, next.span.end)));
+            },
+            TokenKind::Operator(op) if op.is_assignment() => {
+                tq.push_front(next);
+                lhs = Some(try!(parse_assignment(tq, indent_level, e, op, tok_pos)));
             },
             TokenKind::Operator(op) if op.is_binary_operator() => {
                 tq.push_front(next);
@@ -405,7 +406,7 @@ fn test_precedence_8()
         name_ref("b", span(1, 1, 1, 1)),
         assignment(
             Operator::AddAssign,
-            "c".into(),
+            name_ref("c", span(1, 5, 1, 5)),
             number(1, span(1, 5, 1, 5)),
             span(1, 5, 1, 5),
         ),
@@ -435,23 +436,6 @@ fn test_precedence_9()
 #[test]
 fn test_precedence_10()
 {
-    let e = th_expr("b + c++");
-    assert!(e == bin_op(
-        Operator::Add,
-        name_ref("b", span(1, 1, 1, 1)),
-        assignment(
-            Operator::AddAssign,
-            "c".into(),
-            number(1, span(1, 5, 1, 5)),
-            span(1, 5, 1, 5),
-        ),
-        span(1, 1, 1, 5),
-    ));
-}
-
-#[test]
-fn test_precedence_11()
-{
     let e = th_expr("b + c(6)");
     assert!(e == bin_op(
         Operator::Add,
@@ -466,7 +450,7 @@ fn test_precedence_11()
 }
 
 #[test]
-fn test_precedence_12()
+fn test_precedence_11()
 {
     let e = th_expr("c(6) + b");
     assert!(e == bin_op(
@@ -487,7 +471,7 @@ fn test_assign()
     let e = th_expr("a = 6 + 9");
     assert!(e == assignment(
         Operator::Assign,
-        "a".into(),
+        name_ref("a", span(1, 1, 1, 1)),
         bin_op(Operator::Add,
             number(6, span(1, 5, 1, 5)),
             number(9, span(1, 9, 1, 9)),
@@ -541,4 +525,15 @@ fn test_nested_member_accesss()
     let b = MemberAccess::new("b", Member::Nested(Box::new(c)), span(1, 3, 1, 7));
     let a = member_access("a", Member::Nested(Box::new(b)), span(1, 1, 1, 7));
     assert!(e == a);
+}
+
+#[test]
+fn test_member_assignment()
+{
+    let e = th_expr("b.d = 6");
+    assert!(e == assignment(
+        Operator::Assign,
+        member_access("b", Member::Var(NameRef::new("d".into(), span(1, 3, 1, 3))), span(1, 1, 1, 3)),
+        number(6, span(1, 7, 1, 7)),
+        span(1, 1, 1, 7)));
 }
