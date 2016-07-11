@@ -1,0 +1,5 @@
+pub const STDIN = 0, STDOUT = 1, STDERR = 2
+
+extern func exit(ec: int)
+extern func write(fd: int, const buf: *char, count: uint) -> int
+extern func read(fd: int, buf: *char, count: uint) -> int
