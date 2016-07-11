@@ -1,9 +1,4 @@
-#!/usr/bin/cobra
-
-const STDOUT = 1
-
-extern func exit(ec: int)
-extern func write(fd: int, const buf: *char, count: uint) -> int
+import cobra::syscalls
 
 struct Point:
     var x = 0, y = 0
@@ -16,11 +11,11 @@ struct Point:
         return self.x + self.y
 
     pub func prod(self) -> int:
-        return self.x * self.y + self.sum() 
+        return self.x * self.y + self.sum()
 
 
-
-write(STDOUT, "Running tests\n", 14)
+cobra::syscalls::write(STDOUT, "Running tests\n", 14)
 var p = Point{4, 5}
 p.inc()
+
 exit(p.prod())

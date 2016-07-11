@@ -680,3 +680,25 @@ match bla:
         assert!(false);
     }
 }
+
+#[test]
+fn test_import()
+{
+    let stmt = th_statement(r#"
+import cobra::syscalls, foo
+    ""#);
+
+    if let Statement::Import(m) = stmt
+    {
+        m.print(0);
+        assert!(m.modules == vec![
+            ModuleName::new(vec!["cobra".into(), "syscalls".into()], span(2, 8, 2, 22)),
+            ModuleName::new(vec!["foo".into()], span(2, 25, 2, 27)),
+        ]);
+        assert!(m.span == span(2, 1, 2, 27));
+    }
+    else
+    {
+        assert!(false);
+    }
+}

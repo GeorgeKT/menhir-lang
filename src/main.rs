@@ -93,7 +93,7 @@ fn main()
             let debug_compiler = args.flag_debug.unwrap_or(false);
             let opts = CodeGenOptions{
                 dump_ir: debug_compiler,
-                build_dir: "cobra-build".into(),
+                build_dir: "build".into(),
                 program_name: output_file,
                 runtime_library: find_runtime_library().expect("Unable to find the cobra runtime library"),
                 optimize: args.flag_optimize.unwrap_or(false),

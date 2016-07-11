@@ -17,18 +17,39 @@ pub trait TreePrinter
 }
 
 #[derive(Debug, Eq, PartialEq)]
+pub struct ModuleName
+{
+    pub parts: Vec<String>,
+    pub span: Span,
+}
+
+impl ModuleName
+{
+    pub fn new(parts: Vec<String>, span: Span) -> ModuleName {
+        ModuleName{
+            parts: parts,
+            span: span,
+        }
+    }
+    pub fn to_string(&self) -> String
+    {
+        self.parts.join("::")
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
 pub struct Import
 {
-    path: String,
-    span: Span,
+    pub modules: Vec<ModuleName>,
+    pub span: Span,
 }
 
 impl Import
 {
-    pub fn new(path: String, span: Span) -> Import
+    pub fn new(modules: Vec<ModuleName>, span: Span) -> Import
     {
         Import{
-            path: path,
+            modules: modules,
             span: span,
         }
     }
@@ -38,7 +59,11 @@ impl TreePrinter for Import
 {
     fn print(&self, level: usize)
     {
-        println!("{}import {}", prefix(level), self.path);
+        let p = prefix(level);
+        println!("{}import ({})", p, self.span);
+        for m in &self.modules {
+            println!("{} {} ({})", p, m.to_string(), m.span);
+        }
     }
 }
 
@@ -915,6 +940,6 @@ impl TreePrinter for Program
 {
     fn print(&self, level: usize)
     {
-        self.block.print(level + 1)
+        self.block.print(level)
     }
 }

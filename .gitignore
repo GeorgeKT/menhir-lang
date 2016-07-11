@@ -2,4 +2,4 @@
 *.a
 target
 Cargo.lock
-cobra-build
+build

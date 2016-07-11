@@ -109,7 +109,7 @@ impl TokenQueue
             Err(CompileError::new(tok.span.start, ErrorType::ExpectedIndent))
         }
     }
-
+/*
     pub fn expect_string(&mut self) -> Result<(String, Pos), CompileError>
     {
         let tok = try!(self.pop());
@@ -122,7 +122,7 @@ impl TokenQueue
             Err(CompileError::new(tok.span.start, ErrorType::ExpectedStringLiteral))
         }
     }
-
+*/
     pub fn expect_identifier(&mut self) -> Result<(String, Pos), CompileError>
     {
         let tok = try!(self.pop());

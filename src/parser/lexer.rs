@@ -28,7 +28,7 @@ pub struct Lexer
 
 fn is_operator_start(c: char) -> bool
 {
-    for &op in ['+', '-', '*', '/', '%', '>', '<', '=', '!', '.', '|', '&'].iter()
+    for &op in ['+', '-', '*', '/', '%', '>', '<', '=', '!', '.', '|', '&', ':'].iter()
     {
         if op == c {return true;}
     }
@@ -87,7 +87,6 @@ impl Lexer
             '\n' => {self.state = LexState::StartOfLine; Ok(())},
             ' ' | '\t' => Ok(()),
             '#' => {self.state = LexState::Comment; Ok(())},
-            ':' => {self.add(TokenKind::Colon, Span::single(pos)); Ok(())},
             ',' => {self.add(TokenKind::Comma, Span::single(pos)); Ok(())},
             '(' => {self.add(TokenKind::OpenParen, Span::single(pos)); Ok(())},
             ')' => {self.add(TokenKind::CloseParen, Span::single(pos)); Ok(())},
@@ -174,34 +173,36 @@ impl Lexer
         }
     }
 
-    fn data_to_operator(&self) -> Result<Operator, CompileError>
+    fn data_to_token_kind(&self) -> Result<TokenKind, CompileError>
     {
         match &self.data[..]
         {
-            "+" => Ok(Operator::Add),
-            "-" => Ok(Operator::Sub),
-            "*" => Ok(Operator::Mul),
-            "/" => Ok(Operator::Div),
-            "%" => Ok(Operator::Mod),
-            ">" => Ok(Operator::GreaterThan),
-            ">=" => Ok(Operator::GreaterThanEquals),
-            "<" => Ok(Operator::LessThan),
-            "<=" => Ok(Operator::LessThanEquals),
-            "=" => Ok(Operator::Assign),
-            "==" => Ok(Operator::Equals),
-            "!" => Ok(Operator::Not),
-            "!=" => Ok(Operator::NotEquals),
-            "&&" => Ok(Operator::And),
-            "||" => Ok(Operator::Or),
-            "->" => Ok(Operator::Arrow),
-            ".." => Ok(Operator::Range),
-            "--" => Ok(Operator::Decrement),
-            "++" => Ok(Operator::Increment),
-            "+=" => Ok(Operator::AddAssign),
-            "-=" => Ok(Operator::SubAssign),
-            "*=" => Ok(Operator::MulAssign),
-            "/=" => Ok(Operator::DivAssign),
-            "." => Ok(Operator::Dot),
+            "+" => Ok(TokenKind::Operator(Operator::Add)),
+            "-" => Ok(TokenKind::Operator(Operator::Sub)),
+            "*" => Ok(TokenKind::Operator(Operator::Mul)),
+            "/" => Ok(TokenKind::Operator(Operator::Div)),
+            "%" => Ok(TokenKind::Operator(Operator::Mod)),
+            ">" => Ok(TokenKind::Operator(Operator::GreaterThan)),
+            ">=" => Ok(TokenKind::Operator(Operator::GreaterThanEquals)),
+            "<" => Ok(TokenKind::Operator(Operator::LessThan)),
+            "<=" => Ok(TokenKind::Operator(Operator::LessThanEquals)),
+            "=" => Ok(TokenKind::Operator(Operator::Assign)),
+            "==" => Ok(TokenKind::Operator(Operator::Equals)),
+            "!" => Ok(TokenKind::Operator(Operator::Not)),
+            "!=" => Ok(TokenKind::Operator(Operator::NotEquals)),
+            "&&" => Ok(TokenKind::Operator(Operator::And)),
+            "||" => Ok(TokenKind::Operator(Operator::Or)),
+            "->" => Ok(TokenKind::Operator(Operator::Arrow)),
+            ".." => Ok(TokenKind::Operator(Operator::Range)),
+            "--" => Ok(TokenKind::Operator(Operator::Decrement)),
+            "++" => Ok(TokenKind::Operator(Operator::Increment)),
+            "+=" => Ok(TokenKind::Operator(Operator::AddAssign)),
+            "-=" => Ok(TokenKind::Operator(Operator::SubAssign)),
+            "*=" => Ok(TokenKind::Operator(Operator::MulAssign)),
+            "/=" => Ok(TokenKind::Operator(Operator::DivAssign)),
+            "." => Ok(TokenKind::Operator(Operator::Dot)),
+            ":" => Ok(TokenKind::Colon),
+            "::" => Ok(TokenKind::DoubleColon),
             _ => Err(CompileError::new(self.pos, ErrorType::InvalidOperator(self.data.clone()))),
         }
     }
@@ -210,10 +211,10 @@ impl Lexer
     {
         if c.is_whitespace() || c.is_alphanumeric()
         {
-            let op = try!(self.data_to_operator());
+            let kind = try!(self.data_to_token_kind());
             self.state = LexState::Idle;
             let span = self.current_span();
-            self.add(TokenKind::Operator(op), span);
+            self.add(kind, span);
             self.idle(c)
         }
         else

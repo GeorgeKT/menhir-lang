@@ -125,6 +125,7 @@ pub enum TokenKind
     Extern,
     Identifier(String),
     Colon,
+    DoubleColon,
     Comma,
     OpenParen,
     CloseParen,

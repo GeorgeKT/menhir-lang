@@ -2,11 +2,40 @@ use ast::*;
 use compileerror::*;
 use parser::*;
 
+fn parse_module_name(tq: &mut TokenQueue) -> Result<ModuleName, CompileError>
+{
+    let mut start_pos = Pos::zero();
+    let mut parts = Vec::new();
+    while tq.is_next_identifier()
+    {
+        let (m, pos) = try!(tq.expect_identifier());
+        if start_pos == Pos::zero() {
+            start_pos = pos;
+        }
+
+        parts.push(m);
+        if tq.is_next(TokenKind::DoubleColon) {
+            try!(tq.pop());
+        } else {
+            break;
+        }
+    }
+
+    Ok(ModuleName::new(parts, Span::new(start_pos, tq.pos())))
+}
 
 fn parse_import(tq: &mut TokenQueue, pos: Pos) -> Result<Statement, CompileError>
 {
-    let (file, end_pos) = try!(tq.expect_string());
-    Ok(Statement::Import(Import::new(file, Span::new(pos, end_pos))))
+    let mut modules = Vec::new();
+    modules.push(try!(parse_module_name(tq)));
+    while tq.is_next(TokenKind::Comma) {
+        try!(tq.pop());
+        if !tq.is_next_identifier() {break}
+
+        modules.push(try!(parse_module_name(tq)));
+    }
+
+    Ok(Statement::Import(Import::new(modules, Span::new(pos, tq.pos()))))
 }
 
 fn is_primitive_type(name: &str) -> bool
@@ -395,21 +424,29 @@ pub fn parse_statement(tq: &mut TokenQueue, indent_level: usize) -> Result<State
     let tok = try!(tq.pop());
     match tok.kind
     {
+        TokenKind::While => parse_while(tq, indent_level, tok.span.start),
+        TokenKind::If => parse_if(tq, indent_level, tok.span.start).map(|i| Statement::If(i)),
+        TokenKind::Return => parse_return(tq, indent_level, tok.span.start),
+        TokenKind::Match => parse_match(tq, indent_level, tok.span.start),
+        TokenKind::Identifier(id) => {
+            tq.push_front(Token::new(TokenKind::Identifier(id), tok.span));
+            parse_expression(tq, indent_level).map(|e| Statement::Expression(e))
+        },
+        _ => parse_module_statement(tq, indent_level, tok),
+    }
+}
+
+pub fn parse_module_statement(tq: &mut TokenQueue, indent_level: usize, tok: Token) -> Result<Statement, CompileError>
+{
+    match tok.kind
+    {
         TokenKind::Import => parse_import(tq, tok.span.start),
         TokenKind::Var => parse_vars(tq, indent_level, false, false).map(|v| Statement::Variable(v)),
         TokenKind::Const => parse_vars(tq, indent_level, true, false).map(|v| Statement::Variable(v)),
         TokenKind::Func => parse_func(tq, tok.span.start, indent_level, false, Type::Void).map(|f| Statement::Function(f)),
         TokenKind::Struct => parse_struct(tq, indent_level, false, tok.span.start).map(|s| Statement::Struct(s)),
         TokenKind::Union => parse_union(tq, indent_level, false).map(|u| Statement::Union(u)),
-        TokenKind::While => parse_while(tq, indent_level, tok.span.start),
-        TokenKind::If => parse_if(tq, indent_level, tok.span.start).map(|i| Statement::If(i)),
-        TokenKind::Return => parse_return(tq, indent_level, tok.span.start),
-        TokenKind::Match => parse_match(tq, indent_level, tok.span.start),
         TokenKind::Extern => parse_external_func(tq, tok.span.start).map(|f| Statement::ExternalFunction(f)),
-        TokenKind::Identifier(id) => {
-            tq.push_front(Token::new(TokenKind::Identifier(id), tok.span));
-            parse_expression(tq, indent_level).map(|e| Statement::Expression(e))
-        },
         TokenKind::Pub => {
             let next = try!(tq.pop());
             match next.kind
