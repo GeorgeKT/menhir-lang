@@ -9,6 +9,18 @@ fn parse_import(tq: &mut TokenQueue, pos: Pos) -> Result<Statement, CompileError
     Ok(Statement::Import(Import::new(file, Span::new(pos, end_pos))))
 }
 
+fn is_primitive_type(name: &str) -> bool
+{
+    match name
+    {
+        "uint8" | "int8" | "char" | "byte" |
+        "uint16" | "int16" | "uint32" | "int32" |
+        "int" | "uint" | "uint64"| "bool" |
+        "float" | "double" => true,
+        _ => false,
+    }
+}
+
 fn parse_type(tq: &mut TokenQueue) -> Result<Type, CompileError>
 {
     if tq.is_next(TokenKind::Operator(Operator::Mul)) {
@@ -17,7 +29,11 @@ fn parse_type(tq: &mut TokenQueue) -> Result<Type, CompileError>
         Ok(Type::Pointer(Box::new(st)))
     } else {
         let (name, _pos) = try!(tq.expect_identifier());
-        Ok(Type::Primitive(name))
+        if is_primitive_type(&name) {
+            Ok(Type::Primitive(name))
+        } else {
+            Ok(Type::Complex(name))
+        }
     }
 
 }

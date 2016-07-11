@@ -1,4 +1,5 @@
 use std::ptr;
+use std::rc::Rc;
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use llvm::core::*;
@@ -33,21 +34,27 @@ unsafe fn gen_variable(ctx: &mut Context, v: &Variable) -> Result<(), CompileErr
     let initial_value = try!(gen_expression(ctx, &v.init));
     let initial_value_type = LLVMTypeOf(initial_value);
 
-    if v.typ != Type::Unknown {
-        if let Some(llvm_type_ref) = ctx.resolve_type(&v.typ) {
-            if llvm_type_ref != initial_value_type {
-                return err(v.span.start, ErrorType::TypeError(format!("Mismatched types in initialization")))
-            }
-        } else {
-            return err(v.span.start, ErrorType::TypeError(format!("Unknown type '{}'", v.typ)));
+    let v_typ = if v.typ == Type::Unknown {
+        try!(ctx.infer_type(&v.init))
+    } else {
+        v.typ.clone()
+    };
+
+    if let Some(llvm_type_ref) = ctx.resolve_type(&v_typ) {
+        if llvm_type_ref != initial_value_type {
+            return err(v.span.start, ErrorType::TypeError(format!("Mismatched types in initialization ({} vs {})",
+                type_name(llvm_type_ref), type_name(initial_value_type))));
         }
+    } else {
+        return err(v.span.start, ErrorType::TypeError(format!("Unknown type '{}'", v.typ)));
     }
+
 
     let var = LLVMBuildAlloca(ctx.builder, initial_value_type, cstr("var"));
     LLVMBuildStore(ctx.builder, initial_value, var);
 
     let mut sf = ctx.top_stack_frame();
-    sf.add_variable(&v.name, var, v.is_const);
+    sf.add_variable(&v.name, var, v.is_const, v_typ);
     Ok(())
 }
 
@@ -73,6 +80,7 @@ unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, span: &Sp
         args: arg_types,
         return_type: ret_type,
         function: function,
+        sig: sig.clone(),
     })
 }
 
@@ -93,7 +101,7 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<FunctionInstan
         let var = LLVMGetParam(fi.function, i as libc::c_uint);
         let alloc = LLVMBuildAlloca(ctx.builder, fi.args[i], cstr("argtmp"));
         LLVMBuildStore(ctx.builder, var, alloc);
-        ctx.top_stack_frame().add_variable(&arg.name, alloc, arg.constant);
+        ctx.top_stack_frame().add_variable(&arg.name, alloc, arg.constant, arg.typ.clone());
     }
 
     for s in &f.block.statements {
@@ -210,24 +218,23 @@ unsafe fn gen_struct(ctx: &mut Context, s: &Struct) -> Result<(), CompileError>
     {
         let typ = if v.typ == Type::Unknown {
             try!(ctx.infer_type(&v.init))
-        } else if let Some(typ) = ctx.resolve_type(&v.typ) {
-            typ
         } else {
-            ptr::null_mut()
+            v.typ.clone()
         };
 
-        if typ == ptr::null_mut() {
+         if let Some(llvm_typ) = ctx.resolve_type(&typ) {
+            members.push(Rc::new(StructMemberVar{
+                name: v.name.clone(),
+                typ: typ,
+                llvm_typ: llvm_typ,
+                constant: v.is_const,
+                init: v.init.clone(),
+            }));
+            element_types.push(llvm_typ);
+         } else {
             return err(v.span.start, ErrorType::TypeError(
                 format!("Unable to determine type of member '{}' of struct '{}'", v.name, s.name)));
         }
-
-        members.push(StructMemberVar{
-            name: v.name.clone(),
-            typ: typ,
-            constant: v.is_const,
-            init: v.init.clone(),
-        });
-        element_types.push(typ);
     }
 
     let struct_type = StructType{

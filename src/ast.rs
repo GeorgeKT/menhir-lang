@@ -423,7 +423,7 @@ impl fmt::Display for Type
 }
 
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Argument
 {
     pub name: String,
@@ -454,7 +454,7 @@ impl TreePrinter for Argument
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct FunctionSignature
 {
     pub name: String,

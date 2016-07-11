@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use llvm::*;
 use llvm::core::*;
 use llvm::prelude::*;
@@ -261,18 +263,24 @@ unsafe fn convert(b: LLVMBuilderRef, from: LLVMValueRef, to: LLVMTypeRef) ->  Op
     None
 }
 
-unsafe fn gen_call(ctx: &mut Context, c: &Call) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_call(ctx: &mut Context, c: &Call, prefix: &str, self_ptr: Option<LLVMValueRef>) -> Result<LLVMValueRef, CompileError>
 {
     let mut arg_vals = Vec::with_capacity(c.args.len());
+
+    if let Some(ptr) = self_ptr {
+        arg_vals.push(LLVMBuildLoad(ctx.builder, ptr, cstr("this")));
+    }
+
     for arg in &c.args {
         arg_vals.push(try!(gen_expression(ctx, arg)));
     }
 
+    let full_name = format!("{}{}", prefix, c.name);
     let func: &FunctionInstance = try!(ctx
-        .get_function(&c.name)
-        .ok_or(CompileError::new(c.span.start, ErrorType::UnknownFunction(c.name.clone()))));
+        .get_function(&full_name)
+        .ok_or(CompileError::new(c.span.start, ErrorType::UnknownFunction(full_name))));
 
-    if c.args.len() != func.args.len() {
+    if arg_vals.len() != func.args.len() {
         return err(c.span.start, ErrorType::ArgumentCountMismatch(
             format!("Function '{}', expects {} arguments, {} are provided",
                 c.name, func.args.len(), c.args.len())));
@@ -296,10 +304,19 @@ unsafe fn gen_call(ctx: &mut Context, c: &Call) -> Result<LLVMValueRef, CompileE
     Ok(LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr("")))
 }
 
-unsafe fn gen_name_ref(ctx: &mut Context, nr: &NameRef) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_name_ref(ctx: &mut Context, nr: &NameRef, store: bool) -> Result<LLVMValueRef, CompileError>
 {
     if let Some(ref v) = ctx.get_variable(&nr.name) {
-        Ok(LLVMBuildLoad(ctx.builder, v.value, cstr("load")))
+        if !store {
+            return Ok(LLVMBuildLoad(ctx.builder, v.value, cstr("load")));
+        }
+
+        if v.constant {
+            return err(nr.span.start, ErrorType::ConstantModification(nr.name.clone()));
+        }
+
+        Ok(v.value)
+
     } else {
         err(nr.span.start, ErrorType::UnknownVariable(nr.name.clone()))
     }
@@ -353,25 +370,98 @@ unsafe fn assign(ctx: &mut Context, op: Operator, var: LLVMValueRef, val: LLVMVa
     Ok(new_val) // Return the new value
 }
 
+unsafe fn gen_member_var(ctx: &mut Context, this: LLVMValueRef, st: &Rc<StructType>, nr: &NameRef, store: bool) -> Result<LLVMValueRef, CompileError>
+{
+    if let Some((idx, mvar)) = st.get_member(&nr.name) {
+        if mvar.constant && store {
+            return err(nr.span.start, ErrorType::ConstantModification(nr.name.clone()));
+        }
+
+        // Dereference this, to get the actual struct ptr
+        let this_ptr = LLVMBuildLoad(ctx.builder, this, cstr("this"));
+        let element = LLVMBuildStructGEP(ctx.builder, this_ptr, idx as u32, cstr("elptr"));
+        if store {
+            Ok(element)
+        } else {
+            Ok(LLVMBuildLoad(ctx.builder, element, cstr("elload")))
+        }
+    } else {
+        err(nr.span.start, ErrorType::UnknownStructMember(st.name.clone(), nr.name.clone()))
+    }
+}
+
+unsafe fn gen_nested_member_access(ctx: &mut Context, this: LLVMValueRef, st: &Rc<StructType>, next: &MemberAccess, store: bool) -> Result<LLVMValueRef, CompileError>
+{
+    if let Some((idx, mvar)) = st.get_member(&next.name) {
+        match next.member
+        {
+            Member::Call(ref c) => gen_call(ctx, c, &format!("{}::", st.name), Some(this)),
+            Member::Var(ref nr) => gen_member_var(ctx, this, st, nr, store),
+            Member::Nested(ref next_next) => {
+                if let Some(next_st) = get_struct_type(ctx, &mvar.typ)
+                {
+                    let new_this = LLVMBuildStructGEP(ctx.builder, this, idx as u32, cstr("elptr"));
+                    gen_nested_member_access(ctx, new_this, &next_st, next_next, store)
+                }
+                else
+                {
+                    err(next.span.start, ErrorType::TypeError(format!("Unknown type {}", mvar.typ)))
+                }
+            }
+        }
+
+    } else {
+        err(next.span.start, ErrorType::UnknownStructMember(st.name.clone(), next.name.clone()))
+    }
+}
+
+fn get_struct_type(ctx: &Context, typ: &Type) -> Option<Rc<StructType>>
+{
+    match *typ
+    {
+        Type::Complex(ref ctype) => ctx.get_complex_type(&ctype),
+        Type::Pointer(ref inner) => get_struct_type(ctx, &inner),
+        _ => None,
+    }
+}
+
+unsafe fn gen_member_access(ctx: &mut Context, a: &MemberAccess, store: bool) -> Result<LLVMValueRef, CompileError>
+{
+    if let Some(ref v) = ctx.get_variable(&a.name) {
+        if v.constant {
+            return err(a.span.start, ErrorType::ConstantModification(a.name.clone()));
+        }
+
+        if let Some(st) = get_struct_type(ctx, &v.typ)
+        {
+            match a.member
+            {
+                Member::Call(ref c) => gen_call(ctx, c, &format!("{}::", st.name), Some(v.value)),
+                Member::Var(ref nr) => gen_member_var(ctx, v.value, &st, nr, store),
+                Member::Nested(ref next) => gen_nested_member_access(ctx, v.value, &st, next, store),
+            }
+        }
+        else
+        {
+            err(a.span.start, ErrorType::TypeError(format!("Unknown type {}", v.typ)))
+        }
+    } else {
+        err(a.span.start, ErrorType::UnknownVariable(a.name.clone()))
+    }
+}
+
+
 unsafe fn gen_target(ctx: &mut Context, target: &Expression) -> Result<LLVMValueRef, CompileError>
 {
     match *target
     {
         Expression::NameRef(ref nr) => {
-            if !ctx.has_variable(&nr.name) {
-                return err(nr.span.start, ErrorType::UnknownVariable(nr.name.clone()));
-            }
-
-            let (var, constant) = ctx.get_variable(&nr.name).map(|v| (v.value, v.constant)).unwrap();
-            if constant {
-                return err(nr.span.start, ErrorType::ConstantModification(nr.name.clone()));
-            }
-
-            Ok(var)
+            gen_name_ref(ctx, nr, true)
         },
-        /*Expression::MemberAccess(ref ma) => {
 
-        },*/
+        Expression::MemberAccess(ref ma) => {
+            gen_member_access(ctx, ma, true)
+        },
         _ => err(target.span().start, ErrorType::TypeError(format!("Invalid left hand side expression"))),
         /*
         TODO: call which returns a pointer/ref
@@ -422,11 +512,12 @@ unsafe fn gen_object_construction(ctx: &mut Context, oc: &ObjectConstruction) ->
             try!(gen_expression(ctx, &m.init))
         };
 
-        if let Some(cv) = convert(ctx.builder, v, m.typ) {
+
+        if let Some(cv) = convert(ctx.builder, v, m.llvm_typ) {
             LLVMBuildStore(ctx.builder, cv, element);
         } else {
             let msg = format!("Expression to initialize member {} of struct {}, has the wrong type ({}, expected {})",
-                    idx, st.name, type_name(LLVMTypeOf(v)), type_name(m.typ));
+                    idx, st.name, type_name(LLVMTypeOf(v)), type_name(m.llvm_typ));
             return err(oc.span.start, ErrorType::TypeError(msg));
         }
     }
@@ -434,11 +525,6 @@ unsafe fn gen_object_construction(ctx: &mut Context, oc: &ObjectConstruction) ->
     Ok(ptr)
 }
 
-#[allow(unused_variables)]
-unsafe fn gen_member_access(ctx: &mut Context, a: &MemberAccess) -> Result<LLVMValueRef, CompileError>
-{
-    return err(a.span.start, ErrorType::UnexpectedEOF);
-}
 
 pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<LLVMValueRef, CompileError>
 {
@@ -451,10 +537,10 @@ pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<LLVMVa
         Expression::PostFixUnaryOp(ref op) => gen_pf_unary(ctx, op),
         Expression::BinaryOp(ref op) => gen_binary(ctx, op),
         Expression::Enclosed(ref span, ref e) => gen_enclosed(ctx, e, span),
-        Expression::Call(ref c) => gen_call(ctx, c),
-        Expression::NameRef(ref nr) => gen_name_ref(ctx, nr),
+        Expression::Call(ref c) => gen_call(ctx, c, "", None),
+        Expression::NameRef(ref nr) => gen_name_ref(ctx, nr, false),
         Expression::Assignment(ref a) => gen_assignment(ctx, a),
         Expression::ObjectConstruction(ref oc) => gen_object_construction(ctx, oc),
-        Expression::MemberAccess(ref ma) => gen_member_access(ctx, ma),
+        Expression::MemberAccess(ref ma) => gen_member_access(ctx, ma, false),
     }
 }

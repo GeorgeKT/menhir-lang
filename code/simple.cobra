@@ -6,21 +6,20 @@ extern func exit(ec: int)
 extern func write(fd: int, const buf: *char, count: uint) -> int
 
 struct Point:
-    var x: int = 0, y: int = 0
+    var x = 0, y = 0
 
     pub func inc(self):
         self.x += 1
         self.y += 1
 
+    pub func sum(self) -> int:
+        return self.x + self.y
 
+    pub func prod(self) -> int:
+        return self.x * self.y
+
+
+write(STDOUT, "Running tests\n", 14)
 var p = Point{4, 5}
-
-var x = 0
-while x < 5:
-    if x == 3:
-        write(STDOUT, "Hello World\n", 12)
-    else if x == 4:
-        write(STDOUT, "Goodbye World\n", 14)
-    else:
-        write(STDOUT, "X\n", 2)
-    x++
+p.inc()
+exit(p.prod())

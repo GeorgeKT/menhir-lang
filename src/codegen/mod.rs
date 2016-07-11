@@ -32,6 +32,7 @@ pub struct VariableInstance
     pub value: LLVMValueRef,
     pub name: String,
     pub constant: bool,
+    pub typ: Type,
 }
 
 pub struct FunctionInstance
@@ -40,12 +41,14 @@ pub struct FunctionInstance
     pub name: String,
     pub args: Vec<LLVMTypeRef>,
     pub return_type: LLVMTypeRef,
+    pub sig: FunctionSignature,
 }
 
 pub struct StructMemberVar
 {
     pub name: String,
-    pub typ: LLVMTypeRef,
+    pub typ: Type,
+    pub llvm_typ: LLVMTypeRef,
     pub constant: bool,
     pub init: Expression,
 }
@@ -54,13 +57,27 @@ pub struct StructType
 {
     pub name: String,
     pub typ: LLVMTypeRef,
-    pub members: Vec<StructMemberVar>,
+    pub members: Vec<Rc<StructMemberVar>>,
+}
+
+impl StructType
+{
+    pub fn get_member(&self, name: &str) -> Option<(usize, Rc<StructMemberVar>)>
+    {
+        for (idx, m) in self.members.iter().enumerate() {
+            if m.name == name {
+                return Some((idx, m.clone()));
+            }
+        }
+
+        None
+    }
 }
 
 pub struct StackFrame
 {
     function: LLVMValueRef,
-    vars: HashMap<String, VariableInstance>,
+    vars: HashMap<String, Rc<VariableInstance>>,
     funcs: HashMap<String, FunctionInstance>,
     complex_types: HashMap<String, Rc<StructType>>,
     current_bb: LLVMBasicBlockRef,
@@ -73,14 +90,19 @@ impl StackFrame
         LLVMGetReturnType(LLVMGetElementType(LLVMTypeOf(self.function)))
     }
 
-    pub fn add_variable(&mut self, name: &str, value: LLVMValueRef, constant: bool)
+    pub fn add_variable(&mut self, name: &str, value: LLVMValueRef, constant: bool, typ: Type)
     {
-        self.vars.insert(name.into(), VariableInstance{value: value, name: name.into(), constant: constant});
+        self.vars.insert(name.into(), Rc::new(VariableInstance{
+            value: value,
+            name: name.into(),
+            constant: constant,
+            typ: typ,
+        }));
     }
 
-    pub fn get_variable(&self, name: &str) -> Option<&VariableInstance>
+    pub fn get_variable(&self, name: &str) -> Option<Rc<VariableInstance>>
     {
-        self.vars.get(name)
+        self.vars.get(name).map(|v| v.clone())
     }
 
     pub fn add_function(&mut self, f: FunctionInstance)
@@ -175,7 +197,7 @@ impl<'a> Context<'a>
         LLVMDumpModule(self.module);
     }
 
-    pub fn get_variable(&'a self, name: &str) -> Option<&'a VariableInstance>
+    pub fn get_variable(&'a self, name: &str) -> Option<Rc<VariableInstance>>
     {
         for sf in self.stack.iter().rev() {
             let v = sf.get_variable(name);
@@ -244,51 +266,102 @@ impl<'a> Context<'a>
         }
     }
 
-    pub unsafe fn infer_type(&self, e: &Expression) -> Result<LLVMTypeRef, CompileError>
+    fn infer_member_var_type(&self, st: &StructType, nr: &NameRef) -> Result<Type, CompileError>
+    {
+        if let Some((_, mvar)) = st.get_member(&nr.name) {
+            if mvar.typ == Type::Unknown {
+                self.infer_type(&mvar.init)
+            } else {
+                Ok(mvar.typ.clone())
+            }
+        } else {
+            err(nr.span.start, ErrorType::UnknownStructMember(st.name.clone(), nr.name.clone()))
+        }
+    }
+
+    fn infer_nested_member_type(&self, st: &StructType, next: &MemberAccess) -> Result<Type, CompileError>
+    {
+        if let Some((_, mvar)) = st.get_member(&next.name) {
+            let st = match mvar.typ {
+                Type::Complex(ref ctype) => try!(self.get_complex_type(&ctype).ok_or(CompileError::new(next.span.start, ErrorType::TypeError(format!("Unknown type {}", ctype))))),
+                _ => return err(next.span.start, ErrorType::TypeError(format!("Member variable {} is not a struct", next.name))),
+            };
+
+            match next.member
+            {
+                Member::Call(ref c) => self.infer_call_type(c),
+                Member::Var(ref nr) => self.infer_member_var_type(&st, nr),
+                Member::Nested(ref next) => self.infer_nested_member_type(&st, next),
+            }
+        } else {
+            err(next.span.start, ErrorType::UnknownStructMember(st.name.clone(), next.name.clone()))
+        }
+    }
+
+    fn infer_member_type(&self, a: &MemberAccess) -> Result<Type, CompileError>
+    {
+        if let Some(ref v) = self.get_variable(&a.name) {
+            match v.typ
+            {
+                Type::Complex(ref ctype) => {
+                    let st = try!(self.get_complex_type(&ctype).ok_or(CompileError::new(a.span.start, ErrorType::TypeError(format!("Unknown type {}", ctype)))));
+                    match a.member
+                    {
+                        Member::Call(ref c) => self.infer_call_type(c),
+                        Member::Var(ref nr) => self.infer_member_var_type(&st, nr),
+                        Member::Nested(ref next) => self.infer_nested_member_type(&st, next),
+                    }
+                },
+                _ => err(a.span.start, ErrorType::TypeError(format!("Variable {} is not a struct", a.name))),
+            }
+        } else {
+            err(a.span.start, ErrorType::UnknownVariable(a.name.clone()))
+        }
+    }
+
+    fn infer_call_type(&self, c: &Call) -> Result<Type, CompileError>
+    {
+        if let Some(f) = self.get_function(&c.name) {
+            Ok(f.sig.return_type.clone())
+        } else {
+            err(c.span.start, ErrorType::UnknownFunction(c.name.clone()))
+        }
+    }
+
+    pub fn infer_type(&self, e: &Expression) -> Result<Type, CompileError>
     {
         match *e
         {
-            Expression::IntLiteral(_, _) => Ok(LLVMInt64TypeInContext(self.context)),
-            Expression::FloatLiteral(_, _) => Ok(LLVMDoubleTypeInContext(self.context)),
-            Expression::StringLiteral(_, ref s) => Ok(LLVMArrayType(LLVMInt8TypeInContext(self.context), s.len() as u32)),
+            Expression::IntLiteral(_, _) => Ok(Type::Primitive("int".into())),
+            Expression::FloatLiteral(_, _) => Ok(Type::Primitive("double".into())),
+            Expression::StringLiteral(_, _) => Ok(Type::Primitive("string".into())),
             Expression::UnaryOp(ref op) => self.infer_type(&op.expression),
             Expression::PostFixUnaryOp(ref op) => self.infer_type(&op.expression),
             Expression::BinaryOp(ref op) => {
                 let lt = try!(self.infer_type(&op.left));
                 let rt = try!(self.infer_type(&op.right));
                 if lt != rt {
-                    let msg = format!("Type mismatch in '{}' operation  (left hand side {}, right hand side {})", op.operator, type_name(lt), type_name(rt));
+                    let msg = format!("Type mismatch in '{}' operation  (left hand side {}, right hand side {})", op.operator, lt, rt);
                     err(op.span.start, ErrorType::TypeError(msg))
                 } else {
                     Ok(rt)
                 }
             },
             Expression::Enclosed(_, ref e) => self.infer_type(e),
-            Expression::Call(ref c) => {
-                if let Some(f) = self.get_function(&c.name) {
-                    Ok(f.return_type)
-                } else {
-                    err(c.span.start, ErrorType::UnknownFunction(c.name.clone()))
-                }
-            },
+            Expression::Call(ref c) => self.infer_call_type(c),
             Expression::NameRef(ref nr) => {
                 if let Some(v) = self.get_variable(&nr.name) {
-                    Ok(LLVMTypeOf(v.value))
+                    Ok(v.typ.clone())
                 } else {
                     err(nr.span.start, ErrorType::UnknownVariable(nr.name.clone()))
                 }
             },
             Expression::Assignment(ref a) => self.infer_type(&a.expression),
             Expression::ObjectConstruction(ref oc) => {
-                let ct = Type::Complex(oc.object_type.clone());
-                if let Some(t) = self.resolve_type(&ct) {
-                    Ok(t)
-                } else {
-                    err(oc.span.start, ErrorType::UnknownType(format!("{}", oc.object_type)))
-                }
+                Ok(Type::ptr(Type::Complex(oc.object_type.clone())))
             },
             Expression::MemberAccess(ref ma) => {
-                err(ma.span.start, ErrorType::UnexpectedEOF)
+                self.infer_member_type(ma)
             },
         }
     }
