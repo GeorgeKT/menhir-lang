@@ -99,10 +99,11 @@ fn main()
                 optimize: args.flag_optimize.unwrap_or(false),
             };
 
+/*
             if debug_compiler {
                 p.print(0);
             }
-
+*/
             if let Err(e) = codegen(&p, &opts) {
                 println!("Error: {}", e);
             }

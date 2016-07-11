@@ -12,11 +12,12 @@ struct Point:
         self.x += 1
         self.y += 1
 
-    pub func sum(self) -> int:
+    func sum(self) -> int:
         return self.x + self.y
 
     pub func prod(self) -> int:
-        return self.x * self.y
+        return self.x * self.y + self.sum() 
+
 
 
 write(STDOUT, "Running tests\n", 14)

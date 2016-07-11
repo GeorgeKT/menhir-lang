@@ -30,7 +30,7 @@ pub unsafe fn const_int(ctx: LLVMContextRef, v: u64) -> LLVMValueRef
     LLVMConstInt(LLVMInt64TypeInContext(ctx), v, 0)
 }
 
-unsafe fn gen_float(ctx: &mut Context, num: &str, span: &Span) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_float(ctx: &Context, num: &str, span: &Span) -> Result<LLVMValueRef, CompileError>
 {
     match num.parse::<f64>() {
         Ok(f) => Ok(LLVMConstReal(LLVMDoubleTypeInContext(ctx.context), f)),
@@ -38,12 +38,12 @@ unsafe fn gen_float(ctx: &mut Context, num: &str, span: &Span) -> Result<LLVMVal
     }
 }
 
-unsafe fn gen_integer(ctx: &mut Context, i: u64, _span: &Span) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_integer(ctx: &Context, i: u64, _span: &Span) -> Result<LLVMValueRef, CompileError>
 {
     Ok(const_int(ctx.context, i))
 }
 
-unsafe fn gen_string_literal(ctx: &mut Context, s: &str, _span: &Span) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_string_literal(ctx: &Context, s: &str, _span: &Span) -> Result<LLVMValueRef, CompileError>
 {
     let glob = LLVMAddGlobal(ctx.module, LLVMArrayType(LLVMInt8TypeInContext(ctx.context), s.len() as u32), cstr("string"));
 
@@ -55,7 +55,7 @@ unsafe fn gen_string_literal(ctx: &mut Context, s: &str, _span: &Span) -> Result
     Ok(glob)
 }
 
-unsafe fn gen_unary(ctx: &mut Context, op: &UnaryOp) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_unary(ctx: &Context, op: &UnaryOp) -> Result<LLVMValueRef, CompileError>
 {
     let e_val = try!(gen_expression(ctx, &op.expression));
     let e_type = LLVMTypeOf(e_val);
@@ -92,7 +92,7 @@ unsafe fn gen_unary(ctx: &mut Context, op: &UnaryOp) -> Result<LLVMValueRef, Com
     }
 }
 
-unsafe fn gen_pf_unary(ctx: &mut Context, op: &UnaryOp) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_pf_unary(ctx: &Context, op: &UnaryOp) -> Result<LLVMValueRef, CompileError>
 {
     match op.operator {
         Operator::Increment | Operator::Decrement => gen_unary(ctx, op),
@@ -100,7 +100,7 @@ unsafe fn gen_pf_unary(ctx: &mut Context, op: &UnaryOp) -> Result<LLVMValueRef, 
     }
 }
 
-unsafe fn check_numeric_operands(ctx: &mut Context, op: Operator, left_type: LLVMTypeRef, right_type: LLVMTypeRef, pos: Pos) -> Result<(), CompileError>
+unsafe fn check_numeric_operands(ctx: &Context, op: Operator, left_type: LLVMTypeRef, right_type: LLVMTypeRef, pos: Pos) -> Result<(), CompileError>
 {
     if left_type != right_type {
         err(pos, ErrorType::TypeError(format!("Operator '{}', expects both operands to be of the same type", op)))
@@ -111,7 +111,7 @@ unsafe fn check_numeric_operands(ctx: &mut Context, op: Operator, left_type: LLV
     }
 }
 
-unsafe fn check_bool_operands(ctx: &mut Context, op: Operator, left_type: LLVMTypeRef, right_type: LLVMTypeRef, pos: Pos) -> Result<(), CompileError>
+unsafe fn check_bool_operands(ctx: &Context, op: Operator, left_type: LLVMTypeRef, right_type: LLVMTypeRef, pos: Pos) -> Result<(), CompileError>
 {
     if left_type != right_type {
         err(pos, ErrorType::TypeError(format!("Operator '{}', expects both operands to be of the same type", op, )))
@@ -123,7 +123,7 @@ unsafe fn check_bool_operands(ctx: &mut Context, op: Operator, left_type: LLVMTy
 }
 
 
-unsafe fn gen_binary(ctx: &mut Context, op: &BinaryOp) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_binary(ctx: &Context, op: &BinaryOp) -> Result<LLVMValueRef, CompileError>
 {
     let left_val = try!(gen_expression(ctx, &op.left));
     let right_val = try!(gen_expression(ctx, &op.right));
@@ -232,7 +232,7 @@ unsafe fn gen_binary(ctx: &mut Context, op: &BinaryOp) -> Result<LLVMValueRef, C
 
 }
 
-unsafe fn gen_enclosed(ctx: &mut Context, e: &Expression, _span: &Span) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_enclosed(ctx: &Context, e: &Expression, _span: &Span) -> Result<LLVMValueRef, CompileError>
 {
     gen_expression(ctx, e)
 }
@@ -263,23 +263,28 @@ unsafe fn convert(b: LLVMBuilderRef, from: LLVMValueRef, to: LLVMTypeRef) ->  Op
     None
 }
 
-unsafe fn gen_call(ctx: &mut Context, c: &Call, prefix: &str, self_ptr: Option<LLVMValueRef>) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_member_call(ctx: &Context, c: &Call, st: &StructType, self_ptr: LLVMValueRef, private_allowed: bool) -> Result<LLVMValueRef, CompileError>
 {
-    let mut arg_vals = Vec::with_capacity(c.args.len());
-
-    if let Some(ptr) = self_ptr {
-        arg_vals.push(LLVMBuildLoad(ctx.builder, ptr, cstr("this")));
-    }
-
+    let mut arg_vals = Vec::with_capacity(c.args.len() + 1);
+    arg_vals.push(LLVMBuildLoad(ctx.builder, self_ptr, cstr("self")));
     for arg in &c.args {
         arg_vals.push(try!(gen_expression(ctx, arg)));
     }
 
-    let full_name = format!("{}{}", prefix, c.name);
+    let full_name = format!("{}::{}", st.name, c.name);
     let func: &FunctionInstance = try!(ctx
         .get_function(&full_name)
         .ok_or(CompileError::new(c.span.start, ErrorType::UnknownFunction(full_name))));
 
+    if !private_allowed && !func.public {
+        return err(c.span.start, ErrorType::PrivateMemberAccess(c.name.clone()));
+    }
+
+    gen_call_common(ctx, c, func, arg_vals)
+}
+
+unsafe fn gen_call_common(ctx: &Context, c: &Call, func: &FunctionInstance, mut arg_vals: Vec<LLVMValueRef>)  -> Result<LLVMValueRef, CompileError>
+{
     if arg_vals.len() != func.args.len() {
         return err(c.span.start, ErrorType::ArgumentCountMismatch(
             format!("Function '{}', expects {} arguments, {} are provided",
@@ -304,7 +309,21 @@ unsafe fn gen_call(ctx: &mut Context, c: &Call, prefix: &str, self_ptr: Option<L
     Ok(LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr("")))
 }
 
-unsafe fn gen_name_ref(ctx: &mut Context, nr: &NameRef, store: bool) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_call(ctx: &Context, c: &Call) -> Result<LLVMValueRef, CompileError>
+{
+    let mut arg_vals = Vec::with_capacity(c.args.len());
+    for arg in &c.args {
+        arg_vals.push(try!(gen_expression(ctx, arg)));
+    }
+
+    let func: &FunctionInstance = try!(ctx
+        .get_function(&c.name)
+        .ok_or(CompileError::new(c.span.start, ErrorType::UnknownFunction(c.name.clone()))));
+
+    gen_call_common(ctx, c, func, arg_vals)
+}
+
+unsafe fn gen_name_ref(ctx: &Context, nr: &NameRef, store: bool) -> Result<LLVMValueRef, CompileError>
 {
     if let Some(ref v) = ctx.get_variable(&nr.name) {
         if !store {
@@ -322,7 +341,7 @@ unsafe fn gen_name_ref(ctx: &mut Context, nr: &NameRef, store: bool) -> Result<L
     }
 }
 
-unsafe fn assign(ctx: &mut Context, op: Operator, var: LLVMValueRef, val: LLVMValueRef, span: &Span) -> Result<LLVMValueRef, CompileError>
+unsafe fn assign(ctx: &Context, op: Operator, var: LLVMValueRef, val: LLVMValueRef, span: &Span) -> Result<LLVMValueRef, CompileError>
 {
     if op == Operator::Assign {
         return Ok(LLVMBuildStore(ctx.builder, val, var));
@@ -370,11 +389,15 @@ unsafe fn assign(ctx: &mut Context, op: Operator, var: LLVMValueRef, val: LLVMVa
     Ok(new_val) // Return the new value
 }
 
-unsafe fn gen_member_var(ctx: &mut Context, this: LLVMValueRef, st: &Rc<StructType>, nr: &NameRef, store: bool) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_member_var(ctx: &Context, this: LLVMValueRef, st: &Rc<StructType>, nr: &NameRef, store: bool, private_allowed: bool) -> Result<LLVMValueRef, CompileError>
 {
     if let Some((idx, mvar)) = st.get_member(&nr.name) {
         if mvar.constant && store {
             return err(nr.span.start, ErrorType::ConstantModification(nr.name.clone()));
+        }
+
+        if !mvar.public && !private_allowed {
+            return err(nr.span.start, ErrorType::PrivateMemberAccess(nr.name.clone()));
         }
 
         // Dereference this, to get the actual struct ptr
@@ -390,18 +413,22 @@ unsafe fn gen_member_var(ctx: &mut Context, this: LLVMValueRef, st: &Rc<StructTy
     }
 }
 
-unsafe fn gen_nested_member_access(ctx: &mut Context, this: LLVMValueRef, st: &Rc<StructType>, next: &MemberAccess, store: bool) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_nested_member_access(ctx: &Context, this: LLVMValueRef, st: &Rc<StructType>, next: &MemberAccess, store: bool, private_allowed: bool) -> Result<LLVMValueRef, CompileError>
 {
     if let Some((idx, mvar)) = st.get_member(&next.name) {
+        if !mvar.public && !private_allowed {
+            return err(next.span.start, ErrorType::PrivateMemberAccess(next.name.clone()));
+        }
+
         match next.member
         {
-            Member::Call(ref c) => gen_call(ctx, c, &format!("{}::", st.name), Some(this)),
-            Member::Var(ref nr) => gen_member_var(ctx, this, st, nr, store),
+            Member::Call(ref c) => gen_member_call(ctx, c, &st, this, false),
+            Member::Var(ref nr) => gen_member_var(ctx, this, st, nr, store, false),
             Member::Nested(ref next_next) => {
                 if let Some(next_st) = get_struct_type(ctx, &mvar.typ)
                 {
                     let new_this = LLVMBuildStructGEP(ctx.builder, this, idx as u32, cstr("elptr"));
-                    gen_nested_member_access(ctx, new_this, &next_st, next_next, store)
+                    gen_nested_member_access(ctx, new_this, &next_st, next_next, store, false)
                 }
                 else
                 {
@@ -425,7 +452,7 @@ fn get_struct_type(ctx: &Context, typ: &Type) -> Option<Rc<StructType>>
     }
 }
 
-unsafe fn gen_member_access(ctx: &mut Context, a: &MemberAccess, store: bool) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_member_access(ctx: &Context, a: &MemberAccess, store: bool) -> Result<LLVMValueRef, CompileError>
 {
     if let Some(ref v) = ctx.get_variable(&a.name) {
         if v.constant {
@@ -434,11 +461,12 @@ unsafe fn gen_member_access(ctx: &mut Context, a: &MemberAccess, store: bool) ->
 
         if let Some(st) = get_struct_type(ctx, &v.typ)
         {
+            let private_allowed = a.name == "self";
             match a.member
             {
-                Member::Call(ref c) => gen_call(ctx, c, &format!("{}::", st.name), Some(v.value)),
-                Member::Var(ref nr) => gen_member_var(ctx, v.value, &st, nr, store),
-                Member::Nested(ref next) => gen_nested_member_access(ctx, v.value, &st, next, store),
+                Member::Call(ref c) => gen_member_call(ctx, c, &st, v.value, private_allowed),
+                Member::Var(ref nr) => gen_member_var(ctx, v.value, &st, nr, store, private_allowed),
+                Member::Nested(ref next) => gen_nested_member_access(ctx, v.value, &st, next, store, private_allowed),
             }
         }
         else
@@ -451,7 +479,7 @@ unsafe fn gen_member_access(ctx: &mut Context, a: &MemberAccess, store: bool) ->
 }
 
 
-unsafe fn gen_target(ctx: &mut Context, target: &Expression) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_target(ctx: &Context, target: &Expression) -> Result<LLVMValueRef, CompileError>
 {
     match *target
     {
@@ -472,7 +500,7 @@ unsafe fn gen_target(ctx: &mut Context, target: &Expression) -> Result<LLVMValue
     }
 }
 
-unsafe fn gen_assignment(ctx: &mut Context, a: &Assignment) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_assignment(ctx: &Context, a: &Assignment) -> Result<LLVMValueRef, CompileError>
 {
     let target_ptr = try!(gen_target(ctx, &a.target));
     let rhs_val = try!(gen_expression(ctx, &a.expression));
@@ -487,7 +515,7 @@ unsafe fn gen_assignment(ctx: &mut Context, a: &Assignment) -> Result<LLVMValueR
     }
 }
 
-unsafe fn gen_object_construction(ctx: &mut Context, oc: &ObjectConstruction) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_object_construction(ctx: &Context, oc: &ObjectConstruction) -> Result<LLVMValueRef, CompileError>
 {
     use std::rc::Rc;
     let st: Rc<StructType> = try!(ctx
@@ -526,7 +554,7 @@ unsafe fn gen_object_construction(ctx: &mut Context, oc: &ObjectConstruction) ->
 }
 
 
-pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<LLVMValueRef, CompileError>
+pub unsafe fn gen_expression(ctx: &Context, e: &Expression) -> Result<LLVMValueRef, CompileError>
 {
     match *e
     {
@@ -537,7 +565,7 @@ pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<LLVMVa
         Expression::PostFixUnaryOp(ref op) => gen_pf_unary(ctx, op),
         Expression::BinaryOp(ref op) => gen_binary(ctx, op),
         Expression::Enclosed(ref span, ref e) => gen_enclosed(ctx, e, span),
-        Expression::Call(ref c) => gen_call(ctx, c, "", None),
+        Expression::Call(ref c) => gen_call(ctx, c),
         Expression::NameRef(ref nr) => gen_name_ref(ctx, nr, false),
         Expression::Assignment(ref a) => gen_assignment(ctx, a),
         Expression::ObjectConstruction(ref oc) => gen_object_construction(ctx, oc),

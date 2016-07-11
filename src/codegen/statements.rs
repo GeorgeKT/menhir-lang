@@ -58,7 +58,7 @@ unsafe fn gen_variable(ctx: &mut Context, v: &Variable) -> Result<(), CompileErr
     Ok(())
 }
 
-unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, span: &Span) -> Result<FunctionInstance, CompileError>
+unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, public: bool, span: &Span) -> Result<FunctionInstance, CompileError>
 {
     let ret_type = try!(ctx
         .resolve_type(&sig.return_type)
@@ -81,6 +81,7 @@ unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, span: &Sp
         return_type: ret_type,
         function: function,
         sig: sig.clone(),
+        public: public,
     })
 }
 
@@ -90,7 +91,7 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<FunctionInstan
         return err(f.span.start, ErrorType::RedefinitionOfFunction(f.sig.name.clone()));
     }
 
-    let fi = try!(gen_function_sig(ctx, &f.sig, &f.span));
+    let fi = try!(gen_function_sig(ctx, &f.sig, f.public, &f.span));
 
     let bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, cstr("entry"));
     LLVMPositionBuilderAtEnd(ctx.builder, bb);
@@ -119,7 +120,7 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<FunctionInstan
 
 unsafe fn gen_external_function(ctx: &mut Context, f: &ExternalFunction) -> Result<(), CompileError>
 {
-    let fi = try!(gen_function_sig(ctx, &f.sig, &f.span));
+    let fi = try!(gen_function_sig(ctx, &f.sig, true, &f.span));
     ctx.top_stack_frame().add_function(fi);
     Ok(())
 }
@@ -228,6 +229,7 @@ unsafe fn gen_struct(ctx: &mut Context, s: &Struct) -> Result<(), CompileError>
                 typ: typ,
                 llvm_typ: llvm_typ,
                 constant: v.is_const,
+                public: v.public,
                 init: v.init.clone(),
             }));
             element_types.push(llvm_typ);

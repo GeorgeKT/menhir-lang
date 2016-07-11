@@ -42,6 +42,7 @@ pub struct FunctionInstance
     pub args: Vec<LLVMTypeRef>,
     pub return_type: LLVMTypeRef,
     pub sig: FunctionSignature,
+    pub public: bool,
 }
 
 pub struct StructMemberVar
@@ -50,6 +51,7 @@ pub struct StructMemberVar
     pub typ: Type,
     pub llvm_typ: LLVMTypeRef,
     pub constant: bool,
+    pub public: bool,
     pub init: Expression,
 }
 

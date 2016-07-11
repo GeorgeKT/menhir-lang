@@ -132,6 +132,7 @@ pub enum ErrorType
     ArgumentCountMismatch(String),
     CodegenError(String),
     ConstantModification(String),
+    PrivateMemberAccess(String),
 }
 
 
@@ -187,8 +188,9 @@ impl fmt::Display for CompileError
             ErrorType::UnknownType(ref n) => write!(f, "{}: Unknown type '{}'", self.pos, n),
             ErrorType::UnknownStructMember(ref struct_name, ref member_name) => write!(f, "{}: Struct '{}' has no member named '{}'", self.pos, struct_name, member_name),
             ErrorType::ArgumentCountMismatch(ref msg) => write!(f, "{}: {}", self.pos, msg),
-            ErrorType::CodegenError(ref msg) => write!(f, "Code generation failed: {}", msg),
-            ErrorType::ConstantModification(ref name) => write!(f, "Attempting to modify constant '{}'", name),
+            ErrorType::CodegenError(ref msg) => write!(f, "{}: Code generation failed: {}", self.pos, msg),
+            ErrorType::ConstantModification(ref name) => write!(f, "{}: Attempting to modify constant '{}'", self.pos, name),
+            ErrorType::PrivateMemberAccess(ref var) => write!(f, "{}: Attempting to access private member '{}'", self.pos, var)
         }
     }
 }
