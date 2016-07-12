@@ -20,7 +20,9 @@ before_install:
         - sudo apt-get install -y libllvm3.8 llvm-3.8 llvm-3.8-dev llvm-3.8-runtime
         - ls -l /usr/bin/llvm-config*  
         - sudo rm -f /usr/bin/llvm-config && sudo ln -s /usr/bin/llvm-config-3.8 /usr/bin/llvm-config 
-        - sudo strace llvm-config --version  
+        - sudo llvm-config --version  
+        - llvm-config --version
+        - which llvm-config  
         - llvm-config-3.8 --version   
         - ls -l /usr/bin/llvm-config* 
         - sudo dpkg -l | grep llvm
