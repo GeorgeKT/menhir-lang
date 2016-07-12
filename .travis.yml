@@ -16,4 +16,3 @@ before_install:
         - wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key | sudo apt-key add -
         - sudo apt-get -qq update
         - sudo apt-get install -y libllvm3.8 llvm-3.8 llvm-3.8-dev
-        - sudo ln -s /usr/bin/llvm-config-* /usr/bin/llvm-config  
