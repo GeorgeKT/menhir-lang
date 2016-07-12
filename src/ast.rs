@@ -919,24 +919,24 @@ impl TreePrinter for Block
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct Program
+pub struct Module
 {
     pub name: String,
     pub block: Block,
 }
 
-impl Program
+impl Module
 {
-    pub fn new(name: &str, block: Block) -> Program
+    pub fn new(name: &str, block: Block) -> Module
     {
-        Program{
+        Module{
             name: name.into(),
             block: block,
         }
     }
 }
 
-impl TreePrinter for Program
+impl TreePrinter for Module
 {
     fn print(&self, level: usize)
     {

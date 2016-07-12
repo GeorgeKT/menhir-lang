@@ -1,5 +1,6 @@
 import cobra::syscalls
 
+
 struct Point:
     var x = 0, y = 0
 
@@ -13,9 +14,9 @@ struct Point:
     pub func prod(self) -> int:
         return self.x * self.y + self.sum()
 
-
-cobra::syscalls::write(STDOUT, "Running tests\n", 14)
-var p = Point{4, 5}
-p.inc()
-
-exit(p.prod())
+func main() -> int:
+    write(STDOUT, "Running tests\n", 14)
+    var p = Point{4, 5}
+    p.inc()
+    exit(p.prod())
+    return 0

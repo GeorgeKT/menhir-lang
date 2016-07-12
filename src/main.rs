@@ -8,17 +8,11 @@ mod codegen;
 mod compileerror;
 mod parser;
 
-
-use std::ffi::OsStr;
-use std::fs;
 use std::path::Path;
-
 use docopt::Docopt;
-
-use ast::*;
 use codegen::*;
-use parser::parse_program;
-use compileerror::CompileError;
+use parser::*;
+
 
 static USAGE: &'static str =  "
 Usage: cobra [options] <input-file>
@@ -41,13 +35,7 @@ struct Args
     flag_output: Option<String>,
 }
 
-fn parse_file(file_path: &str) -> Result<Program, CompileError>
-{
-    let mut file = try!(fs::File::open(file_path));
-    let path = Path::new(file_path);
-    let filename: &OsStr = path.file_name().expect("Invalid filename");
-    parse_program(&mut file, filename.to_str().expect("Invalid UTF8 filename"))
-}
+
 
 fn find_runtime_library() -> Option<String>
 {
@@ -86,27 +74,24 @@ fn main()
 
     let input_file = args.arg_input_file.expect("Missing input file argument");
     let output_file = args.flag_output.unwrap_or(default_output_file(&input_file));
-    match parse_file(&input_file)
-    {
-        Err(e) => println!("Error: {}", e),
-        Ok(p) => {
-            let debug_compiler = args.flag_debug.unwrap_or(false);
-            let opts = CodeGenOptions{
-                dump_ir: debug_compiler,
-                build_dir: "build".into(),
-                program_name: output_file,
-                runtime_library: find_runtime_library().expect("Unable to find the cobra runtime library"),
-                optimize: args.flag_optimize.unwrap_or(false),
-            };
 
-/*
-            if debug_compiler {
-                p.print(0);
-            }
-*/
-            if let Err(e) = codegen(&p, &opts) {
-                println!("Error: {}", e);
-            }
-        },
+
+    let debug_compiler = args.flag_debug.unwrap_or(false);
+    let opts = CodeGenOptions{
+        dump_ir: debug_compiler,
+        build_dir: "build".into(),
+        program_name: output_file,
+        runtime_library: find_runtime_library().expect("Unable to find the cobra runtime library"),
+        optimize: args.flag_optimize.unwrap_or(false),
+    };
+
+    llvm_init();
+    let r = parse_file(&input_file, ParseMode::Block)
+        .and_then(|p| codegen(&p, &opts))
+        .and_then(|ctx| link(&ctx, &opts));
+
+    if let Err(e) = r
+    {
+        println!("Error: {}", e);
     }
 }

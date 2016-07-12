@@ -133,6 +133,7 @@ pub enum ErrorType
     CodegenError(String),
     ConstantModification(String),
     PrivateMemberAccess(String),
+    MissingReturn(String),
 }
 
 
@@ -190,7 +191,8 @@ impl fmt::Display for CompileError
             ErrorType::ArgumentCountMismatch(ref msg) => write!(f, "{}: {}", self.pos, msg),
             ErrorType::CodegenError(ref msg) => write!(f, "{}: Code generation failed: {}", self.pos, msg),
             ErrorType::ConstantModification(ref name) => write!(f, "{}: Attempting to modify constant '{}'", self.pos, name),
-            ErrorType::PrivateMemberAccess(ref var) => write!(f, "{}: Attempting to access private member '{}'", self.pos, var)
+            ErrorType::PrivateMemberAccess(ref var) => write!(f, "{}: Attempting to access private member '{}'", self.pos, var),
+            ErrorType::MissingReturn(ref func) => write!(f, "{}: Missing return statement at end of function '{}'", self.pos, func),
         }
     }
 }

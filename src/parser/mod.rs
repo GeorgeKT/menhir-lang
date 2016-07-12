@@ -4,8 +4,11 @@ mod lexer;
 mod tokens;
 mod tokenqueue;
 
-use std::io::Read;
 
+use std::io::Read;
+use std::fs;
+use std::path::Path;
+use std::ffi::OsStr;
 
 use ast::*;
 use compileerror::*;
@@ -16,13 +19,27 @@ pub use self::tokenqueue::TokenQueue;
 pub use self::expressions::*;
 pub use self::tokens::*;
 
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+pub enum ParseMode
+{
+    Block,      // allow every statement
+    Module,     // only allow toplevel statements (funcs, vars, imports, structs ...)
+}
 
 
-pub fn parse_program<Input: Read>(input: &mut Input, name: &str) -> Result<Program, CompileError>
+pub fn parse_module<Input: Read>(input: &mut Input, name: &str, mode: ParseMode) -> Result<Module, CompileError>
 {
     let mut tq = try!(Lexer::new().read(input));
-    let block = try!(parse_block(&mut tq, 0));
-    Ok(Program::new(name, block))
+    let block = try!(parse_block(&mut tq, 0, mode));
+    Ok(Module::new(name, block))
+}
+
+pub fn parse_file(file_path: &str, mode: ParseMode) -> Result<Module, CompileError>
+{
+    let mut file = try!(fs::File::open(file_path));
+    let path = Path::new(file_path);
+    let filename: &OsStr = path.file_name().expect("Invalid filename");
+    parse_module(&mut file, filename.to_str().expect("Invalid UTF8 filename"), mode)
 }
 
 #[cfg(test)]
@@ -34,7 +51,7 @@ fn th_statement(data: &str) -> Statement
     let mut cursor = Cursor::new(data);
     let mut tq = Lexer::new().read(&mut cursor).expect("Lexing failed");
     let lvl = tq.expect_indent().expect("Missing indentation");
-    parse_statement(&mut tq, lvl).expect("Parsing failed")
+    parse_statement(&mut tq, lvl, ParseMode::Block).expect("Parsing failed")
 }
 
 #[cfg(test)]
