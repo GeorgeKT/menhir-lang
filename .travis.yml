@@ -15,7 +15,8 @@ before_install:
         - sudo sh -c "echo 'deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-3.8 main' >> /etc/apt/sources.list"
         - wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key | sudo apt-key add -
         - sudo dpkg -l | grep llvm  
+        - sudo apt-get -y remove llvm llvm-3.4 llvm-3.4-dev llvm-runtime
         - sudo apt-get -qq update
         - sudo apt-get install -y libllvm3.8 llvm-3.8 llvm-3.8-dev
-        - sudo rm /usr/bin/llvm-config && sudo ln -s /usr/bin/llvm-config-3.8 /usr/bin/llvm-config 
-        - echo "llvm-version: $(llvm-config --version)"
+        - ls -l /usr/bin/llvm-config*  
+        - sudo rm -f /usr/bin/llvm-config && sudo ln -s /usr/bin/llvm-config-3.8 /usr/bin/llvm-config 
