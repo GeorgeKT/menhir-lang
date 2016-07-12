@@ -18,5 +18,6 @@ func main() -> int:
     write(STDOUT, "Running tests\n", 14)
     var p = Point{4, 5}
     p.inc()
+    blaat()
     exit(p.prod())
     return 0

@@ -47,11 +47,13 @@ unsafe fn gen_variable(ctx: &mut Context, v: &Variable) -> Result<(), CompileErr
     }
 
     if ctx.in_global_context() {
-        let glob = LLVMAddGlobal(ctx.get_current_module_ref(), initial_value_type, cstr("glob_var"));
+        let glob = LLVMAddGlobal(ctx.get_module_ref(), initial_value_type, cstr("glob_var"));
         LLVMSetLinkage(glob, LLVMLinkage::LLVMInternalLinkage);
         LLVMSetGlobalConstant(glob, if v.is_const {1} else {0});
         LLVMSetInitializer(glob, initial_value);
-        ctx.add_variable(&v.name, glob, v.is_const, v.public, v_typ);
+
+        let name = ctx.prepend_namespace(&v.name);
+        ctx.add_variable(&name, glob, v.is_const, v.public, v_typ);
     } else {
         let var = LLVMBuildAlloca(ctx.builder, initial_value_type, cstr("local_var"));
         LLVMBuildStore(ctx.builder, initial_value, var);
@@ -61,7 +63,7 @@ unsafe fn gen_variable(ctx: &mut Context, v: &Variable) -> Result<(), CompileErr
     Ok(())
 }
 
-unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, public: bool, span: &Span) -> Result<FunctionInstance, CompileError>
+unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, public: bool, external: bool, span: &Span) -> Result<FunctionInstance, CompileError>
 {
     let ret_type = try!(ctx
         .resolve_type(&sig.return_type)
@@ -75,16 +77,24 @@ unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, public: b
         arg_types.push(arg_type);
     }
 
+    let name = if ctx.in_global_context() && !external {
+        // global functions have to be namespaced
+        ctx.prepend_namespace(&sig.name)
+    } else {
+        sig.name.clone()
+    };
+
     let function_type = LLVMFunctionType(ret_type, arg_types.as_mut_ptr(), arg_types.len() as libc::c_uint, 0);
-    let function = LLVMAddFunction(ctx.get_current_module_ref(), cstr(&sig.name), function_type);
+    let function = LLVMAddFunction(ctx.get_module_ref(), cstr(&name), function_type);
 
     Ok(FunctionInstance{
-        name: sig.name.clone(),
+        name: name,
         args: arg_types,
         return_type: ret_type,
         function: function,
         sig: sig.clone(),
         public: public,
+        external: external,
     })
 }
 
@@ -94,8 +104,7 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<FunctionInstan
         return err(f.span.start, ErrorType::RedefinitionOfFunction(f.sig.name.clone()));
     }
 
-    let fi = try!(gen_function_sig(ctx, &f.sig, f.public, &f.span));
-
+    let fi = try!(gen_function_sig(ctx, &f.sig, f.public, false, &f.span));
     let bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, cstr("entry"));
     let current_bb = LLVMGetInsertBlock(ctx.builder);
     LLVMPositionBuilderAtEnd(ctx.builder, bb);
@@ -134,7 +143,7 @@ unsafe fn gen_external_function(ctx: &mut Context, f: &ExternalFunction) -> Resu
         return err(f.span.start, ErrorType::RedefinitionOfFunction(f.sig.name.clone()));
     }
 
-    let fi = try!(gen_function_sig(ctx, &f.sig, true, &f.span));
+    let fi = try!(gen_function_sig(ctx, &f.sig, true, true, &f.span));
     ctx.add_function(fi);
     Ok(())
 }
@@ -255,7 +264,7 @@ unsafe fn gen_struct(ctx: &mut Context, s: &Struct) -> Result<(), CompileError>
     }
 
     let struct_type = StructType{
-        name: s.name.clone(),
+        name: if ctx.in_global_context() {ctx.prepend_namespace(&s.name)} else {s.name.clone()},
         typ: LLVMStructTypeInContext(ctx.context, element_types.as_mut_ptr(), s.variables.len() as u32, 0),
         members: members,
         public: s.public,

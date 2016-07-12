@@ -81,7 +81,7 @@ pub fn codegen(m: &Module, opts: &CodeGenOptions) -> Result<Context, CompileErro
         // Set up a context, module and builder in that context.
         let mut ctx = Context::new(&m.name);
         try!(gen_module(&mut ctx, m));
-        try!(ctx.verify()); 
+        try!(ctx.verify());
         if opts.optimize {
             try!(ctx.optimize());
         }
@@ -89,7 +89,7 @@ pub fn codegen(m: &Module, opts: &CodeGenOptions) -> Result<Context, CompileErro
         if opts.dump_ir {
             println!("LLVM IR: {}", m.name);
             // Dump the module as IR to stdout.
-            LLVMDumpModule(ctx.get_current_module_ref());
+            LLVMDumpModule(ctx.get_module_ref());
             println!("----------------------");
         }
 

@@ -12,6 +12,7 @@ pub struct ModuleContext
     namespace: String,
     public_symbols: SymbolTable,
     private_symbols: SymbolTable,
+    external_symbols: SymbolTable,
     stack: Vec<StackFrame>,
 }
 
@@ -23,6 +24,7 @@ impl ModuleContext
             namespace: namespace.into(),
             public_symbols: SymbolTable::new(),
             private_symbols: SymbolTable::new(),
+            external_symbols: SymbolTable::new(),
             stack: Vec::new(),
         }
     }
@@ -42,6 +44,15 @@ impl ModuleContext
         self.stack.pop();
     }
 
+    pub fn prepend_namespace(&self, n: &str) -> String
+    {
+        if n.starts_with(&self.namespace) || (n == "main" && self.namespace == "self::") {
+            n.into()
+        } else {
+            format!("{}{}", self.namespace, n)
+        }
+    }
+
     pub fn get_variable(&self, name: &str, private_allowed: bool) -> Option<Rc<VariableInstance>>
     {
         for sf in self.stack.iter().rev() {
@@ -51,13 +62,15 @@ impl ModuleContext
             }
         }
 
-        let v = self.public_symbols.get_variable(name);
+        let namespaced = self.prepend_namespace(name);
+
+        let v = self.public_symbols.get_variable(&namespaced);
         if v.is_some() {
             return v;
         }
 
         if private_allowed {
-            let v = self.private_symbols.get_variable(name);
+            let v = self.private_symbols.get_variable(&namespaced);
             if v.is_some() {
                 return v;
             }
@@ -89,13 +102,19 @@ impl ModuleContext
             }
         }
 
-        let f = self.public_symbols.get_function(name);
+        let f = self.external_symbols.get_function(name);
+        if f.is_some() {
+            return f;
+        }
+
+        let namespaced = self.prepend_namespace(name);
+        let f = self.public_symbols.get_function(&namespaced);
         if f.is_some() {
             return f;
         }
 
         if private_allowed {
-            let f = self.private_symbols.get_function(name);
+            let f = self.private_symbols.get_function(&namespaced);
             if f.is_some() {
                 return f;
             }
@@ -105,7 +124,9 @@ impl ModuleContext
 
     pub fn add_function(&mut self, f: Rc<FunctionInstance>)
     {
-        if let Some(ref mut sf) = self.stack.last_mut() {
+        if f.external {
+            self.external_symbols.add_function(f);
+        } else if let Some(ref mut sf) = self.stack.last_mut() {
             sf.symbols.add_function(f);
         } else {
             // It's a global
@@ -126,13 +147,14 @@ impl ModuleContext
             }
         }
 
-        let f = self.public_symbols.get_complex_type(name);
+        let namespaced = self.prepend_namespace(name);
+        let f = self.public_symbols.get_complex_type(&namespaced);
         if f.is_some() {
             return f;
         }
 
         if private_allowed {
-            let f = self.private_symbols.get_complex_type(name);
+            let f = self.private_symbols.get_complex_type(&namespaced);
             if f.is_some() {
                 return f;
             }

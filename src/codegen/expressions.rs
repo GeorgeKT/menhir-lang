@@ -47,7 +47,7 @@ unsafe fn gen_integer(ctx: &Context, i: u64, _span: &Span) -> Result<LLVMValueRe
 
 unsafe fn gen_string_literal(ctx: &Context, s: &str, _span: &Span) -> Result<LLVMValueRef, CompileError>
 {
-    let glob = LLVMAddGlobal(ctx.get_current_module_ref(), LLVMArrayType(LLVMInt8TypeInContext(ctx.context), s.len() as u32), cstr("string"));
+    let glob = LLVMAddGlobal(ctx.get_module_ref(), LLVMArrayType(LLVMInt8TypeInContext(ctx.context), s.len() as u32), cstr("string"));
 
     LLVMSetLinkage(glob, LLVMLinkage::LLVMInternalLinkage);
     LLVMSetGlobalConstant(glob, 1);

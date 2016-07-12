@@ -22,6 +22,7 @@ pub struct FunctionInstance
     pub return_type: LLVMTypeRef,
     pub sig: FunctionSignature,
     pub public: bool,
+    pub external: bool,
 }
 
 pub struct StructMemberVar

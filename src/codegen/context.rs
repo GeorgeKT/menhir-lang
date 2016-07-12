@@ -38,12 +38,12 @@ impl Context
                 builder: LLVMCreateBuilderInContext(context),
                 name: name.into(),
                 modules: Vec::new(),
-                current_module: Box::new(ModuleContext::new("::")),
+                current_module: Box::new(ModuleContext::new("self::")),
             }
         }
     }
 
-    pub fn get_current_module_ref(&self) -> LLVMModuleRef
+    pub fn get_module_ref(&self) -> LLVMModuleRef
     {
         self.module
     }
@@ -57,6 +57,11 @@ impl Context
     pub fn add_module(&mut self, mc: Box<ModuleContext>)
     {
         self.modules.push(mc);
+    }
+
+    pub fn prepend_namespace(&self, n: &str) -> String
+    {
+        self.current_module.prepend_namespace(n)
     }
 
     pub fn verify(&self) -> Result<(), CompileError>
