@@ -10,6 +10,7 @@ use llvm::target_machine::*;
 
 
 use codegen::*;
+use codegen::context::*;
 use compileerror::*;
 
 pub unsafe fn llvm_init()
@@ -34,12 +35,11 @@ pub unsafe fn llvm_init()
     LLVMInitializeAnalysis(pass_registry);
     LLVMInitializeIPA(pass_registry);
     LLVMInitializeCodeGen(pass_registry);
-    LLVMInitializeTarget(pass_registry); 
+    LLVMInitializeTarget(pass_registry);
 }
 
 unsafe fn gen_obj_files(ctx: &Context, build_dir: &str) -> Result<Vec<String>, CompileError>
 {
-	
     let target_triple = CStr::from_ptr(LLVMGetDefaultTargetTriple());
     let target_triple_str = target_triple.to_str().expect("Invalid target triple");
     println!("Compiling for {}", target_triple_str);
@@ -69,19 +69,19 @@ unsafe fn gen_obj_files(ctx: &Context, build_dir: &str) -> Result<Vec<String>, C
 
     let mut obj_files = Vec::new();
 
-    
 	try!(DirBuilder::new()
 		.recursive(true)
 		.create(build_dir)
 		.map_err(|e| CompileError::new(
-			Pos::zero(), 
+			Pos::zero(),
 			ErrorType::CodegenError(
 				format!("Unable to create directory for {}: {}", build_dir, e)))));
 
 
-	let obj_file_name = format!("{}/{}.o", build_dir, ctx.module_name);
-	println!("  Building {}", ctx.module_name);
-    if LLVMTargetMachineEmitToFile(target_machine, ctx.module, cstr_mut(&obj_file_name), LLVMCodeGenFileType::LLVMObjectFile, &mut error_message) != 0 {
+    let mod_name = ctx.get_module_name();
+	let obj_file_name = format!("{}/{}.o", build_dir, mod_name);
+	println!("  Building {}", mod_name);
+    if LLVMTargetMachineEmitToFile(target_machine, ctx.get_module(), cstr_mut(&obj_file_name), LLVMCodeGenFileType::LLVMObjectFile, &mut error_message) != 0 {
         let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
         let e = format!("Unable to create object file: {}", msg);
         LLVMDisposeMessage(error_message);
@@ -94,10 +94,10 @@ unsafe fn gen_obj_files(ctx: &Context, build_dir: &str) -> Result<Vec<String>, C
     Ok(obj_files)
 }
 
-pub fn link(ctx: &Context, build_dir: &str, program_name: &str, runtime_lib: &str) -> Result<(), CompileError>
+pub fn link(ctx: &Context, opts: &CodeGenOptions) -> Result<(), CompileError>
 {
-	let obj_files = unsafe{try!(gen_obj_files(ctx, build_dir))};
-	let program_path = format!("{}/{}", build_dir, program_name);
+	let obj_files = unsafe{try!(gen_obj_files(ctx, &opts.build_dir))};
+	let program_path = format!("{}/{}", opts.build_dir, opts.program_name);
 
 	let mut cmd = Command::new("ld");
 	cmd.arg("--gc-sections");
@@ -108,11 +108,11 @@ pub fn link(ctx: &Context, build_dir: &str, program_name: &str, runtime_lib: &st
 	}
 
 	println!("  Linking {}", program_path);
-	cmd.arg(runtime_lib);
+	cmd.arg(&opts.runtime_library);
 	let output: Output = try!(cmd
 		.output()
 		.map_err(|e| CompileError::new(
-			Pos::zero(), 
+			Pos::zero(),
 			ErrorType::CodegenError(
 				format!("Unable to spawn the linker: {}", e)))));
 
@@ -120,7 +120,7 @@ pub fn link(ctx: &Context, build_dir: &str, program_name: &str, runtime_lib: &st
 	if !output.status.success() {
 		let out = String::from_utf8(output.stderr).expect("Invalid stdout from ld");
 		let msg = format!("Linking {} failed:\n{}", program_path, out);
-		return err(Pos::zero(), ErrorType::CodegenError(msg));		
+		return err(Pos::zero(), ErrorType::CodegenError(msg));
 	}
 
 	Ok(())

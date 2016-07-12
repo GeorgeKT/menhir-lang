@@ -120,7 +120,6 @@ fn parse_vars(tq: &mut TokenQueue, indent_level: usize, constants: bool, public:
     Ok(vars)
 }
 
-
 pub fn parse_block(tq: &mut TokenQueue, indent_level: usize, mode: ParseMode) -> Result<Block, CompileError>
 {
     let mut statements = Vec::new();

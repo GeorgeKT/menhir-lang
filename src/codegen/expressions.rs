@@ -7,6 +7,8 @@ use libc;
 
 use ast::*;
 use codegen::*;
+use codegen::context::*;
+use codegen::symbols::*;
 use compileerror::*;
 use parser::Operator;
 
@@ -45,7 +47,7 @@ unsafe fn gen_integer(ctx: &Context, i: u64, _span: &Span) -> Result<LLVMValueRe
 
 unsafe fn gen_string_literal(ctx: &Context, s: &str, _span: &Span) -> Result<LLVMValueRef, CompileError>
 {
-    let glob = LLVMAddGlobal(ctx.module, LLVMArrayType(LLVMInt8TypeInContext(ctx.context), s.len() as u32), cstr("string"));
+    let glob = LLVMAddGlobal(ctx.get_module(), LLVMArrayType(LLVMInt8TypeInContext(ctx.context), s.len() as u32), cstr("string"));
 
     LLVMSetLinkage(glob, LLVMLinkage::LLVMInternalLinkage);
     LLVMSetGlobalConstant(glob, 1);
@@ -272,7 +274,7 @@ unsafe fn gen_member_call(ctx: &Context, c: &Call, st: &StructType, self_ptr: LL
     }
 
     let full_name = format!("{}::{}", st.name, c.name);
-    let func: &FunctionInstance = try!(ctx
+    let func = try!(ctx
         .get_function(&full_name)
         .ok_or(CompileError::new(c.span.start, ErrorType::UnknownFunction(full_name))));
 
@@ -280,7 +282,7 @@ unsafe fn gen_member_call(ctx: &Context, c: &Call, st: &StructType, self_ptr: LL
         return err(c.span.start, ErrorType::PrivateMemberAccess(c.name.clone()));
     }
 
-    gen_call_common(ctx, c, func, arg_vals)
+    gen_call_common(ctx, c, &func, arg_vals)
 }
 
 unsafe fn gen_call_common(ctx: &Context, c: &Call, func: &FunctionInstance, mut arg_vals: Vec<LLVMValueRef>)  -> Result<LLVMValueRef, CompileError>
@@ -316,11 +318,11 @@ unsafe fn gen_call(ctx: &Context, c: &Call) -> Result<LLVMValueRef, CompileError
         arg_vals.push(try!(gen_expression(ctx, arg)));
     }
 
-    let func: &FunctionInstance = try!(ctx
+    let func = try!(ctx
         .get_function(&c.name)
         .ok_or(CompileError::new(c.span.start, ErrorType::UnknownFunction(c.name.clone()))));
 
-    gen_call_common(ctx, c, func, arg_vals)
+    gen_call_common(ctx, c, &func, arg_vals)
 }
 
 unsafe fn gen_name_ref(ctx: &Context, nr: &NameRef, store: bool) -> Result<LLVMValueRef, CompileError>

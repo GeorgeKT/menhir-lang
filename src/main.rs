@@ -74,27 +74,23 @@ fn main()
 
     let input_file = args.arg_input_file.expect("Missing input file argument");
     let output_file = args.flag_output.unwrap_or(default_output_file(&input_file));
-    match parse_file(&input_file, ParseMode::Block)
-    {
-        Err(e) => println!("Error: {}", e),
-        Ok(p) => {
-            let debug_compiler = args.flag_debug.unwrap_or(false);
-            let opts = CodeGenOptions{
-                dump_ir: debug_compiler,
-                build_dir: "build".into(),
-                program_name: output_file,
-                runtime_library: find_runtime_library().expect("Unable to find the cobra runtime library"),
-                optimize: args.flag_optimize.unwrap_or(false),
-            };
 
-/*
-            if debug_compiler {
-                p.print(0);
-            }
-*/
-            if let Err(e) = codegen(&p, &opts) {
-                println!("Error: {}", e);
-            }
-        },
+
+    let debug_compiler = args.flag_debug.unwrap_or(false);
+    let opts = CodeGenOptions{
+        dump_ir: debug_compiler,
+        build_dir: "build".into(),
+        program_name: output_file,
+        runtime_library: find_runtime_library().expect("Unable to find the cobra runtime library"),
+        optimize: args.flag_optimize.unwrap_or(false),
+    };
+
+    let r = parse_file(&input_file, ParseMode::Block)
+        .and_then(|p| codegen(&p, &opts))
+        .and_then(|ctx| link(&ctx, &opts));
+
+    if let Err(e) = r
+    {
+        println!("Error: {}", e);
     }
 }
