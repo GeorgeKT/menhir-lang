@@ -48,15 +48,40 @@ pub struct CodeGenOptions
 }
 
 
+pub fn llvm_init()
+{
+    unsafe {
+        use llvm::initialization::*;
+        use llvm::target::*;
+        LLVM_InitializeAllTargetInfos();
+        LLVM_InitializeAllTargets();
+        LLVM_InitializeAllTargetMCs();
+        LLVM_InitializeAllAsmPrinters();
+        LLVM_InitializeAllAsmParsers();
+
+        let pass_registry = LLVMGetGlobalPassRegistry();
+        LLVMInitializeCore(pass_registry);
+        LLVMInitializeTransformUtils(pass_registry);
+        LLVMInitializeScalarOpts(pass_registry);
+        LLVMInitializeObjCARCOpts(pass_registry);
+        LLVMInitializeVectorization(pass_registry);
+        LLVMInitializeInstCombine(pass_registry);
+        LLVMInitializeIPO(pass_registry);
+        LLVMInitializeInstrumentation(pass_registry);
+        LLVMInitializeAnalysis(pass_registry);
+        LLVMInitializeIPA(pass_registry);
+        LLVMInitializeCodeGen(pass_registry);
+        LLVMInitializeTarget(pass_registry);
+    }
+}
+
 pub fn codegen(m: &Module, opts: &CodeGenOptions) -> Result<Context, CompileError>
 {
-    use self::linker::*;
     unsafe {
-        llvm_init();
         // Set up a context, module and builder in that context.
         let mut ctx = Context::new(&m.name);
-        try!(gen_program(&mut ctx, m));
-
+        try!(gen_module(&mut ctx, m));
+        try!(ctx.verify_modules());
         if opts.optimize {
             try!(ctx.optimize());
         }
@@ -64,7 +89,7 @@ pub fn codegen(m: &Module, opts: &CodeGenOptions) -> Result<Context, CompileErro
         if opts.dump_ir {
             println!("LLVM IR: {}", m.name);
             // Dump the module as IR to stdout.
-            LLVMDumpModule(ctx.get_module());
+            LLVMDumpModule(ctx.get_current_module_ref());
             println!("----------------------");
         }
 

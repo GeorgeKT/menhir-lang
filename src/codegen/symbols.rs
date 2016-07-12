@@ -10,6 +10,7 @@ pub struct VariableInstance
     pub value: LLVMValueRef,
     pub name: String,
     pub constant: bool,
+    pub public: bool,
     pub typ: Type,
 }
 
@@ -38,6 +39,7 @@ pub struct StructType
     pub name: String,
     pub typ: LLVMTypeRef,
     pub members: Vec<Rc<StructMemberVar>>,
+    pub public: bool,
 }
 
 impl StructType
@@ -72,14 +74,10 @@ impl SymbolTable
         }
     }
 
-    pub fn add_variable(&mut self, name: &str, value: LLVMValueRef, constant: bool, typ: Type)
+    pub fn add_variable(&mut self, var: Rc<VariableInstance>)
     {
-        self.vars.insert(name.into(), Rc::new(VariableInstance{
-            value: value,
-            name: name.into(),
-            constant: constant,
-            typ: typ,
-        }));
+        let name = var.name.clone();
+        self.vars.insert(name, var);
     }
 
     pub fn get_variable(&self, name: &str) -> Option<Rc<VariableInstance>>
@@ -87,10 +85,10 @@ impl SymbolTable
         self.vars.get(name).map(|v| v.clone())
     }
 
-    pub fn add_function(&mut self, f: FunctionInstance)
+    pub fn add_function(&mut self, f: Rc<FunctionInstance>)
     {
         let name = f.name.clone();
-        self.funcs.insert(name, Rc::new(f));
+        self.funcs.insert(name, f);
     }
 
     pub fn get_function(&self, name: &str) -> Option<Rc<FunctionInstance>>
@@ -103,8 +101,8 @@ impl SymbolTable
         self.complex_types.get(name).map(|st| st.clone())
     }
 
-    pub fn add_complex_type(&mut self, st: StructType)
+    pub fn add_complex_type(&mut self, st: Rc<StructType>)
     {
-        self.complex_types.insert(st.name.clone(), Rc::new(st));
+        self.complex_types.insert(st.name.clone(), st);
     }
 }

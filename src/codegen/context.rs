@@ -1,20 +1,25 @@
 use std::rc::Rc;
+use std::ffi::CStr;
+use std::os::raw::c_char;
+use std::ptr;
+use std::mem;
+
 use llvm::prelude::*;
 use llvm::core::*;
+use llvm::target_machine::*;
 
 use ast::*;
 use compileerror::*;
+use codegen::cstr;
 use codegen::modulecontext::*;
-use codegen::stackframe::*;
 use codegen::symbols::*;
 
 pub struct Context
 {
     pub context: LLVMContextRef,
     pub builder: LLVMBuilderRef,
-    imports: Vec<ModuleContext>,
-    module: ModuleContext,
-    stack: Vec<StackFrame>,
+    modules: Vec<Box<ModuleContext>>,
+    current_module: Box<ModuleContext>,
 }
 
 impl Context
@@ -25,89 +30,35 @@ impl Context
             let context = LLVMContextCreate();
             Context{
                 context: context,
-                imports: Vec::new(),
-                module: ModuleContext::new(context, name, "::"),
+                modules: Vec::new(),
+                current_module: Box::new(ModuleContext::new(context, name, "::")),
                 builder: LLVMCreateBuilderInContext(context),
-                stack: Vec::new(),
             }
         }
     }
 
-    pub fn get_module(&self) -> LLVMModuleRef
+    pub fn get_current_module_ref(&self) -> LLVMModuleRef
     {
-        self.module.module
+        self.current_module.module
     }
 
-    pub fn get_module_name(&self) -> String
+    // Set the current module, return the old module
+    pub fn set_current_module(&mut self, new_current: Box<ModuleContext>) -> Box<ModuleContext>
     {
-        self.module.name.clone()
+        mem::replace(&mut self.current_module, new_current)
     }
 
-/*
-    pub fn add_module(&mut self, name: &str, path: &str) -> LLVMModuleRef
+    pub fn add_module(&mut self, mc: Box<ModuleContext>)
     {
-        let m = ModuleContext::new(self.context, name, path);
-        let mref = m.module;
-        self.modules.push(m);
-        mref
-    }
-*/
-    pub fn push_stack_frame(&mut self, fun: LLVMValueRef, bb: LLVMBasicBlockRef)
-    {
-        self.stack.push(StackFrame::new(fun, bb));
+        self.modules.push(mc);
     }
 
-    pub fn pop_stack_frame(&mut self)
+    pub fn verify_modules(&mut self) -> Result<(), CompileError>
     {
-        self.stack.pop();
-    }
-
-    pub fn top_stack_frame(&mut self) -> &mut StackFrame
-    {
-        self.stack.last_mut().expect("Empty stack")
-    }
-
-    pub fn get_variable(&self, name: &str) -> Option<Rc<VariableInstance>>
-    {
-        for sf in self.stack.iter().rev() {
-            let v = sf.symbols.get_variable(name);
-            if v.is_some() {
-                return v;
-            }
+        for md in &self.modules {
+            try!(md.verify_module());
         }
-        None
-    }
-
-    pub fn has_variable(&self, name: &str) -> bool
-    {
-        self.get_variable(name).is_some()
-    }
-
-    pub fn get_function(&self, name: &str) -> Option<Rc<FunctionInstance>>
-    {
-        for sf in self.stack.iter().rev() {
-            let f = sf.symbols.get_function(name);
-            if f.is_some() {
-                return f;
-            }
-        }
-        None
-    }
-
-    pub fn has_function(&self, name: &str) -> bool
-    {
-        self.get_function(name).is_some()
-    }
-
-    pub fn get_complex_type(&self, name: &str) -> Option<Rc<StructType>>
-    {
-        for sf in self.stack.iter().rev() {
-            let f = sf.symbols.get_complex_type(name);
-            if f.is_some() {
-                return f;
-            }
-        }
-        None
+        self.current_module.verify_module()
     }
 
     pub unsafe fn resolve_type(&self, typ: &Type) -> Option<LLVMTypeRef>
@@ -238,9 +189,154 @@ impl Context
 
     pub fn optimize(&self) -> Result<(), CompileError>
     {
-        unsafe {
-            self.module.optimize()
+        for md in &self.modules {
+            try!(md.optimize());
         }
+        self.current_module.optimize()
+    }
+
+
+    pub unsafe fn gen_object_files(&self, build_dir: &str) -> Result<Vec<String>, CompileError>
+    {
+        let target_triple = CStr::from_ptr(LLVMGetDefaultTargetTriple());
+        let target_triple_str = target_triple.to_str().expect("Invalid target triple");
+        println!("Compiling for {}", target_triple_str);
+
+        let mut target: LLVMTargetRef = ptr::null_mut();
+        let mut error_message: *mut c_char = ptr::null_mut();
+        if LLVMGetTargetFromTriple(target_triple.as_ptr(), &mut target, &mut error_message) != 0 {
+            let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
+            let e = format!("Unable to get an LLVM target reference for {}: {}", target_triple_str, msg);
+            LLVMDisposeMessage(error_message);
+            return err(Pos::zero(), ErrorType::CodegenError(e));
+        }
+
+        let target_machine = LLVMCreateTargetMachine(
+            target,
+            target_triple.as_ptr(),
+            cstr(""),
+            cstr(""),
+            LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault,
+            LLVMRelocMode::LLVMRelocDefault,
+            LLVMCodeModel::LLVMCodeModelDefault,
+        );
+        if target_machine == ptr::null_mut() {
+            let e = format!("Unable to get a LLVM target machine for {}", target_triple_str);
+            return err(Pos::zero(), ErrorType::CodegenError(e));
+        }
+
+        let mut obj_files = Vec::new();
+
+        for md in &self.modules {
+            obj_files.push(try!(md.gen_object_file(target_machine, build_dir)));
+        }
+        obj_files.push(try!(self.current_module.gen_object_file(target_machine, build_dir)));
+
+        LLVMDisposeTargetMachine(target_machine);
+        Ok(obj_files)
+    }
+
+
+    pub fn push_stack_frame(&mut self, fun: LLVMValueRef)
+    {
+        self.current_module.push_stack_frame(fun);
+    }
+
+    pub fn pop_stack_frame(&mut self)
+    {
+        self.current_module.pop_stack_frame();
+    }
+
+    pub fn in_global_context(&self) -> bool
+    {
+        self.current_module.in_global_context()
+    }
+
+    pub fn get_variable(&self, name: &str) -> Option<Rc<VariableInstance>>
+    {
+        let v = self.current_module.get_variable(name, true);
+        if v.is_some() {
+            return v;
+        }
+
+        for md in &self.modules {
+            let v = md.get_variable(name, false);
+            if v.is_some() {
+                return v;
+            }
+        }
+        None
+    }
+
+    pub fn has_variable(&self, name: &str) -> bool
+    {
+        self.get_variable(name).is_some()
+    }
+
+    pub fn add_variable(&mut self, name: &str, value: LLVMValueRef, constant: bool, public: bool, typ: Type)
+    {
+        let var = Rc::new(VariableInstance{
+            value: value,
+            name: name.into(),
+            constant: constant,
+            public: public,
+            typ: typ,
+        });
+        self.current_module.add_variable(var);
+    }
+
+    pub fn get_function(&self, name: &str) -> Option<Rc<FunctionInstance>>
+    {
+        let func = self.current_module.get_function(name, true);
+        if func.is_some() {
+            return func;
+
+        }
+
+        for md in &self.modules {
+            let func = md.get_function(name, false);
+            if func.is_some() {
+                return func;
+            }
+        }
+        None
+    }
+
+    pub fn has_function(&self, name: &str) -> bool
+    {
+        self.get_function(name).is_some()
+    }
+
+    pub fn add_function(&mut self, fi: FunctionInstance)
+    {
+        self.current_module.add_function(Rc::new(fi));
+    }
+
+    pub fn get_complex_type(&self, name: &str) -> Option<Rc<StructType>>
+    {
+        let ct = self.current_module.get_complex_type(name, true);
+        if ct.is_some() {
+            return ct;
+        }
+
+        for md in &self.modules {
+            let ct = md.get_complex_type(name, false);
+            if ct.is_some() {
+                return ct;
+            }
+        }
+
+        None
+    }
+
+    pub fn add_complex_type(&mut self, st: StructType)
+    {
+        self.current_module.add_complex_type(Rc::new(st));
+    }
+
+    pub fn get_current_function(&self) -> LLVMValueRef
+    {
+        self.current_module.get_current_function()
     }
 }
 

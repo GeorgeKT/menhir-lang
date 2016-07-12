@@ -85,6 +85,7 @@ fn main()
         optimize: args.flag_optimize.unwrap_or(false),
     };
 
+    llvm_init();
     let r = parse_file(&input_file, ParseMode::Block)
         .and_then(|p| codegen(&p, &opts))
         .and_then(|ctx| link(&ctx, &opts));

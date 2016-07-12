@@ -1,9 +1,8 @@
 use std::ptr;
 use std::rc::Rc;
-use std::ffi::CStr;
-use std::os::raw::c_char;
+use llvm::*;
+use llvm::prelude::*;
 use llvm::core::*;
-use llvm::analysis::*;
 use libc;
 
 use ast::*;
@@ -14,10 +13,13 @@ use codegen::expressions::*;
 use codegen::symbols::*;
 
 
-#[allow(unused_variables)]
 fn gen_import(ctx: &mut Context, import: &Import) -> Result<(), CompileError>
 {
-     err(Pos::new(0, 0), ErrorType::UnexpectedEOF)
+    use codegen::modulecontext::import_module;
+    for md in &import.modules {
+        try!(import_module(ctx, md));
+    }
+    Ok(())
 }
 
 unsafe fn gen_variable(ctx: &mut Context, v: &Variable) -> Result<(), CompileError>
@@ -44,12 +46,19 @@ unsafe fn gen_variable(ctx: &mut Context, v: &Variable) -> Result<(), CompileErr
         return err(v.span.start, ErrorType::TypeError(format!("Unknown type '{}'", v.typ)));
     }
 
+    if ctx.in_global_context() {
+        let glob = LLVMAddGlobal(ctx.get_current_module_ref(), initial_value_type, cstr("string"));
+        LLVMSetLinkage(glob, LLVMLinkage::LLVMInternalLinkage);
+        LLVMSetGlobalConstant(glob, if v.is_const {1} else {0});
+        LLVMSetInitializer(glob, initial_value);
+        ctx.add_variable(&v.name, glob, v.is_const, v.public, v_typ);
+    } else {
+        let var = LLVMBuildAlloca(ctx.builder, initial_value_type, cstr("var"));
+        LLVMBuildStore(ctx.builder, initial_value, var);
 
-    let var = LLVMBuildAlloca(ctx.builder, initial_value_type, cstr("var"));
-    LLVMBuildStore(ctx.builder, initial_value, var);
+        ctx.add_variable(&v.name, var, v.is_const, v.public, v_typ);
+    }
 
-    let mut sf = ctx.top_stack_frame();
-    sf.symbols.add_variable(&v.name, var, v.is_const, v_typ);
     Ok(())
 }
 
@@ -68,7 +77,7 @@ unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, public: b
     }
 
     let function_type = LLVMFunctionType(ret_type, arg_types.as_mut_ptr(), arg_types.len() as libc::c_uint, 0);
-    let function = LLVMAddFunction(ctx.get_module(), cstr(&sig.name), function_type);
+    let function = LLVMAddFunction(ctx.get_current_module_ref(), cstr(&sig.name), function_type);
 
     Ok(FunctionInstance{
         name: sig.name.clone(),
@@ -89,15 +98,16 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<FunctionInstan
     let fi = try!(gen_function_sig(ctx, &f.sig, f.public, &f.span));
 
     let bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, cstr("entry"));
+    let current_bb = LLVMGetInsertBlock(ctx.builder);
     LLVMPositionBuilderAtEnd(ctx.builder, bb);
 
-    ctx.push_stack_frame(fi.function, bb);
+    ctx.push_stack_frame(fi.function);
 
     for (i, arg) in f.sig.args.iter().enumerate() {
         let var = LLVMGetParam(fi.function, i as libc::c_uint);
         let alloc = LLVMBuildAlloca(ctx.builder, fi.args[i], cstr("argtmp"));
         LLVMBuildStore(ctx.builder, var, alloc);
-        ctx.top_stack_frame().symbols.add_variable(&arg.name, alloc, arg.constant, arg.typ.clone());
+        ctx.add_variable(&arg.name, alloc, arg.constant, false, arg.typ.clone());
     }
 
     for s in &f.block.statements {
@@ -106,17 +116,27 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<FunctionInstan
 
     if f.sig.return_type == Type::Void {
         LLVMBuildRetVoid(ctx.builder);
+    } else if LLVMIsATerminatorInst(LLVMGetLastInstruction(LLVMGetInsertBlock(ctx.builder))) == ptr::null_mut() {
+        return err(f.span.end, ErrorType::MissingReturn(f.sig.name.clone()));
     }
 
     ctx.pop_stack_frame();
-    LLVMPositionBuilderAtEnd(ctx.builder, ctx.top_stack_frame().get_current_bb());
+
+    if current_bb != ptr::null_mut() {
+        LLVMPositionBuilderAtEnd(ctx.builder, current_bb);
+    }
+
     Ok(fi)
 }
 
 unsafe fn gen_external_function(ctx: &mut Context, f: &ExternalFunction) -> Result<(), CompileError>
 {
+    if ctx.has_function(&f.sig.name) {
+        return err(f.span.start, ErrorType::RedefinitionOfFunction(f.sig.name.clone()));
+    }
+
     let fi = try!(gen_function_sig(ctx, &f.sig, true, &f.span));
-    ctx.top_stack_frame().symbols.add_function(fi);
+    ctx.add_function(fi);
     Ok(())
 }
 
@@ -130,7 +150,7 @@ unsafe fn gen_block(ctx: &mut Context, b: &Block) -> Result<(), CompileError>
 
 unsafe fn gen_while(ctx: &mut Context, f: &While) -> Result<(), CompileError>
 {
-    let func = ctx.top_stack_frame().get_current_function();
+    let func = ctx.get_current_function();
     let loop_cond_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("loop_cond"));
     let loop_body_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("loop_body"));
     let post_loop_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("loop_done"));
@@ -140,19 +160,17 @@ unsafe fn gen_while(ctx: &mut Context, f: &While) -> Result<(), CompileError>
     let cond = try!(gen_expression(ctx, &f.cond));
     LLVMBuildCondBr(ctx.builder, cond, loop_body_bb, post_loop_bb);
     LLVMPositionBuilderAtEnd(ctx.builder, loop_body_bb);
-    ctx.top_stack_frame().set_current_bb(loop_body_bb);
 
     try!(gen_block(ctx, &f.block));
 
     LLVMBuildBr(ctx.builder, loop_cond_bb);
     LLVMPositionBuilderAtEnd(ctx.builder, post_loop_bb);
-    ctx.top_stack_frame().set_current_bb(post_loop_bb);
     Ok(())
 }
 
 unsafe fn gen_if(ctx: &mut Context, f: &If) -> Result<(), CompileError>
 {
-    let func = ctx.top_stack_frame().get_current_function();
+    let func = ctx.get_current_function();
     let if_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("if_bb"));
     let after_if_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("after_if_bb"));
     let else_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("else_bb"));
@@ -182,17 +200,20 @@ unsafe fn gen_if(ctx: &mut Context, f: &If) -> Result<(), CompileError>
     }
 
     LLVMPositionBuilderAtEnd(ctx.builder, after_if_bb);
-    ctx.top_stack_frame().set_current_bb(after_if_bb);
     Ok(())
+}
+
+unsafe fn return_type(func: LLVMValueRef) -> LLVMTypeRef
+{
+    LLVMGetReturnType(LLVMGetElementType(LLVMTypeOf(func)))
 }
 
 unsafe fn gen_return(ctx: &mut Context, f: &Return) -> Result<(), CompileError>
 {
     let ret = try!(gen_expression(ctx, &f.expr));
     let builder = ctx.builder;
-    let sf = ctx.top_stack_frame();
     let ret_type =  LLVMTypeOf(ret);
-    let func_type = sf.return_type();
+    let func_type = return_type(ctx.get_current_function());
     if ret_type != func_type {
         err(f.span.start, ErrorType::TypeError(
             format!("Attempting to return type '{}' expecting '{}'", type_name(ret_type), type_name(func_type))))
@@ -238,13 +259,14 @@ unsafe fn gen_struct(ctx: &mut Context, s: &Struct) -> Result<(), CompileError>
         name: s.name.clone(),
         typ: LLVMStructTypeInContext(ctx.context, element_types.as_mut_ptr(), s.variables.len() as u32, 0),
         members: members,
+        public: s.public,
     };
 
-    ctx.top_stack_frame().symbols.add_complex_type(struct_type);
+    ctx.add_complex_type(struct_type);
 
     for f in &s.functions {
         let func = try!(gen_function(ctx, f));
-        ctx.top_stack_frame().symbols.add_function(func)
+        ctx.add_function(func)
     }
 
     Ok(())
@@ -274,7 +296,7 @@ unsafe fn gen_statement(ctx: &mut Context, stmt: &Statement) -> Result<(), Compi
         },
         Statement::Function(ref fun) => {
             let function_instance = try!(gen_function(ctx, fun));
-            ctx.top_stack_frame().symbols.add_function(function_instance);
+            ctx.add_function(function_instance);
             Ok(())
         },
         Statement::ExternalFunction(ref fun) => gen_external_function(ctx, fun),
@@ -288,34 +310,8 @@ unsafe fn gen_statement(ctx: &mut Context, stmt: &Statement) -> Result<(), Compi
     }
 }
 
-pub unsafe fn verify_module(ctx: &Context) -> Result<(), CompileError>
+pub unsafe fn gen_module(ctx: &mut Context, module: &Module) -> Result<(), CompileError>
 {
-    let mut error_message: *mut c_char = ptr::null_mut();
-    if LLVMVerifyModule(ctx.get_module(), LLVMVerifierFailureAction::LLVMReturnStatusAction, &mut error_message) != 0 {
-        let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
-        let e = format!("Module verification error: {}", msg);
-        LLVMDisposeMessage(error_message);
-        err(Pos::zero(), ErrorType::CodegenError(e))
-    } else {
-        Ok(())
-    }
-}
-
-pub unsafe fn gen_program(ctx: &mut Context, prog: &Module) -> Result<(), CompileError>
-{
-    let main_ret_type = LLVMInt64TypeInContext(ctx.context);
-    let function_type = LLVMFunctionType(main_ret_type, ptr::null_mut(), 0, 0);
-    let function = LLVMAddFunction(ctx.get_module(), cstr("main"), function_type);
-    let bb = LLVMAppendBasicBlockInContext(ctx.context, function, cstr("entry"));
-    LLVMPositionBuilderAtEnd(ctx.builder, bb);
-
-    ctx.push_stack_frame(function, bb);
-    try!(gen_block(ctx, &prog.block));
-
-    if LLVMIsATerminatorInst(LLVMGetLastInstruction(ctx.top_stack_frame().get_current_bb())) == ptr::null_mut() {
-        LLVMBuildRet(ctx.builder, const_int(ctx.context, 0));
-    }
-
-    try!(verify_module(ctx));
+    try!(gen_block(ctx, &module.block));
     Ok(())
 }
