@@ -415,7 +415,7 @@ unsafe fn optimize_module(ctx: &Context) -> Result<(), CompileError>
 }
 
 
-pub fn codegen(prog: &Program, opts: &CodeGenOptions) -> Result<(), CompileError>
+pub fn codegen(prog: &Module, opts: &CodeGenOptions) -> Result<(), CompileError>
 {
     use self::linker::*;
 

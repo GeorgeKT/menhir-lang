@@ -14,7 +14,7 @@ struct Point:
         return self.x * self.y + self.sum()
 
 
-cobra::syscalls::write(STDOUT, "Running tests\n", 14)
+write(STDOUT, "Running tests\n", 14)
 var p = Point{4, 5}
 p.inc()
 

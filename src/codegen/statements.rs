@@ -306,7 +306,7 @@ pub unsafe fn verify_module(ctx: &Context) -> Result<(), CompileError>
     }
 }
 
-pub unsafe fn gen_program(ctx: &mut Context, prog: &Program) -> Result<(), CompileError>
+pub unsafe fn gen_program(ctx: &mut Context, prog: &Module) -> Result<(), CompileError>
 {
     let main_ret_type = LLVMInt64TypeInContext(ctx.context);
     let function_type = LLVMFunctionType(main_ret_type, ptr::null_mut(), 0, 0);

@@ -120,11 +120,12 @@ fn parse_vars(tq: &mut TokenQueue, indent_level: usize, constants: bool, public:
     Ok(vars)
 }
 
-pub fn parse_block(tq: &mut TokenQueue, indent_level: usize) -> Result<Block, CompileError>
+
+pub fn parse_block(tq: &mut TokenQueue, indent_level: usize, mode: ParseMode) -> Result<Block, CompileError>
 {
     let mut statements = Vec::new();
     if tq.next_indent().is_none() {
-        statements.push(try!(parse_statement(tq, indent_level)));
+        statements.push(try!(parse_statement(tq, indent_level, mode)));
     }
 
     loop {
@@ -137,7 +138,7 @@ pub fn parse_block(tq: &mut TokenQueue, indent_level: usize) -> Result<Block, Co
                     break;
                 }
 
-                statements.push(try!(parse_statement(tq, lvl)));
+                statements.push(try!(parse_statement(tq, lvl, mode)));
             },
             _ => break,
         }
@@ -203,7 +204,7 @@ fn parse_func(tq: &mut TokenQueue, start_pos: Pos, indent_level: usize, public: 
     let sig = try!(parse_func_signature(tq, self_type));
     try!(tq.expect(TokenKind::Colon));
 
-    let block = try!(parse_block(tq, indent_level));
+    let block = try!(parse_block(tq, indent_level, ParseMode::Block));
     Ok(Function::new(
         sig,
         public,
@@ -223,7 +224,7 @@ fn parse_while(tq: &mut TokenQueue, indent_level: usize, pos: Pos) -> Result<Sta
 {
     let cond = try!(parse_expression(tq, indent_level));
     try!(tq.expect(TokenKind::Colon));
-    let block = try!(parse_block(tq, indent_level));
+    let block = try!(parse_block(tq, indent_level, ParseMode::Block));
     Ok(Statement::While(While::new(cond, block, Span::new(pos, tq.pos()))))
 }
 
@@ -237,7 +238,7 @@ fn parse_else(tq: &mut TokenQueue, indent_level: usize) -> Result<ElsePart, Comp
     else
     {
         try!(tq.expect(TokenKind::Colon));
-        Ok(ElsePart::Block(try!(parse_block(tq, indent_level))))
+        Ok(ElsePart::Block(try!(parse_block(tq, indent_level, ParseMode::Block))))
     }
 }
 
@@ -245,7 +246,7 @@ fn parse_if(tq: &mut TokenQueue, indent_level: usize, pos: Pos) -> Result<If, Co
 {
     let cond = try!(parse_expression(tq, indent_level));
     try!(tq.expect(TokenKind::Colon));
-    let if_block = try!(parse_block(tq, indent_level));
+    let if_block = try!(parse_block(tq, indent_level, ParseMode::Block));
     let mut else_part = ElsePart::Empty;
 
     if let Some(lvl) = tq.next_indent() {
@@ -396,7 +397,7 @@ fn parse_match_case(tq: &mut TokenQueue, indent_level: usize) -> Result<MatchCas
     }
 
     try!(tq.expect(TokenKind::Colon));
-    let block = try!(parse_block(tq, indent_level));
+    let block = try!(parse_block(tq, indent_level, ParseMode::Block));
     Ok(MatchCase::new(name, bindings, block, Span::new(pos, tq.pos())))
 }
 
@@ -419,9 +420,13 @@ fn parse_match(tq: &mut TokenQueue, indent_level: usize, pos: Pos) -> Result<Sta
     Ok(Statement::Match(m))
 }
 
-pub fn parse_statement(tq: &mut TokenQueue, indent_level: usize) -> Result<Statement, CompileError>
+pub fn parse_statement(tq: &mut TokenQueue, indent_level: usize, mode: ParseMode) -> Result<Statement, CompileError>
 {
     let tok = try!(tq.pop());
+    if mode == ParseMode::Module {
+        return parse_module_statement(tq, indent_level, tok);
+    }
+
     match tok.kind
     {
         TokenKind::While => parse_while(tq, indent_level, tok.span.start),
