@@ -47,15 +47,14 @@ unsafe fn gen_variable(ctx: &mut Context, v: &Variable) -> Result<(), CompileErr
     }
 
     if ctx.in_global_context() {
-        let glob = LLVMAddGlobal(ctx.get_current_module_ref(), initial_value_type, cstr("string"));
+        let glob = LLVMAddGlobal(ctx.get_current_module_ref(), initial_value_type, cstr("glob_var"));
         LLVMSetLinkage(glob, LLVMLinkage::LLVMInternalLinkage);
         LLVMSetGlobalConstant(glob, if v.is_const {1} else {0});
         LLVMSetInitializer(glob, initial_value);
         ctx.add_variable(&v.name, glob, v.is_const, v.public, v_typ);
     } else {
-        let var = LLVMBuildAlloca(ctx.builder, initial_value_type, cstr("var"));
+        let var = LLVMBuildAlloca(ctx.builder, initial_value_type, cstr("local_var"));
         LLVMBuildStore(ctx.builder, initial_value, var);
-
         ctx.add_variable(&v.name, var, v.is_const, v.public, v_typ);
     }
 

@@ -81,7 +81,7 @@ pub fn codegen(m: &Module, opts: &CodeGenOptions) -> Result<Context, CompileErro
         // Set up a context, module and builder in that context.
         let mut ctx = Context::new(&m.name);
         try!(gen_module(&mut ctx, m));
-        try!(ctx.verify_modules());
+        try!(ctx.verify()); 
         if opts.optimize {
             try!(ctx.optimize());
         }

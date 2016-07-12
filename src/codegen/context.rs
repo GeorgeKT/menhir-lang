@@ -1,8 +1,9 @@
 use std::rc::Rc;
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::ptr;
 use std::mem;
+use std::fs::DirBuilder;
 
 use llvm::prelude::*;
 use llvm::core::*;
@@ -10,14 +11,16 @@ use llvm::target_machine::*;
 
 use ast::*;
 use compileerror::*;
-use codegen::cstr;
+use codegen::*;
 use codegen::modulecontext::*;
 use codegen::symbols::*;
 
 pub struct Context
 {
     pub context: LLVMContextRef,
+    pub module: LLVMModuleRef,
     pub builder: LLVMBuilderRef,
+    name: String,
     modules: Vec<Box<ModuleContext>>,
     current_module: Box<ModuleContext>,
 }
@@ -27,19 +30,22 @@ impl Context
     pub fn new(name: &str) -> Context
     {
         unsafe {
+            let cname = CString::new(name).expect("Invalid module name");
             let context = LLVMContextCreate();
             Context{
                 context: context,
-                modules: Vec::new(),
-                current_module: Box::new(ModuleContext::new(context, name, "::")),
+                module: LLVMModuleCreateWithNameInContext(cname.as_ptr(), context),
                 builder: LLVMCreateBuilderInContext(context),
+                name: name.into(),
+                modules: Vec::new(),
+                current_module: Box::new(ModuleContext::new("::")),
             }
         }
     }
 
     pub fn get_current_module_ref(&self) -> LLVMModuleRef
     {
-        self.current_module.module
+        self.module
     }
 
     // Set the current module, return the old module
@@ -53,12 +59,20 @@ impl Context
         self.modules.push(mc);
     }
 
-    pub fn verify_modules(&mut self) -> Result<(), CompileError>
+    pub fn verify(&self) -> Result<(), CompileError>
     {
-        for md in &self.modules {
-            try!(md.verify_module());
+        use llvm::analysis::*;
+        unsafe {
+            let mut error_message: *mut c_char = ptr::null_mut();
+            if LLVMVerifyModule(self.module, LLVMVerifierFailureAction::LLVMReturnStatusAction, &mut error_message) != 0 {
+                let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
+                let e = format!("Module verification error: {}", msg);
+                LLVMDisposeMessage(error_message);
+                err(Pos::zero(), ErrorType::CodegenError(e))
+            } else {
+                Ok(())
+            }
         }
-        self.current_module.verify_module()
     }
 
     pub unsafe fn resolve_type(&self, typ: &Type) -> Option<LLVMTypeRef>
@@ -187,16 +201,7 @@ impl Context
         }
     }
 
-    pub fn optimize(&self) -> Result<(), CompileError>
-    {
-        for md in &self.modules {
-            try!(md.optimize());
-        }
-        self.current_module.optimize()
-    }
-
-
-    pub unsafe fn gen_object_files(&self, build_dir: &str) -> Result<Vec<String>, CompileError>
+    pub unsafe fn gen_object_file(&self, build_dir: &str) -> Result<String, CompileError>
     {
         let target_triple = CStr::from_ptr(LLVMGetDefaultTargetTriple());
         let target_triple_str = target_triple.to_str().expect("Invalid target triple");
@@ -225,15 +230,30 @@ impl Context
             return err(Pos::zero(), ErrorType::CodegenError(e));
         }
 
-        let mut obj_files = Vec::new();
+        try!(DirBuilder::new()
+            .recursive(true)
+            .create(build_dir)
+            .map_err(|e| CompileError::new(
+                Pos::zero(),
+                ErrorType::CodegenError(
+                    format!("Unable to create directory for {}: {}", build_dir, e)))));
 
-        for md in &self.modules {
-            obj_files.push(try!(md.gen_object_file(target_machine, build_dir)));
+
+        let obj_file_name = format!("{}/{}.o", build_dir, self.name);
+        println!("  Building {}", self.name);
+
+        let mut error_message: *mut c_char = ptr::null_mut();
+        if LLVMTargetMachineEmitToFile(target_machine, self.module, cstr_mut(&obj_file_name), LLVMCodeGenFileType::LLVMObjectFile, &mut error_message) != 0 {
+            let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
+            let e = format!("Unable to create object file: {}", msg);
+            LLVMDisposeMessage(error_message);
+            LLVMDisposeTargetMachine(target_machine);
+            return err(Pos::zero(), ErrorType::CodegenError(e));
         }
-        obj_files.push(try!(self.current_module.gen_object_file(target_machine, build_dir)));
+
 
         LLVMDisposeTargetMachine(target_machine);
-        Ok(obj_files)
+        Ok(obj_file_name)
     }
 
 
@@ -338,6 +358,30 @@ impl Context
     {
         self.current_module.get_current_function()
     }
+
+    pub fn optimize(&self) -> Result<(), CompileError>
+    {
+        unsafe{
+            use llvm::transforms::pass_manager_builder::*;
+
+            let pmb = LLVMPassManagerBuilderCreate();
+            let pm = LLVMCreateFunctionPassManagerForModule(self.module);
+            LLVMInitializeFunctionPassManager(pm);
+
+            LLVMPassManagerBuilderSetOptLevel(pmb, 2);
+            LLVMPassManagerBuilderPopulateFunctionPassManager(pmb, pm);
+
+            let mut func = LLVMGetFirstFunction(self.module);
+            while func != ptr::null_mut() {
+                LLVMRunFunctionPassManager(pm, func);
+                func = LLVMGetNextFunction(func);
+            }
+
+            LLVMDisposePassManager(pm);
+            LLVMPassManagerBuilderDispose(pmb);
+        }
+        Ok(())
+    }
 }
 
 impl Drop for Context
@@ -346,6 +390,7 @@ impl Drop for Context
     {
         unsafe {
             LLVMDisposeBuilder(self.builder);
+            LLVMDisposeModule(self.module);
             LLVMContextDispose(self.context);
         }
     }
