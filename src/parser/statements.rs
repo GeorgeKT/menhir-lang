@@ -56,6 +56,11 @@ fn parse_type(tq: &mut TokenQueue) -> Result<Type, CompileError>
         try!(tq.pop());
         let st = try!(parse_type(tq));
         Ok(Type::Pointer(Box::new(st)))
+    } else if tq.is_next(TokenKind::OpenBracket) {
+        try!(tq.pop());
+        let at = try!(parse_type(tq));
+        try!(tq.expect(TokenKind::CloseBracket));
+        Ok(Type::Array(Box::new(at)))
     } else {
         let (name, _pos) = try!(tq.expect_identifier());
         if is_primitive_type(&name) {

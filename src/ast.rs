@@ -444,6 +444,7 @@ pub enum Type
     Primitive(String),
     Complex(String),
     Pointer(Box<Type>),
+    Array(Box<Type>),
 }
 
 impl Type
@@ -465,6 +466,7 @@ impl fmt::Display for Type
             Type::Primitive(ref t) => write!(f, "{}", t),
             Type::Complex(ref s) => write!(f, "{}", s),
             Type::Pointer(ref st) => write!(f, "pointer to {}", st),
+            Type::Array(ref at) => write!(f, "array of {}", at),
         }
     }
 }

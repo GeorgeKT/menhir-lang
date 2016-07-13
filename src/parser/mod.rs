@@ -221,6 +221,28 @@ fn test_var_with_pointer_type()
     }
 }
 
+#[test]
+fn test_var_with_array()
+{
+    let stmt = th_statement("var x: [int] = []");
+    if let Statement::Variable(vars) = stmt
+    {
+        assert!(vars.len() == 1);
+        let v = &vars[0];
+        v.print(0);
+        assert!(v.name == "x");
+        assert!(v.typ == Type::Array(Box::new(Type::Primitive("int".into()))));
+        assert!(!v.is_const);
+        assert!(!v.public);
+        assert!(v.init == array_lit(Vec::new(), span(1, 16, 1, 17)));
+    }
+    else
+    {
+        assert!(false);
+    }
+}
+
+
 
 #[cfg(test)]
 fn call(name: &str, args: Vec<Expression>, span: Span) -> Statement
