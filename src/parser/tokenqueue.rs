@@ -109,20 +109,22 @@ impl TokenQueue
             Err(CompileError::new(tok.span.start, ErrorType::ExpectedIndent))
         }
     }
-/*
-    pub fn expect_string(&mut self) -> Result<(String, Pos), CompileError>
+
+    pub fn expect_int(&mut self) -> Result<(u64, Pos), CompileError>
     {
         let tok = try!(self.pop());
-        if let TokenKind::StringLiteral(s) = tok.kind
+        if let TokenKind::Number(v) = tok.kind
         {
-            Ok((s, tok.span.start))
+            let pos = tok.span.start;
+            let val = try!(v.parse::<u64>().map_err(|_| CompileError::new(pos, ErrorType::InvalidInteger)));
+            Ok((val, tok.span.start))
         }
         else
         {
-            Err(CompileError::new(tok.span.start, ErrorType::ExpectedStringLiteral))
+            Err(CompileError::new(tok.span.start, ErrorType::ExpectedIntLiteral))
         }
     }
-*/
+
     pub fn expect_identifier(&mut self) -> Result<(String, Pos), CompileError>
     {
         let tok = try!(self.pop());

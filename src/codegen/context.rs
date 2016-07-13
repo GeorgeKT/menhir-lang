@@ -4,6 +4,7 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::mem;
 use std::fs::DirBuilder;
+use std::collections::HashMap;
 
 use llvm::prelude::*;
 use llvm::core::*;
@@ -23,6 +24,7 @@ pub struct Context
     name: String,
     modules: Vec<Box<ModuleContext>>,
     current_module: Box<ModuleContext>,
+    slice_types: HashMap<String, LLVMTypeRef>,
 }
 
 impl Context
@@ -39,6 +41,7 @@ impl Context
                 name: module_name.into(),
                 modules: Vec::new(),
                 current_module: Box::new(ModuleContext::new(format!("{}::", module_name))),
+                slice_types: HashMap::new(),
             }
         }
     }
@@ -80,7 +83,22 @@ impl Context
         }
     }
 
-    pub unsafe fn resolve_type(&self, typ: &Type) -> Option<LLVMTypeRef>
+    unsafe fn get_slice_type(&mut self, element_type: LLVMTypeRef) -> LLVMTypeRef
+    {
+        let name = format!("slice_{}", type_name(element_type));
+        if let Some(st) = self.slice_types.get(&name) {
+            return *st;
+        }
+
+        let st = LLVMStructCreateNamed(self.context, cstr(&name));
+        // A slice is a struct containing a pointer and a length
+        let mut element_types = vec![LLVMPointerType(element_type, 1), LLVMInt64TypeInContext(self.context)];
+        LLVMStructSetBody(st, element_types.as_mut_ptr(), 2, 0);
+        self.slice_types.insert(name, st);
+        st
+    }
+
+    pub unsafe fn resolve_type(&mut self, typ: &Type) -> Option<LLVMTypeRef>
     {
         match *typ
         {
@@ -102,6 +120,12 @@ impl Context
             Type::Complex(ref name) => {
                 self.get_complex_type(&name).map(|ct| ct.typ)
             },
+            Type::Array(ref st, count) => {
+                self.resolve_type(&st).map(|t| LLVMArrayType(t, count as u32))
+            },
+            Type::Slice(ref st) => {
+                self.resolve_type(&st).map(|t| self.get_slice_type(t))
+            }
             _ => None,
         }
     }
@@ -168,6 +192,23 @@ impl Context
         }
     }
 
+    pub fn infer_array_element_type(&self, a: &ArrayLiteral) -> Result<Type, CompileError>
+    {
+        for e in &a.elements {
+            let t = self.infer_type(e);
+            if t.is_ok() {
+                return t;
+            }
+        }
+
+        let msg = if a.elements.is_empty() {
+            format!("Unable to infer the type of an empty array literal")
+        } else {
+            format!("Unable to infer the type of each array element")
+        };
+        err(a.span.start, ErrorType::TypeError(msg))
+    }
+
     pub fn infer_type(&self, e: &Expression) -> Result<Type, CompileError>
     {
         match *e
@@ -198,25 +239,14 @@ impl Context
             },
             Expression::Assignment(ref a) => self.infer_type(&a.expression),
             Expression::ObjectConstruction(ref oc) => {
-                Ok(Type::ptr(Type::Complex(oc.object_type.clone())))
+                Ok(Type::Complex(oc.object_type.clone()))
             },
             Expression::MemberAccess(ref ma) => {
                 self.infer_member_type(ma)
             },
             Expression::ArrayLiteral(ref a) => {
-                for e in &a.elements {
-                    let t = self.infer_type(e);
-                    if t.is_ok() {
-                        return t;
-                    }
-                }
-
-                let msg = if a.elements.is_empty() {
-                    format!("Unable to infer the type of an empty array literal")
-                } else {
-                    format!("Unable to infer the type of each array element")
-                };
-                err(a.span.start, ErrorType::TypeError(msg))
+                let et = try!(self.infer_array_element_type(a));
+                Ok(Type::Array(Box::new(et), a.elements.len()))
             },
         }
     }
@@ -313,11 +343,11 @@ impl Context
         self.get_variable(name).is_some()
     }
 
-    pub fn add_variable(&mut self, name: &str, value: LLVMValueRef, constant: bool, public: bool, typ: Type)
+    pub fn add_variable(&mut self, name: String, value: LLVMValueRef, constant: bool, public: bool, typ: Type)
     {
         let var = Rc::new(VariableInstance{
             value: value,
-            name: name.into(),
+            name: name,
             constant: constant,
             public: public,
             typ: typ,

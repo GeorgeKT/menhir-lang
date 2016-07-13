@@ -52,16 +52,32 @@ fn is_primitive_type(name: &str) -> bool
 
 fn parse_type(tq: &mut TokenQueue) -> Result<Type, CompileError>
 {
-    if tq.is_next(TokenKind::Operator(Operator::Mul)) {
+    if tq.is_next(TokenKind::Operator(Operator::Mul))
+    {
         try!(tq.pop());
         let st = try!(parse_type(tq));
         Ok(Type::Pointer(Box::new(st)))
-    } else if tq.is_next(TokenKind::OpenBracket) {
+    }
+    else if tq.is_next(TokenKind::OpenBracket)
+    {
         try!(tq.pop());
         let at = try!(parse_type(tq));
-        try!(tq.expect(TokenKind::CloseBracket));
-        Ok(Type::Array(Box::new(at)))
-    } else {
+
+        if tq.is_next(TokenKind::Comma)
+        {
+            try!(tq.pop());
+            let (count, _) = try!(tq.expect_int());
+            try!(tq.expect(TokenKind::CloseBracket));
+            Ok(Type::Array(Box::new(at), count as usize))
+        }
+        else
+        {
+            try!(tq.expect(TokenKind::CloseBracket));
+            Ok(Type::Slice(Box::new(at)))
+        }
+    }
+    else
+    {
         let (name, _pos) = try!(tq.expect_identifier());
         if is_primitive_type(&name) {
             Ok(Type::Primitive(name))

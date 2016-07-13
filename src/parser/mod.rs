@@ -224,17 +224,21 @@ fn test_var_with_pointer_type()
 #[test]
 fn test_var_with_array()
 {
-    let stmt = th_statement("var x: [int] = []");
+    let stmt = th_statement("var x: [int, 2] = [4, 4]");
     if let Statement::Variable(vars) = stmt
     {
         assert!(vars.len() == 1);
         let v = &vars[0];
         v.print(0);
         assert!(v.name == "x");
-        assert!(v.typ == Type::Array(Box::new(Type::Primitive("int".into()))));
+        assert!(v.typ == Type::Array(Box::new(Type::Primitive("int".into())), 2));
         assert!(!v.is_const);
         assert!(!v.public);
-        assert!(v.init == array_lit(Vec::new(), span(1, 16, 1, 17)));
+        assert!(v.init == array_lit(vec![
+                number(4, span(1, 20, 1, 20)),
+                number(4, span(1, 23, 1, 23)),
+            ],
+            span(1, 19, 1, 24)));
     }
     else
     {

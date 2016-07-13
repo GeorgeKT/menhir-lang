@@ -113,7 +113,7 @@ pub enum ErrorType
     UnexpectedToken(Token),
     ExpectedIndent,
     ExpectedIdentifier,
-    //ExpectedStringLiteral,
+    ExpectedIntLiteral,
     ExpectedOperator,
     InvalidOperator(String),
     InvalidUnaryOperator(Operator),
@@ -134,6 +134,7 @@ pub enum ErrorType
     ConstantModification(String),
     PrivateMemberAccess(String),
     MissingReturn(String),
+    ExpectedConstExpr(String),
 }
 
 
@@ -175,7 +176,7 @@ impl fmt::Display for CompileError
             ErrorType::InvalidBinaryOperator(op) =>  write!(f, "{}: Invalid operator {}", self.pos, op),
             ErrorType::ExpectedIdentifier =>  write!(f, "{}: Expected identifier", self.pos),
             ErrorType::ExpectedIndent =>  write!(f, "{}: Expected indentation", self.pos),
-            //ErrorType::ExpectedStringLiteral =>  write!(f, "{}: Expected string literal", self.pos),
+            ErrorType::ExpectedIntLiteral =>  write!(f, "{}: Expected integer literal", self.pos),
             ErrorType::ExpectedOperator => write!(f, "{}: Expected operator", self.pos),
             ErrorType::SelfNotAllowed => write!(f, "{}: A self argument is only allowed as the first argument of a member function", self.pos),
             ErrorType::InvalidFloatingPoint => write!(f, "{}: Invalid floating point number", self.pos),
@@ -193,6 +194,7 @@ impl fmt::Display for CompileError
             ErrorType::ConstantModification(ref name) => write!(f, "{}: Attempting to modify constant '{}'", self.pos, name),
             ErrorType::PrivateMemberAccess(ref var) => write!(f, "{}: Attempting to access private member '{}'", self.pos, var),
             ErrorType::MissingReturn(ref func) => write!(f, "{}: Missing return statement at end of function '{}'", self.pos, func),
+            ErrorType::ExpectedConstExpr(ref msg) => write!(f, "{}: {}", self.pos, msg),
         }
     }
 }

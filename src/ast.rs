@@ -444,7 +444,8 @@ pub enum Type
     Primitive(String),
     Complex(String),
     Pointer(Box<Type>),
-    Array(Box<Type>),
+    Array(Box<Type>, usize),
+    Slice(Box<Type>),
 }
 
 impl Type
@@ -466,7 +467,8 @@ impl fmt::Display for Type
             Type::Primitive(ref t) => write!(f, "{}", t),
             Type::Complex(ref s) => write!(f, "{}", s),
             Type::Pointer(ref st) => write!(f, "pointer to {}", st),
-            Type::Array(ref at) => write!(f, "array of {}", at),
+            Type::Array(ref at, count) => write!(f, "array({}) of {}", count, at),
+            Type::Slice(ref at) => write!(f, "slice of {}", at),
         }
     }
 }

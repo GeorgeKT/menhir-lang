@@ -1,6 +1,5 @@
 import cobra::syscalls
 
-
 struct Point:
     var x = 0, y = 0
 
@@ -8,18 +7,18 @@ struct Point:
         self.x += 1
         self.y += 1
 
-    func sum(self) -> int:
+    pub func sum(self) -> int:
         return self.x + self.y
 
     pub func prod(self) -> int:
-        return self.x * self.y + self.sum()
+        return self.x * self.y
 
-
+const NUMS = [1, 2, 3]
+var X = Point{4, 4}
 
 func main() -> int:
     write(STDOUT, "Running tests\n", 14)
-    var points = [Point{4, 5}, Point{1, 2}]
-    var s = 0
-    for p in points:
-        s += p.sum()
-    return s
+    #var points = [Point{4, 5}, Point{1, 2}]
+    var y = Point{5, 5}
+    y.inc()
+    return X.sum() + y.prod()

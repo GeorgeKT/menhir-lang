@@ -57,7 +57,7 @@ unsafe fn gen_string_literal(ctx: &Context, s: &str, _span: &Span) -> Result<LLV
     Ok(glob)
 }
 
-unsafe fn gen_unary(ctx: &Context, op: &UnaryOp) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_unary(ctx: &mut Context, op: &UnaryOp) -> Result<LLVMValueRef, CompileError>
 {
     let e_val = try!(gen_expression(ctx, &op.expression));
     let e_type = LLVMTypeOf(e_val);
@@ -94,7 +94,7 @@ unsafe fn gen_unary(ctx: &Context, op: &UnaryOp) -> Result<LLVMValueRef, Compile
     }
 }
 
-unsafe fn gen_pf_unary(ctx: &Context, op: &UnaryOp) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_pf_unary(ctx: &mut Context, op: &UnaryOp) -> Result<LLVMValueRef, CompileError>
 {
     match op.operator {
         Operator::Increment | Operator::Decrement => gen_unary(ctx, op),
@@ -125,7 +125,7 @@ unsafe fn check_bool_operands(ctx: &Context, op: Operator, left_type: LLVMTypeRe
 }
 
 
-unsafe fn gen_binary(ctx: &Context, op: &BinaryOp) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_binary(ctx: &mut Context, op: &BinaryOp) -> Result<LLVMValueRef, CompileError>
 {
     let left_val = try!(gen_expression(ctx, &op.left));
     let right_val = try!(gen_expression(ctx, &op.right));
@@ -234,12 +234,12 @@ unsafe fn gen_binary(ctx: &Context, op: &BinaryOp) -> Result<LLVMValueRef, Compi
 
 }
 
-unsafe fn gen_enclosed(ctx: &Context, e: &Expression, _span: &Span) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_enclosed(ctx: &mut Context, e: &Expression, _span: &Span) -> Result<LLVMValueRef, CompileError>
 {
     gen_expression(ctx, e)
 }
 
-fn is_same_kind(a: LLVMTypeKind, b: LLVMTypeKind) -> bool
+pub fn is_same_kind(a: LLVMTypeKind, b: LLVMTypeKind) -> bool
 {
     (a as usize) == (b as usize)
 }
@@ -265,14 +265,8 @@ unsafe fn convert(b: LLVMBuilderRef, from: LLVMValueRef, to: LLVMTypeRef) ->  Op
     None
 }
 
-unsafe fn gen_member_call(ctx: &Context, c: &Call, st: &StructType, self_ptr: LLVMValueRef, private_allowed: bool) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_member_call(ctx: &mut Context, c: &Call, st: &StructType, self_ptr: LLVMValueRef, private_allowed: bool) -> Result<LLVMValueRef, CompileError>
 {
-    let mut arg_vals = Vec::with_capacity(c.args.len() + 1);
-    arg_vals.push(LLVMBuildLoad(ctx.builder, self_ptr, cstr("self")));
-    for arg in &c.args {
-        arg_vals.push(try!(gen_expression(ctx, arg)));
-    }
-
     let full_name = format!("{}::{}", st.name, c.name);
     let func = try!(ctx
         .get_function(&full_name)
@@ -280,6 +274,22 @@ unsafe fn gen_member_call(ctx: &Context, c: &Call, st: &StructType, self_ptr: LL
 
     if !private_allowed && !func.public {
         return err(c.span.start, ErrorType::PrivateMemberAccess(c.name.clone()));
+    }
+
+    let mut arg_vals = Vec::with_capacity(c.args.len() + 1);
+
+    // Add self argument
+    let expected_self_type = *func.args.first().expect("Self argument missing");
+    if LLVMTypeOf(self_ptr) == LLVMPointerType(expected_self_type, 0) {
+        arg_vals.push(LLVMBuildLoad(ctx.builder, self_ptr, cstr("self")));
+    } else if LLVMTypeOf(self_ptr) == expected_self_type {
+        arg_vals.push(self_ptr);
+    } else {
+        return err(c.span.start, ErrorType::TypeError(format!("Self type mismatch")))
+    }
+
+    for arg in &c.args {
+        arg_vals.push(try!(gen_expression(ctx, arg)));
     }
 
     gen_call_common(ctx, c, &func, arg_vals)
@@ -311,7 +321,7 @@ unsafe fn gen_call_common(ctx: &Context, c: &Call, func: &FunctionInstance, mut 
     Ok(LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr("")))
 }
 
-unsafe fn gen_call(ctx: &Context, c: &Call) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_call(ctx: &mut Context, c: &Call) -> Result<LLVMValueRef, CompileError>
 {
     let mut arg_vals = Vec::with_capacity(c.args.len());
     for arg in &c.args {
@@ -415,7 +425,7 @@ unsafe fn gen_member_var(ctx: &Context, this: LLVMValueRef, st: &Rc<StructType>,
     }
 }
 
-unsafe fn gen_nested_member_access(ctx: &Context, this: LLVMValueRef, st: &Rc<StructType>, next: &MemberAccess, store: bool, private_allowed: bool) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_nested_member_access(ctx: &mut Context, this: LLVMValueRef, st: &Rc<StructType>, next: &MemberAccess, store: bool, private_allowed: bool) -> Result<LLVMValueRef, CompileError>
 {
     if let Some((idx, mvar)) = st.get_member(&next.name) {
         if !mvar.public && !private_allowed {
@@ -454,7 +464,7 @@ fn get_struct_type(ctx: &Context, typ: &Type) -> Option<Rc<StructType>>
     }
 }
 
-unsafe fn gen_member_access(ctx: &Context, a: &MemberAccess, store: bool) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_member_access(ctx: &mut Context, a: &MemberAccess, store: bool) -> Result<LLVMValueRef, CompileError>
 {
     if let Some(ref v) = ctx.get_variable(&a.name) {
         if v.constant {
@@ -481,7 +491,7 @@ unsafe fn gen_member_access(ctx: &Context, a: &MemberAccess, store: bool) -> Res
 }
 
 
-unsafe fn gen_target(ctx: &Context, target: &Expression) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_target(ctx: &mut Context, target: &Expression) -> Result<LLVMValueRef, CompileError>
 {
     match *target
     {
@@ -493,16 +503,10 @@ unsafe fn gen_target(ctx: &Context, target: &Expression) -> Result<LLVMValueRef,
             gen_member_access(ctx, ma, true)
         },
         _ => err(target.span().start, ErrorType::TypeError(format!("Invalid left hand side expression"))),
-        /*
-        TODO: call which returns a pointer/ref
-        Expression::Call(ref c) => {
-
-        },
-        */
     }
 }
 
-unsafe fn gen_assignment(ctx: &Context, a: &Assignment) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_assignment(ctx: &mut Context, a: &Assignment) -> Result<LLVMValueRef, CompileError>
 {
     let target_ptr = try!(gen_target(ctx, &a.target));
     let rhs_val = try!(gen_expression(ctx, &a.expression));
@@ -517,7 +521,7 @@ unsafe fn gen_assignment(ctx: &Context, a: &Assignment) -> Result<LLVMValueRef, 
     }
 }
 
-unsafe fn gen_object_construction(ctx: &Context, oc: &ObjectConstruction) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_object_construction(ctx: &mut Context, oc: &ObjectConstruction, ptr: LLVMValueRef) -> Result<(), CompileError>
 {
     use std::rc::Rc;
     let st: Rc<StructType> = try!(ctx
@@ -530,46 +534,84 @@ unsafe fn gen_object_construction(ctx: &Context, oc: &ObjectConstruction) -> Res
                 st.name, st.members.len())));
     }
 
-    let ptr = LLVMBuildAlloca(ctx.builder, st.typ, cstr("newvar"));
+    if ctx.in_global_context()
+    {
+        let mut vals = Vec::new();
+        for (idx, m) in st.members.iter().enumerate() {
+            let v = if let Some(ref e) = oc.args.get(idx) {
+                try!(gen_expression(ctx, e))
+            } else {
+                // Use default initializer
+                try!(gen_expression(ctx, &m.init))
+            };
 
-    for (idx, m) in st.members.iter().enumerate() {
-        let element = LLVMBuildStructGEP(ctx.builder, ptr, idx as u32, cstr("elptr"));
+            if LLVMIsConstant(v) != 0 {
+                vals.push(v);
+            } else {
+                return err(oc.span.start, ErrorType::ExpectedConstExpr(format!("Global structs must be initialized with constant expressions")));
+            }
+        }
 
-        let v = if let Some(ref e) = oc.args.get(idx) {
-            try!(gen_expression(ctx, e))
-        } else {
-            // Use default initializer
-            try!(gen_expression(ctx, &m.init))
-        };
+        LLVMSetInitializer(ptr, LLVMConstStructInContext(ctx.context, vals.as_mut_ptr(), vals.len() as u32, 0));
+    }
+    else
+    {
+        for (idx, m) in st.members.iter().enumerate() {
 
-
-        if let Some(cv) = convert(ctx.builder, v, m.llvm_typ) {
-            LLVMBuildStore(ctx.builder, cv, element);
-        } else {
-            let msg = format!("Expression to initialize member {} of struct {}, has the wrong type ({}, expected {})",
-                    idx, st.name, type_name(LLVMTypeOf(v)), type_name(m.llvm_typ));
-            return err(oc.span.start, ErrorType::TypeError(msg));
+            let element = LLVMBuildStructGEP(ctx.builder, ptr, idx as u32, cstr("elptr"));
+            if let Some(ref e) = oc.args.get(idx) {
+                try!(gen_expression_store(ctx, e, element))
+            } else {
+                // Use default initializer
+                try!(gen_expression_store(ctx, &m.init, element))
+            }
         }
     }
 
-    Ok(ptr)
+    Ok(())
 }
 
-#[allow(unused_variables)]
-unsafe fn gen_array_literal(ctx: &Context, a: &ArrayLiteral) -> Result<LLVMValueRef, CompileError>
+unsafe fn gen_array_literal(ctx: &mut Context, a: &ArrayLiteral,  ptr: LLVMValueRef) -> Result<(), CompileError>
 {
-    err(a.span.start, ErrorType::UnexpectedEOF)
+    let element_type = try!(ctx.infer_array_element_type(a));
+    let llvm_type = try!(ctx.resolve_type(&element_type).ok_or(
+        CompileError::new(a.span.start, ErrorType::TypeError(format!("Unknown type {}", element_type)))
+    ));
+
+    if ctx.in_global_context()
+    {
+        let mut vals = Vec::new();
+        for element in &a.elements
+        {
+            let element_val = try!(gen_expression(ctx, element));
+            if LLVMIsConstant(element_val) != 0 {
+                vals.push(element_val);
+            } else {
+                return err(a.span.start, ErrorType::ExpectedConstExpr(format!("Global arrays must be initialized with constant expressions")));
+            }
+        }
+        LLVMSetInitializer(ptr, LLVMConstArray(llvm_type, vals.as_mut_ptr(), vals.len() as u32));
+    }
+    else
+    {
+        for (idx, element) in a.elements.iter().enumerate()
+        {
+            let mut index_expr = vec![const_int(ctx.context, idx as u64), const_int(ctx.context, 0)];
+            let elptr = LLVMBuildGEP(ctx.builder, ptr, index_expr.as_mut_ptr(), 2, cstr("elptr"));
+            try!(gen_expression_store(ctx, element, elptr));
+        }
+    }
+
+    Ok(())
 }
 
-
-pub unsafe fn gen_expression(ctx: &Context, e: &Expression) -> Result<LLVMValueRef, CompileError>
+pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<LLVMValueRef, CompileError>
 {
     match *e
     {
         Expression::IntLiteral(ref span, integer) => gen_integer(ctx, integer, span),
         Expression::FloatLiteral(ref span, ref s) => gen_float(ctx, s, span),
         Expression::StringLiteral(ref span, ref s) => gen_string_literal(ctx, s, span),
-        Expression::ArrayLiteral(ref a) => gen_array_literal(ctx, a),
         Expression::UnaryOp(ref op) => gen_unary(ctx, op),
         Expression::PostFixUnaryOp(ref op) => gen_pf_unary(ctx, op),
         Expression::BinaryOp(ref op) => gen_binary(ctx, op),
@@ -577,7 +619,44 @@ pub unsafe fn gen_expression(ctx: &Context, e: &Expression) -> Result<LLVMValueR
         Expression::Call(ref c) => gen_call(ctx, c),
         Expression::NameRef(ref nr) => gen_name_ref(ctx, nr, false),
         Expression::Assignment(ref a) => gen_assignment(ctx, a),
-        Expression::ObjectConstruction(ref oc) => gen_object_construction(ctx, oc),
         Expression::MemberAccess(ref ma) => gen_member_access(ctx, ma, false),
+        _ => err(e.span().start, ErrorType::TypeError(format!("Use gen_expression_store"))),
+    }
+}
+
+pub unsafe fn store(ctx: &mut Context, e: &Expression, ptr: LLVMValueRef) -> Result<(), CompileError>
+{
+    let v = try!(gen_expression(ctx, e));
+    let dst_typ = LLVMGetElementType(LLVMTypeOf(ptr));
+    if let Some(cv) = convert(ctx.builder, v, dst_typ)
+    {
+        if ctx.in_global_context()
+        {
+            if LLVMIsConstant(cv) != 0 {
+                LLVMSetInitializer(ptr, cv);
+            } else {
+                return err(e.span().start, ErrorType::ExpectedConstExpr(format!("Global variables and constants must be initialized with a constant expression")));
+            }
+        }
+        else
+        {
+           LLVMBuildStore(ctx.builder, cv, ptr);
+        }
+        Ok(())
+    }
+    else
+    {
+       let msg = format!("Wrong type ({}, expected {})", type_name(LLVMTypeOf(v)), type_name(dst_typ));
+       return err(e.span().start, ErrorType::TypeError(msg));
+    }
+}
+
+pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: LLVMValueRef) -> Result<(), CompileError>
+{
+    match *e
+    {
+        Expression::ObjectConstruction(ref oc) => gen_object_construction(ctx, oc, ptr),
+        Expression::ArrayLiteral(ref a) => gen_array_literal(ctx, a, ptr),
+        _ => store(ctx, e, ptr),
     }
 }

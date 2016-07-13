@@ -28,36 +28,28 @@ unsafe fn gen_variable(ctx: &mut Context, v: &Variable) -> Result<(), CompileErr
         return err(v.span.start, ErrorType::RedefinitionOfVariable(v.name.clone()));
     }
 
-    let initial_value = try!(gen_expression(ctx, &v.init));
-    let initial_value_type = LLVMTypeOf(initial_value);
-
     let v_typ = if v.typ == Type::Unknown {
         try!(ctx.infer_type(&v.init))
     } else {
         v.typ.clone()
     };
 
-    if let Some(llvm_type_ref) = ctx.resolve_type(&v_typ) {
-        if llvm_type_ref != initial_value_type {
-            return err(v.span.start, ErrorType::TypeError(format!("Mismatched types in initialization ({} vs {})",
-                type_name(llvm_type_ref), type_name(initial_value_type))));
-        }
-    } else {
-        return err(v.span.start, ErrorType::TypeError(format!("Unknown type '{}'", v.typ)));
-    }
-
-    if ctx.in_global_context() {
-        let glob = LLVMAddGlobal(ctx.get_module_ref(), initial_value_type, cstr("glob_var"));
+    let llvm_type = try!(ctx.resolve_type(&v_typ).ok_or(CompileError::new(v.span.start, ErrorType::TypeError(format!("Unknown type '{}'", v.typ)))));
+    if ctx.in_global_context()
+    {
+        let glob = LLVMAddGlobal(ctx.get_module_ref(), llvm_type, cstr("glob_var"));
         LLVMSetLinkage(glob, LLVMLinkage::LLVMInternalLinkage);
         LLVMSetGlobalConstant(glob, if v.is_const {1} else {0});
-        LLVMSetInitializer(glob, initial_value);
+        try!(gen_expression_store(ctx, &v.init, glob));
 
         let name = ctx.prepend_namespace(&v.name);
-        ctx.add_variable(&name, glob, v.is_const, v.public, v_typ);
-    } else {
-        let var = LLVMBuildAlloca(ctx.builder, initial_value_type, cstr("local_var"));
-        LLVMBuildStore(ctx.builder, initial_value, var);
-        ctx.add_variable(&v.name, var, v.is_const, v.public, v_typ);
+        ctx.add_variable(name, glob, v.is_const, v.public, v_typ);
+    }
+    else
+    {
+        let var = LLVMBuildAlloca(ctx.builder, llvm_type, cstr("local_var"));
+        try!(gen_expression_store(ctx, &v.init, var));
+        ctx.add_variable(v.name.clone(), var, v.is_const, v.public, v_typ);
     }
 
     Ok(())
@@ -115,7 +107,7 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<FunctionInstan
         let var = LLVMGetParam(fi.function, i as libc::c_uint);
         let alloc = LLVMBuildAlloca(ctx.builder, fi.args[i], cstr("argtmp"));
         LLVMBuildStore(ctx.builder, var, alloc);
-        ctx.add_variable(&arg.name, alloc, arg.constant, false, arg.typ.clone());
+        ctx.add_variable(arg.name.clone(), alloc, arg.constant, false, arg.typ.clone());
     }
 
     for s in &f.block.statements {
