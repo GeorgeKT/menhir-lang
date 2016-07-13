@@ -18,10 +18,10 @@ pub struct ModuleContext
 
 impl ModuleContext
 {
-    pub fn new(namespace: &str) -> ModuleContext
+    pub fn new(namespace: String) -> ModuleContext
     {
         ModuleContext{
-            namespace: namespace.into(),
+            namespace: namespace,
             public_symbols: SymbolTable::new(),
             private_symbols: SymbolTable::new(),
             external_symbols: SymbolTable::new(),
@@ -46,7 +46,7 @@ impl ModuleContext
 
     pub fn prepend_namespace(&self, n: &str) -> String
     {
-        if n.starts_with(&self.namespace) || (n == "main" && self.namespace == "self::") {
+        if n.starts_with(&self.namespace) || (n == "main") {
             n.into()
         } else {
             format!("{}{}", self.namespace, n)
@@ -191,7 +191,7 @@ pub fn import_module(ctx: &mut Context, m: &ModuleName) -> Result<(), CompileErr
     let path = m.parts.join("/") + ".cobra";
     let module = try!(parse_file(&path, ParseMode::Module));
     let namespace = m.parts.join("::") + "::";
-    let mc = Box::new(ModuleContext::new(&namespace));
+    let mc = Box::new(ModuleContext::new(namespace));
     let old_mc = ctx.set_current_module(mc);
     unsafe {
         try!(gen_module(ctx, &module));

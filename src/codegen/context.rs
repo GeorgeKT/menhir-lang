@@ -27,18 +27,18 @@ pub struct Context
 
 impl Context
 {
-    pub fn new(name: &str) -> Context
+    pub fn new(module_name: &str) -> Context
     {
         unsafe {
-            let cname = CString::new(name).expect("Invalid module name");
+            let cname = CString::new(module_name).expect("Invalid module name");
             let context = LLVMContextCreate();
             Context{
                 context: context,
                 module: LLVMModuleCreateWithNameInContext(cname.as_ptr(), context),
                 builder: LLVMCreateBuilderInContext(context),
-                name: name.into(),
+                name: module_name.into(),
                 modules: Vec::new(),
-                current_module: Box::new(ModuleContext::new("self::")),
+                current_module: Box::new(ModuleContext::new(format!("{}::", module_name))),
             }
         }
     }
@@ -244,8 +244,8 @@ impl Context
                     format!("Unable to create directory for {}: {}", build_dir, e)))));
 
 
-        let obj_file_name = format!("{}/{}.o", build_dir, self.name);
-        println!("  Building {}", self.name);
+        let obj_file_name = format!("{}/{}.cobra.o", build_dir, self.name);
+        println!("  Building {}", obj_file_name);
 
         let mut error_message: *mut c_char = ptr::null_mut();
         if LLVMTargetMachineEmitToFile(target_machine, self.module, cstr_mut(&obj_file_name), LLVMCodeGenFileType::LLVMObjectFile, &mut error_message) != 0 {

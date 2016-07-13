@@ -38,8 +38,8 @@ pub fn parse_file(file_path: &str, mode: ParseMode) -> Result<Module, CompileErr
 {
     let mut file = try!(fs::File::open(file_path));
     let path = Path::new(file_path);
-    let filename: &OsStr = path.file_name().expect("Invalid filename");
-    parse_module(&mut file, filename.to_str().expect("Invalid UTF8 filename"), mode)
+    let module_name: &OsStr = path.file_stem().expect("Invalid filename");
+    parse_module(&mut file, module_name.to_str().expect("Invalid UTF8 filename"), mode)
 }
 
 #[cfg(test)]
