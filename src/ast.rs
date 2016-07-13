@@ -253,7 +253,7 @@ pub fn assignment(op: Operator, target: Expression, expression: Expression, span
     })
 }
 
-
+#[cfg(test)]
 pub fn name_ref(name: &str, span: Span) -> Expression
 {
     Expression::NameRef(NameRef{

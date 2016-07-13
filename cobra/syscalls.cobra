@@ -5,4 +5,4 @@ extern func write(fd: int, const buf: *char, count: uint) -> int
 extern func read(fd: int, buf: *char, count: uint) -> int
 
 pub func blaat():
-    write(STDOUT, "blaat", 5)
+    write(STDOUT, "blaat\n", 6)

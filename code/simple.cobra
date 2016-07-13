@@ -19,5 +19,6 @@ func main() -> int:
     var p = Point{4, 5}
     p.inc()
     blaat()
+    cobra::syscalls::blaat()
     exit(p.prod())
     return 0

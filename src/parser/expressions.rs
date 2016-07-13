@@ -153,6 +153,20 @@ fn parse_member_access(tq: &mut TokenQueue, indent_level: usize, name: &str, pos
     Ok(MemberAccess::new(name, member, Span::new(pos, tq.pos())))
 }
 
+fn parse_name(tq: &mut TokenQueue, id: String, pos: Pos) -> Result<NameRef, CompileError>
+{
+    let mut name = id;
+    while tq.is_next(TokenKind::DoubleColon)
+    {
+        try!(tq.pop());
+        let (next, _) = try!(tq.expect_identifier());
+        name.push_str("::");
+        name.push_str(&next);
+    }
+
+    Ok(NameRef::new(name, Span::new(pos, tq.pos())))
+}
+
 fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token) -> Result<Expression, CompileError>
 {
     match tok.kind
@@ -164,25 +178,26 @@ fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token
         },
 
         TokenKind::Identifier(id) => {
+            let nr = try!(parse_name(tq, id, tok.span.start));
             let next_kind = tq.peek().map(|tok| tok.kind.clone());
             match next_kind
             {
                 Some(TokenKind::OpenParen) => {
-                    parse_function_call(tq, indent_level, id, tok.span.start).map(|c| Expression::Call(c))
+                    parse_function_call(tq, indent_level, nr.name, tok.span.start).map(|c| Expression::Call(c))
                 },
                 Some(TokenKind::OpenCurly) => {
-                    parse_object_construction(tq, indent_level, &id, tok.span.start)
+                    parse_object_construction(tq, indent_level, &nr.name, tok.span.start)
                 },
                 Some(TokenKind::Operator(op)) if op == Operator::Dot => {
-                    parse_member_access(tq, indent_level, &id, tok.span.start).map(|m| Expression::MemberAccess(m))
+                    parse_member_access(tq, indent_level, &nr.name, tok.span.start).map(|m| Expression::MemberAccess(m))
                 },
                 Some(TokenKind::Operator(op)) if op == Operator::Increment || op == Operator::Decrement => {
                     // Turn x++ in x += 1, and x-- in x -= 1
                     try!(tq.pop());
                     let new_op = if op == Operator::Increment {Operator::AddAssign} else {Operator::SubAssign};
-                    Ok(assignment(new_op, name_ref(&id, tok.span), Expression::IntLiteral(tok.span, 1), tok.span))
+                    Ok(assignment(new_op, Expression::NameRef(nr), Expression::IntLiteral(tok.span, 1), tok.span))
                 },
-                _ => Ok(name_ref(&id, tok.span)),
+                _ => Ok(Expression::NameRef(nr)),
             }
         },
 
@@ -536,4 +551,27 @@ fn test_member_assignment()
         member_access("b", Member::Var(NameRef::new("d".into(), span(1, 3, 1, 3))), span(1, 1, 1, 3)),
         number(6, span(1, 7, 1, 7)),
         span(1, 1, 1, 7)));
+}
+
+#[test]
+fn test_namespacing()
+{
+    let e = th_expr("foo::bar = 7");
+    assert!(e == assignment(
+        Operator::Assign,
+        name_ref("foo::bar", span(1, 1, 1, 8)),
+        number(7, span(1, 12, 1, 12)),
+        span(1, 1, 1, 12)));
+}
+
+#[test]
+fn test_namespaced_call()
+{
+    let e = th_expr("foo::bar(7)");
+    assert!(e == Expression::Call(
+        Call::new(
+            "foo::bar".into(),
+            vec![number(7, span(1, 10, 1, 10))],
+            span(1, 1, 1, 11),
+        )));
 }
