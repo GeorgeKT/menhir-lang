@@ -3,12 +3,6 @@ name = "cobra"
 version = "0.1.0"
 authors = ["Joris Guisson <joris.guisson@gmail.com>"]
 
-[profile.dev]
-panic = "abort"
-
-[profile.release]
-panic = "abort"
-
 [dependencies]
 llvm-sys = "0.3"
 libc = "*"

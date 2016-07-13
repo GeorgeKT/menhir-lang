@@ -131,6 +131,8 @@ pub enum TokenKind
     CloseParen,
     OpenCurly,
     CloseCurly,
+    OpenBracket,
+    CloseBracket,
     Number(String),
     StringLiteral(String),
     Indent(usize),

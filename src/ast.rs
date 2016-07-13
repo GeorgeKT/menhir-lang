@@ -205,11 +205,19 @@ impl TreePrinter for MemberAccess
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
+pub struct ArrayLiteral
+{
+    pub elements: Vec<Expression>,
+    pub span: Span,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
 {
     IntLiteral(Span, u64),
     FloatLiteral(Span, String), // Keep as string until we generate code, so we can compare it
     StringLiteral(Span, String),
+    ArrayLiteral(ArrayLiteral),
     UnaryOp(UnaryOp),
     PostFixUnaryOp(UnaryOp), // post increment and decrement
     BinaryOp(BinaryOp),
@@ -221,6 +229,13 @@ pub enum Expression
     MemberAccess(MemberAccess),
 }
 
+pub fn array_lit(e: Vec<Expression>, span: Span) -> Expression
+{
+    Expression::ArrayLiteral(ArrayLiteral{
+        elements: e,
+        span: span,
+    })
+}
 
 pub fn bin_op(op: Operator, left: Expression, right: Expression, span: Span) -> Expression
 {
@@ -313,6 +328,7 @@ impl Expression
             Expression::IntLiteral(span, _) => span,
             Expression::FloatLiteral(span, _) => span,
             Expression::StringLiteral(span, _) => span,
+            Expression::ArrayLiteral(ref a) => a.span,
             Expression::UnaryOp(ref op) => op.span,
             Expression::PostFixUnaryOp(ref op) => op.span,
             Expression::BinaryOp(ref op) => op.span,
@@ -341,6 +357,12 @@ impl TreePrinter for Expression
             },
             Expression::StringLiteral(ref span, ref s) => {
                 println!("{}string \"{}\" ({})", p, s, span);
+            },
+            Expression::ArrayLiteral(ref a) => {
+                println!("{}array ({})", p, a.span);
+                for e in &a.elements {
+                    e.print(level + 1);
+                }
             },
             Expression::UnaryOp(ref op) => {
                 println!("{}unary {} ({})", p, op.operator, op.span);

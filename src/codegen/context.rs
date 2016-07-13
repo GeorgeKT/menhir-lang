@@ -203,6 +203,21 @@ impl Context
             Expression::MemberAccess(ref ma) => {
                 self.infer_member_type(ma)
             },
+            Expression::ArrayLiteral(ref a) => {
+                for e in &a.elements {
+                    let t = self.infer_type(e);
+                    if t.is_ok() {
+                        return t;
+                    }
+                }
+
+                let msg = if a.elements.is_empty() {
+                    format!("Unable to infer the type of an empty array literal")
+                } else {
+                    format!("Unable to infer the type of each array element")
+                };
+                err(a.span.start, ErrorType::TypeError(msg))
+            },
         }
     }
 

@@ -92,6 +92,8 @@ impl Lexer
             ')' => {self.add(TokenKind::CloseParen, Span::single(pos)); Ok(())},
             '{' => {self.add(TokenKind::OpenCurly, Span::single(pos)); Ok(())},
             '}' => {self.add(TokenKind::CloseCurly, Span::single(pos)); Ok(())},
+            '[' => {self.add(TokenKind::OpenBracket, Span::single(pos)); Ok(())},
+            ']' => {self.add(TokenKind::CloseBracket, Span::single(pos)); Ok(())},
             '0'...'9' => {self.start(c, LexState::Number); Ok(())},
             '\"' => {self.start(c, LexState::InString); Ok(())},
             ch if is_identifier_start(ch) => {self.start(c, LexState::Identifier); Ok(())},

@@ -555,6 +555,12 @@ unsafe fn gen_object_construction(ctx: &Context, oc: &ObjectConstruction) -> Res
     Ok(ptr)
 }
 
+#[allow(unused_variables)]
+unsafe fn gen_array_literal(ctx: &Context, a: &ArrayLiteral) -> Result<LLVMValueRef, CompileError>
+{
+    err(a.span.start, ErrorType::UnexpectedEOF)
+}
+
 
 pub unsafe fn gen_expression(ctx: &Context, e: &Expression) -> Result<LLVMValueRef, CompileError>
 {
@@ -563,6 +569,7 @@ pub unsafe fn gen_expression(ctx: &Context, e: &Expression) -> Result<LLVMValueR
         Expression::IntLiteral(ref span, integer) => gen_integer(ctx, integer, span),
         Expression::FloatLiteral(ref span, ref s) => gen_float(ctx, s, span),
         Expression::StringLiteral(ref span, ref s) => gen_string_literal(ctx, s, span),
+        Expression::ArrayLiteral(ref a) => gen_array_literal(ctx, a),
         Expression::UnaryOp(ref op) => gen_unary(ctx, op),
         Expression::PostFixUnaryOp(ref op) => gen_pf_unary(ctx, op),
         Expression::BinaryOp(ref op) => gen_binary(ctx, op),

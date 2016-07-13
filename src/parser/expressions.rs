@@ -12,8 +12,17 @@ fn is_end_of_expression(tok: &Token) -> bool
         TokenKind::Identifier(_) |
         TokenKind::StringLiteral(_) |
         TokenKind::OpenParen => false,
+        TokenKind::OpenBracket => false,
         _ => true,
     }
+}
+
+fn eat_comma(tq: &mut TokenQueue) -> Result<(), CompileError>
+{
+    if tq.is_next(TokenKind::Comma) {
+        try!(tq.pop());
+    }
+    Ok(())
 }
 
 fn parse_unary_expression(tq: &mut TokenQueue, indent_level: usize, op: Operator, op_pos: Pos) -> Result<Expression, CompileError>
@@ -80,10 +89,7 @@ fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: String, p
     {
         let expr = try!(parse_expression(tq, indent_level));
         args.push(expr);
-        if tq.is_next(TokenKind::Comma) {
-            try!(tq.pop());
-            continue;
-        }
+        try!(eat_comma(tq));
     }
 
     try!(tq.pop());
@@ -121,9 +127,7 @@ fn parse_object_construction(tq: &mut TokenQueue, indent_level: usize, name: &st
     while !tq.is_next(TokenKind::CloseCurly) {
         let e = try!(parse_expression(tq, indent_level));
         params.push(e);
-        if tq.is_next(TokenKind::Comma) {
-            try!(tq.pop());
-        }
+        try!(eat_comma(tq));
     }
 
     try!(tq.expect(TokenKind::CloseCurly));
@@ -167,6 +171,29 @@ fn parse_name(tq: &mut TokenQueue, id: String, pos: Pos) -> Result<NameRef, Comp
     Ok(NameRef::new(name, Span::new(pos, tq.pos())))
 }
 
+fn parse_array_literal(tq: &mut TokenQueue, indent_level: usize, pos: Pos) -> Result<Expression, CompileError>
+{
+    let mut expressions = Vec::new();
+    loop
+    {
+        if tq.is_next(TokenKind::CloseBracket) {
+            break;
+        }
+
+        if tq.next_indent().is_some() {
+            try!(tq.pop());
+            continue;
+        }
+
+        let e = try!(parse_expression(tq, indent_level));
+        expressions.push(e);
+        try!(eat_comma(tq));
+    }
+
+    try!(tq.expect(TokenKind::CloseBracket));
+    Ok(array_lit(expressions, Span::new(pos, tq.pos())))
+}
+
 fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token) -> Result<Expression, CompileError>
 {
     match tok.kind
@@ -175,6 +202,10 @@ fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token
             let expr = try!(parse_expression(tq, indent_level));
             try!(tq.expect(TokenKind::CloseParen));
             Ok(Expression::Enclosed(Span::new(tok.span.start, tq.pos()), Box::new(expr)))
+        },
+
+        TokenKind::OpenBracket => {
+            parse_array_literal(tq, indent_level, tok.span.start)
         },
 
         TokenKind::Identifier(id) => {
@@ -574,4 +605,35 @@ fn test_namespaced_call()
             vec![number(7, span(1, 10, 1, 10))],
             span(1, 1, 1, 11),
         )));
+}
+
+#[test]
+fn test_array_literal()
+{
+    let e = th_expr("[1, 2, 3]");
+    assert!(e == array_lit(
+        vec![
+            number(1, span(1, 2, 1, 2)),
+            number(2, span(1, 5, 1, 5)),
+            number(3, span(1, 8, 1, 8)),
+        ],
+        span(1, 1, 1, 9)));
+
+}
+
+#[test]
+fn test_multi_line_array_literal()
+{
+    let e = th_expr(r#"[
+    1,
+    2,
+    3
+]"#);
+    assert!(e == array_lit(
+        vec![
+            number(1, span(2, 5, 2, 5)),
+            number(2, span(3, 5, 3, 5)),
+            number(3, span(4, 5, 4, 5)),
+        ],
+        span(1, 1, 5, 1)));
 }
