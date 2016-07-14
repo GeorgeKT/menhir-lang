@@ -5,6 +5,7 @@ mod stackframe;
 mod symbols;
 mod modulecontext;
 mod context;
+mod tests;
 
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
@@ -90,7 +91,7 @@ pub fn codegen(m: &Module, opts: &CodeGenOptions) -> Result<Context, CompileErro
             }
             _ => (),
         }
-        
+
         if opts.optimize {
             try!(ctx.optimize());
         }

@@ -244,9 +244,6 @@ fn parse_rhs(tq: &mut TokenQueue, indent_level: usize, lhs: Expression) -> Resul
     }
 
     let next = try!(tq.pop());
-    println!("continue expression ");
-    lhs.print(0);
-    println!("parse_expression next {:?}", next);
     let nlhs = match next.kind
     {
         TokenKind::OpenParen => {
@@ -298,8 +295,7 @@ pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize) -> Result<Expr
     if is_end_of_expression(&tok) {
         return err(tq.pos(), ErrorType::ExpectedStartOfExpression);
     }
-
-    println!("parse_expression tok {:?}", tok);
+    
     let lhs = try!(parse_lhs(tq, indent_level, tok));
     parse_rhs(tq, indent_level, lhs)
 }

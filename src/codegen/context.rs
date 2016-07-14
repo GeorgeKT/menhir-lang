@@ -52,6 +52,12 @@ impl Context
         self.module
     }
 
+    #[cfg(test)]
+    pub fn take_module_ref(&mut self) -> LLVMModuleRef
+    {
+        mem::replace(&mut self.module, ptr::null_mut())
+    }
+
     // Set the current module, return the old module
     pub fn set_current_module(&mut self, new_current: Box<ModuleContext>) -> Box<ModuleContext>
     {
@@ -470,7 +476,9 @@ impl Drop for Context
     {
         unsafe {
             LLVMDisposeBuilder(self.builder);
-            LLVMDisposeModule(self.module);
+            if self.module != ptr::null_mut() {
+                LLVMDisposeModule(self.module);
+            }
             LLVMContextDispose(self.context);
         }
     }
