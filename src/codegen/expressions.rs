@@ -97,7 +97,30 @@ unsafe fn gen_unary(ctx: &mut Context, op: &UnaryOp) -> Result<LLVMValueRef, Com
 unsafe fn gen_pf_unary(ctx: &mut Context, op: &UnaryOp) -> Result<LLVMValueRef, CompileError>
 {
     match op.operator {
-        Operator::Increment | Operator::Decrement => gen_unary(ctx, op),
+        Operator::Increment | Operator::Decrement =>
+        {
+            if op.expression.is_assignable()
+            {
+                let ptr = try!(gen_target(ctx, &op.expression));
+                let val = LLVMBuildLoad(ctx.builder, ptr, cstr("val"));
+                if !is_integer(ctx.context, LLVMTypeOf(val)) {
+                    return err(op.span.start, ErrorType::InvalidUnaryOperator(op.operator));
+                }
+
+                let nval = if op.operator == Operator::Increment {
+                    LLVMBuildAdd(ctx.builder, val, const_int(ctx.context, 1), cstr("inc"))
+                } else {
+                    LLVMBuildSub(ctx.builder, val, const_int(ctx.context, 1), cstr("dec"))
+                };
+                LLVMBuildStore(ctx.builder, nval, ptr);
+                Ok(val)
+            }
+            else
+            {
+                gen_unary(ctx, op)
+            }
+
+        },
         _ => err(op.span.start, ErrorType::InvalidUnaryOperator(op.operator)),
     }
 }
@@ -415,8 +438,15 @@ unsafe fn gen_member_var(ctx: &Context, this: LLVMValueRef, st: &Rc<StructType>,
             return err(nr.span.start, ErrorType::PrivateMemberAccess(nr.name.clone()));
         }
 
-        // Dereference this, to get the actual struct ptr
-        let this_ptr = LLVMBuildLoad(ctx.builder, this, cstr("this"));
+        let this_ptr = if LLVMTypeOf(this) == LLVMPointerType(st.typ, 0) {
+            this
+        } else if LLVMTypeOf(this) == LLVMPointerType(LLVMPointerType(st.typ, 0), 0) {
+            // Dereference this, to get the actual struct ptr
+            LLVMBuildLoad(ctx.builder, this, cstr("this"))
+        } else {
+            return err(nr.span.start, ErrorType::TypeError(format!("Type mismatch when accessing member variable")));
+        };
+
         let element = LLVMBuildStructGEP(ctx.builder, this_ptr, idx as u32, cstr("elptr"));
         if store {
             Ok(element)

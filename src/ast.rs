@@ -381,6 +381,17 @@ impl Expression
             _ => err(self.span().start, ErrorType::TypeError(format!("Expected name reference"))),
         }
     }
+
+    pub fn is_assignable(&self) -> bool
+    {
+        match *self
+        {
+            Expression::NameRef(_) |
+            Expression::MemberAccess(_) |
+            Expression::IndexOperation(_) => true,
+            _ => false,
+        }
+    }
 }
 
 impl TreePrinter for Expression
