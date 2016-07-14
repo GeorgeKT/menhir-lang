@@ -115,6 +115,7 @@ pub enum ErrorType
     ExpectedIdentifier,
     ExpectedIntLiteral,
     ExpectedOperator,
+    ExpectedStartOfExpression,
     InvalidOperator(String),
     InvalidUnaryOperator(Operator),
     InvalidBinaryOperator(Operator),
@@ -135,6 +136,7 @@ pub enum ErrorType
     PrivateMemberAccess(String),
     MissingReturn(String),
     ExpectedConstExpr(String),
+    IndexOperationNotSupported(String),
 }
 
 
@@ -178,6 +180,7 @@ impl fmt::Display for CompileError
             ErrorType::ExpectedIndent =>  write!(f, "{}: Expected indentation", self.pos),
             ErrorType::ExpectedIntLiteral =>  write!(f, "{}: Expected integer literal", self.pos),
             ErrorType::ExpectedOperator => write!(f, "{}: Expected operator", self.pos),
+            ErrorType::ExpectedStartOfExpression => write!(f, "{}: Expected an expression", self.pos),
             ErrorType::SelfNotAllowed => write!(f, "{}: A self argument is only allowed as the first argument of a member function", self.pos),
             ErrorType::InvalidFloatingPoint => write!(f, "{}: Invalid floating point number", self.pos),
             ErrorType::InvalidInteger => write!(f, "{}: Invalid integer", self.pos),
@@ -195,6 +198,7 @@ impl fmt::Display for CompileError
             ErrorType::PrivateMemberAccess(ref var) => write!(f, "{}: Attempting to access private member '{}'", self.pos, var),
             ErrorType::MissingReturn(ref func) => write!(f, "{}: Missing return statement at end of function '{}'", self.pos, func),
             ErrorType::ExpectedConstExpr(ref msg) => write!(f, "{}: {}", self.pos, msg),
+            ErrorType::IndexOperationNotSupported(ref typ) => write!(f, "{}: Indexing operation not supported on type '{}'", self.pos, typ),
         }
     }
 }

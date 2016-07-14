@@ -249,9 +249,10 @@ fn test_var_with_array()
 
 
 #[cfg(test)]
-fn call(name: &str, args: Vec<Expression>, span: Span) -> Statement
+fn call(name: Expression, args: Vec<Expression>, span: Span) -> Statement
 {
-    Statement::Expression(Expression::Call(Call::new(name.into(), args, span)))
+    Statement::Expression(Expression::Call(
+        Call::new(name, args, span)))
 }
 
 #[cfg(test)]
@@ -276,10 +277,10 @@ while 1:
         assert!(w.block.statements.len() == 2);
 
         let s = &w.block.statements[0];
-        assert!(*s == call("print", vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
+        assert!(*s == call(name_ref("print", span(3, 5, 3, 9)), vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
 
         let s = &w.block.statements[1];
-        assert!(*s == call("print", vec![str_lit("something else", span(4, 11, 4, 26))], span(4, 5, 4, 27)));
+        assert!(*s == call(name_ref("print", span(4, 5, 4, 9)), vec![str_lit("something else", span(4, 11, 4, 26))], span(4, 5, 4, 27)));
     }
     else
     {
@@ -302,7 +303,7 @@ while 1: print("true")
         assert!(w.block.statements.len() == 1);
 
         let s = &w.block.statements[0];
-        assert!(*s == call("print", vec![str_lit("true", span(2, 16, 2, 21))], span(2, 10, 2, 22)));
+        assert!(*s == call(name_ref("print", span(2, 10, 2, 14)), vec![str_lit("true", span(2, 16, 2, 21))], span(2, 10, 2, 22)));
     }
     else
     {
@@ -325,7 +326,7 @@ if 1:
         assert!(w.else_part == ElsePart::Empty);
 
         let s = &w.if_block.statements[0];
-        assert!(*s == call("print", vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
+        assert!(*s == call(name_ref("print", span(3, 5, 3, 9)), vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
     }
     else
     {
@@ -350,13 +351,13 @@ else:
         assert!(w.if_block.statements.len() == 1);
 
         let s = &w.if_block.statements[0];
-        assert!(*s == call("print", vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
+        assert!(*s == call(name_ref("print", span(3, 5, 3, 9)), vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
 
         if let ElsePart::Block(eb) = w.else_part
         {
             assert!(eb.statements.len() == 1);
             let s = &eb.statements[0];
-            assert!(*s == call("print", vec![str_lit("false", span(5, 11, 5, 17))], span(5, 5, 5, 18)));
+            assert!(*s == call(name_ref("print", span(5, 5, 5, 9)), vec![str_lit("false", span(5, 11, 5, 17))], span(5, 5, 5, 18)));
         }
         else
         {
@@ -387,7 +388,7 @@ else if 0:
         assert!(w.if_block.statements.len() == 1);
 
         let s = &w.if_block.statements[0];
-        assert!(*s == call("print", vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
+        assert!(*s == call(name_ref("print", span(3, 5, 3, 9)), vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
 
         if let ElsePart::If(else_if) = w.else_part
         {
@@ -395,7 +396,7 @@ else if 0:
             assert!(else_if.cond == number(0, span(4, 9, 4, 9)));
             assert!(else_if.if_block.statements.len() == 1);
             let s = &else_if.if_block.statements[0];
-            assert!(*s == call("print", vec![str_lit("nada", span(5, 11, 5, 16))], span(5, 5, 5, 17)));
+            assert!(*s == call(name_ref("print", span(5, 5, 5, 9)), vec![str_lit("nada", span(5, 11, 5, 16))], span(5, 5, 5, 17)));
             assert!(else_if.else_part == ElsePart::Empty);
         }
         else
@@ -424,7 +425,7 @@ if 1: print("true")
         assert!(w.else_part == ElsePart::Empty);
 
         let s = &w.if_block.statements[0];
-        assert!(*s == call("print", vec![str_lit("true", span(2, 13, 2, 18))], span(2, 7, 2, 19)));
+        assert!(*s == call(name_ref("print", span(2, 7, 2, 11)), vec![str_lit("true", span(2, 13, 2, 18))], span(2, 7, 2, 19)));
     }
     else
     {
@@ -467,7 +468,7 @@ func blaat():
         assert!(!f.public);
         assert!(f.block.statements.len() == 2);
         let s = &f.block.statements[0];
-        assert!(*s == call("print", vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
+        assert!(*s == call(name_ref("print", span(3, 5, 3, 9)), vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
 
         let s = &f.block.statements[1];
         assert!(*s == Statement::Return(
@@ -501,7 +502,7 @@ pub func blaat(x: int, const y: int) -> int:
         assert!(f.public);
 
         let s = &f.block.statements[0];
-        assert!(*s == call("print", vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
+        assert!(*s == call(name_ref("print", span(3, 5, 3, 9)), vec![str_lit("true", span(3, 11, 3, 16))], span(3, 5, 3, 17)));
 
         let s = &f.block.statements[1];
         assert!(*s == Statement::Return(
@@ -565,21 +566,21 @@ pub struct Blaat:
         assert!(s.functions == vec![
             Function::new(
                 sig("Blaat::foo", Type::Void, vec![
-                    Argument::new("self".into(), type_complex("Blaat"), false, span(6, 18, 6, 18)),
+                    Argument::new("self".into(), type_complex("Blaat"), false, span(6, 18, 6, 21)),
                 ]),
                 true,
                 Block::new(vec![
-                    call("print", vec![str_lit("foo", span(7, 15, 7, 19))], span(7, 9, 7, 20))
+                    call(name_ref("print", span(7, 9, 7, 13)), vec![str_lit("foo", span(7, 15, 7, 19))], span(7, 9, 7, 20))
                 ]),
                 span(6, 9, 7, 20),
             ),
             Function::new(
                 sig("Blaat::bar", Type::Void, vec![
-                    Argument::new("self".into(), type_complex("Blaat"), false, span(9, 14, 9, 14)),
+                    Argument::new("self".into(), type_complex("Blaat"), false, span(9, 14, 9, 17)),
                 ]),
                 false,
                 Block::new(vec![
-                    call("print", vec![str_lit("bar", span(10, 15, 10, 19))], span(10, 9, 10, 20))
+                    call(name_ref("print", span(10, 9, 10, 13)), vec![str_lit("bar", span(10, 15, 10, 19))], span(10, 9, 10, 20))
                 ]),
                 span(9, 5, 10, 20),
             ),
@@ -623,18 +624,18 @@ pub union Blaat:
             UnionCase::new("Baz".into(), span(4, 10, 4, 12)),
         ]);
 
-        assert!(u.functions == vec![
-            Function::new(
-                sig("Blaat::foo",Type::Void, vec![
-                    Argument::new("self".into(), type_complex("Blaat"), false, span(6, 18, 6, 18)),
-                ]),
-                true,
-                Block::new(vec![
-                    call("print", vec![str_lit("foo", span(7, 15, 7, 19))], span(7, 9, 7, 20))
-                ]),
-                span(6, 9, 7, 20),
-            ),
-        ]);
+        let foo = Function::new(
+            sig("Blaat::foo",Type::Void, vec![
+                Argument::new("self".into(), type_complex("Blaat"), false, span(6, 18, 6, 21)),
+            ]),
+            true,
+            Block::new(vec![
+                call(name_ref("print", span(7, 9, 7, 13)), vec![str_lit("foo", span(7, 15, 7, 19))], span(7, 9, 7, 20))
+            ]),
+            span(6, 9, 7, 20),
+        );
+        foo.print(0);
+        assert!(u.functions == vec![foo]);
     }
     else
     {
@@ -691,7 +692,7 @@ match bla:
                 vec!["x".into(), "y".into()],
                 Block::new(
                     vec![
-                        call("print", vec![str_lit("foo", span(3, 22, 3, 26))], span(3, 16, 3, 27))
+                        call(name_ref("print", span(3, 16, 3, 20)), vec![str_lit("foo", span(3, 22, 3, 26))], span(3, 16, 3, 27))
                     ]
                 ),
                 span(3, 5, 3, 27),
@@ -701,7 +702,7 @@ match bla:
                 Vec::new(),
                 Block::new(
                     vec![
-                        call("print", vec![str_lit("bar", span(5, 15, 5, 19))], span(5, 9, 5, 20))
+                        call(name_ref("print", span(5, 9, 5, 13)), vec![str_lit("bar", span(5, 15, 5, 19))], span(5, 9, 5, 20))
                     ]
                 ),
                 span(4, 5, 5, 20),
@@ -711,7 +712,7 @@ match bla:
                 Vec::new(),
                 Block::new(
                     vec![
-                        call("print", vec![str_lit("baz", span(7, 15, 7, 19))], span(7, 9, 7, 20))
+                        call(name_ref("print", span(7, 9, 7, 13)), vec![str_lit("baz", span(7, 15, 7, 19))], span(7, 9, 7, 20))
                     ]
                 ),
                 span(6, 5, 7, 20),

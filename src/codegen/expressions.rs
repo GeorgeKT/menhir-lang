@@ -267,13 +267,14 @@ unsafe fn convert(b: LLVMBuilderRef, from: LLVMValueRef, to: LLVMTypeRef) ->  Op
 
 unsafe fn gen_member_call(ctx: &mut Context, c: &Call, st: &StructType, self_ptr: LLVMValueRef, private_allowed: bool) -> Result<LLVMValueRef, CompileError>
 {
-    let full_name = format!("{}::{}", st.name, c.name);
+    let func_name = try!(c.get_function_name());
+    let full_name = format!("{}::{}", st.name, func_name);
     let func = try!(ctx
         .get_function(&full_name)
         .ok_or(CompileError::new(c.span.start, ErrorType::UnknownFunction(full_name))));
 
     if !private_allowed && !func.public {
-        return err(c.span.start, ErrorType::PrivateMemberAccess(c.name.clone()));
+        return err(c.span.start, ErrorType::PrivateMemberAccess(func_name));
     }
 
     let mut arg_vals = Vec::with_capacity(c.args.len() + 1);
@@ -297,10 +298,11 @@ unsafe fn gen_member_call(ctx: &mut Context, c: &Call, st: &StructType, self_ptr
 
 unsafe fn gen_call_common(ctx: &Context, c: &Call, func: &FunctionInstance, mut arg_vals: Vec<LLVMValueRef>)  -> Result<LLVMValueRef, CompileError>
 {
+    let func_name = try!(c.get_function_name());
     if arg_vals.len() != func.args.len() {
         return err(c.span.start, ErrorType::ArgumentCountMismatch(
             format!("Function '{}', expects {} arguments, {} are provided",
-                c.name, func.args.len(), c.args.len())));
+                func_name, func.args.len(), c.args.len())));
     }
 
     for (i, arg) in c.args.iter().enumerate() {
@@ -312,7 +314,7 @@ unsafe fn gen_call_common(ctx: &Context, c: &Call, func: &FunctionInstance, mut 
             None => {
                 let val_type = LLVMTypeOf(arg_vals[i]);
                 let msg = format!("Argument {} of function '{}' has the wrong type\n  Expecting {}, got {}",
-                                i, c.name, type_name(func.args[i]), type_name(val_type));
+                                i, func_name, type_name(func.args[i]), type_name(val_type));
                 return err(arg.span().start, ErrorType::TypeError(msg));
             },
         }
@@ -328,9 +330,10 @@ unsafe fn gen_call(ctx: &mut Context, c: &Call) -> Result<LLVMValueRef, CompileE
         arg_vals.push(try!(gen_expression(ctx, arg)));
     }
 
+    let func_name = try!(c.get_function_name());
     let func = try!(ctx
-        .get_function(&c.name)
-        .ok_or(CompileError::new(c.span.start, ErrorType::UnknownFunction(c.name.clone()))));
+        .get_function(&func_name)
+        .ok_or(CompileError::new(c.span.start, ErrorType::UnknownFunction(func_name))));
 
     gen_call_common(ctx, c, &func, arg_vals)
 }
@@ -525,8 +528,8 @@ unsafe fn gen_object_construction(ctx: &mut Context, oc: &ObjectConstruction, pt
 {
     use std::rc::Rc;
     let st: Rc<StructType> = try!(ctx
-        .get_complex_type(&oc.object_type)
-        .ok_or(CompileError::new(oc.span.start, ErrorType::UnknownType(oc.object_type.clone()))));
+        .get_complex_type(&oc.object_type.name)
+        .ok_or(CompileError::new(oc.span.start, ErrorType::UnknownType(oc.object_type.name.clone()))));
 
     if oc.args.len() > st.members.len() {
         return err(oc.span.start, ErrorType::ArgumentCountMismatch(

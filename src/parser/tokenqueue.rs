@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use compileerror::{Pos, CompileError, ErrorType, err};
+use compileerror::{Pos, Span, CompileError, ErrorType, err};
 use parser::{Token, TokenKind, Operator};
 
 
@@ -125,12 +125,12 @@ impl TokenQueue
         }
     }
 
-    pub fn expect_identifier(&mut self) -> Result<(String, Pos), CompileError>
+    pub fn expect_identifier(&mut self) -> Result<(String, Span), CompileError>
     {
         let tok = try!(self.pop());
         if let TokenKind::Identifier(s) = tok.kind
         {
-            Ok((s, tok.span.start))
+            Ok((s, tok.span))
         }
         else
         {

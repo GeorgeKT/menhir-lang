@@ -11,8 +11,9 @@ fn is_end_of_expression(tok: &Token) -> bool
         TokenKind::Number(_) |
         TokenKind::Identifier(_) |
         TokenKind::StringLiteral(_) |
-        TokenKind::OpenParen => false,
-        TokenKind::OpenBracket => false,
+        TokenKind::OpenParen |
+        TokenKind::OpenBracket |
+        TokenKind::OpenCurly => false,
         _ => true,
     }
 }
@@ -80,10 +81,8 @@ fn parse_binary_op_rhs(tq: &mut TokenQueue, indent_level: usize, mut lhs: Expres
     }
 }
 
-fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: String, pos: Pos) -> Result<Call, CompileError>
+fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: Expression) -> Result<Call, CompileError>
 {
-    try!(tq.expect(TokenKind::OpenParen));
-
     let mut args = Vec::new();
     while !tq.is_next(TokenKind::CloseParen)
     {
@@ -93,6 +92,7 @@ fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: String, p
     }
 
     try!(tq.pop());
+    let pos = name.span().start;
     Ok(Call::new(name, args, Span::new(pos, tq.pos())))
 }
 
@@ -119,9 +119,8 @@ fn parse_number(num: &str, span: Span) -> Result<Expression, CompileError>
     }
 }
 
-fn parse_object_construction(tq: &mut TokenQueue, indent_level: usize, name: &str, pos: Pos) -> Result<Expression, CompileError>
+fn parse_object_construction(tq: &mut TokenQueue, indent_level: usize, name: NameRef) -> Result<Expression, CompileError>
 {
-    try!(tq.expect(TokenKind::OpenCurly));
     let mut params = Vec::new();
 
     while !tq.is_next(TokenKind::CloseCurly) {
@@ -131,30 +130,33 @@ fn parse_object_construction(tq: &mut TokenQueue, indent_level: usize, name: &st
     }
 
     try!(tq.expect(TokenKind::CloseCurly));
-    Ok(object_construction(name.into(), params, Span::new(pos, tq.pos())))
+    let pos = name.span.start;
+    Ok(object_construction(name, params, Span::new(pos, tq.pos())))
 }
 
-fn parse_member_access(tq: &mut TokenQueue, indent_level: usize, name: &str, pos: Pos) -> Result<MemberAccess, CompileError>
+fn parse_member_access(tq: &mut TokenQueue, indent_level: usize, name: NameRef) -> Result<MemberAccess, CompileError>
 {
-    try!(tq.expect(TokenKind::Operator(Operator::Dot)));
-    let (next_name, next_name_pos) = try!(tq.expect_identifier());
+    let (next_name, next_name_span) = try!(tq.expect_identifier());
+    let next_nr = NameRef::new(next_name, next_name_span);
     let member = if tq.is_next(TokenKind::OpenParen)
     {
-        let call = try!(parse_function_call(tq, indent_level, next_name, next_name_pos));
+        try!(tq.pop());
+        let call = try!(parse_function_call(tq, indent_level, Expression::NameRef(next_nr)));
         Member::Call(call)
     }
     else if tq.is_next(TokenKind::Operator(Operator::Dot))
     {
-        let next = try!(parse_member_access(tq, indent_level, &next_name, next_name_pos));
+        try!(tq.pop());
+        let next = try!(parse_member_access(tq, indent_level, next_nr));
         Member::Nested(Box::new(next))
     }
     else
     {
-        let nr = NameRef::new(next_name, Span::new(next_name_pos, tq.pos()));
-        Member::Var(nr)
+        Member::Var(next_nr)
     };
 
-    Ok(MemberAccess::new(name, member, Span::new(pos, tq.pos())))
+    let pos = name.span.start;
+    Ok(MemberAccess::new(name.name, member, Span::new(pos, tq.pos())))
 }
 
 fn parse_name(tq: &mut TokenQueue, id: String, pos: Pos) -> Result<NameRef, CompileError>
@@ -194,7 +196,15 @@ fn parse_array_literal(tq: &mut TokenQueue, indent_level: usize, pos: Pos) -> Re
     Ok(array_lit(expressions, Span::new(pos, tq.pos())))
 }
 
-fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token) -> Result<Expression, CompileError>
+fn parse_index_operation(tq: &mut TokenQueue, indent_level: usize, target: Expression) -> Result<Expression, CompileError>
+{
+    let index_expr = try!(parse_expression(tq, indent_level));
+    try!(tq.expect(TokenKind::CloseBracket));
+    let span =  Span::new(target.span().start, tq.pos());
+    Ok(index_op(target, index_expr, span))
+}
+
+fn parse_lhs(tq: &mut TokenQueue, indent_level: usize, tok: Token) -> Result<Expression, CompileError>
 {
     match tok.kind
     {
@@ -210,26 +220,7 @@ fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token
 
         TokenKind::Identifier(id) => {
             let nr = try!(parse_name(tq, id, tok.span.start));
-            let next_kind = tq.peek().map(|tok| tok.kind.clone());
-            match next_kind
-            {
-                Some(TokenKind::OpenParen) => {
-                    parse_function_call(tq, indent_level, nr.name, tok.span.start).map(|c| Expression::Call(c))
-                },
-                Some(TokenKind::OpenCurly) => {
-                    parse_object_construction(tq, indent_level, &nr.name, tok.span.start)
-                },
-                Some(TokenKind::Operator(op)) if op == Operator::Dot => {
-                    parse_member_access(tq, indent_level, &nr.name, tok.span.start).map(|m| Expression::MemberAccess(m))
-                },
-                Some(TokenKind::Operator(op)) if op == Operator::Increment || op == Operator::Decrement => {
-                    // Turn x++ in x += 1, and x-- in x -= 1
-                    try!(tq.pop());
-                    let new_op = if op == Operator::Increment {Operator::AddAssign} else {Operator::SubAssign};
-                    Ok(assignment(new_op, Expression::NameRef(nr), Expression::IntLiteral(tok.span, 1), tok.span))
-                },
-                _ => Ok(Expression::NameRef(nr)),
-            }
+            Ok(Expression::NameRef(nr))
         },
 
         TokenKind::StringLiteral(s) => {
@@ -246,44 +237,71 @@ fn parse_primary_expression(tq: &mut TokenQueue, indent_level: usize, tok: Token
     }
 }
 
+fn parse_rhs(tq: &mut TokenQueue, indent_level: usize, lhs: Expression) -> Result<Expression, CompileError>
+{
+    if is_end_of_expression(tq.peek().expect("Unexpected EOF")) {
+        return Ok(lhs);
+    }
+
+    let next = try!(tq.pop());
+    println!("continue expression ");
+    lhs.print(0);
+    println!("parse_expression next {:?}", next);
+    let nlhs = match next.kind
+    {
+        TokenKind::OpenParen => {
+            try!(parse_function_call(tq, indent_level, lhs).map(|c| Expression::Call(c)))
+        },
+        TokenKind::OpenCurly => {
+            let nr = try!(lhs.to_name_ref());
+            try!(parse_object_construction(tq, indent_level, nr))
+        },
+        TokenKind::Operator(op) if op == Operator::Dot => {
+            let nr = try!(lhs.to_name_ref());
+            try!(parse_member_access(tq, indent_level, nr).map(|m| Expression::MemberAccess(m)))
+        },
+        /*
+        Some(TokenKind::Operator(op)) if op == Operator::Increment || op == Operator::Decrement => {
+            // Turn x++ in x += 1, and x-- in x -= 1
+            let new_op = if op == Operator::Increment {Operator::AddAssign} else {Operator::SubAssign};
+            Ok(assignment(new_op, lhs, Expression::IntLiteral(tok.span, 1), tok.span))
+        },
+        */
+        TokenKind::Operator(op) if op == Operator::Increment || op == Operator::Decrement => {
+            let start = lhs.span().start;
+            pf_unary_op(op, lhs, Span::new(start, next.span.end))
+        },
+        TokenKind::Operator(op) if op.is_assignment() => {
+            tq.push_front(next);
+            let start = lhs.span().start;
+            try!(parse_assignment(tq, indent_level, lhs, op, start))
+        },
+        TokenKind::Operator(op) if op.is_binary_operator() => {
+            tq.push_front(next);
+            try!(parse_binary_op_rhs(tq, indent_level, lhs))
+        },
+        TokenKind::OpenBracket => {
+            try!(parse_index_operation(tq, indent_level, lhs))
+        },
+        _ => {
+            return err(tq.pos(), ErrorType::UnexpectedToken(next));
+        },
+    };
+
+    parse_rhs(tq, indent_level, nlhs)
+}
+
 
 pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize) -> Result<Expression, CompileError>
 {
-    let mut lhs: Option<Expression> = None;
-    while let Some(tok) = try!(tq.pop_if(|tok| !is_end_of_expression(tok)))
-    {
-        let tok_pos = tok.span.start;
-        let e = try!(parse_primary_expression(tq, indent_level, tok));
-        if is_end_of_expression(tq.peek().expect("Unexpected EOF")) {
-            lhs = Some(e);
-            break;
-        }
-
-        let next = try!(tq.pop());
-        match next.kind
-        {
-            TokenKind::Operator(op) if op == Operator::Increment || op == Operator::Decrement => {
-                lhs = Some(pf_unary_op(op, e, Span::new(tok_pos, next.span.end)));
-            },
-            TokenKind::Operator(op) if op.is_assignment() => {
-                tq.push_front(next);
-                lhs = Some(try!(parse_assignment(tq, indent_level, e, op, tok_pos)));
-            },
-            TokenKind::Operator(op) if op.is_binary_operator() => {
-                tq.push_front(next);
-                lhs = Some(try!(parse_binary_op_rhs(tq, indent_level, e)));
-            },
-            _ => {
-                return err(tq.pos(), ErrorType::UnexpectedToken(next))
-            },
-        }
+    let tok = try!(tq.pop());
+    if is_end_of_expression(&tok) {
+        return err(tq.pos(), ErrorType::ExpectedStartOfExpression);
     }
 
-    if let Some(e) = lhs {
-        Ok(e)
-    } else {
-        err(tq.pos(), ErrorType::UnexpectedEOF)
-    }
+    println!("parse_expression tok {:?}", tok);
+    let lhs = try!(parse_lhs(tq, indent_level, tok));
+    parse_rhs(tq, indent_level, lhs)
 }
 
 #[cfg(test)]
@@ -297,6 +315,7 @@ fn th_expr(data: &str) -> Expression
     let mut tq = Lexer::new().read(&mut cursor).expect("Lexing failed");
     let lvl = tq.expect_indent().expect("Missing indentation");
     let e = parse_expression(&mut tq, lvl).expect("Parsing failed");
+    println!("AST dump:");
     e.print(0);
     e
 }
@@ -450,13 +469,12 @@ fn test_precedence_8()
     assert!(e == bin_op(
         Operator::Add,
         name_ref("b", span(1, 1, 1, 1)),
-        assignment(
-            Operator::AddAssign,
+        pf_unary_op(
+            Operator::Increment,
             name_ref("c", span(1, 5, 1, 5)),
-            number(1, span(1, 5, 1, 5)),
-            span(1, 5, 1, 5),
+            span(1, 5, 1, 7),
         ),
-        span(1, 1, 1, 5),
+        span(1, 1, 1, 7),
     ));
 }
 
@@ -487,7 +505,7 @@ fn test_precedence_10()
         Operator::Add,
         name_ref("b", span(1, 1, 1, 1)),
         Expression::Call(Call::new(
-            "c".into(),
+            name_ref("c", span(1, 5, 1, 5)),
             vec![number(6, span(1, 7, 1, 7))],
             span(1, 5, 1, 8)
         )),
@@ -502,7 +520,7 @@ fn test_precedence_11()
     assert!(e == bin_op(
         Operator::Add,
         Expression::Call(Call::new(
-            "c".into(),
+            name_ref("c", span(1, 1, 1, 1)),
             vec![number(6, span(1, 3, 1, 3))],
             span(1, 1, 1, 4)
         )),
@@ -532,7 +550,7 @@ fn test_object_construction()
 {
     let e = th_expr("Foo{7, 8}");
     assert!(e == object_construction(
-        "Foo".into(),
+        NameRef::new("Foo".into(), span(1, 1, 1, 3)),
         vec![
             number(7, span(1, 5, 1, 5)),
             number(8, span(1, 8, 1, 8))
@@ -547,11 +565,15 @@ fn test_member_accesss()
     let e = th_expr("b.d + a.c(6)");
     assert!(e == bin_op(
         Operator::Add,
-        member_access("b", Member::Var(NameRef::new("d".into(), span(1, 3, 1, 3))), span(1, 1, 1, 3)),
         member_access(
-            "a",
+            "b".into(),
+            Member::Var(NameRef::new("d".into(), span(1, 3, 1, 3))),
+            span(1, 1, 1, 3)
+        ),
+        member_access(
+            "a".into(),
             Member::Call(Call::new(
-                "c".into(),
+                name_ref("c", span(1, 9, 1, 9)),
                 vec![number(6, span(1, 11, 1, 11))],
                 span(1, 9, 1, 12),
             )),
@@ -567,9 +589,9 @@ fn test_nested_member_accesss()
 {
     let e = th_expr("a.b.c.d");
 
-    let c = MemberAccess::new("c", Member::Var(NameRef::new("d".into(), span(1, 7, 1, 7))), span(1, 5, 1, 7));
-    let b = MemberAccess::new("b", Member::Nested(Box::new(c)), span(1, 3, 1, 7));
-    let a = member_access("a", Member::Nested(Box::new(b)), span(1, 1, 1, 7));
+    let c = MemberAccess::new("c".into(), Member::Var(NameRef::new("d".into(), span(1, 7, 1, 7))), span(1, 5, 1, 7));
+    let b = MemberAccess::new("b".into(), Member::Nested(Box::new(c)), span(1, 3, 1, 7));
+    let a = member_access("a".into(), Member::Nested(Box::new(b)), span(1, 1, 1, 7));
     assert!(e == a);
 }
 
@@ -579,7 +601,7 @@ fn test_member_assignment()
     let e = th_expr("b.d = 6");
     assert!(e == assignment(
         Operator::Assign,
-        member_access("b", Member::Var(NameRef::new("d".into(), span(1, 3, 1, 3))), span(1, 1, 1, 3)),
+        member_access("b".into(), Member::Var(NameRef::new("d".into(), span(1, 3, 1, 3))), span(1, 1, 1, 3)),
         number(6, span(1, 7, 1, 7)),
         span(1, 1, 1, 7)));
 }
@@ -601,7 +623,7 @@ fn test_namespaced_call()
     let e = th_expr("foo::bar(7)");
     assert!(e == Expression::Call(
         Call::new(
-            "foo::bar".into(),
+            name_ref("foo::bar", span(1, 1, 1, 8)),
             vec![number(7, span(1, 10, 1, 10))],
             span(1, 1, 1, 11),
         )));
@@ -636,4 +658,28 @@ fn test_multi_line_array_literal()
             number(3, span(4, 5, 4, 5)),
         ],
         span(1, 1, 5, 1)));
+}
+
+#[test]
+fn test_index_op()
+{
+    let e = th_expr("foo[5]");
+    assert!(e == index_op(
+        name_ref("foo", span(1, 1, 1, 3)),
+        number(5, span(1, 5, 1, 5)),
+        span(1, 1, 1, 6)));
+}
+
+#[test]
+fn test_nested_index_op()
+{
+    let e = th_expr("foo[5][5]");
+    assert!(e == index_op(
+        index_op(
+            name_ref("foo", span(1, 1, 1, 3)),
+            number(5, span(1, 5, 1, 5)),
+            span(1, 1, 1, 6)),
+        number(5, span(1, 8, 1, 8)),
+        span(1, 1, 1, 9)
+    ));
 }

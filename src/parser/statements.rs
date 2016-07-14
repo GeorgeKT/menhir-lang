@@ -8,9 +8,9 @@ fn parse_module_name(tq: &mut TokenQueue) -> Result<ModuleName, CompileError>
     let mut parts = Vec::new();
     while tq.is_next_identifier()
     {
-        let (m, pos) = try!(tq.expect_identifier());
+        let (m, span) = try!(tq.expect_identifier());
         if start_pos == Pos::zero() {
-            start_pos = pos;
+            start_pos = span.start;
         }
 
         parts.push(m);
@@ -182,18 +182,18 @@ fn parse_func_signature(tq: &mut TokenQueue, self_type: Type) -> Result<Function
             false
         };
 
-        let (arg_name, arg_pos) = try!(tq.expect_identifier());
+        let (arg_name, arg_span) = try!(tq.expect_identifier());
 
         if arg_name == "self" {
             if args.is_empty() {
-                args.push(Argument::new(arg_name, Type::ptr(self_type.clone()), const_arg, Span::new(arg_pos, arg_pos)));
+                args.push(Argument::new(arg_name, Type::ptr(self_type.clone()), const_arg, arg_span));
             } else {
-                return err(arg_pos, ErrorType::SelfNotAllowed);
+                return err(arg_span.start, ErrorType::SelfNotAllowed);
             }
         } else {
             try!(tq.expect(TokenKind::Colon));
             let typ = try!(parse_type(tq));
-            args.push(Argument::new(arg_name, typ, const_arg, Span::new(arg_pos, tq.pos())));
+            args.push(Argument::new(arg_name, typ, const_arg, Span::new(arg_span.start, tq.pos())));
         }
 
         if !tq.is_next(TokenKind::Comma) {
@@ -341,17 +341,17 @@ fn eat_comma(tq: &mut TokenQueue) -> Result<(), CompileError>
 
 fn parse_union_case(tq: &mut TokenQueue) -> Result<UnionCase, CompileError>
 {
-    let (name, pos) = try!(tq.expect_identifier());
+    let (name, span) = try!(tq.expect_identifier());
     let mut uc = UnionCase::new(name, Span::zero());
     if tq.is_next(TokenKind::OpenParen)
     {
         try!(tq.pop());
         while !tq.is_next(TokenKind::CloseParen)
         {
-            let (name, arg_pos) = try!(tq.expect_identifier());
+            let (name, span) = try!(tq.expect_identifier());
             try!(tq.expect(TokenKind::Colon));
             let typ = try!(parse_type(tq));
-            uc.vars.push(Argument::new(name, typ, false, Span::new(arg_pos, tq.pos())));
+            uc.vars.push(Argument::new(name, typ, false, Span::new(span.start, tq.pos())));
             try!(eat_comma(tq));
         }
 
@@ -359,7 +359,7 @@ fn parse_union_case(tq: &mut TokenQueue) -> Result<UnionCase, CompileError>
     }
 
     try!(eat_comma(tq)); // Eat trailing comma
-    uc.span = Span::new(pos, tq.pos());
+    uc.span = Span::new(span.start, tq.pos());
     Ok(uc)
 }
 
@@ -376,7 +376,7 @@ fn parse_union_member(tq: &mut TokenQueue, indent_level: usize, public: bool, ut
 
 fn parse_union(tq: &mut TokenQueue, indent_level: usize, public: bool) -> Result<Union, CompileError>
 {
-    let (name, name_pos) = try!(tq.expect_identifier());
+    let (name, name_span) = try!(tq.expect_identifier());
     let mut u = Union::new(name, public, Span::zero());
     let mut indent = indent_level;
     try!(tq.expect(TokenKind::Colon));
@@ -395,13 +395,13 @@ fn parse_union(tq: &mut TokenQueue, indent_level: usize, public: bool) -> Result
         }
     }
 
-    u.span = Span::new(name_pos, tq.pos());
+    u.span = Span::new(name_span.start, tq.pos());
     Ok(u)
 }
 
 fn parse_match_case(tq: &mut TokenQueue, indent_level: usize) -> Result<MatchCase, CompileError>
 {
-    let (name, pos) = try!(tq.expect_identifier());
+    let (name, span) = try!(tq.expect_identifier());
     let mut bindings = Vec::new();
     if tq.is_next(TokenKind::OpenParen)
     {
@@ -418,7 +418,7 @@ fn parse_match_case(tq: &mut TokenQueue, indent_level: usize) -> Result<MatchCas
 
     try!(tq.expect(TokenKind::Colon));
     let block = try!(parse_block(tq, indent_level, ParseMode::Block));
-    Ok(MatchCase::new(name, bindings, block, Span::new(pos, tq.pos())))
+    Ok(MatchCase::new(name, bindings, block, Span::new(span.start, tq.pos())))
 }
 
 fn parse_match(tq: &mut TokenQueue, indent_level: usize, pos: Pos) -> Result<Statement, CompileError>

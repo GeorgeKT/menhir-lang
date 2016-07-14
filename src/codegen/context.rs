@@ -1,6 +1,7 @@
 use std::rc::Rc;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
+use std::ops::Deref;
 use std::ptr;
 use std::mem;
 use std::fs::DirBuilder;
@@ -185,10 +186,11 @@ impl Context
 
     fn infer_call_type(&self, c: &Call) -> Result<Type, CompileError>
     {
-        if let Some(f) = self.get_function(&c.name) {
+        let func_name = try!(c.get_function_name());
+        if let Some(f) = self.get_function(&func_name) {
             Ok(f.sig.return_type.clone())
         } else {
-            err(c.span.start, ErrorType::UnknownFunction(c.name.clone()))
+            err(c.span.start, ErrorType::UnknownFunction(func_name))
         }
     }
 
@@ -207,6 +209,31 @@ impl Context
             format!("Unable to infer the type of each array element")
         };
         err(a.span.start, ErrorType::TypeError(msg))
+    }
+
+    fn infer_index_operation_type(&self, iop: &IndexOperation) -> Result<Type, CompileError>
+    {
+        match *iop.target.deref()
+        {
+            Expression::NameRef(ref nr) =>
+                if let Some(v) = self.get_variable(&nr.name)
+                {
+                    match v.typ
+                    {
+                        Type::Array(ref inner, _) | Type::Slice(ref inner) => Ok(inner.deref().clone()),
+                        _ => err(iop.span.start, ErrorType::IndexOperationNotSupported(format!("{}", v.typ))),
+                    }
+                }
+                else
+                {
+                    err(iop.span.start, ErrorType::UnknownVariable(nr.name.clone()))
+                },
+            _ => {
+                let t = try!(self.infer_type(&iop.target));
+                err(iop.span.start, ErrorType::IndexOperationNotSupported(format!("{}", t)))
+            }
+        }
+
     }
 
     pub fn infer_type(&self, e: &Expression) -> Result<Type, CompileError>
@@ -239,7 +266,7 @@ impl Context
             },
             Expression::Assignment(ref a) => self.infer_type(&a.expression),
             Expression::ObjectConstruction(ref oc) => {
-                Ok(Type::Complex(oc.object_type.clone()))
+                Ok(Type::Complex(oc.object_type.name.clone()))
             },
             Expression::MemberAccess(ref ma) => {
                 self.infer_member_type(ma)
@@ -247,6 +274,9 @@ impl Context
             Expression::ArrayLiteral(ref a) => {
                 let et = try!(self.infer_array_element_type(a));
                 Ok(Type::Array(Box::new(et), a.elements.len()))
+            },
+            Expression::IndexOperation(ref iop) => {
+                self.infer_index_operation_type(iop)
             },
         }
     }

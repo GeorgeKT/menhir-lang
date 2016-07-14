@@ -13,12 +13,8 @@ struct Point:
     pub func prod(self) -> int:
         return self.x * self.y
 
-const NUMS = [1, 2, 3]
-var X = Point{4, 4}
-
 func main() -> int:
     write(STDOUT, "Running tests\n", 14)
-    #var points = [Point{4, 5}, Point{1, 2}]
-    var y = Point{5, 5}
-    y.inc()
-    return X.sum() + y.prod()
+    var points = [Point{4, 5}, Point{1, 2}]
+    points[0].inc()
+    return points[0].sum() + points[1].sum()

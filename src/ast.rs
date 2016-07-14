@@ -1,5 +1,6 @@
 use std::fmt;
-use compileerror::{Span};
+use std::ops::Deref;
+use compileerror::{Span, CompileError, ErrorType, err};
 use parser::Operator;
 
 fn prefix(level: usize) -> String
@@ -70,19 +71,28 @@ impl TreePrinter for Import
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Call
 {
-    pub name: String,
+    pub name: Box<Expression>,
     pub args: Vec<Expression>,
     pub span: Span,
 }
 
 impl Call
 {
-    pub fn new(name: String, args: Vec<Expression>, span: Span) -> Call
+    pub fn new(name: Expression, args: Vec<Expression>, span: Span) -> Call
     {
         Call{
-            name: name,
+            name: Box::new(name),
             args: args,
             span: span,
+        }
+    }
+
+    pub fn get_function_name(&self) -> Result<String, CompileError>
+    {
+        match *self.name.deref()
+        {
+            Expression::NameRef(ref nr) => Ok(nr.name.clone()),
+            _ => err(self.name.span().start, ErrorType::TypeError(format!("Unable to determine function name")))
         }
     }
 }
@@ -92,9 +102,10 @@ impl TreePrinter for Call
     fn print(&self, level: usize)
     {
         let p = prefix(level);
-        println!("{}call {} {}", p, self.name, self.span);
+        println!("{}call {}", p, self.span);
+        self.name.print(level + 1);
         for a in &self.args {
-            a.print(level + 1);
+            a.print(level + 2);
         }
     }
 }
@@ -155,7 +166,7 @@ impl TreePrinter for NameRef
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ObjectConstruction
 {
-    pub object_type: String,
+    pub object_type: NameRef,
     pub args: Vec<Expression>,
     pub span: Span,
 }
@@ -179,10 +190,10 @@ pub struct MemberAccess
 
 impl MemberAccess
 {
-    pub fn new(name: &str, member: Member, span: Span) -> MemberAccess
+    pub fn new(name: String, member: Member, span: Span) -> MemberAccess
     {
         MemberAccess{
-            name: name.into(),
+            name: name,
             member: member,
             span: span,
         }
@@ -212,6 +223,14 @@ pub struct ArrayLiteral
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
+pub struct IndexOperation
+{
+    pub target: Box<Expression>,
+    pub index_expr: Box<Expression>,
+    pub span: Span,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
 {
     IntLiteral(Span, u64),
@@ -227,6 +246,7 @@ pub enum Expression
     Assignment(Assignment),
     ObjectConstruction(ObjectConstruction),
     MemberAccess(MemberAccess),
+    IndexOperation(IndexOperation),
 }
 
 pub fn array_lit(e: Vec<Expression>, span: Span) -> Expression
@@ -268,6 +288,17 @@ pub fn assignment(op: Operator, target: Expression, expression: Expression, span
     })
 }
 
+pub fn index_op(target: Expression, index_expr: Expression, span: Span) -> Expression
+{
+    Expression::IndexOperation(
+        IndexOperation{
+            target: Box::new(target),
+            index_expr: Box::new(index_expr),
+            span: span,
+        }
+    )
+}
+
 #[cfg(test)]
 pub fn name_ref(name: &str, span: Span) -> Expression
 {
@@ -277,7 +308,7 @@ pub fn name_ref(name: &str, span: Span) -> Expression
     })
 }
 
-pub fn object_construction(object_type: String, args: Vec<Expression>, span: Span) -> Expression
+pub fn object_construction(object_type: NameRef, args: Vec<Expression>, span: Span) -> Expression
 {
     Expression::ObjectConstruction(ObjectConstruction{
         object_type: object_type,
@@ -305,7 +336,7 @@ pub fn pf_unary_op(operator: Operator, expression: Expression, span: Span) -> Ex
 }
 
 #[cfg(test)]
-pub fn member_access(name: &str, member: Member, span: Span) -> Expression
+pub fn member_access(name: String, member: Member, span: Span) -> Expression
 {
     Expression::MemberAccess(MemberAccess::new(name, member, span))
 }
@@ -338,6 +369,16 @@ impl Expression
             Expression::Assignment(ref a) => a.span,
             Expression::ObjectConstruction(ref oc) => oc.span,
             Expression::MemberAccess(ref ma) => ma.span,
+            Expression::IndexOperation(ref i) => i.span,
+        }
+    }
+
+    pub fn to_name_ref(self) -> Result<NameRef, CompileError>
+    {
+        match self
+        {
+            Expression::NameRef(nr) => Ok(nr),
+            _ => err(self.span().start, ErrorType::TypeError(format!("Expected name reference"))),
         }
     }
 }
@@ -389,12 +430,18 @@ impl TreePrinter for Expression
                 a.expression.print(level + 1);
             },
             Expression::ObjectConstruction(ref oc) => {
-                println!("{}construct {} ({})", p, oc.object_type, oc.span);
+                println!("{}construct ({})", p, oc.span);
+                oc.object_type.print(level + 1);
                 for p in &oc.args {
-                    p.print(level + 1);
+                    p.print(level + 2);
                 }
             },
             Expression::MemberAccess(ref ma) => ma.print(level),
+            Expression::IndexOperation(ref iop) => {
+                println!("{}index ({})", p, iop.span);
+                iop.target.print(level + 1);
+                iop.index_expr.print(level + 1);
+            },
         }
     }
 }
@@ -466,9 +513,9 @@ impl fmt::Display for Type
             Type::Unknown => write!(f, "unknown"),
             Type::Primitive(ref t) => write!(f, "{}", t),
             Type::Complex(ref s) => write!(f, "{}", s),
-            Type::Pointer(ref st) => write!(f, "pointer to {}", st),
-            Type::Array(ref at, count) => write!(f, "array({}) of {}", count, at),
-            Type::Slice(ref at) => write!(f, "slice of {}", at),
+            Type::Pointer(ref st) => write!(f, "*{}", st),
+            Type::Array(ref at, count) => write!(f, "[{}, {}]", at, count),
+            Type::Slice(ref at) => write!(f, "[{}]", at),
         }
     }
 }
