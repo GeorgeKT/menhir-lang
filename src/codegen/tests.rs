@@ -167,20 +167,19 @@ func main() -> int:
     assert!(v == 20);
 }
 
-/*
+
 #[test]
 fn test_struct_with_arrays()
 {
     assert!(run(r#"
 struct Point:
-    var x = 0, y = 0
+    var coords = [0, 0]
 
     pub func sum(self) -> int:
-        return self.x + self.y
+        return self.coords[0] + self.coords[1]
 
 func main() -> int:
-    var p = [Point{4, 9}, Point{3, 4}]
-    return p[0].sum() + p[1].sum()
-    ""#).unwrap() == 20);
+    var p = Point{[4, 10]}
+    return p.sum()
+    ""#, false).unwrap() == 14);
 }
-*/
