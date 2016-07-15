@@ -90,6 +90,15 @@ unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, public: b
     })
 }
 
+unsafe fn is_block_terminated(bb: LLVMBasicBlockRef) -> bool
+{
+    if bb == ptr::null_mut() {
+        return true;
+    }
+    let last = LLVMGetLastInstruction(bb);
+    last != ptr::null_mut() && LLVMIsATerminatorInst(last) != ptr::null_mut()
+}
+
 unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<FunctionInstance, CompileError>
 {
     if ctx.has_function(&f.sig.name) {
@@ -116,7 +125,7 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<FunctionInstan
 
     if f.sig.return_type == Type::Void {
         LLVMBuildRetVoid(ctx.builder);
-    } else if LLVMIsATerminatorInst(LLVMGetLastInstruction(LLVMGetInsertBlock(ctx.builder))) == ptr::null_mut() {
+    } else if !is_block_terminated(LLVMGetInsertBlock(ctx.builder)) {
         return err(f.span.end, ErrorType::MissingReturn(f.sig.name.clone()));
     }
 
@@ -172,7 +181,7 @@ unsafe fn gen_if(ctx: &mut Context, f: &If) -> Result<(), CompileError>
 {
     let func = ctx.get_current_function();
     let if_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("if_bb"));
-    let after_if_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("after_if_bb"));
+    let mut after_if_bb = ptr::null_mut();
     let else_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("else_bb"));
     let cond = try!(gen_expression(ctx, &f.cond));
 
@@ -180,22 +189,40 @@ unsafe fn gen_if(ctx: &mut Context, f: &If) -> Result<(), CompileError>
     LLVMPositionBuilderAtEnd(ctx.builder, if_bb);
 
     try!(gen_block(ctx, &f.if_block));
-    LLVMBuildBr(ctx.builder, after_if_bb);
+    if !is_block_terminated(LLVMGetInsertBlock(ctx.builder)) {
+        if after_if_bb == ptr::null_mut() {
+            after_if_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("after_if_bb"));
+        }
+        LLVMBuildBr(ctx.builder, after_if_bb);
+    }
 
     match f.else_part {
         ElsePart::Block(ref else_block) => {
             LLVMPositionBuilderAtEnd(ctx.builder, else_bb);
             try!(gen_block(ctx, else_block));
-            LLVMBuildBr(ctx.builder, after_if_bb);
+            if !is_block_terminated(LLVMGetInsertBlock(ctx.builder)) {
+                if after_if_bb == ptr::null_mut() {
+                    after_if_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("after_if_bb"));
+                }
+                LLVMBuildBr(ctx.builder, after_if_bb);
+            }
         },
         ElsePart::Empty => {
             LLVMPositionBuilderAtEnd(ctx.builder, else_bb);
+            if after_if_bb == ptr::null_mut() {
+                after_if_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("after_if_bb"));
+            }
             LLVMBuildBr(ctx.builder, after_if_bb);
         },
         ElsePart::If(ref next_if) => {
             LLVMPositionBuilderAtEnd(ctx.builder, else_bb);
             try!(gen_if(ctx, next_if));
-            LLVMBuildBr(ctx.builder, after_if_bb);
+            if !is_block_terminated(LLVMGetInsertBlock(ctx.builder)) {
+                if after_if_bb == ptr::null_mut() {
+                    after_if_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("after_if_bb"));
+                }
+                LLVMBuildBr(ctx.builder, after_if_bb);
+            }
         }
     }
 

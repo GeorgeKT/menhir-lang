@@ -183,3 +183,57 @@ func main() -> int:
     return p.sum()
     ""#, false).unwrap() == 14);
 }
+
+#[test]
+fn test_if()
+{
+    assert!(run(r#"
+struct Point:
+    var x = 0, y = 0
+
+    pub func sum(self) -> int:
+        return self.x + self.y
+
+func main() -> int:
+    const x = 77
+    if x > 10:
+        var p = Point{7, 9}
+        return p.sum()
+    else:
+        return 5
+    ""#, false).unwrap() == 16);
+}
+
+#[test]
+fn test_else()
+{
+    assert!(run(r#"
+struct Point:
+    var x = 0, y = 0
+
+    pub func sum(self) -> int:
+        return self.x + self.y
+
+func main() -> int:
+    const x = 77
+    if x < 10:
+        var p = Point{7, 9}
+        return p.sum()
+    else:
+        return 5
+    ""#, false).unwrap() == 5);
+}
+
+#[test]
+fn test_while()
+{
+    assert!(run(r#"
+func main() -> int:
+    var i = 0
+    var count = 0
+    while i < 10:
+        count += 2
+        i++
+    return count
+    ""#, false).unwrap() == 20);
+}
