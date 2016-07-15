@@ -11,6 +11,7 @@ pub struct VariableInstance
     pub name: String,
     pub constant: bool,
     pub public: bool,
+    pub global: bool,
     pub typ: Type,
 }
 

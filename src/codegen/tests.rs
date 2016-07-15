@@ -10,13 +10,13 @@
 #[cfg(test)] use codegen::{CodeGenOptions, codegen, cstr};
 
 #[cfg(test)]
-fn run(prog: &str) -> Result<u64, CompileError>
+fn run(prog: &str, dump_ir: bool) -> Result<u64, CompileError>
 {
     let mut cursor = Cursor::new(prog);
     let md = try!(parse_module(&mut cursor, "test", ParseMode::Module));
 
     let opts = CodeGenOptions{
-        dump_ir: false,
+        dump_ir: dump_ir,
         build_dir: "build".into(),
         program_name: "test".into(),
         runtime_library: "libcobraruntime.a".into(),
@@ -57,7 +57,7 @@ fn test_number()
     assert!(run(r#"
 func main() -> int:
     return 5
-    ""#).unwrap() == 5);
+    ""#, false).unwrap() == 5);
 }
 
 #[test]
@@ -69,7 +69,7 @@ func foo(a: int, b: int) -> int:
 
 func main() -> int:
     return foo(1, 2)
-    ""#).unwrap() == 5);
+    ""#, false).unwrap() == 5);
 }
 
 #[test]
@@ -81,7 +81,7 @@ func main() -> int:
     var y = 6
     y += x
     return y
-    ""#).unwrap() == 13);
+    ""#, false).unwrap() == 13);
 }
 
 #[test]
@@ -93,7 +93,7 @@ var y = 6
 func main() -> int:
     y += x
     return y
-    ""#).unwrap() == 13);
+    ""#, false).unwrap() == 13);
 }
 
 #[test]
@@ -109,7 +109,7 @@ struct Point:
 func main() -> int:
     var p = Point{4, 9}
     return p.sum()
-    ""#).unwrap() == 13);
+    ""#, false).unwrap() == 13);
 }
 
 #[test]
@@ -128,12 +128,48 @@ func main() -> int:
     bar.z++
     y++
     return y + foo.z + bar.z
-    ""#).unwrap() == 21);
+    ""#, false).unwrap() == 21);
+}
+
+
+#[test]
+fn test_arrays()
+{
+    assert!(run(r#"
+struct Point:
+    var x = 0, y = 0
+
+    pub func sum(self) -> int:
+        return self.x + self.y
+
+func main() -> int:
+    var p = [Point{4, 9}, Point{3, 4}]
+    return p[0].sum() + p[1].sum()
+    ""#, false).unwrap() == 20);
+}
+
+
+#[test]
+fn test_global_arrays()
+{
+    let v = run(r#"
+struct Point:
+    var x = 0, y = 0
+
+    pub func sum(self) -> int:
+        return self.x + self.y
+
+var p = [Point{4, 9}, Point{3, 4}]
+
+func main() -> int:
+    return p[0].sum() + p[1].sum()
+    ""#, false).unwrap();
+    assert!(v == 20);
 }
 
 /*
 #[test]
-fn test_arrays()
+fn test_struct_with_arrays()
 {
     assert!(run(r#"
 struct Point:

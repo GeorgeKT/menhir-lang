@@ -183,19 +183,28 @@ pub enum Member
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct MemberAccess
 {
-    pub name: String,
+    pub target: Box<Expression>,
     pub member: Member,
     pub span: Span,
 }
 
 impl MemberAccess
 {
-    pub fn new(name: String, member: Member, span: Span) -> MemberAccess
+    pub fn new(target: Expression, member: Member, span: Span) -> MemberAccess
     {
         MemberAccess{
-            name: name,
+            target: Box::new(target),
             member: member,
             span: span,
+        }
+    }
+
+    pub fn name(&self) -> Option<String>
+    {
+        match *self.target.deref()
+        {
+            Expression::NameRef(ref nr) => Some(nr.name.clone()),
+            _ => None,
         }
     }
 }
@@ -205,7 +214,8 @@ impl TreePrinter for MemberAccess
     fn print(&self, level: usize)
     {
         let p = prefix(level);
-        println!("{}member access {} ({})", p, self.name, self.span);
+        println!("{}member access ({})", p, self.span);
+        self.target.print(level + 1);
         match self.member
         {
             Member::Call(ref c) => c.print(level + 1),
@@ -308,6 +318,12 @@ pub fn name_ref(name: &str, span: Span) -> Expression
     })
 }
 
+#[cfg(test)]
+pub fn name_ref2(name: &str, span: Span) -> NameRef
+{
+    NameRef::new(name.into(), span)
+}
+
 pub fn object_construction(object_type: NameRef, args: Vec<Expression>, span: Span) -> Expression
 {
     Expression::ObjectConstruction(ObjectConstruction{
@@ -336,9 +352,13 @@ pub fn pf_unary_op(operator: Operator, expression: Expression, span: Span) -> Ex
 }
 
 #[cfg(test)]
-pub fn member_access(name: String, member: Member, span: Span) -> Expression
+pub fn member_access(name: NameRef, member: Member, span: Span) -> Expression
 {
-    Expression::MemberAccess(MemberAccess::new(name, member, span))
+    Expression::MemberAccess(
+        MemberAccess::new(
+            Expression::NameRef(name),
+            member,
+            span))
 }
 
 impl Expression

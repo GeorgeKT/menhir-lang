@@ -163,6 +163,16 @@ pub fn err<T: Sized>(pos: Pos, e: ErrorType) -> Result<T, CompileError>
     Err(CompileError::new(pos, e))
 }
 
+pub fn type_error(pos: Pos, msg: String) -> CompileError
+{
+    CompileError::new(pos, ErrorType::TypeError(msg))
+}
+
+pub fn expected_const_expr(pos: Pos, msg: String) -> CompileError
+{
+    CompileError::new(pos, ErrorType::ExpectedConstExpr(msg))
+}
+
 impl fmt::Display for CompileError
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>

@@ -152,10 +152,11 @@ impl Context
 
     fn infer_nested_member_type(&self, st: &StructType, next: &MemberAccess) -> Result<Type, CompileError>
     {
-        if let Some((_, mvar)) = st.get_member(&next.name) {
+        let member_name = try!(next.name().ok_or(type_error(next.span.start, "Unexpected nexted member target expression".into())));
+        if let Some((_, mvar)) = st.get_member(&member_name) {
             let st = match mvar.typ {
-                Type::Complex(ref ctype) => try!(self.get_complex_type(&ctype).ok_or(CompileError::new(next.span.start, ErrorType::TypeError(format!("Unknown type {}", ctype))))),
-                _ => return err(next.span.start, ErrorType::TypeError(format!("Member variable {} is not a struct", next.name))),
+                Type::Complex(ref ctype) => try!(self.get_complex_type(&ctype).ok_or(type_error(next.span.start, format!("Unknown type {}", ctype)))),
+                _ => return err(next.span.start, ErrorType::TypeError(format!("Member variable {} is not a struct", member_name))),
             };
 
             match next.member
@@ -165,28 +166,25 @@ impl Context
                 Member::Nested(ref next) => self.infer_nested_member_type(&st, next),
             }
         } else {
-            err(next.span.start, ErrorType::UnknownStructMember(st.name.clone(), next.name.clone()))
+            err(next.span.start, ErrorType::UnknownStructMember(st.name.clone(), member_name))
         }
     }
 
     fn infer_member_type(&self, a: &MemberAccess) -> Result<Type, CompileError>
     {
-        if let Some(ref v) = self.get_variable(&a.name) {
-            match v.typ
-            {
-                Type::Complex(ref ctype) => {
-                    let st = try!(self.get_complex_type(&ctype).ok_or(CompileError::new(a.span.start, ErrorType::TypeError(format!("Unknown type {}", ctype)))));
-                    match a.member
-                    {
-                        Member::Call(ref c) => self.infer_call_type(c),
-                        Member::Var(ref nr) => self.infer_member_var_type(&st, nr),
-                        Member::Nested(ref next) => self.infer_nested_member_type(&st, next),
-                    }
-                },
-                _ => err(a.span.start, ErrorType::TypeError(format!("Variable {} is not a struct", a.name))),
-            }
-        } else {
-            err(a.span.start, ErrorType::UnknownVariable(a.name.clone()))
+        let target_type = try!(self.infer_type(&a.target));
+        match target_type
+        {
+            Type::Complex(ref ctype) => {
+                let st = try!(self.get_complex_type(&ctype).ok_or(CompileError::new(a.span.start, ErrorType::TypeError(format!("Unknown type {}", ctype)))));
+                match a.member
+                {
+                    Member::Call(ref c) => self.infer_call_type(c),
+                    Member::Var(ref nr) => self.infer_member_var_type(&st, nr),
+                    Member::Nested(ref next) => self.infer_nested_member_type(&st, next),
+                }
+            },
+            _ => err(a.span.start, ErrorType::TypeError(format!("{} is not a struct", target_type))),
         }
     }
 
@@ -219,27 +217,34 @@ impl Context
 
     fn infer_index_operation_type(&self, iop: &IndexOperation) -> Result<Type, CompileError>
     {
-        match *iop.target.deref()
+        let target_typ = match *iop.target.deref()
         {
             Expression::NameRef(ref nr) =>
                 if let Some(v) = self.get_variable(&nr.name)
                 {
-                    match v.typ
-                    {
-                        Type::Array(ref inner, _) | Type::Slice(ref inner) => Ok(inner.deref().clone()),
-                        _ => err(iop.span.start, ErrorType::IndexOperationNotSupported(format!("{}", v.typ))),
-                    }
+                    v.typ.clone()
                 }
                 else
                 {
-                    err(iop.span.start, ErrorType::UnknownVariable(nr.name.clone()))
+                    return err(iop.span.start, ErrorType::UnknownVariable(nr.name.clone()));
                 },
+            Expression::IndexOperation(ref iop) => {
+                try!(self.infer_type(&iop.target))
+            },
+            Expression::MemberAccess(ref ma) => {
+                try!(self.infer_member_type(ma))
+            },
             _ => {
                 let t = try!(self.infer_type(&iop.target));
-                err(iop.span.start, ErrorType::IndexOperationNotSupported(format!("{}", t)))
+                return err(iop.span.start, ErrorType::IndexOperationNotSupported(format!("{}", t)))
             }
-        }
+        };
 
+        match target_typ
+        {
+            Type::Array(ref inner, _) | Type::Slice(ref inner) => Ok(Type::Pointer(inner.clone())),
+            _ => err(iop.span.start, ErrorType::IndexOperationNotSupported(format!("{}", target_typ))),
+        }
     }
 
     pub fn infer_type(&self, e: &Expression) -> Result<Type, CompileError>
@@ -379,13 +384,14 @@ impl Context
         self.get_variable(name).is_some()
     }
 
-    pub fn add_variable(&mut self, name: String, value: LLVMValueRef, constant: bool, public: bool, typ: Type)
+    pub fn add_variable(&mut self, name: String, value: LLVMValueRef, constant: bool, public: bool, global: bool, typ: Type)
     {
         let var = Rc::new(VariableInstance{
             value: value,
             name: name,
             constant: constant,
             public: public,
+            global: global,
             typ: typ,
         });
         self.current_module.add_variable(var);

@@ -134,7 +134,7 @@ fn parse_object_construction(tq: &mut TokenQueue, indent_level: usize, name: Nam
     Ok(object_construction(name, params, Span::new(pos, tq.pos())))
 }
 
-fn parse_member_access(tq: &mut TokenQueue, indent_level: usize, name: NameRef) -> Result<MemberAccess, CompileError>
+fn parse_member_access(tq: &mut TokenQueue, indent_level: usize, target: Expression) -> Result<MemberAccess, CompileError>
 {
     let (next_name, next_name_span) = try!(tq.expect_identifier());
     let next_nr = NameRef::new(next_name, next_name_span);
@@ -147,7 +147,7 @@ fn parse_member_access(tq: &mut TokenQueue, indent_level: usize, name: NameRef) 
     else if tq.is_next(TokenKind::Operator(Operator::Dot))
     {
         try!(tq.pop());
-        let next = try!(parse_member_access(tq, indent_level, next_nr));
+        let next = try!(parse_member_access(tq, indent_level, Expression::NameRef(next_nr)));
         Member::Nested(Box::new(next))
     }
     else
@@ -155,8 +155,8 @@ fn parse_member_access(tq: &mut TokenQueue, indent_level: usize, name: NameRef) 
         Member::Var(next_nr)
     };
 
-    let pos = name.span.start;
-    Ok(MemberAccess::new(name.name, member, Span::new(pos, tq.pos())))
+    let pos = target.span().start;
+    Ok(MemberAccess::new(target, member, Span::new(pos, tq.pos())))
 }
 
 fn parse_name(tq: &mut TokenQueue, id: String, pos: Pos) -> Result<NameRef, CompileError>
@@ -254,16 +254,8 @@ fn parse_rhs(tq: &mut TokenQueue, indent_level: usize, lhs: Expression) -> Resul
             try!(parse_object_construction(tq, indent_level, nr))
         },
         TokenKind::Operator(op) if op == Operator::Dot => {
-            let nr = try!(lhs.to_name_ref());
-            try!(parse_member_access(tq, indent_level, nr).map(|m| Expression::MemberAccess(m)))
+            try!(parse_member_access(tq, indent_level, lhs).map(|m| Expression::MemberAccess(m)))
         },
-        /*
-        Some(TokenKind::Operator(op)) if op == Operator::Increment || op == Operator::Decrement => {
-            // Turn x++ in x += 1, and x-- in x -= 1
-            let new_op = if op == Operator::Increment {Operator::AddAssign} else {Operator::SubAssign};
-            Ok(assignment(new_op, lhs, Expression::IntLiteral(tok.span, 1), tok.span))
-        },
-        */
         TokenKind::Operator(op) if op == Operator::Increment || op == Operator::Decrement => {
             let start = lhs.span().start;
             pf_unary_op(op, lhs, Span::new(start, next.span.end))
@@ -295,7 +287,7 @@ pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize) -> Result<Expr
     if is_end_of_expression(&tok) {
         return err(tq.pos(), ErrorType::ExpectedStartOfExpression);
     }
-    
+
     let lhs = try!(parse_lhs(tq, indent_level, tok));
     parse_rhs(tq, indent_level, lhs)
 }
@@ -562,12 +554,12 @@ fn test_member_accesss()
     assert!(e == bin_op(
         Operator::Add,
         member_access(
-            "b".into(),
+            name_ref2("b", span(1, 1, 1, 1)),
             Member::Var(NameRef::new("d".into(), span(1, 3, 1, 3))),
             span(1, 1, 1, 3)
         ),
         member_access(
-            "a".into(),
+            name_ref2("a", span(1, 7, 1, 7)),
             Member::Call(Call::new(
                 name_ref("c", span(1, 9, 1, 9)),
                 vec![number(6, span(1, 11, 1, 11))],
@@ -585,19 +577,20 @@ fn test_nested_member_accesss()
 {
     let e = th_expr("a.b.c.d");
 
-    let c = MemberAccess::new("c".into(), Member::Var(NameRef::new("d".into(), span(1, 7, 1, 7))), span(1, 5, 1, 7));
-    let b = MemberAccess::new("b".into(), Member::Nested(Box::new(c)), span(1, 3, 1, 7));
-    let a = member_access("a".into(), Member::Nested(Box::new(b)), span(1, 1, 1, 7));
-    assert!(e == a);
+    let c = MemberAccess::new(name_ref("c", span(1, 5, 1, 5)), Member::Var(NameRef::new("d".into(), span(1, 7, 1, 7))), span(1, 5, 1, 7));
+    let b = MemberAccess::new(name_ref("b", span(1, 3, 1, 3)), Member::Nested(Box::new(c)), span(1, 3, 1, 7));
+    let a = MemberAccess::new(name_ref("a", span(1, 1, 1, 1)), Member::Nested(Box::new(b)), span(1, 1, 1, 7));
+    assert!(e == Expression::MemberAccess(a));
 }
 
 #[test]
 fn test_member_assignment()
 {
     let e = th_expr("b.d = 6");
+    let ma = MemberAccess::new(name_ref("b", span(1, 1, 1, 1)), Member::Var(NameRef::new("d".into(), span(1, 3, 1, 3))), span(1, 1, 1, 3));
     assert!(e == assignment(
         Operator::Assign,
-        member_access("b".into(), Member::Var(NameRef::new("d".into(), span(1, 3, 1, 3))), span(1, 1, 1, 3)),
+        Expression::MemberAccess(ma),
         number(6, span(1, 7, 1, 7)),
         span(1, 1, 1, 7)));
 }

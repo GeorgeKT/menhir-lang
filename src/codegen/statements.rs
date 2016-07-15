@@ -43,13 +43,13 @@ unsafe fn gen_variable(ctx: &mut Context, v: &Variable) -> Result<(), CompileErr
         try!(gen_expression_store(ctx, &v.init, glob));
 
         let name = ctx.prepend_namespace(&v.name);
-        ctx.add_variable(name, glob, v.is_const, v.public, v_typ);
+        ctx.add_variable(name, glob, v.is_const, v.public, true, v_typ);
     }
     else
     {
         let var = LLVMBuildAlloca(ctx.builder, llvm_type, cstr("local_var"));
         try!(gen_expression_store(ctx, &v.init, var));
-        ctx.add_variable(v.name.clone(), var, v.is_const, v.public, v_typ);
+        ctx.add_variable(v.name.clone(), var, v.is_const, v.public, false, v_typ);
     }
 
     Ok(())
@@ -107,7 +107,7 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<FunctionInstan
         let var = LLVMGetParam(fi.function, i as libc::c_uint);
         let alloc = LLVMBuildAlloca(ctx.builder, fi.args[i], cstr("argtmp"));
         LLVMBuildStore(ctx.builder, var, alloc);
-        ctx.add_variable(arg.name.clone(), alloc, arg.constant, false, arg.typ.clone());
+        ctx.add_variable(arg.name.clone(), alloc, arg.constant, false, false, arg.typ.clone());
     }
 
     for s in &f.block.statements {
