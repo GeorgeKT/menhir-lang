@@ -61,7 +61,7 @@ fn test_number()
     assert!(run(r#"
 func main() -> int:
     return 5
-    ""#, false).unwrap() == 5);
+    "#, false).unwrap() == 5);
 }
 
 #[test]
@@ -73,7 +73,7 @@ func foo(a: int, b: int) -> int:
 
 func main() -> int:
     return foo(1, 2)
-    ""#, false).unwrap() == 5);
+    "#, false).unwrap() == 5);
 }
 
 #[test]
@@ -85,7 +85,7 @@ func main() -> int:
     var y = 6
     y += x
     return y
-    ""#, false).unwrap() == 13);
+    "#, false).unwrap() == 13);
 }
 
 #[test]
@@ -97,7 +97,7 @@ var y = 6
 func main() -> int:
     y += x
     return y
-    ""#, false).unwrap() == 13);
+    "#, false).unwrap() == 13);
 }
 
 #[test]
@@ -113,7 +113,7 @@ struct Point:
 func main() -> int:
     var p = Point{4, 9}
     return p.sum()
-    ""#, false).unwrap() == 13);
+    "#, false).unwrap() == 13);
 }
 
 #[test]
@@ -132,7 +132,7 @@ func main() -> int:
     bar.z++
     y++
     return y + foo.z + bar.z
-    ""#, false).unwrap() == 21);
+    "#, false).unwrap() == 21);
 }
 
 
@@ -149,7 +149,7 @@ struct Point:
 func main() -> int:
     var p = [Point{4, 9}, Point{3, 4}]
     return p[0].sum() + p[1].sum()
-    ""#, false).unwrap() == 20);
+    "#, false).unwrap() == 20);
 }
 
 
@@ -167,7 +167,7 @@ var p = [Point{4, 9}, Point{3, 4}]
 
 func main() -> int:
     return p[0].sum() + p[1].sum()
-    ""#, false).unwrap();
+    "#, false).unwrap();
     assert!(v == 20);
 }
 
@@ -185,7 +185,7 @@ struct Point:
 func main() -> int:
     var p = Point{[4, 10]}
     return p.sum()
-    ""#, false).unwrap() == 14);
+    "#, false).unwrap() == 14);
 }
 
 #[test]
@@ -205,7 +205,7 @@ func main() -> int:
         return p.sum()
     else:
         return 5
-    ""#, false).unwrap() == 16);
+    "#, false).unwrap() == 16);
 }
 
 #[test]
@@ -225,7 +225,7 @@ func main() -> int:
         return p.sum()
     else:
         return 5
-    ""#, false).unwrap() == 5);
+    "#, false).unwrap() == 5);
 }
 
 #[test]
@@ -239,7 +239,7 @@ func main() -> int:
         count += 2
         i++
     return count
-    ""#, false).unwrap() == 20);
+    "#, false).unwrap() == 20);
 }
 
 #[test]
@@ -256,5 +256,5 @@ func sum(v: [int]) -> int:
 
 func main() -> int:
     return sum([4, 5, 6, 7])
-    ""#, false).unwrap() == 22);
+    "#, false).unwrap() == 22);
 }
