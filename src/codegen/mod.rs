@@ -5,6 +5,8 @@ mod stackframe;
 mod symbols;
 mod modulecontext;
 mod context;
+mod conversions;
+mod builtin;
 mod tests;
 
 use std::ffi::{CStr, CString};

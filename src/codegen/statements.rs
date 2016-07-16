@@ -65,7 +65,7 @@ unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, public: b
     for arg in &sig.args {
         let arg_type = try!(ctx
             .resolve_type(&arg.typ)
-            .ok_or(CompileError::new(arg.span.start, ErrorType::TypeError(format!("Cannot resolve the type of argument '{}'", arg.name)))));
+            .ok_or(type_error(arg.span.start, format!("Cannot resolve the type of argument '{}'", arg.name))));
         arg_types.push(arg_type);
     }
 
@@ -282,12 +282,12 @@ unsafe fn gen_struct(ctx: &mut Context, s: &Struct) -> Result<(), CompileError>
         }
     }
 
-    let struct_type = StructType{
+    let struct_type = Rc::new(StructType{
         name: if ctx.in_global_context() {ctx.prepend_namespace(&s.name)} else {s.name.clone()},
         typ: LLVMStructTypeInContext(ctx.context, element_types.as_mut_ptr(), s.variables.len() as u32, 0),
         members: members,
         public: s.public,
-    };
+    });
 
     ctx.add_complex_type(struct_type);
 

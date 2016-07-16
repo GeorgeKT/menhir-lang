@@ -10,6 +10,7 @@ use ast::*;
 use codegen::*;
 use codegen::context::*;
 use codegen::symbols::*;
+use codegen::conversions::*;
 use compileerror::*;
 use parser::Operator;
 
@@ -268,32 +269,6 @@ unsafe fn gen_enclosed(ctx: &mut Context, e: &Expression, _span: &Span) -> Resul
     gen_expression(ctx, e)
 }
 
-pub fn is_same_kind(a: LLVMTypeKind, b: LLVMTypeKind) -> bool
-{
-    (a as usize) == (b as usize)
-}
-
-// Convert a value to a different type, if possible
-unsafe fn convert(b: LLVMBuilderRef, from: LLVMValueRef, to: LLVMTypeRef) ->  Option<LLVMValueRef>
-{
-    let from_type = LLVMTypeOf(from);
-    if from_type == to {
-        return Some(from); // Same types, so no problem
-    }
-
-    let array_to_ptr =
-        is_same_kind(LLVMGetTypeKind(from_type), LLVMTypeKind::LLVMPointerTypeKind) &&
-        is_same_kind(LLVMGetTypeKind(to), LLVMTypeKind::LLVMPointerTypeKind) &&
-        is_same_kind(LLVMGetTypeKind(LLVMGetElementType(from_type)), LLVMTypeKind::LLVMArrayTypeKind) &&
-        LLVMGetElementType(LLVMGetElementType(from_type)) == LLVMGetElementType(to);
-    if array_to_ptr {
-        let cast = LLVMBuildBitCast(b, from, to, cstr("cast"));
-        return Some(cast);
-    }
-
-    None
-}
-
 unsafe fn gen_member_call(ctx: &mut Context, c: &Call, st: &StructType, self_ptr: LLVMValueRef, private_allowed: bool) -> Result<LLVMValueRef, CompileError>
 {
     let func_name = try!(c.get_function_name());
@@ -335,7 +310,7 @@ unsafe fn gen_call_common(ctx: &Context, c: &Call, func: &FunctionInstance, mut 
     }
 
     for (i, arg) in c.args.iter().enumerate() {
-        let nval = convert(ctx.builder, arg_vals[i], func.args[i]);
+        let nval = convert(ctx, arg_vals[i], func.args[i]);
         match nval {
             Some(val) => {
                 arg_vals[i] = val;
@@ -477,7 +452,7 @@ unsafe fn gen_nested_member_access_by_name(
         return err(next.span.start, ErrorType::PrivateMemberAccess(mvar.name.clone()));
     }
 
-    let next_st = try!(get_struct_type(ctx, &mvar.typ, next.span.start));
+    let next_st = try!(ctx.get_struct_type(&mvar.typ, next.span.start));
     let new_this = LLVMBuildStructGEP(ctx.builder, this, idx as u32, cstr("elptr"));
     match next.member
     {
@@ -500,21 +475,11 @@ unsafe fn gen_nested_member_access(ctx: &mut Context, this: LLVMValueRef, st: &S
     }
 }
 
-fn get_struct_type(ctx: &Context, typ: &Type, pos: Pos) -> Result<Rc<StructType>, CompileError>
-{
-    match *typ
-    {
-        Type::Complex(ref ctype) => ctx.get_complex_type(&ctype).ok_or(type_error(pos, format!("Unknown type {}", typ))),
-        Type::Pointer(ref inner) => get_struct_type(ctx, &inner, pos),
-        _ => Err(type_error(pos, format!("Unknown type {}", typ))),
-    }
-}
-
 unsafe fn gen_member_access(ctx: &mut Context, a: &MemberAccess, store: bool) -> Result<LLVMValueRef, CompileError>
 {
     let st = try!(ctx
         .infer_type(&a.target)
-        .and_then(|t| get_struct_type(ctx, &t, a.span.start)));
+        .and_then(|t| ctx.get_struct_type(&t, a.span.start)));
     let target_ptr = try!(gen_target(ctx, &a.target));
 
     let private_allowed = if let &Expression::NameRef(ref nr) = a.target.deref() {
@@ -534,23 +499,41 @@ unsafe fn gen_member_access(ctx: &mut Context, a: &MemberAccess, store: bool) ->
 unsafe fn gen_index_operation(ctx: &mut Context, iop: &IndexOperation, store: bool) -> Result<LLVMValueRef, CompileError>
 {
     let index = try!(gen_expression(ctx, &iop.index_expr));
-    if !is_integer(ctx.context, LLVMTypeOf(index))
-    {
-        err(iop.index_expr.span().start, ErrorType::TypeError(format!("Indexing must be done with an integer expression")))
+    if !is_integer(ctx.context, LLVMTypeOf(index)) {
+        return Err(type_error(iop.index_expr.span().start, format!("Indexing must be done with an integer expression")));
     }
-    else
+
+    let target_type = try!(ctx.infer_type(&iop.target));
+    match target_type
     {
-        let array = try!(gen_target(ctx, &iop.target));
-        let mut index_expr = vec![const_int(ctx.context, 0), index];
-        let target_ptr = LLVMBuildGEP(ctx.builder, array, index_expr.as_mut_ptr(), 2, cstr("target_ptr"));
-        if store
-        {
-            Ok(target_ptr)
-        }
-        else
-        {
-            Ok(LLVMBuildLoad(ctx.builder, target_ptr, cstr("element")))
-        }
+        Type::Slice(_) => {
+            let slice = try!(gen_target(ctx, &iop.target));
+            let slice_data = LLVMBuildStructGEP(ctx.builder, LLVMBuildLoad(ctx.builder, slice, cstr("slice_data_struct")), 1, cstr("slice_data"));
+            let mut index_expr = vec![index];
+            let target_ptr = LLVMBuildGEP(ctx.builder, LLVMBuildLoad(ctx.builder, slice_data, cstr("slice_data_ptr")), index_expr.as_mut_ptr(), 1, cstr("target_ptr"));
+            if store
+            {
+                Ok(target_ptr)
+            }
+            else
+            {
+                Ok(LLVMBuildLoad(ctx.builder, target_ptr, cstr("element")))
+            }
+        },
+        Type::Array(_, _) => {
+            let array = try!(gen_target(ctx, &iop.target));
+            let mut index_expr = vec![const_int(ctx.context, 0), index];
+            let target_ptr = LLVMBuildGEP(ctx.builder, array, index_expr.as_mut_ptr(), 2, cstr("target_ptr"));
+            if store
+            {
+                Ok(target_ptr)
+            }
+            else
+            {
+                Ok(LLVMBuildLoad(ctx.builder, target_ptr, cstr("element")))
+            }
+        },
+        _ => Err(type_error(iop.span.start, format!("Indexing not supported on {}", target_type))),
     }
 }
 
@@ -579,7 +562,7 @@ unsafe fn gen_assignment(ctx: &mut Context, a: &Assignment) -> Result<LLVMValueR
     let rhs_val = try!(gen_expression(ctx, &a.expression));
     let rhs_type = LLVMTypeOf(rhs_val);
     let target_type = LLVMTypeOf(target_ptr);
-    if let Some(cv) = convert(ctx.builder, rhs_val, LLVMGetElementType(target_type)) {
+    if let Some(cv) = convert(ctx, rhs_val, LLVMGetElementType(target_type)) {
         assign(ctx, a.operator, target_ptr, cv, &a.span)
     } else {
         let msg = format!("Attempting to assign an expression of type '{}' to a variable of type '{}'",
@@ -673,7 +656,7 @@ unsafe fn gen_const_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> Result
     Ok(LLVMConstArray(llvm_type, vals.as_mut_ptr(), vals.len() as u32))
 }
 
-unsafe fn gen_array_literal(ctx: &mut Context, a: &ArrayLiteral,  ptr: LLVMValueRef) -> Result<(), CompileError>
+unsafe fn gen_array_literal_store(ctx: &mut Context, a: &ArrayLiteral, ptr: LLVMValueRef) -> Result<(), CompileError>
 {
     if ctx.in_global_context()
     {
@@ -692,6 +675,16 @@ unsafe fn gen_array_literal(ctx: &mut Context, a: &ArrayLiteral,  ptr: LLVMValue
     Ok(())
 }
 
+unsafe fn gen_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> Result<LLVMValueRef, CompileError>
+{
+    let element_type = try!(ctx.infer_array_element_type(a));
+    let llvm_type = try!(ctx.resolve_type(&element_type)
+        .ok_or(type_error(a.span.start, format!("Unknown type '{}'", element_type))));
+    let var = LLVMBuildAlloca(ctx.builder, LLVMArrayType(llvm_type, a.elements.len() as u32), cstr("local_var"));
+    try!(gen_array_literal_store(ctx, a, var));
+    Ok(var)
+}
+
 pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<LLVMValueRef, CompileError>
 {
     match *e
@@ -699,6 +692,7 @@ pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<LLVMVa
         Expression::IntLiteral(ref span, integer) => gen_integer(ctx, integer, span),
         Expression::FloatLiteral(ref span, ref s) => gen_float(ctx, s, span),
         Expression::StringLiteral(ref span, ref s) => gen_string_literal(ctx, s, span),
+        Expression::ArrayLiteral(ref a) => gen_array_literal(ctx, a),
         Expression::UnaryOp(ref op) => gen_unary(ctx, op),
         Expression::PostFixUnaryOp(ref op) => gen_pf_unary(ctx, op),
         Expression::BinaryOp(ref op) => gen_binary(ctx, op),
@@ -708,7 +702,7 @@ pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<LLVMVa
         Expression::Assignment(ref a) => gen_assignment(ctx, a),
         Expression::MemberAccess(ref ma) => gen_member_access(ctx, ma, false),
         Expression::IndexOperation(ref iop) => gen_index_operation(ctx, iop, false),
-        _ => err(e.span().start, ErrorType::TypeError(format!("Use gen_expression_store"))),
+        _ => err(e.span().start, ErrorType::TypeError(format!("Use gen_expression_store (e = {:?})", e))),
     }
 }
 
@@ -716,7 +710,7 @@ unsafe fn store(ctx: &mut Context, e: &Expression, ptr: LLVMValueRef) -> Result<
 {
     let v = try!(gen_expression(ctx, e));
     let dst_typ = LLVMGetElementType(LLVMTypeOf(ptr));
-    if let Some(cv) = convert(ctx.builder, v, dst_typ)
+    if let Some(cv) = convert(ctx, v, dst_typ)
     {
         if ctx.in_global_context()
         {
@@ -744,7 +738,7 @@ pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: LLVMV
     match *e
     {
         Expression::ObjectConstruction(ref oc) => gen_object_construction(ctx, oc, ptr),
-        Expression::ArrayLiteral(ref a) => gen_array_literal(ctx, a, ptr),
+        Expression::ArrayLiteral(ref a) => gen_array_literal_store(ctx, a, ptr),
         _ => store(ctx, e, ptr),
     }
 }

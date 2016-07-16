@@ -8,15 +8,19 @@
 #[cfg(test)] use compileerror::{ErrorType, err, CompileError, Pos};
 #[cfg(test)] use parser::{parse_module, ParseMode};
 #[cfg(test)] use codegen::{CodeGenOptions, codegen, cstr};
+#[cfg(test)] use ast::{TreePrinter};
 
 #[cfg(test)]
-fn run(prog: &str, dump_ir: bool) -> Result<u64, CompileError>
+fn run(prog: &str, dump: bool) -> Result<u64, CompileError>
 {
     let mut cursor = Cursor::new(prog);
     let md = try!(parse_module(&mut cursor, "test", ParseMode::Module));
+    if dump {
+        md.print(0);
+    }
 
     let opts = CodeGenOptions{
-        dump_ir: dump_ir,
+        dump_ir: dump,
         build_dir: "build".into(),
         program_name: "test".into(),
         runtime_library: "libcobraruntime.a".into(),
@@ -236,4 +240,21 @@ func main() -> int:
         i++
     return count
     ""#, false).unwrap() == 20);
+}
+
+#[test]
+fn test_slice()
+{
+    assert!(run(r#"
+func sum(v: [int]) -> int:
+    var i = 0
+    var s = 0
+    while i < v.len:
+        s += v[i]
+        i++
+    return s
+
+func main() -> int:
+    return sum([4, 5, 6, 7])
+    ""#, false).unwrap() == 22);
 }

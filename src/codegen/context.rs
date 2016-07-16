@@ -5,7 +5,6 @@ use std::ops::Deref;
 use std::ptr;
 use std::mem;
 use std::fs::DirBuilder;
-use std::collections::HashMap;
 
 use llvm::prelude::*;
 use llvm::core::*;
@@ -16,6 +15,7 @@ use compileerror::*;
 use codegen::*;
 use codegen::modulecontext::*;
 use codegen::symbols::*;
+use codegen::builtin::*;
 
 pub struct Context
 {
@@ -25,7 +25,7 @@ pub struct Context
     name: String,
     modules: Vec<Box<ModuleContext>>,
     current_module: Box<ModuleContext>,
-    slice_types: HashMap<String, LLVMTypeRef>,
+    builtin: SymbolTable,
 }
 
 impl Context
@@ -42,7 +42,7 @@ impl Context
                 name: module_name.into(),
                 modules: Vec::new(),
                 current_module: Box::new(ModuleContext::new(format!("{}::", module_name))),
-                slice_types: HashMap::new(),
+                builtin: SymbolTable::new(),
             }
         }
     }
@@ -90,21 +90,6 @@ impl Context
         }
     }
 
-    unsafe fn get_slice_type(&mut self, element_type: LLVMTypeRef) -> LLVMTypeRef
-    {
-        let name = format!("slice_{}", type_name(element_type));
-        if let Some(st) = self.slice_types.get(&name) {
-            return *st;
-        }
-
-        let st = LLVMStructCreateNamed(self.context, cstr(&name));
-        // A slice is a struct containing a pointer and a length
-        let mut element_types = vec![LLVMPointerType(element_type, 1), LLVMInt64TypeInContext(self.context)];
-        LLVMStructSetBody(st, element_types.as_mut_ptr(), 2, 0);
-        self.slice_types.insert(name, st);
-        st
-    }
-
     pub unsafe fn resolve_type(&mut self, typ: &Type) -> Option<LLVMTypeRef>
     {
         match *typ
@@ -131,13 +116,13 @@ impl Context
                 self.resolve_type(&st).map(|t| LLVMArrayType(t, count as u32))
             },
             Type::Slice(ref st) => {
-                self.resolve_type(&st).map(|t| self.get_slice_type(t))
+                get_slice_type(self, st).map(|s| LLVMPointerType(s.typ, 0))
             }
             _ => None,
         }
     }
 
-    fn infer_member_var_type(&self, st: &StructType, nr: &NameRef) -> Result<Type, CompileError>
+    fn infer_member_var_type(&mut self, st: &StructType, nr: &NameRef) -> Result<Type, CompileError>
     {
         if let Some((_, mvar)) = st.get_member(&nr.name) {
             if mvar.typ == Type::Unknown {
@@ -150,7 +135,7 @@ impl Context
         }
     }
 
-    fn infer_nested_member_type(&self, st: &StructType, next: &MemberAccess) -> Result<Type, CompileError>
+    fn infer_nested_member_type(&mut self, st: &StructType, next: &MemberAccess) -> Result<Type, CompileError>
     {
         let member_name = try!(next.name().ok_or(type_error(next.span.start, "Unexpected nexted member target expression".into())));
         if let Some((_, mvar)) = st.get_member(&member_name) {
@@ -170,21 +155,29 @@ impl Context
         }
     }
 
-    fn infer_member_type(&self, a: &MemberAccess) -> Result<Type, CompileError>
+
+    pub fn get_struct_type(&mut self, typ: &Type, pos: Pos) -> Result<Rc<StructType>, CompileError>
+    {
+        match *typ
+        {
+            Type::Complex(ref ctype) => self.get_complex_type(&ctype).ok_or(type_error(pos, format!("Unknown struct type {}", typ))),
+            Type::Pointer(ref inner) => self.get_struct_type(&inner, pos),
+            Type::Slice(ref inner) => unsafe {
+                get_slice_type(self, inner).ok_or(type_error(pos, format!("Unknown slice type {}", typ)))
+            },
+            _ => Err(type_error(pos, format!("{} is not a struct or slice", typ))),
+        }
+    }
+
+    fn infer_member_type(&mut self, a: &MemberAccess) -> Result<Type, CompileError>
     {
         let target_type = try!(self.infer_type(&a.target));
-        match target_type
+        let st = try!(self.get_struct_type(&target_type, a.span.start));
+        match a.member
         {
-            Type::Complex(ref ctype) => {
-                let st = try!(self.get_complex_type(&ctype).ok_or(CompileError::new(a.span.start, ErrorType::TypeError(format!("Unknown type {}", ctype)))));
-                match a.member
-                {
-                    Member::Call(ref c) => self.infer_call_type(c),
-                    Member::Var(ref nr) => self.infer_member_var_type(&st, nr),
-                    Member::Nested(ref next) => self.infer_nested_member_type(&st, next),
-                }
-            },
-            _ => err(a.span.start, ErrorType::TypeError(format!("{} is not a struct", target_type))),
+            Member::Call(ref c) => self.infer_call_type(c),
+            Member::Var(ref nr) => self.infer_member_var_type(&st, nr),
+            Member::Nested(ref next) => self.infer_nested_member_type(&st, next),
         }
     }
 
@@ -198,7 +191,7 @@ impl Context
         }
     }
 
-    pub fn infer_array_element_type(&self, a: &ArrayLiteral) -> Result<Type, CompileError>
+    pub fn infer_array_element_type(&mut self, a: &ArrayLiteral) -> Result<Type, CompileError>
     {
         for e in &a.elements {
             let t = self.infer_type(e);
@@ -215,7 +208,7 @@ impl Context
         err(a.span.start, ErrorType::TypeError(msg))
     }
 
-    fn infer_index_operation_type(&self, iop: &IndexOperation) -> Result<Type, CompileError>
+    fn infer_index_operation_type(&mut self, iop: &IndexOperation) -> Result<Type, CompileError>
     {
         let target_typ = match *iop.target.deref()
         {
@@ -247,7 +240,7 @@ impl Context
         }
     }
 
-    pub fn infer_type(&self, e: &Expression) -> Result<Type, CompileError>
+    pub fn infer_type(&mut self, e: &Expression) -> Result<Type, CompileError>
     {
         match *e
         {
@@ -426,6 +419,11 @@ impl Context
 
     pub fn get_complex_type(&self, name: &str) -> Option<Rc<StructType>>
     {
+        let bit = self.builtin.get_complex_type(name);
+        if bit.is_some() {
+            return bit
+        }
+
         let ct = self.current_module.get_complex_type(name, true);
         if ct.is_some() {
             return ct;
@@ -441,9 +439,14 @@ impl Context
         None
     }
 
-    pub fn add_complex_type(&mut self, st: StructType)
+    pub fn add_builtin_type(&mut self, st: Rc<StructType>)
     {
-        self.current_module.add_complex_type(Rc::new(st));
+        self.builtin.add_complex_type(st);
+    }
+
+    pub fn add_complex_type(&mut self, st: Rc<StructType>)
+    {
+        self.current_module.add_complex_type(st);
     }
 
     pub fn get_current_function(&self) -> LLVMValueRef
