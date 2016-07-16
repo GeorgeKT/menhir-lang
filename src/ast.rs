@@ -233,6 +233,15 @@ pub struct ArrayLiteral
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
+pub struct ArrayInitializer
+{
+    // syntax [init; times]
+    pub init: Box<Expression>,
+    pub times: u64,
+    pub span: Span,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct IndexOperation
 {
     pub target: Box<Expression>,
@@ -247,6 +256,7 @@ pub enum Expression
     FloatLiteral(Span, String), // Keep as string until we generate code, so we can compare it
     StringLiteral(Span, String),
     ArrayLiteral(ArrayLiteral),
+    ArrayInitializer(ArrayInitializer),
     UnaryOp(UnaryOp),
     PostFixUnaryOp(UnaryOp), // post increment and decrement
     BinaryOp(BinaryOp),
@@ -263,6 +273,15 @@ pub fn array_lit(e: Vec<Expression>, span: Span) -> Expression
 {
     Expression::ArrayLiteral(ArrayLiteral{
         elements: e,
+        span: span,
+    })
+}
+
+pub fn array_init(init: Expression, times: u64, span: Span) -> Expression
+{
+    Expression::ArrayInitializer(ArrayInitializer{
+        init: Box::new(init),
+        times: times,
         span: span,
     })
 }
@@ -380,6 +399,7 @@ impl Expression
             Expression::FloatLiteral(span, _) => span,
             Expression::StringLiteral(span, _) => span,
             Expression::ArrayLiteral(ref a) => a.span,
+            Expression::ArrayInitializer(ref a) => a.span,
             Expression::UnaryOp(ref op) => op.span,
             Expression::PostFixUnaryOp(ref op) => op.span,
             Expression::BinaryOp(ref op) => op.span,
@@ -435,6 +455,10 @@ impl TreePrinter for Expression
                 for e in &a.elements {
                     e.print(level + 1);
                 }
+            },
+            Expression::ArrayInitializer(ref a) => {
+                println!("{}array initializer {} ({})", p, a.times, a.span);
+                a.init.print(level + 1);
             },
             Expression::UnaryOp(ref op) => {
                 println!("{}unary {} ({})", p, op.operator, op.span);

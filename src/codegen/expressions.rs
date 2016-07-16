@@ -685,6 +685,55 @@ unsafe fn gen_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> Result<LLVMV
     Ok(var)
 }
 
+unsafe fn gen_const_array_initializer(ctx: &mut Context, a: &ArrayInitializer) -> Result<LLVMValueRef, CompileError>
+{
+    let element_type = try!(ctx.infer_type(&a.init));
+    let llvm_type = try!(ctx.resolve_type(&element_type).ok_or(
+        type_error(a.span.start, format!("Unknown type {}", element_type))
+    ));
+
+    let element_val = try!(gen_const_expression(ctx, &a.init));
+    if LLVMIsConstant(element_val) == 0 {
+        return err(a.span.start, ErrorType::ExpectedConstExpr(format!("Global arrays must be initialized with constant expressions")));
+    }
+
+    let mut vals = Vec::with_capacity(a.times as usize);
+    for _ in 0..a.times {
+        vals.push(element_val);
+    }
+
+    Ok(LLVMConstArray(llvm_type, vals.as_mut_ptr(), vals.len() as u32))
+}
+
+unsafe fn gen_array_initializer_store(ctx: &mut Context, a: &ArrayInitializer, ptr: LLVMValueRef) -> Result<(), CompileError>
+{
+    if ctx.in_global_context()
+    {
+        LLVMSetInitializer(ptr, try!(gen_const_array_initializer(ctx, a)));
+    }
+    else
+    {
+        for idx in 0..a.times
+        {
+            let mut index_expr = vec![const_int(ctx.context, 0), const_int(ctx.context, idx as u64)];
+            let elptr = LLVMBuildGEP(ctx.builder, ptr, index_expr.as_mut_ptr(), 2, cstr("elptr"));
+            try!(gen_expression_store(ctx, &a.init, elptr));
+        }
+    }
+
+    Ok(())
+}
+
+unsafe fn gen_array_initializer(ctx: &mut Context, a: &ArrayInitializer) -> Result<LLVMValueRef, CompileError>
+{
+    let array_element_type = try!(ctx.infer_type(&a.init));
+    let llvm_type = try!(ctx.resolve_type(&array_element_type)
+        .ok_or(type_error(a.span.start, format!("Unknown type '{}'", array_element_type))));
+    let var = LLVMBuildAlloca(ctx.builder, LLVMArrayType(llvm_type, a.times as u32), cstr("local_var"));
+    try!(gen_array_initializer_store(ctx, a, var));
+    Ok(var)
+}
+
 pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<LLVMValueRef, CompileError>
 {
     match *e
@@ -693,6 +742,7 @@ pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<LLVMVa
         Expression::FloatLiteral(ref span, ref s) => gen_float(ctx, s, span),
         Expression::StringLiteral(ref span, ref s) => gen_string_literal(ctx, s, span),
         Expression::ArrayLiteral(ref a) => gen_array_literal(ctx, a),
+        Expression::ArrayInitializer(ref a) => gen_array_initializer(ctx, a),
         Expression::UnaryOp(ref op) => gen_unary(ctx, op),
         Expression::PostFixUnaryOp(ref op) => gen_pf_unary(ctx, op),
         Expression::BinaryOp(ref op) => gen_binary(ctx, op),
@@ -739,6 +789,7 @@ pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: LLVMV
     {
         Expression::ObjectConstruction(ref oc) => gen_object_construction(ctx, oc, ptr),
         Expression::ArrayLiteral(ref a) => gen_array_literal_store(ctx, a, ptr),
+        Expression::ArrayInitializer(ref a) => gen_array_initializer_store(ctx, a, ptr),
         _ => store(ctx, e, ptr),
     }
 }

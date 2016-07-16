@@ -189,6 +189,23 @@ func main() -> int:
 }
 
 #[test]
+fn test_array_initializer()
+{
+    assert!(run(r#"
+func sum(v: [int]) -> int:
+    var i = 0, s = 0
+    while i < v.len:
+        s += v[i]
+        i++
+    return s
+
+func main() -> int:
+    const x = 20
+    return sum([x; 4])
+    "#, false).unwrap() == 80);
+}
+
+#[test]
 fn test_if()
 {
     assert!(run(r#"
@@ -247,8 +264,7 @@ fn test_slice()
 {
     assert!(run(r#"
 func sum(v: [int]) -> int:
-    var i = 0
-    var s = 0
+    var i = 0, s = 0
     while i < v.len:
         s += v[i]
         i++

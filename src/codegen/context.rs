@@ -279,6 +279,10 @@ impl Context
                 let et = try!(self.infer_array_element_type(a));
                 Ok(Type::Array(Box::new(et), a.elements.len()))
             },
+            Expression::ArrayInitializer(ref a) => {
+                let et = try!(self.infer_type(&a.init));
+                Ok(Type::Array(Box::new(et), a.times as usize))
+            },
             Expression::IndexOperation(ref iop) => {
                 self.infer_index_operation_type(iop)
             },

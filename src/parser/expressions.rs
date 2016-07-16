@@ -188,8 +188,19 @@ fn parse_array_literal(tq: &mut TokenQueue, indent_level: usize, pos: Pos) -> Re
         }
 
         let e = try!(parse_expression(tq, indent_level));
-        expressions.push(e);
-        try!(eat_comma(tq));
+        if expressions.is_empty() && tq.is_next(TokenKind::SemiColon)
+        {
+            // [x ; 4]
+            try!(tq.pop());
+            let (times, _) = try!(tq.expect_int());
+            try!(tq.expect(TokenKind::CloseBracket));
+            return Ok(array_init(e, times, Span::new(pos, tq.pos())))
+        }
+        else
+        {
+            expressions.push(e);
+            try!(eat_comma(tq));
+        }
     }
 
     try!(tq.expect(TokenKind::CloseBracket));

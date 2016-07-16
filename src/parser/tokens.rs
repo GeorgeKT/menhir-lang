@@ -126,6 +126,7 @@ pub enum TokenKind
     Identifier(String),
     Colon,
     DoubleColon,
+    SemiColon,
     Comma,
     OpenParen,
     CloseParen,
