@@ -825,7 +825,7 @@ func blaat():
 fn test_func_with_args_and_return_type()
 {
     let stmt = th_statement(r#"
-pub func blaat(x: int, const y: int) -> int:
+pub func blaat(var x: int, const y: int) -> int:
     print("true")
     return 5
     ""#);
@@ -835,8 +835,8 @@ pub func blaat(x: int, const y: int) -> int:
         f.print(0);
         assert!(f.sig.name == "blaat");
         assert!(f.sig.args.len() == 2);
-        assert!(f.sig.args[0] == arg("x", "int", false, span(2, 16, 2, 21)));
-        assert!(f.sig.args[1] == arg("y", "int", true, span(2, 30, 2, 35)));
+        assert!(f.sig.args[0] == arg("x", "int", false, span(2, 20, 2, 25)));
+        assert!(f.sig.args[1] == arg("y", "int", true, span(2, 34, 2, 39)));
         assert!(f.sig.return_type == type_primitve("int"));
         assert!(f.block.statements.len() == 2);
         assert!(f.public);
@@ -906,7 +906,7 @@ pub struct Blaat:
         assert!(s.functions == vec![
             Function::new(
                 sig("Blaat::foo", Type::Void, vec![
-                    Argument::new("self".into(), type_complex("Blaat"), false, span(6, 18, 6, 21)),
+                    Argument::new("self".into(), type_complex("Blaat"), true, span(6, 18, 6, 21)),
                 ]),
                 true,
                 Block::new(vec![
@@ -916,7 +916,7 @@ pub struct Blaat:
             ),
             Function::new(
                 sig("Blaat::bar", Type::Void, vec![
-                    Argument::new("self".into(), type_complex("Blaat"), false, span(9, 14, 9, 17)),
+                    Argument::new("self".into(), type_complex("Blaat"), true, span(9, 14, 9, 17)),
                 ]),
                 false,
                 Block::new(vec![
@@ -966,7 +966,7 @@ pub union Blaat:
 
         let foo = Function::new(
             sig("Blaat::foo",Type::Void, vec![
-                Argument::new("self".into(), type_complex("Blaat"), false, span(6, 18, 6, 21)),
+                Argument::new("self".into(), type_complex("Blaat"), true, span(6, 18, 6, 21)),
             ]),
             true,
             Block::new(vec![

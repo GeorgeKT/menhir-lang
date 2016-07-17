@@ -11,6 +11,7 @@ use compileerror::*;
 use codegen::context::*;
 use codegen::expressions::*;
 use codegen::symbols::*;
+use codegen::valueref::ValueRef;
 
 
 fn gen_import(ctx: &mut Context, import: &Import) -> Result<(), CompileError>
@@ -37,19 +38,17 @@ unsafe fn gen_variable(ctx: &mut Context, v: &Variable) -> Result<(), CompileErr
     let llvm_type = try!(ctx.resolve_type(&v_typ).ok_or(CompileError::new(v.span.start, ErrorType::TypeError(format!("Unknown type '{}'", v.typ)))));
     if ctx.in_global_context()
     {
-        let glob = LLVMAddGlobal(ctx.get_module_ref(), llvm_type, cstr("glob_var"));
-        LLVMSetLinkage(glob, LLVMLinkage::LLVMInternalLinkage);
-        LLVMSetGlobalConstant(glob, if v.is_const {1} else {0});
-        try!(gen_expression_store(ctx, &v.init, glob));
+        let glob = ValueRef::global(ctx, llvm_type, LLVMLinkage::LLVMInternalLinkage, v.is_const);
+        try!(gen_expression_store(ctx, &v.init, &glob));
 
         let name = ctx.prepend_namespace(&v.name);
-        ctx.add_variable(name, glob, v.is_const, v.public, true, v_typ);
+        ctx.add_variable(name, glob.get(), v.is_const, v.public, true, v_typ);
     }
     else
     {
-        let var = LLVMBuildAlloca(ctx.builder, llvm_type, cstr("local_var"));
-        try!(gen_expression_store(ctx, &v.init, var));
-        ctx.add_variable(v.name.clone(), var, v.is_const, v.public, false, v_typ);
+        let var = ValueRef::local(ctx.builder, llvm_type);
+        try!(gen_expression_store(ctx, &v.init, &var));
+        ctx.add_variable(v.name.clone(), var.get(), v.is_const, v.public, false, v_typ);
     }
 
     Ok(())
@@ -167,7 +166,7 @@ unsafe fn gen_while(ctx: &mut Context, f: &While) -> Result<(), CompileError>
     LLVMBuildBr(ctx.builder, loop_cond_bb);
     LLVMPositionBuilderAtEnd(ctx.builder, loop_cond_bb);
     let cond = try!(gen_expression(ctx, &f.cond));
-    LLVMBuildCondBr(ctx.builder, cond, loop_body_bb, post_loop_bb);
+    LLVMBuildCondBr(ctx.builder, cond.load(), loop_body_bb, post_loop_bb);
     LLVMPositionBuilderAtEnd(ctx.builder, loop_body_bb);
 
     try!(gen_block(ctx, &f.block));
@@ -185,7 +184,7 @@ unsafe fn gen_if(ctx: &mut Context, f: &If) -> Result<(), CompileError>
     let else_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("else_bb"));
     let cond = try!(gen_expression(ctx, &f.cond));
 
-    LLVMBuildCondBr(ctx.builder, cond, if_bb, else_bb);
+    LLVMBuildCondBr(ctx.builder, cond.load(), if_bb, else_bb);
     LLVMPositionBuilderAtEnd(ctx.builder, if_bb);
 
     try!(gen_block(ctx, &f.if_block));
@@ -239,13 +238,13 @@ unsafe fn gen_return(ctx: &mut Context, f: &Return) -> Result<(), CompileError>
 {
     let ret = try!(gen_expression(ctx, &f.expr));
     let builder = ctx.builder;
-    let ret_type =  LLVMTypeOf(ret);
+    let ret_type =  ret.get_type();
     let func_type = return_type(ctx.get_current_function());
     if ret_type != func_type {
         err(f.span.start, ErrorType::TypeError(
             format!("Attempting to return type '{}' expecting '{}'", type_name(ret_type), type_name(func_type))))
     } else {
-        LLVMBuildRet(builder, ret);
+        LLVMBuildRet(builder, ret.load());
         Ok(())
     }
 }

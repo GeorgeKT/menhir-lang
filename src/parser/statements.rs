@@ -175,11 +175,14 @@ fn parse_func_signature(tq: &mut TokenQueue, self_type: Type) -> Result<Function
     try!(tq.expect(TokenKind::OpenParen));
     while !tq.is_next(TokenKind::CloseParen)
     {
-        let const_arg = if tq.is_next(TokenKind::Const) {
+        let const_arg = if tq.is_next(TokenKind::Var) {
+            try!(tq.pop());
+            false
+        } else if tq.is_next(TokenKind::Const) {
             try!(tq.pop());
             true
         } else {
-            false
+            true // const by default
         };
 
         let (arg_name, arg_span) = try!(tq.expect_identifier());

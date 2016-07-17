@@ -274,3 +274,20 @@ func main() -> int:
     return sum([4, 5, 6, 7])
     "#, false).unwrap() == 22);
 }
+
+/*
+#[test]
+fn test_object_passing()
+{
+    assert!(run(r#"
+struct Point:
+    pub var x = 0, y = 0
+
+func sum(p: &Point) -> int:
+    return p.x + p.y
+
+func main() -> int:
+    return sum(Point{10, 12})
+    "#, false).unwrap() == 22);
+}
+*/
