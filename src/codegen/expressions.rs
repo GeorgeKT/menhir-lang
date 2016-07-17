@@ -643,13 +643,10 @@ unsafe fn gen_array_literal_store(ctx: &mut Context, a: &ArrayLiteral, ptr: &Val
     {
         for (idx, element) in a.elements.iter().enumerate()
         {
-            let mut index_expr = vec![const_int(ctx.context, 0), const_int(ctx.context, idx as u64)];
-            let elptr = ValueRef::new(
-                LLVMBuildGEP(ctx.builder, ptr.get(), index_expr.as_mut_ptr(), 2, cstr("elptr")),
-                ptr.is_const(),
-                ctx.builder,
-            );
-            try!(gen_expression_store(ctx, element, &elptr));
+            let index = ValueRef::new(const_int(ctx.context, idx as u64), true, ctx.builder);
+            try!(ptr
+                .get_array_element(ctx, index, a.span.start)
+                .and_then(|v| gen_expression_store(ctx, element, &v)));
         }
     }
 
