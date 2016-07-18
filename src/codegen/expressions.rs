@@ -67,35 +67,39 @@ unsafe fn gen_const_string_literal(ctx: &Context, s: &str) -> Result<ValueRef, C
 
 unsafe fn gen_unary(ctx: &mut Context, op: &UnaryOp) -> Result<ValueRef, CompileError>
 {
-    let e_val = try!(gen_expression(ctx, &op.expression)).load();
-    let e_type = LLVMTypeOf(e_val);
+    if op.operator == Operator::Deref {
+        return gen_deref(ctx, &op.expression);
+    }
+
+    let e_val = try!(gen_expression(ctx, &op.expression));
+    let e_type = e_val.get_element_type();
     match op.operator {
         Operator::Sub => {
             if !is_numeric(ctx.context, e_type) {
                 err(op.span.start, ErrorType::TypeError("Operator '-', expects and integer or floating point expression as argument".into()))
             } else {
-                Ok(ValueRef::new(LLVMBuildNeg(ctx.builder, e_val, cstr("neg")), true, ctx.builder))
+                Ok(ValueRef::new(LLVMBuildNeg(ctx.builder, e_val.load(), cstr("neg")), true, ctx.builder))
             }
         },
         Operator::Not => {
             if !is_integer(ctx.context, e_type) {
                 err(op.span.start, ErrorType::TypeError("Operator '!', expects an integer or boolean expression".into()))
             } else {
-                Ok(ValueRef::new(LLVMBuildNot(ctx.builder, e_val, cstr("not")), true, ctx.builder))
+                Ok(ValueRef::new(LLVMBuildNot(ctx.builder, e_val.load(), cstr("not")), true, ctx.builder))
             }
         },
         Operator::Increment => {
             if !is_integer(ctx.context, e_type) {
                 err(op.span.start, ErrorType::TypeError("Operator '++', expects an integer expression".into()))
             } else {
-                Ok(ValueRef::new(LLVMBuildAdd(ctx.builder, e_val, const_int(ctx.context, 1), cstr("inc")), true, ctx.builder))
+                Ok(ValueRef::new(LLVMBuildAdd(ctx.builder, e_val.load(), const_int(ctx.context, 1), cstr("inc")), true, ctx.builder))
             }
         },
         Operator::Decrement => {
             if !is_integer(ctx.context, e_type) {
                 err(op.span.start, ErrorType::TypeError("Operator '--', expects an integer expression".into()))
             } else {
-                Ok(ValueRef::new(LLVMBuildSub(ctx.builder, e_val, const_int(ctx.context, 1), cstr("dec")), true, ctx.builder))
+                Ok(ValueRef::new(LLVMBuildSub(ctx.builder, e_val.load(), const_int(ctx.context, 1), cstr("dec")), true, ctx.builder))
             }
         },
         _ => err(op.span.start, ErrorType::InvalidUnaryOperator(op.operator)),
@@ -286,7 +290,7 @@ unsafe fn gen_member_call(ctx: &mut Context, c: &Call, st: &StructType, self_ptr
     let mut arg_vals = Vec::with_capacity(c.args.len() + 1);
 
     // Add self argument
-    let expected_self_type = *func.args.first().expect("Self argument missing");
+    let (expected_self_type, _) = *func.args.first().expect("Self argument missing");
     let self_element_type = self_ptr.get_element_type();
     if self_element_type == expected_self_type {
         arg_vals.push(self_ptr.load());
@@ -304,7 +308,7 @@ unsafe fn gen_member_call(ctx: &mut Context, c: &Call, st: &StructType, self_ptr
     gen_call_common(ctx, c, &func, arg_vals)
 }
 
-unsafe fn gen_call_common(ctx: &Context, c: &Call, func: &FunctionInstance, mut arg_vals: Vec<LLVMValueRef>)  -> Result<ValueRef, CompileError>
+unsafe fn gen_call_common(ctx: &mut Context, c: &Call, func: &FunctionInstance, mut arg_vals: Vec<LLVMValueRef>)  -> Result<ValueRef, CompileError>
 {
     let func_name = try!(c.get_function_name());
     if arg_vals.len() != func.args.len() {
@@ -315,16 +319,25 @@ unsafe fn gen_call_common(ctx: &Context, c: &Call, func: &FunctionInstance, mut 
 
     for (i, arg) in c.args.iter().enumerate()
     {
-        let nval = convert(ctx, ValueRef::new(arg_vals[i], true, ctx.builder), func.args[i]);
+        println!("arg_vals[{}] : {}", i, type_name(LLVMTypeOf(arg_vals[i])));
+        let (ref arg_type, ref arg_mode) = func.args[i];
+        let arg_val = match *arg_mode
+        {
+            PassingMode::Copy => try!(ValueRef::new(arg_vals[i], true, ctx.builder).copy(ctx, c.span.start)).load(),
+            PassingMode::Value => arg_vals[i],
+        };
+
+        let nval = convert(ctx, ValueRef::new(arg_val, true, ctx.builder), *arg_type);
         match nval
         {
             Some(val) => {
                 arg_vals[i] = val.load();
+                println!("arg_vals[{}] : {}", i, type_name(LLVMTypeOf(arg_vals[i])));
             },
             None => {
                 let val_type = LLVMTypeOf(arg_vals[i]);
                 let msg = format!("Argument {} of function '{}' has the wrong type\n  Expecting {}, got {}",
-                                i, func_name, type_name(func.args[i]), type_name(val_type));
+                                i, func_name, type_name(*arg_type), type_name(val_type));
                 return err(arg.span().start, ErrorType::TypeError(msg));
             },
         }
@@ -424,7 +437,7 @@ unsafe fn gen_member_var(_ctx: &Context, this: ValueRef, st: &StructType, nr: &N
         }
 
         let this_element_type = this.get_element_type();
-        if this_element_type == st.typ 
+        if this_element_type == st.typ
         {
             this.get_struct_element(idx as u32, nr.span.start)
         }
@@ -540,6 +553,29 @@ unsafe fn gen_target(ctx: &mut Context, target: &Expression) -> Result<ValueRef,
             gen_index_operation(ctx, iop)
         },
         _ => err(target.span().start, ErrorType::TypeError(format!("Invalid left hand side expression"))),
+    }
+}
+
+unsafe fn gen_deref(ctx: &mut Context, e: &Expression) -> Result<ValueRef, CompileError>
+{
+    match *e
+    {
+        Expression::NameRef(ref nr) => {
+            gen_name_ref(ctx, nr)
+        },
+
+        Expression::MemberAccess(ref ma) => {
+            gen_member_access(ctx, ma)
+        },
+
+        Expression::IndexOperation(ref iop) => {
+            gen_index_operation(ctx, iop)
+        },
+
+        Expression::ObjectConstruction(ref oc) => {
+            gen_object_construction(ctx, oc)
+        },
+        _ => err(e.span().start, ErrorType::TypeError(format!("Invalid dereference"))),
     }
 }
 

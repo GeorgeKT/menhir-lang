@@ -15,18 +15,31 @@ pub fn is_same_kind(a: LLVMTypeKind, b: LLVMTypeKind) -> bool
     (a as usize) == (b as usize)
 }
 
+pub unsafe fn is_struct(t: LLVMTypeRef) -> bool
+{
+    is_same_kind(LLVMGetTypeKind(t), LLVMTypeKind::LLVMStructTypeKind)
+}
+
+pub unsafe fn is_array(t: LLVMTypeRef) -> bool
+{
+    is_same_kind(LLVMGetTypeKind(t), LLVMTypeKind::LLVMArrayTypeKind)
+}
+
+pub unsafe fn is_pointer(t: LLVMTypeRef) -> bool
+{
+    is_same_kind(LLVMGetTypeKind(t), LLVMTypeKind::LLVMPointerTypeKind)
+}
 
 unsafe fn array_to_slice(ctx: &Context, from: &ValueRef, to: LLVMTypeRef) -> Option<ValueRef>
 {
     let from_type = from.get_element_type();
-    if !is_same_kind(LLVMGetTypeKind(from_type), LLVMTypeKind::LLVMArrayTypeKind) {
+    if !is_array(from_type) {
         return None;
     }
 
     let array_element_type = LLVMGetElementType(from_type);
     // Slices are structs containing a length field and a pointer field
-    if !is_same_kind(LLVMGetTypeKind(to), LLVMTypeKind::LLVMPointerTypeKind) ||
-       !is_same_kind(LLVMGetTypeKind(LLVMGetElementType(to)), LLVMTypeKind::LLVMStructTypeKind) {
+    if !is_pointer(to) || !is_struct(LLVMGetElementType(to)) {
         return None
     }
 
@@ -63,8 +76,8 @@ unsafe fn array_to_ptr(b: LLVMBuilderRef, from: &ValueRef, to: LLVMTypeRef) -> O
 {
     let from_type = from.get_element_type();
     let can_convert =
-        is_same_kind(LLVMGetTypeKind(from_type), LLVMTypeKind::LLVMArrayTypeKind) &&
-        is_same_kind(LLVMGetTypeKind(to), LLVMTypeKind::LLVMPointerTypeKind) &&
+        is_struct(from_type) &&
+        is_pointer(to) &&
         LLVMGetElementType(from_type) == LLVMGetElementType(to);
     if can_convert {
         let cast = LLVMBuildBitCast(b, from.load(), to, cstr("cast"));

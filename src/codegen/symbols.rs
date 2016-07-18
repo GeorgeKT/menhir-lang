@@ -15,11 +15,17 @@ pub struct VariableInstance
     pub typ: Type,
 }
 
+pub enum PassingMode
+{
+    Copy,
+    Value,
+}
+
 pub struct FunctionInstance
 {
     pub function: LLVMValueRef,
     pub name: String,
-    pub args: Vec<LLVMTypeRef>,
+    pub args: Vec<(LLVMTypeRef, PassingMode)>,
     pub return_type: LLVMTypeRef,
     pub sig: FunctionSignature,
     pub public: bool,

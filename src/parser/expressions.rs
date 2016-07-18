@@ -28,7 +28,7 @@ fn eat_comma(tq: &mut TokenQueue) -> Result<(), CompileError>
 
 fn parse_unary_expression(tq: &mut TokenQueue, indent_level: usize, op: Operator, op_pos: Pos) -> Result<Expression, CompileError>
 {
-    if op == Operator::Not || op == Operator::Sub || op == Operator::Increment || op == Operator::Decrement {
+    if op == Operator::Not || op == Operator::Sub || op == Operator::Increment || op == Operator::Decrement || op == Operator::Deref {
         let se = try!(parse_expression(tq, indent_level));
         Ok(unary_op(op, se, Span::new(op_pos, tq.pos())))
     } else {

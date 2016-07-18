@@ -3,9 +3,8 @@ use llvm::core::*;
 use llvm::{LLVMTypeKind, LLVMLinkage};
 use codegen::{type_name, cstr};
 use codegen::context::Context;
-use codegen::conversions::{is_same_kind};
 use codegen::expressions::{const_int};
-use codegen::conversions::convert;
+use codegen::conversions::{is_struct, is_array, is_pointer, convert, is_same_kind};
 use compileerror::{Pos, CompileError, ErrorType, err, type_error};
 
 
@@ -14,7 +13,6 @@ pub struct ValueRef
 {
     ptr: LLVMValueRef,
     constant: bool,
-    global: bool,
     builder: LLVMBuilderRef,
 }
 
@@ -27,7 +25,6 @@ impl ValueRef
             ValueRef{
                 ptr: LLVMBuildAlloca(builder, typ, cstr("alloc")),
                 constant: false,
-                global: false,
                 builder: builder,
             }
         }
@@ -43,7 +40,6 @@ impl ValueRef
             ValueRef{
                 ptr: glob,
                 constant: constant,
-                global: true,
                 builder: ctx.builder,
             }
         }
@@ -54,7 +50,6 @@ impl ValueRef
         ValueRef{
             ptr: ptr,
             constant: constant,
-            global: false,
             builder: builder,
         }
     }
@@ -62,7 +57,7 @@ impl ValueRef
     pub fn is_pointer(&self) -> bool
     {
         unsafe {
-            is_same_kind(LLVMGetTypeKind(LLVMTypeOf(self.ptr)), LLVMTypeKind::LLVMPointerTypeKind)
+            is_pointer(LLVMTypeOf(self.ptr))
         }
     }
 
@@ -169,7 +164,7 @@ impl ValueRef
 
         unsafe{
             let et = LLVMGetElementType(LLVMTypeOf(self.ptr));
-            if is_same_kind(LLVMGetTypeKind(et), LLVMTypeKind::LLVMStructTypeKind)
+            if is_struct(et)
             {
                 Ok(ValueRef::new(
                     LLVMBuildStructGEP(self.builder, self.ptr, index, cstr("el")),
@@ -177,8 +172,7 @@ impl ValueRef
                     self.builder
                 ))
             }
-            else if is_same_kind(LLVMGetTypeKind(et), LLVMTypeKind::LLVMPointerTypeKind) &&
-                    is_same_kind(LLVMGetTypeKind(LLVMGetElementType(et)), LLVMTypeKind::LLVMStructTypeKind)
+            else if is_pointer(et) && is_struct(LLVMGetElementType(et))
             {
                 Ok(ValueRef::new(
                     LLVMBuildStructGEP(self.builder, LLVMBuildLoad(self.builder, self.ptr, cstr("elptr")), index, cstr("el")),
@@ -255,6 +249,45 @@ impl ValueRef
             {
                 Err(type_error(pos, format!("Attempting to deref something which is not a pointer")))
             }
+        }
+    }
+
+    pub unsafe fn copy(&self, ctx: &mut Context, pos: Pos) -> Result<ValueRef, CompileError>
+    {
+        let typ = self.get_element_type();
+        if is_struct(typ)
+        {
+            let c = ValueRef::local(ctx.builder, typ);
+            for i in 0..LLVMCountStructElementTypes(typ)
+            {
+                let src_ptr = try!(self.get_struct_element(i as u32, pos));
+                let dst_ptr = try!(c.get_struct_element(i as u32, pos));
+                let cv = ValueRef::new(src_ptr.load(), true, ctx.builder);
+                try!(dst_ptr.store(ctx, cv, pos));
+            }
+
+            Ok(c)
+        }
+        else if is_array(typ)
+        {
+            let c = ValueRef::local(ctx.builder, typ);
+            for i in 0..LLVMGetArrayLength(typ)
+            {
+                let index = const_int(ctx.context, i as u64);
+                let src_ptr = try!(self.get_array_element(ctx, index, pos));
+                let dst_ptr = try!(c.get_array_element(ctx, index, pos));
+                let cv = ValueRef::new(src_ptr.load(), true, ctx.builder);
+                try!(dst_ptr.store(ctx, cv, pos));
+            }
+
+            Ok(c)
+        }
+        else
+        {
+            let c = ValueRef::local(ctx.builder, typ);
+            let cv = ValueRef::new(self.load(), true, ctx.builder);
+            try!(c.store(ctx, cv, pos));
+            Ok(c)
         }
     }
 }

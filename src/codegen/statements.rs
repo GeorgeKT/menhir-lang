@@ -11,6 +11,7 @@ use compileerror::*;
 use codegen::context::*;
 use codegen::expressions::*;
 use codegen::symbols::*;
+use codegen::conversions::*;
 use codegen::valueref::ValueRef;
 
 
@@ -61,11 +62,22 @@ unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, public: b
         .ok_or(CompileError::new(span.start, ErrorType::TypeError(format!("Cannot resolve the return type of function '{}'", sig.name)))));
 
     let mut arg_types = Vec::new();
+    let mut arg_types_and_modes = Vec::new();
     for arg in &sig.args {
-        let arg_type = try!(ctx
+        let mut arg_type = try!(ctx
             .resolve_type(&arg.typ)
             .ok_or(type_error(arg.span.start, format!("Cannot resolve the type of argument '{}'", arg.name))));
+
+        let mut mode = PassingMode::Value;
+        if is_struct(arg_type) || is_array(arg_type) {
+            // Pass structs and arrays as pointer
+            arg_type = LLVMPointerType(arg_type, 0);
+            mode = PassingMode::Copy; // Before passing, copy them
+        }
+
+        println!("arg {} {}", type_name(arg_type), arg.typ);
         arg_types.push(arg_type);
+        arg_types_and_modes.push((arg_type, mode));
     }
 
     let name = if ctx.in_global_context() && !external {
@@ -80,7 +92,7 @@ unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, public: b
 
     Ok(FunctionInstance{
         name: name,
-        args: arg_types,
+        args: arg_types_and_modes,
         return_type: ret_type,
         function: function,
         sig: sig.clone(),
@@ -113,7 +125,8 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> Result<FunctionInstan
 
     for (i, arg) in f.sig.args.iter().enumerate() {
         let var = LLVMGetParam(fi.function, i as libc::c_uint);
-        let alloc = LLVMBuildAlloca(ctx.builder, fi.args[i], cstr("argtmp"));
+        let (llvm_arg, _) = fi.args[i];
+        let alloc = LLVMBuildAlloca(ctx.builder, llvm_arg, cstr("argtmp"));
         LLVMBuildStore(ctx.builder, var, alloc);
         ctx.add_variable(arg.name.clone(), alloc, arg.constant, false, false, arg.typ.clone());
     }
