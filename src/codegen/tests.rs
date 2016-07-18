@@ -275,31 +275,6 @@ func main() -> int:
     "#, false).unwrap() == 22);
 }
 
-
-/*
-#[test]
-fn test_traits()
-{
-    assert!(run(r#"
-interface Sum:
-    func sum(self) -> int
-
-struct Foo:
-    var a = 0, b = 0, c = 0
-
-    func sum(self) -> int:
-        return self.a + self.b + self.c
-
-func sum(x: ~Sum) -> int:
-    return x.sum()
-
-func main() -> int:
-    const f = Foo{1, 2, 3}
-    return sum(f)
-    "#, false).unwrap() == 6);
-}
-*/
-
 #[test]
 fn test_object_passing()
 {
@@ -322,25 +297,30 @@ func main() -> int:
     var a = Point{10, 12}
     var b = Point{4, 5}
     return test(a) + test2(&b) + (a.x + a.y) + (b.x + b.y)
-    "#, true).unwrap() == (24 + 11 + 22 + 11));
+    "#, false).unwrap() == (24 + 11 + 22 + 11));
 }
+
 
 /*
 #[test]
-fn test_object_passing_ptr()
+fn test_traits()
 {
     assert!(run(r#"
-struct Point:
-    pub var x = 0, y = 0
+interface Sum:
+    func sum(self) -> int
 
-func test(var p: *Point) -> int:
-    p.x += 1
-    p.y += 1
-    return p.x + p.y
+struct Foo:
+    var a = 0, b = 0, c = 0
+
+    func sum(self) -> int:
+        return self.a + self.b + self.c
+
+func sum(x: ~Sum) -> int:
+    return x.sum()
 
 func main() -> int:
-    const p = Point{10, 12}
-    return test(p)
-    "#, false).unwrap() == 24);
+    const f = Foo{1, 2, 3}
+    return sum(f)
+    "#, false).unwrap() == 6);
 }
 */
