@@ -314,12 +314,12 @@ struct Foo impl Sum:
     func sum(self) -> int:
         return self.a + self.b + self.c
 
+
 func sum<T: Sum>(x: *T) -> int:
     return x.sum()
 
 func main() -> int:
     const f = Foo{1, 2, 3}
-    return sum(&f)
+    return sum(f)
     "#, false).unwrap() == 6);
-}
-*/
+}*/

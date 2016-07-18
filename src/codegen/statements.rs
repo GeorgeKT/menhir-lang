@@ -346,6 +346,7 @@ unsafe fn gen_statement(ctx: &mut Context, stmt: &Statement) -> Result<(), Compi
         Statement::Union(ref u) => gen_union(ctx, u),
         Statement::Match(ref m) => gen_match(ctx, m),
         Statement::Expression(ref e) => gen_expression(ctx, e).map(|_| ()),
+        Statement::Trait(_) => Err(type_error(Pos::zero(), "NYI".into())),
     }
 }
 

@@ -130,6 +130,8 @@ impl Lexer
             "match" => TokenKind::Match,
             "union" => TokenKind::Union,
             "extern" => TokenKind::Extern,
+            "trait" => TokenKind::Trait,
+            "impl" => TokenKind::Impl,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
         };
 

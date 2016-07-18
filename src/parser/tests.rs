@@ -400,6 +400,12 @@ fn type_complex(typ: &str) -> Type
 }
 
 #[cfg(test)]
+fn type_trait(typ: &str) -> Type
+{
+    Type::ptr(Type::Trait(typ.into()))
+}
+
+#[cfg(test)]
 fn type_primitve(typ: &str) -> Type
 {
     Type::Primitive(typ.into())
@@ -412,12 +418,13 @@ fn arg(name: &str, typ: &str, constant: bool, span: Span) -> Argument
 }
 
 #[cfg(test)]
-fn sig(name: &str, ret: Type, args: Vec<Argument>) -> FunctionSignature
+fn sig(name: &str, ret: Type, args: Vec<Argument>, span: Span) -> FunctionSignature
 {
     FunctionSignature{
         name: name.into(),
         return_type: ret,
         args: args,
+        span: span,
     }
 }
 
@@ -904,9 +911,14 @@ pub struct Blaat:
 
         assert!(s.functions == vec![
             Function::new(
-                sig("Blaat::foo", Type::Void, vec![
-                    Argument::new("self".into(), type_complex("Blaat"), true, span(6, 18, 6, 21)),
-                ]),
+                sig(
+                    "Blaat::foo",
+                    Type::Void,
+                    vec![
+                        Argument::new("self".into(), type_complex("Blaat"), true, span(6, 18, 6, 21)),
+                    ],
+                    span(6, 9, 6, 22)
+                ),
                 true,
                 Block::new(vec![
                     call(name_ref("print", span(7, 9, 7, 13)), vec![str_lit("foo", span(7, 15, 7, 19))], span(7, 9, 7, 20))
@@ -914,9 +926,14 @@ pub struct Blaat:
                 span(6, 9, 7, 20),
             ),
             Function::new(
-                sig("Blaat::bar", Type::Void, vec![
-                    Argument::new("self".into(), type_complex("Blaat"), true, span(9, 14, 9, 17)),
-                ]),
+                sig(
+                    "Blaat::bar",
+                    Type::Void,
+                    vec![
+                        Argument::new("self".into(), type_complex("Blaat"), true, span(9, 14, 9, 17)),
+                    ],
+                    span(9, 5, 9, 18),
+                ),
                 false,
                 Block::new(vec![
                     call(name_ref("print", span(10, 9, 10, 13)), vec![str_lit("bar", span(10, 15, 10, 19))], span(10, 9, 10, 20))
@@ -964,9 +981,14 @@ pub union Blaat:
         ]);
 
         let foo = Function::new(
-            sig("Blaat::foo",Type::Void, vec![
-                Argument::new("self".into(), type_complex("Blaat"), true, span(6, 18, 6, 21)),
-            ]),
+            sig(
+                "Blaat::foo",
+                Type::Void,
+                vec![
+                    Argument::new("self".into(), type_complex("Blaat"), true, span(6, 18, 6, 21)),
+                ],
+                span(6, 9, 6, 22)
+            ),
             true,
             Block::new(vec![
                 call(name_ref("print", span(7, 9, 7, 13)), vec![str_lit("foo", span(7, 15, 7, 19))], span(7, 9, 7, 20))
@@ -1079,6 +1101,50 @@ import cobra::syscalls, foo
             ModuleName::new(vec!["foo".into()], span(2, 25, 2, 27)),
         ]);
         assert!(m.span == span(2, 1, 2, 27));
+    }
+    else
+    {
+        assert!(false);
+    }
+}
+
+
+#[test]
+fn test_trait()
+{
+    let stmt = th_statement(r#"
+trait Bar:
+    func bar(self) -> int
+    func foo(self) -> double
+    ""#);
+
+    if let Statement::Trait(t) = stmt
+    {
+        t.print(0);
+        let expected = Trait::new(
+            "Bar".into(),
+            vec![
+                sig(
+                    "Bar::bar",
+                    Type::Primitive("int".into()),
+                    vec![
+                        Argument::new("self".into(), type_trait("Bar"), true, span(3, 14, 3, 17)),
+                    ],
+                    span(3, 5, 3, 25)
+                ),
+                sig(
+                    "Bar::foo",
+                    Type::Primitive("double".into()),
+                    vec![
+                        Argument::new("self".into(), type_trait("Bar"), true, span(4, 14, 4, 17)),
+                    ],
+                    span(4, 5, 4, 28)
+                ),
+            ],
+            span(2, 1, 5, 5)
+        );
+        expected.print(0);
+        assert!(t == expected);
     }
     else
     {

@@ -123,6 +123,8 @@ pub enum TokenKind
     Match,
     Union,
     Extern,
+    Trait,
+    Impl,
     Identifier(String),
     Colon,
     DoubleColon,

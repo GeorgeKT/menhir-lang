@@ -545,6 +545,7 @@ pub enum Type
     Unknown,
     Primitive(String),
     Complex(String),
+    Trait(String),
     Pointer(Box<Type>),
     Array(Box<Type>, usize),
     Slice(Box<Type>),
@@ -571,6 +572,7 @@ impl fmt::Display for Type
             Type::Pointer(ref st) => write!(f, "*{}", st),
             Type::Array(ref at, count) => write!(f, "[{}, {}]", at, count),
             Type::Slice(ref at) => write!(f, "[{}]", at),
+            Type::Trait(ref t) => write!(f, "{}", t),
         }
     }
 }
@@ -613,6 +615,21 @@ pub struct FunctionSignature
     pub name: String,
     pub return_type: Type,
     pub args: Vec<Argument>,
+    pub span: Span,
+}
+
+impl TreePrinter for FunctionSignature
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        println!("{}function {} (span: {})", p, self.name, self.span);
+        println!("{} return_type: {}", p, self.return_type);
+        println!("{} args:", p);
+        for a in &self.args {
+            a.print(level + 2);
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -641,13 +658,7 @@ impl TreePrinter for Function
 {
     fn print(&self, level: usize)
     {
-        let p = prefix(level);
-        println!("{}function {} (public: {}, span: {})", p, self.sig.name, self.public, self.span);
-        println!("{} return_type: {}", p, self.sig.return_type);
-        println!("{} args:", p);
-        for a in &self.sig.args {
-            a.print(level + 2);
-        }
+        self.sig.print(level);
         self.block.print(level + 1)
     }
 }
@@ -976,6 +987,39 @@ impl TreePrinter for Match
     }
 }
 
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct Trait
+{
+    pub name: String,
+    pub functions: Vec<FunctionSignature>,
+    pub span: Span,
+}
+
+impl Trait
+{
+    pub fn new(name: String, functions: Vec<FunctionSignature>, span: Span) -> Trait
+    {
+        Trait{
+            name: name,
+            functions: functions,
+            span: span,
+        }
+    }
+}
+
+impl TreePrinter for Trait
+{
+    fn print(&self, level: usize)
+    {
+        println!("{}trait {} (span: {})", prefix(level), self.name, self.span);
+        for f in &self.functions {
+            f.print(level + 1);
+        }
+    }
+}
+
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum Statement
 {
@@ -990,6 +1034,7 @@ pub enum Statement
     Union(Union),
     Match(Match),
     Expression(Expression),
+    Trait(Trait),
 }
 
 impl TreePrinter for Statement
@@ -1014,6 +1059,7 @@ impl TreePrinter for Statement
             Statement::Union(ref u) => u.print(level),
             Statement::Match(ref m) => m.print(level),
             Statement::Expression(ref e) => e.print(level),
+            Statement::Trait(ref t) => t.print(level),
         }
     }
 }
