@@ -5,7 +5,8 @@ use llvm::prelude::*;
 use llvm::core::*;
 use libc;
 
-use ast::{Import, Variable, Function, Type, FunctionSignature, ExternalFunction, Block, While, If, ElsePart, Return, Struct, Union, Match, Statement, Module};
+use ast::{Import, Variable, Function, Type, FunctionSignature, ExternalFunction, Block, While, If,
+    ElsePart, Return, Struct, Union, Match, Statement, Module, Trait};
 use codegen::{type_name, cstr};
 use compileerror::{CompileError, Span, Pos, ErrorType, err, type_error};
 use codegen::context::{Context};
@@ -262,11 +263,37 @@ unsafe fn gen_return(ctx: &mut Context, f: &Return) -> Result<(), CompileError>
     }
 }
 
+fn check_trait_impls(ctx: &mut Context, s: &Struct) -> Result<(), CompileError>
+{
+    for t in &s.impls
+    {
+        match *t
+        {
+            Type::Trait(ref name) => {
+                if let Some(tr) = ctx.get_trait(&name) {
+                    if !tr.is_implemented_by(s) {
+                        return Err(type_error(s.span.start, format!("Struct {} does not implement {} properly", s.name, name)));
+                    }
+                } else {
+                    return Err(type_error(s.span.start, format!("Unknown trait {}", name)));
+                }
+            }
+            _ => {
+                return Err(type_error(s.span.start, format!("Invalid impl {}", t)));
+            },
+        }
+    }
+
+    Ok(())
+}
+
 unsafe fn gen_struct(ctx: &mut Context, s: &Struct) -> Result<(), CompileError>
 {
     if let Some(_) = ctx.get_complex_type(&s.name) {
         return err(s.span.start, ErrorType::RedefinitionOfStruct(s.name.clone()));
     }
+
+    try!(check_trait_impls(ctx, s));
 
     let mut members = Vec::with_capacity(s.variables.len());
     let mut element_types = Vec::with_capacity(s.variables.len());
@@ -323,6 +350,15 @@ fn gen_match(ctx: &mut Context, f: &Match) -> Result<(), CompileError>
      err(Pos::new(0, 0), ErrorType::UnexpectedEOF)
 }
 
+fn gen_trait(ctx: &mut Context, t: &Trait) -> Result<(), CompileError>
+{
+    if let Some(_) = ctx.get_trait(&t.name) {
+        return err(t.span.start, ErrorType::RedefinitionOfTrait(t.name.clone()));
+    }
+    ctx.add_trait(Rc::new(t.clone()));
+    Ok(())
+}
+
 unsafe fn gen_statement(ctx: &mut Context, stmt: &Statement) -> Result<(), CompileError>
 {
     match *stmt {
@@ -346,7 +382,7 @@ unsafe fn gen_statement(ctx: &mut Context, stmt: &Statement) -> Result<(), Compi
         Statement::Union(ref u) => gen_union(ctx, u),
         Statement::Match(ref m) => gen_match(ctx, m),
         Statement::Expression(ref e) => gen_expression(ctx, e).map(|_| ()),
-        Statement::Trait(_) => Err(type_error(Pos::zero(), "NYI".into())),
+        Statement::Trait(ref t) => gen_trait(ctx, t),
     }
 }
 

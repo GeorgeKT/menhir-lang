@@ -4,7 +4,7 @@ use compileerror::{CompileError};
 use codegen::symbols::{SymbolTable, VariableInstance, FunctionInstance, StructType};
 use codegen::stackframe::{StackFrame};
 use codegen::context::{Context};
-use ast::{ModuleName};
+use ast::{ModuleName, Trait};
 
 
 pub struct ModuleContext
@@ -173,6 +173,45 @@ impl ModuleContext
                 self.public_symbols.add_complex_type(st);
             } else {
                 self.private_symbols.add_complex_type(st);
+            }
+        }
+    }
+
+    pub fn get_trait(&self, name: &str, private_allowed: bool) -> Option<Rc<Trait>>
+    {
+        for sf in self.stack.iter().rev() {
+            let f = sf.symbols.get_trait(name);
+            if f.is_some() {
+                return f;
+            }
+        }
+
+        let namespaced = self.prepend_namespace(name);
+        let f = self.public_symbols.get_trait(&namespaced);
+        if f.is_some() {
+            return f;
+        }
+
+        if private_allowed {
+            let f = self.private_symbols.get_trait(&namespaced);
+            if f.is_some() {
+                return f;
+            }
+        }
+
+        None
+    }
+
+    pub fn add_trait(&mut self, st: Rc<Trait>)
+    {
+        if let Some(ref mut sf) = self.stack.last_mut() {
+            sf.symbols.add_trait(st);
+        } else {
+            // It's a global
+            if st.public {
+                self.public_symbols.add_trait(st);
+            } else {
+                self.private_symbols.add_trait(st);
             }
         }
     }

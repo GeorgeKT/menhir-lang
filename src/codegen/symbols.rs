@@ -2,7 +2,7 @@ use std::rc::Rc;
 use std::collections::HashMap;
 use llvm::prelude::*;
 
-use ast::{Type, FunctionSignature, Expression};
+use ast::{Type, FunctionSignature, Expression, Trait};
 
 
 pub struct VariableInstance
@@ -69,6 +69,7 @@ pub struct SymbolTable
     vars: HashMap<String, Rc<VariableInstance>>,
     funcs: HashMap<String, Rc<FunctionInstance>>,
     complex_types: HashMap<String, Rc<StructType>>,
+    traits: HashMap<String, Rc<Trait>>,
 }
 
 impl SymbolTable
@@ -79,6 +80,7 @@ impl SymbolTable
             vars: HashMap::new(),
             funcs: HashMap::new(),
             complex_types: HashMap::new(),
+            traits: HashMap::new(),
         }
     }
 
@@ -112,5 +114,15 @@ impl SymbolTable
     pub fn add_complex_type(&mut self, st: Rc<StructType>)
     {
         self.complex_types.insert(st.name.clone(), st);
+    }
+
+    pub fn add_trait(&mut self, t: Rc<Trait>)
+    {
+        self.traits.insert(t.name.clone(), t);
+    }
+
+    pub fn get_trait(&self, name: &str) -> Option<Rc<Trait>>
+    {
+        self.traits.get(name).map(|t| t.clone())
     }
 }

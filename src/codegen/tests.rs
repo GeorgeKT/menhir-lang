@@ -300,7 +300,6 @@ func main() -> int:
     "#, false).unwrap() == (24 + 11 + 22 + 11));
 }
 
-/*
 #[test]
 fn test_traits()
 {
@@ -314,7 +313,6 @@ struct Foo impl Sum:
     func sum(self) -> int:
         return self.a + self.b + self.c
 
-
 func sum<T: Sum>(x: *T) -> int:
     return x.sum()
 
@@ -322,4 +320,4 @@ func main() -> int:
     const f = Foo{1, 2, 3}
     return sum(f)
     "#, false).unwrap() == 6);
-}*/
+}

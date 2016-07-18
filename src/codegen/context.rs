@@ -10,7 +10,7 @@ use llvm::prelude::*;
 use llvm::core::*;
 use llvm::target_machine::*;
 
-use ast::{Type, NameRef, MemberAccess, Member, Call, ArrayLiteral, IndexOperation, Expression};
+use ast::{Type, NameRef, MemberAccess, Member, Call, ArrayLiteral, IndexOperation, Expression, Trait};
 use compileerror::{CompileError, Pos, ErrorType, err, type_error};
 use codegen::{cstr, cstr_mut};
 use codegen::modulecontext::{ModuleContext};
@@ -451,6 +451,33 @@ impl Context
     pub fn add_complex_type(&mut self, st: Rc<StructType>)
     {
         self.current_module.add_complex_type(st);
+    }
+
+    pub fn add_trait(&mut self, st: Rc<Trait>)
+    {
+        self.current_module.add_trait(st);
+    }
+
+    pub fn get_trait(&self, name: &str) -> Option<Rc<Trait>>
+    {
+        let bit = self.builtin.get_trait(name);
+        if bit.is_some() {
+            return bit
+        }
+
+        let ct = self.current_module.get_trait(name, true);
+        if ct.is_some() {
+            return ct;
+        }
+
+        for md in &self.modules {
+            let ct = md.get_trait(name, false);
+            if ct.is_some() {
+                return ct;
+            }
+        }
+
+        None
     }
 
     pub fn get_current_function(&self) -> LLVMValueRef

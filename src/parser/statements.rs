@@ -1,6 +1,6 @@
 use ast::{ModuleName, Statement, Import, Type, Variable, Block, Function, FunctionSignature,
     Argument, ExternalFunction, While, If, ElsePart, Struct, Union, UnionCase, Match, MatchCase,
-    Return, Trait};
+    Return, Trait, GenericArgument};
 use compileerror::{CompileError, Pos, Span, ErrorType, err};
 use parser::{TokenQueue, TokenKind, Token, Operator, ParseMode, parse_expression};
 
@@ -171,10 +171,33 @@ pub fn parse_block(tq: &mut TokenQueue, indent_level: usize, mode: ParseMode) ->
     Ok(Block::new(statements))
 }
 
+fn parse_generic_argument_list(tq: &mut TokenQueue) -> Result<Vec<GenericArgument>, CompileError>
+{
+    let mut generic_args = Vec::new();
+    try!(tq.expect(TokenKind::Operator(Operator::LessThan)));
+    while !tq.is_next(TokenKind::Operator(Operator::GreaterThan))
+    {
+        let (name, _) = try!(tq.expect_identifier());
+        try!(tq.expect(TokenKind::Colon));
+        let constraint = try!(parse_type(tq, |t| Type::Trait(t)));
+        try!(eat_comma(tq));
+        generic_args.push(GenericArgument::new(name, constraint));
+    }
+
+    try!(tq.expect(TokenKind::Operator(Operator::GreaterThan)));
+    Ok(generic_args)
+}
+
 fn parse_func_signature(tq: &mut TokenQueue, self_type: Type, pos: Pos) -> Result<FunctionSignature, CompileError>
 {
     let (name, _) = try!(tq.expect_identifier());
     let mut args = Vec::new();
+
+    let generic_args = if tq.is_next(TokenKind::Operator(Operator::LessThan)) {
+        try!(parse_generic_argument_list(tq))
+    } else {
+        Vec::new()
+    };
 
     try!(tq.expect(TokenKind::OpenParen));
     while !tq.is_next(TokenKind::CloseParen)
@@ -229,6 +252,7 @@ fn parse_func_signature(tq: &mut TokenQueue, self_type: Type, pos: Pos) -> Resul
         name: func_name,
         return_type: ret_type,
         args: args,
+        generic_args: generic_args,
         span: Span::new(pos, tq.pos()),
     })
 }
@@ -465,7 +489,7 @@ fn parse_match(tq: &mut TokenQueue, indent_level: usize, pos: Pos) -> Result<Sta
     Ok(Statement::Match(m))
 }
 
-fn parse_trait(tq: &mut TokenQueue, indent_level: usize, pos: Pos) -> Result<Statement, CompileError>
+fn parse_trait(tq: &mut TokenQueue, indent_level: usize, pos: Pos, public: bool) -> Result<Statement, CompileError>
 {
     let (name, _) = try!(tq.expect_identifier());
     try!(tq.expect(TokenKind::Colon));
@@ -479,7 +503,7 @@ fn parse_trait(tq: &mut TokenQueue, indent_level: usize, pos: Pos) -> Result<Sta
         Ok(())
     }));
 
-    Ok(Statement::Trait(Trait::new(name, funcs, Span::new(pos, tq.pos()))))
+    Ok(Statement::Trait(Trait::new(name, public, funcs, Span::new(pos, tq.pos()))))
 }
 
 fn parse_indented_block<Op>(tq: &mut TokenQueue, indent_level: usize, mut parse_line: Op) -> Result<(), CompileError>
@@ -528,7 +552,7 @@ pub fn parse_module_statement(tq: &mut TokenQueue, indent_level: usize, tok: Tok
         TokenKind::Struct => parse_struct(tq, indent_level, false, tok.span.start).map(|s| Statement::Struct(s)),
         TokenKind::Union => parse_union(tq, indent_level, false).map(|u| Statement::Union(u)),
         TokenKind::Extern => parse_external_func(tq, tok.span.start).map(|f| Statement::ExternalFunction(f)),
-        TokenKind::Trait => parse_trait(tq, indent_level, tok.span.start),
+        TokenKind::Trait => parse_trait(tq, indent_level, tok.span.start, false),
         TokenKind::Pub => {
             let next = try!(tq.pop());
             match next.kind
@@ -538,7 +562,7 @@ pub fn parse_module_statement(tq: &mut TokenQueue, indent_level: usize, tok: Tok
                 TokenKind::Func => parse_func(tq, next.span.start, indent_level, true, Type::Void).map(|f| Statement::Function(f)),
                 TokenKind::Struct => parse_struct(tq, indent_level, true, next.span.start).map(|s| Statement::Struct(s)),
                 TokenKind::Union => parse_union(tq, indent_level, true).map(|u| Statement::Union(u)),
-                TokenKind::Trait => parse_trait(tq, indent_level, tok.span.start),
+                TokenKind::Trait => parse_trait(tq, indent_level, tok.span.start, true),
                 _ => err(tok.span.start, ErrorType::UnexpectedToken(next)),
             }
         },

@@ -214,7 +214,7 @@ impl Lexer
 
     fn operator(&mut self, c: char) -> Result<(), CompileError>
     {
-        if c.is_whitespace() || c.is_alphanumeric()
+        if c.is_whitespace() || c.is_alphanumeric() || c == '{' || c == '(' || c == '['
         {
             let kind = try!(self.data_to_token_kind());
             self.state = LexState::Idle;

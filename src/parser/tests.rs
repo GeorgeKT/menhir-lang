@@ -424,6 +424,19 @@ fn sig(name: &str, ret: Type, args: Vec<Argument>, span: Span) -> FunctionSignat
         name: name.into(),
         return_type: ret,
         args: args,
+        generic_args: Vec::new(),
+        span: span,
+    }
+}
+
+#[cfg(test)]
+fn generic_sig(name: &str, ret: Type, args: Vec<Argument>, generic_args: Vec<GenericArgument>, span: Span) -> FunctionSignature
+{
+    FunctionSignature{
+        name: name.into(),
+        return_type: ret,
+        args: args,
+        generic_args: generic_args,
         span: span,
     }
 }
@@ -1127,6 +1140,7 @@ trait Bar:
         t.print(0);
         let expected = Trait::new(
             "Bar".into(),
+            false,
             vec![
                 sig(
                     "Bar::bar",
@@ -1149,6 +1163,60 @@ trait Bar:
         );
         expected.print(0);
         assert!(t == expected);
+    }
+    else
+    {
+        assert!(false);
+    }
+}
+
+
+#[test]
+fn test_generic_arguments()
+{
+    let stmt = th_statement(r#"
+func sum<T: Sum>(x: *T) -> int:
+    return x.sum()
+    ""#);
+
+    if let Statement::Function(f) = stmt
+    {
+        f.print(0);
+        let expected = Function::new(
+            generic_sig(
+                "sum",
+                Type::Primitive("int".into()),
+                vec![
+                    Argument::new("x".into(), type_complex("T"), true, span(2, 18, 2, 22)),
+                ],
+                vec![
+                    GenericArgument::new("T".into(), Type::Trait("Sum".into())),
+                ],
+                span(2, 1, 2, 30)
+            ),
+            false,
+            Block::new(
+                vec![
+                    Statement::Return(
+                        Return::new(
+                            member_access(
+                                name_ref2("x", span(3, 12, 3, 12)),
+                                Member::Call(Call::new(
+                                    name_ref("sum", span(3, 14, 3, 16)),
+                                    Vec::new(),
+                                    span(3, 14, 3, 18),
+                                )),
+                                span(3, 12, 3, 18)
+                            ),
+                            span(3, 5, 3, 18)
+                        )
+                    )
+                ]
+            ),
+            span(2, 1, 4, 5)
+        );
+        expected.print(0);
+        assert!(f == expected);
     }
     else
     {
