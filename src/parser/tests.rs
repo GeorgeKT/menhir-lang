@@ -886,7 +886,7 @@ extern func blaat()
 fn test_struct()
 {
     let stmt = th_statement(r#"
-pub struct Blaat:
+pub struct Blaat impl Foo, Bar:
     var x = 7, y = 9
     pub const z = 99
 
@@ -902,6 +902,10 @@ pub struct Blaat:
         s.print(0);
         assert!(s.name == "Blaat");
         assert!(s.functions.len() == 2);
+        assert!(s.impls == vec![
+            Type::Trait("Foo".into()),
+            Type::Trait("Bar".into()),
+        ]);
 
         assert!(s.variables == vec![
             Variable::new("x".into(), Type::Unknown, false, false, number(7, span(3, 13, 3, 13)), span(3, 9, 3, 13)),

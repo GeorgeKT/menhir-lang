@@ -52,18 +52,20 @@ fn is_primitive_type(name: &str) -> bool
     }
 }
 
-fn parse_type(tq: &mut TokenQueue) -> Result<Type, CompileError>
+
+fn parse_type<MakeComplex>(tq: &mut TokenQueue, make_complex: MakeComplex) -> Result<Type, CompileError>
+    where MakeComplex: Fn(String) -> Type
 {
     if tq.is_next(TokenKind::Operator(Operator::Mul))
     {
         try!(tq.pop());
-        let st = try!(parse_type(tq));
+        let st = try!(parse_type(tq, make_complex));
         Ok(Type::Pointer(Box::new(st)))
     }
     else if tq.is_next(TokenKind::OpenBracket)
     {
         try!(tq.pop());
-        let at = try!(parse_type(tq));
+        let at = try!(parse_type(tq, make_complex));
 
         if tq.is_next(TokenKind::Comma)
         {
@@ -84,7 +86,7 @@ fn parse_type(tq: &mut TokenQueue) -> Result<Type, CompileError>
         if is_primitive_type(&name) {
             Ok(Type::Primitive(name))
         } else {
-            Ok(Type::Complex(name))
+            Ok(make_complex(name))
         }
     }
 
@@ -96,7 +98,7 @@ fn parse_optional_type(tq: &mut TokenQueue) -> Result<Type, CompileError>
     {
         // variable with type declaration
         try!(tq.pop());
-        Ok(try!(parse_type(tq)))
+        Ok(try!(parse_type(tq, |n| Type::Complex(n))))
     }
     else
     {
@@ -197,7 +199,7 @@ fn parse_func_signature(tq: &mut TokenQueue, self_type: Type, pos: Pos) -> Resul
             }
         } else {
             try!(tq.expect(TokenKind::Colon));
-            let typ = try!(parse_type(tq));
+            let typ = try!(parse_type(tq, |n| Type::Complex(n)));
             args.push(Argument::new(arg_name, typ, const_arg, Span::new(arg_span.start, tq.pos())));
         }
 
@@ -212,7 +214,7 @@ fn parse_func_signature(tq: &mut TokenQueue, self_type: Type, pos: Pos) -> Resul
 
     let ret_type = if tq.is_next(TokenKind::Operator(Operator::Arrow)) {
         try!(tq.pop());
-        try!(parse_type(tq))
+        try!(parse_type(tq, |n| Type::Complex(n)))
     } else {
         Type::Void
     };
@@ -332,9 +334,19 @@ fn parse_struct_member(s: &mut Struct, tq: &mut TokenQueue, indent_level: usize,
 fn parse_struct(tq: &mut TokenQueue, indent_level: usize, public: bool, pos: Pos) -> Result<Struct, CompileError>
 {
     let (name, _) = try!(tq.expect_identifier());
-    try!(tq.expect(TokenKind::Colon));
-
     let mut s = Struct::new(name, public, Span::zero());
+    if tq.is_next(TokenKind::Impl)
+    {
+        try!(tq.pop());
+        while !tq.is_next(TokenKind::Colon)
+        {
+            let t = try!(parse_type(tq, |n| Type::Trait(n)));
+            s.impls.push(t);
+            try!(eat_comma(tq));
+        }
+    }
+
+    try!(tq.expect(TokenKind::Colon));
     try!(parse_indented_block(tq, indent_level, |q, level| {
         parse_struct_member(&mut s, q, level, false)
     }));
@@ -359,7 +371,7 @@ fn parse_union_case(tq: &mut TokenQueue) -> Result<UnionCase, CompileError>
         {
             let (name, span) = try!(tq.expect_identifier());
             try!(tq.expect(TokenKind::Colon));
-            let typ = try!(parse_type(tq));
+            let typ = try!(parse_type(tq, |n| Type::Complex(n)));
             uc.vars.push(Argument::new(name, typ, false, Span::new(span.start, tq.pos())));
             try!(eat_comma(tq));
         }

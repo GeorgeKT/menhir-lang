@@ -819,6 +819,7 @@ impl TreePrinter for Return
 pub struct Struct
 {
     pub name: String,
+    pub impls: Vec<Type>,
     pub variables: Vec<Variable>,
     pub functions: Vec<Function>,
     pub public: bool,
@@ -831,6 +832,7 @@ impl Struct
     {
         Struct{
             name: name,
+            impls: Vec::new(),
             variables: Vec::new(),
             functions: Vec::new(),
             public: public,
