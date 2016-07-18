@@ -296,31 +296,30 @@ func test2(var p: *Point) -> int:
 func main() -> int:
     var a = Point{10, 12}
     var b = Point{4, 5}
-    return test(a) + test2(&b) + (a.x + a.y) + (b.x + b.y)
+    return test(a) + test2(b) + (a.x + a.y) + (b.x + b.y)
     "#, false).unwrap() == (24 + 11 + 22 + 11));
 }
-
 
 /*
 #[test]
 fn test_traits()
 {
     assert!(run(r#"
-interface Sum:
+trait Sum:
     func sum(self) -> int
 
-struct Foo:
+struct Foo impl Sum:
     var a = 0, b = 0, c = 0
 
     func sum(self) -> int:
         return self.a + self.b + self.c
 
-func sum(x: ~Sum) -> int:
+func sum<T: Sum>(x: *T) -> int:
     return x.sum()
 
 func main() -> int:
     const f = Foo{1, 2, 3}
-    return sum(f)
+    return sum(&f)
     "#, false).unwrap() == 6);
 }
 */

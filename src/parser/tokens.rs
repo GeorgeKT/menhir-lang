@@ -28,7 +28,6 @@ pub enum Operator
     Increment,
     Decrement,
     Dot,
-    Deref,
 }
 
 pub const TOP_PRECEDENCE: usize = 2000;
@@ -40,7 +39,7 @@ impl Operator
         match *self
         {
             Operator::Not | Operator::Arrow | Operator::Dot |
-            Operator::Increment | Operator::Decrement | Operator::Range | Operator::Deref => TOP_PRECEDENCE,
+            Operator::Increment | Operator::Decrement | Operator::Range => TOP_PRECEDENCE,
             Operator::Mul | Operator::Div | Operator::Mod => TOP_PRECEDENCE - 100,
             Operator::Add | Operator::Sub => TOP_PRECEDENCE - 200,
             Operator::LessThan | Operator::GreaterThan | Operator::LessThanEquals |
@@ -102,7 +101,6 @@ impl Display for Operator
             Operator::DivAssign => write!(fmt, "*="),
             Operator::MulAssign => write!(fmt, "/="),
             Operator::Dot => write!(fmt, "."),
-            Operator::Deref => write!(fmt, "&"),
         }
     }
 }

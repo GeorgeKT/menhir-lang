@@ -204,7 +204,6 @@ impl Lexer
             "*=" => Ok(TokenKind::Operator(Operator::MulAssign)),
             "/=" => Ok(TokenKind::Operator(Operator::DivAssign)),
             "." => Ok(TokenKind::Operator(Operator::Dot)),
-            "&" => Ok(TokenKind::Operator(Operator::Deref)),
             ":" => Ok(TokenKind::Colon),
             "::" => Ok(TokenKind::DoubleColon),
             _ => Err(CompileError::new(self.pos, ErrorType::InvalidOperator(self.data.clone()))),

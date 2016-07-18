@@ -67,10 +67,6 @@ unsafe fn gen_const_string_literal(ctx: &Context, s: &str) -> Result<ValueRef, C
 
 unsafe fn gen_unary(ctx: &mut Context, op: &UnaryOp) -> Result<ValueRef, CompileError>
 {
-    if op.operator == Operator::Deref {
-        return gen_deref(ctx, &op.expression);
-    }
-
     let e_val = try!(gen_expression(ctx, &op.expression));
     let e_type = e_val.get_element_type();
     match op.operator {
@@ -553,29 +549,6 @@ unsafe fn gen_target(ctx: &mut Context, target: &Expression) -> Result<ValueRef,
             gen_index_operation(ctx, iop)
         },
         _ => err(target.span().start, ErrorType::TypeError(format!("Invalid left hand side expression"))),
-    }
-}
-
-unsafe fn gen_deref(ctx: &mut Context, e: &Expression) -> Result<ValueRef, CompileError>
-{
-    match *e
-    {
-        Expression::NameRef(ref nr) => {
-            gen_name_ref(ctx, nr)
-        },
-
-        Expression::MemberAccess(ref ma) => {
-            gen_member_access(ctx, ma)
-        },
-
-        Expression::IndexOperation(ref iop) => {
-            gen_index_operation(ctx, iop)
-        },
-
-        Expression::ObjectConstruction(ref oc) => {
-            gen_object_construction(ctx, oc)
-        },
-        _ => err(e.span().start, ErrorType::TypeError(format!("Invalid dereference"))),
     }
 }
 

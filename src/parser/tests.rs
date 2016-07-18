@@ -384,18 +384,6 @@ fn test_nested_index_op()
     ));
 }
 
-#[test]
-fn test_deref()
-{
-    let e = th_expr("&a");
-    assert!(e == unary_op(
-        Operator::Deref,
-        name_ref("a", span(1, 2, 1, 2)),
-        span(1, 1, 1, 2)
-    ));
-
-}
-
 #[cfg(test)]
 fn th_statement(data: &str) -> Statement
 {
