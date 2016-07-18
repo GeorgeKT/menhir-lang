@@ -18,7 +18,7 @@ pub fn is_same_kind(a: LLVMTypeKind, b: LLVMTypeKind) -> bool
 
 unsafe fn array_to_slice(ctx: &Context, from: &ValueRef, to: LLVMTypeRef) -> Option<ValueRef>
 {
-    let from_type = from.get_type();
+    let from_type = from.get_element_type();
     if !is_same_kind(LLVMGetTypeKind(from_type), LLVMTypeKind::LLVMArrayTypeKind) {
         return None;
     }
@@ -45,7 +45,7 @@ unsafe fn array_to_slice(ctx: &Context, from: &ValueRef, to: LLVMTypeRef) -> Opt
                 let len = LLVMGetArrayLength(from_type);
                 LLVMBuildStore(ctx.builder, const_int(ctx.context, len as u64), LLVMBuildStructGEP(ctx.builder, ptr.get(), 0, cstr("length")));
 
-                let index = ValueRef::new(const_int(ctx.context, 0), true, ctx.builder);
+                let index = const_int(ctx.context, 0);
                 let first_element_ptr = from.get_array_element(ctx, index, Pos::zero()).expect("Not a valid array");
                 LLVMBuildStore(ctx.builder, first_element_ptr.get(), LLVMBuildStructGEP(ctx.builder, ptr.get(), 1, cstr("data")));
                 Some(ptr)
@@ -61,7 +61,7 @@ unsafe fn array_to_slice(ctx: &Context, from: &ValueRef, to: LLVMTypeRef) -> Opt
 
 unsafe fn array_to_ptr(b: LLVMBuilderRef, from: &ValueRef, to: LLVMTypeRef) -> Option<ValueRef>
 {
-    let from_type = from.get_type();
+    let from_type = from.get_element_type();
     let can_convert =
         is_same_kind(LLVMGetTypeKind(from_type), LLVMTypeKind::LLVMArrayTypeKind) &&
         is_same_kind(LLVMGetTypeKind(to), LLVMTypeKind::LLVMPointerTypeKind) &&
@@ -77,8 +77,7 @@ unsafe fn array_to_ptr(b: LLVMBuilderRef, from: &ValueRef, to: LLVMTypeRef) -> O
 // Convert a value to a different type, if needed and possible
 pub unsafe fn convert(ctx: &Context, from: ValueRef, to: LLVMTypeRef) ->  Option<ValueRef>
 {
-    let from_type = from.get_type();
-    if from_type == to {
+    if from.get_element_type() == to || from.get_value_type() == to {
         return Some(from); // Same types, so no problem
     }
 

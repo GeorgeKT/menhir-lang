@@ -236,15 +236,15 @@ unsafe fn return_type(func: LLVMValueRef) -> LLVMTypeRef
 
 unsafe fn gen_return(ctx: &mut Context, f: &Return) -> Result<(), CompileError>
 {
-    let ret = try!(gen_expression(ctx, &f.expr));
+    let ret = try!(gen_expression(ctx, &f.expr)).load();
     let builder = ctx.builder;
-    let ret_type =  ret.get_type();
+    let ret_type =  LLVMTypeOf(ret);
     let func_type = return_type(ctx.get_current_function());
     if ret_type != func_type {
         err(f.span.start, ErrorType::TypeError(
             format!("Attempting to return type '{}' expecting '{}'", type_name(ret_type), type_name(func_type))))
     } else {
-        LLVMBuildRet(builder, ret.load());
+        LLVMBuildRet(builder, ret);
         Ok(())
     }
 }

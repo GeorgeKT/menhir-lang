@@ -67,35 +67,35 @@ unsafe fn gen_const_string_literal(ctx: &Context, s: &str) -> Result<ValueRef, C
 
 unsafe fn gen_unary(ctx: &mut Context, op: &UnaryOp) -> Result<ValueRef, CompileError>
 {
-    let e_val = try!(gen_expression(ctx, &op.expression));
-    let e_type = e_val.get_type();
+    let e_val = try!(gen_expression(ctx, &op.expression)).load();
+    let e_type = LLVMTypeOf(e_val);
     match op.operator {
         Operator::Sub => {
             if !is_numeric(ctx.context, e_type) {
                 err(op.span.start, ErrorType::TypeError("Operator '-', expects and integer or floating point expression as argument".into()))
             } else {
-                Ok(ValueRef::new(LLVMBuildNeg(ctx.builder, e_val.load(), cstr("neg")), true, ctx.builder))
+                Ok(ValueRef::new(LLVMBuildNeg(ctx.builder, e_val, cstr("neg")), true, ctx.builder))
             }
         },
         Operator::Not => {
             if !is_integer(ctx.context, e_type) {
                 err(op.span.start, ErrorType::TypeError("Operator '!', expects an integer or boolean expression".into()))
             } else {
-                Ok(ValueRef::new(LLVMBuildNot(ctx.builder, e_val.load(), cstr("not")), true, ctx.builder))
+                Ok(ValueRef::new(LLVMBuildNot(ctx.builder, e_val, cstr("not")), true, ctx.builder))
             }
         },
         Operator::Increment => {
             if !is_integer(ctx.context, e_type) {
                 err(op.span.start, ErrorType::TypeError("Operator '++', expects an integer expression".into()))
             } else {
-                Ok(ValueRef::new(LLVMBuildAdd(ctx.builder, e_val.load(), const_int(ctx.context, 1), cstr("inc")), true, ctx.builder))
+                Ok(ValueRef::new(LLVMBuildAdd(ctx.builder, e_val, const_int(ctx.context, 1), cstr("inc")), true, ctx.builder))
             }
         },
         Operator::Decrement => {
             if !is_integer(ctx.context, e_type) {
                 err(op.span.start, ErrorType::TypeError("Operator '--', expects an integer expression".into()))
             } else {
-                Ok(ValueRef::new(LLVMBuildSub(ctx.builder, e_val.load(), const_int(ctx.context, 1), cstr("dec")), true, ctx.builder))
+                Ok(ValueRef::new(LLVMBuildSub(ctx.builder, e_val, const_int(ctx.context, 1), cstr("dec")), true, ctx.builder))
             }
         },
         _ => err(op.span.start, ErrorType::InvalidUnaryOperator(op.operator)),
@@ -120,7 +120,7 @@ unsafe fn gen_pf_unary(ctx: &mut Context, op: &UnaryOp) -> Result<ValueRef, Comp
                 } else {
                     LLVMBuildSub(ctx.builder, val, const_int(ctx.context, 1), cstr("dec"))
                 };
-                try!(ptr.store(&ValueRef::new(nval, true, ctx.builder), op.span.start));
+                try!(ptr.store(ctx, ValueRef::new(nval, true, ctx.builder), op.span.start));
                 Ok(ValueRef::new(val, true, ctx.builder))
             }
             else
@@ -158,106 +158,106 @@ unsafe fn check_bool_operands(ctx: &Context, op: Operator, left_type: LLVMTypeRe
 
 unsafe fn gen_binary(ctx: &mut Context, op: &BinaryOp) -> Result<ValueRef, CompileError>
 {
-    let left_val = try!(gen_expression(ctx, &op.left));
-    let right_val = try!(gen_expression(ctx, &op.right));
-    let left_type = left_val.get_type();
-    let right_type = right_val.get_type();
+    let left_val = try!(gen_expression(ctx, &op.left)).load();
+    let right_val = try!(gen_expression(ctx, &op.right)).load();
+    let left_type = LLVMTypeOf(left_val);
+    let right_type = LLVMTypeOf(right_val);
 
     let v = match op.operator {
         Operator::Add => {
             try!(check_numeric_operands(ctx, op.operator, left_type, right_type, op.span.start));
             if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFAdd(ctx.builder, left_val.load(), right_val.load(), cstr("add")))
+                Ok(LLVMBuildFAdd(ctx.builder, left_val, right_val, cstr("add")))
             } else {
-                Ok(LLVMBuildAdd(ctx.builder, left_val.load(), right_val.load(), cstr("add")))
+                Ok(LLVMBuildAdd(ctx.builder, left_val, right_val, cstr("add")))
             }
         },
         Operator::Sub => {
             try!(check_numeric_operands(ctx, op.operator, left_type, right_type, op.span.start));
             if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFSub(ctx.builder, left_val.load(), right_val.load(), cstr("sub")))
+                Ok(LLVMBuildFSub(ctx.builder, left_val, right_val, cstr("sub")))
             } else {
-                Ok(LLVMBuildSub(ctx.builder, left_val.load(), right_val.load(), cstr("sub")))
+                Ok(LLVMBuildSub(ctx.builder, left_val, right_val, cstr("sub")))
             }
         },
         Operator::Div => {
             try!(check_numeric_operands(ctx, op.operator, left_type, right_type, op.span.start));
             if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFDiv(ctx.builder, left_val.load(), right_val.load(), cstr("div")))
+                Ok(LLVMBuildFDiv(ctx.builder, left_val, right_val, cstr("div")))
             } else {
-                Ok(LLVMBuildUDiv(ctx.builder, left_val.load(), right_val.load(), cstr("div")))
+                Ok(LLVMBuildUDiv(ctx.builder, left_val, right_val, cstr("div")))
             }
         },
         Operator::Mod => {
             try!(check_numeric_operands(ctx, op.operator, left_type, right_type, op.span.start));
             if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFRem(ctx.builder, left_val.load(), right_val.load(), cstr("mod")))
+                Ok(LLVMBuildFRem(ctx.builder, left_val, right_val, cstr("mod")))
             } else {
-                Ok(LLVMBuildURem(ctx.builder, left_val.load(), right_val.load(), cstr("mod")))
+                Ok(LLVMBuildURem(ctx.builder, left_val, right_val, cstr("mod")))
             }
         },
         Operator::Mul => {
             try!(check_numeric_operands(ctx, op.operator, left_type, right_type, op.span.start));
             if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFMul(ctx.builder, left_val.load(), right_val.load(), cstr("mul")))
+                Ok(LLVMBuildFMul(ctx.builder, left_val, right_val, cstr("mul")))
             } else {
-                Ok(LLVMBuildMul(ctx.builder, left_val.load(), right_val.load(), cstr("mul")))
+                Ok(LLVMBuildMul(ctx.builder, left_val, right_val, cstr("mul")))
             }
         },
         Operator::And => {
             try!(check_bool_operands(ctx, op.operator, left_type, right_type, op.span.start));
-            Ok(LLVMBuildAnd(ctx.builder, left_val.load(), right_val.load(), cstr("and")))
+            Ok(LLVMBuildAnd(ctx.builder, left_val, right_val, cstr("and")))
         },
         Operator::Or => {
             try!(check_bool_operands(ctx, op.operator, left_type, right_type, op.span.start));
-            Ok(LLVMBuildOr(ctx.builder, left_val.load(), right_val.load(), cstr("or")))
+            Ok(LLVMBuildOr(ctx.builder, left_val, right_val, cstr("or")))
         },
         Operator::LessThan => {
             try!(check_numeric_operands(ctx, op.operator, left_type, right_type, op.span.start));
             if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLT, left_val.load(), right_val.load(), cstr("cmp")))
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLT, left_val, right_val, cstr("cmp")))
             } else {
-                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, left_val.load(), right_val.load(), cstr("cmp")))
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, left_val, right_val, cstr("cmp")))
             }
         },
         Operator::LessThanEquals => {
             try!(check_numeric_operands(ctx, op.operator, left_type, right_type, op.span.start));
             if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLE, left_val.load(), right_val.load(), cstr("cmp")))
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLE, left_val, right_val, cstr("cmp")))
             } else {
-                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLE, left_val.load(), right_val.load(), cstr("cmp")))
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLE, left_val, right_val, cstr("cmp")))
             }
         },
         Operator::GreaterThan => {
             try!(check_numeric_operands(ctx, op.operator, left_type, right_type, op.span.start));
             if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGT, left_val.load(), right_val.load(), cstr("cmp")))
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGT, left_val, right_val, cstr("cmp")))
             } else {
-                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, left_val.load(), right_val.load(), cstr("cmp")))
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, left_val, right_val, cstr("cmp")))
             }
         },
         Operator::GreaterThanEquals => {
             try!(check_numeric_operands(ctx, op.operator, left_type, right_type, op.span.start));
             if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGE, left_val.load(), right_val.load(), cstr("cmp")))
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGE, left_val, right_val, cstr("cmp")))
             } else {
-                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGE, left_val.load(), right_val.load(), cstr("cmp")))
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGE, left_val, right_val, cstr("cmp")))
             }
         },
         Operator::Equals => {
             try!(check_numeric_operands(ctx, op.operator, left_type, right_type, op.span.start));
             if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, left_val.load(), right_val.load(), cstr("cmp")))
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, left_val, right_val, cstr("cmp")))
             } else {
-                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left_val.load(), right_val.load(), cstr("cmp")))
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left_val, right_val, cstr("cmp")))
             }
         },
         Operator::NotEquals => {
             try!(check_numeric_operands(ctx, op.operator, left_type, right_type, op.span.start));
             if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealONE, left_val.load(), right_val.load(), cstr("cmp")))
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealONE, left_val, right_val, cstr("cmp")))
             } else {
-                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left_val.load(), right_val.load(), cstr("cmp")))
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left_val, right_val, cstr("cmp")))
             }
         },
         _ => err(op.span.start, ErrorType::InvalidBinaryOperator(op.operator)),
@@ -287,12 +287,14 @@ unsafe fn gen_member_call(ctx: &mut Context, c: &Call, st: &StructType, self_ptr
 
     // Add self argument
     let expected_self_type = *func.args.first().expect("Self argument missing");
-    if self_ptr.get_type() == expected_self_type {
+    let self_element_type = self_ptr.get_element_type();
+    if self_element_type == expected_self_type {
         arg_vals.push(self_ptr.load());
-    } else if LLVMPointerType(self_ptr.get_type(), 0) == expected_self_type {
+    } else if self_ptr.get_value_type() == expected_self_type {
         arg_vals.push(self_ptr.get());
     } else {
-        return Err(type_error(c.span.start, format!("Self type mismatch (got {}, expected {})", type_name(self_ptr.get_type()), type_name(expected_self_type))));
+        return Err(type_error(c.span.start, format!("Self type mismatch (got {}, expected {})",
+            type_name(self_ptr.get_value_type()), type_name(expected_self_type))));
     }
 
     for arg in &c.args {
@@ -311,11 +313,13 @@ unsafe fn gen_call_common(ctx: &Context, c: &Call, func: &FunctionInstance, mut 
                 func_name, func.args.len(), c.args.len())));
     }
 
-    for (i, arg) in c.args.iter().enumerate() {
+    for (i, arg) in c.args.iter().enumerate()
+    {
         let nval = convert(ctx, ValueRef::new(arg_vals[i], true, ctx.builder), func.args[i]);
-        match nval {
+        match nval
+        {
             Some(val) => {
-                arg_vals[i] = val.get();
+                arg_vals[i] = val.load();
             },
             None => {
                 let val_type = LLVMTypeOf(arg_vals[i]);
@@ -364,11 +368,12 @@ unsafe fn gen_name_ref(ctx: &Context, nr: &NameRef) -> Result<ValueRef, CompileE
 unsafe fn assign(ctx: &Context, op: Operator, var: ValueRef, val: ValueRef, span: &Span) -> Result<ValueRef, CompileError>
 {
     if op == Operator::Assign {
-        return var.store(&val, span.start);
+        return var.store(ctx, val, span.start);
     }
 
-    let var_type = var.get_type();
-    try!(check_numeric_operands(ctx, op, var_type, val.get_type(), span.start));
+    let var_type = var.get_element_type();
+
+    try!(check_numeric_operands(ctx, op, var_type, val.get_element_type(), span.start));
     let var_val = var.load();
     let new_val = match op
     {
@@ -406,26 +411,35 @@ unsafe fn assign(ctx: &Context, op: Operator, var: ValueRef, val: ValueRef, span
     };
 
     let new_val = ValueRef::new(new_val, true, ctx.builder);
-    try!(var.store(&new_val, span.start));
+    try!(var.store(ctx, new_val.clone(), span.start));
     Ok(new_val) // Return the new value
 }
 
 unsafe fn gen_member_var(_ctx: &Context, this: ValueRef, st: &StructType, nr: &NameRef, private_allowed: bool) -> Result<ValueRef, CompileError>
 {
-    if let Some((idx, mvar)) = st.get_member(&nr.name) {
+    if let Some((idx, mvar)) = st.get_member(&nr.name)
+    {
         if !mvar.public && !private_allowed {
             return err(nr.span.start, ErrorType::PrivateMemberAccess(nr.name.clone()));
         }
 
-        if this.get_type() == st.typ {
+        let this_element_type = this.get_element_type();
+        if this_element_type == st.typ 
+        {
             this.get_struct_element(idx as u32, nr.span.start)
-        } else if this.get_type() == LLVMPointerType(st.typ, 0) {
+        }
+        else if this_element_type == LLVMPointerType(st.typ, 0)
+        {
             // Dereference this, to get the actual struct ptr, and the get the element
             this.deref(nr.span.start).and_then(|v| v.get_struct_element(idx as u32, nr.span.start))
-        } else {
+        }
+        else
+        {
             return err(nr.span.start, ErrorType::TypeError(format!("Type mismatch when accessing member variable")));
         }
-    } else {
+    }
+    else
+    {
         err(nr.span.start, ErrorType::UnknownStructMember(st.name.clone(), nr.name.clone()))
     }
 }
@@ -489,8 +503,8 @@ unsafe fn gen_member_access(ctx: &mut Context, a: &MemberAccess) -> Result<Value
 
 unsafe fn gen_index_operation(ctx: &mut Context, iop: &IndexOperation) -> Result<ValueRef, CompileError>
 {
-    let index = try!(gen_expression(ctx, &iop.index_expr));
-    if !is_integer(ctx.context, index.get_type()) {
+    let index = try!(gen_expression(ctx, &iop.index_expr)).load();
+    if !is_integer(ctx.context, LLVMTypeOf(index)) {
         return Err(type_error(iop.index_expr.span().start, format!("Indexing must be done with an integer expression")));
     }
 
@@ -532,12 +546,15 @@ unsafe fn gen_target(ctx: &mut Context, target: &Expression) -> Result<ValueRef,
 unsafe fn gen_assignment(ctx: &mut Context, a: &Assignment) -> Result<ValueRef, CompileError>
 {
     let target_ptr = try!(gen_target(ctx, &a.target));
+    let target_type = target_ptr.get_element_type();
     let rhs_val = try!(gen_expression(ctx, &a.expression));
-    let rhs_type = rhs_val.get_type();
-    let target_type = target_ptr.get_type();
-    if let Some(cv) = convert(ctx, rhs_val, target_type) {
+    let rhs_type = rhs_val.get_element_type();
+    if let Some(cv) = convert(ctx, rhs_val, target_type)
+    {
         assign(ctx, a.operator, target_ptr, cv, &a.span)
-    } else {
+    }
+    else
+    {
         let msg = format!("Attempting to assign an expression of type '{}' to a variable of type '{}'",
             type_name(rhs_type), type_name(target_type));
         err(a.span.start, ErrorType::TypeError(msg))
@@ -579,7 +596,7 @@ unsafe fn gen_const_object_construction(ctx: &mut Context, oc: &ObjectConstructi
     ))
 }
 
-unsafe fn gen_object_construction(ctx: &mut Context, oc: &ObjectConstruction, ptr: &ValueRef) -> Result<(), CompileError>
+unsafe fn gen_object_construction_store(ctx: &mut Context, oc: &ObjectConstruction, ptr: &ValueRef) -> Result<(), CompileError>
 {
     if ctx.in_global_context()
     {
@@ -610,6 +627,17 @@ unsafe fn gen_object_construction(ctx: &mut Context, oc: &ObjectConstruction, pt
     }
 
     Ok(())
+}
+
+unsafe fn gen_object_construction(ctx: &mut Context, oc: &ObjectConstruction) -> Result<ValueRef, CompileError>
+{
+    let st: Rc<StructType> = try!(ctx
+        .get_complex_type(&oc.object_type.name)
+        .ok_or(CompileError::new(oc.span.start, ErrorType::UnknownType(oc.object_type.name.clone()))));
+
+    let ptr = ValueRef::local(ctx.builder, st.typ);
+    try!(gen_object_construction_store(ctx, oc, &ptr));
+    Ok(ptr)
 }
 
 unsafe fn gen_const_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> Result<ValueRef, CompileError>
@@ -643,7 +671,7 @@ unsafe fn gen_array_literal_store(ctx: &mut Context, a: &ArrayLiteral, ptr: &Val
     {
         for (idx, element) in a.elements.iter().enumerate()
         {
-            let index = ValueRef::new(const_int(ctx.context, idx as u64), true, ctx.builder);
+            let index = const_int(ctx.context, idx as u64);
             try!(ptr
                 .get_array_element(ctx, index, a.span.start)
                 .and_then(|v| gen_expression_store(ctx, element, &v)));
@@ -693,7 +721,7 @@ unsafe fn gen_array_initializer_store(ctx: &mut Context, a: &ArrayInitializer, p
     {
         for idx in 0..a.times
         {
-            let index = ValueRef::new(const_int(ctx.context, idx as u64), true, ctx.builder);
+            let index = const_int(ctx.context, idx as u64);
             try!(ptr
                 .get_array_element(ctx, index, a.span.start)
                 .and_then(|v| gen_expression_store(ctx, &a.init, &v)))
@@ -731,43 +759,22 @@ pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<ValueR
         Expression::Assignment(ref a) => gen_assignment(ctx, a),
         Expression::MemberAccess(ref ma) => gen_member_access(ctx, ma),
         Expression::IndexOperation(ref iop) => gen_index_operation(ctx, iop),
-        _ => err(e.span().start, ErrorType::TypeError(format!("Use gen_expression_store (e = {:?})", e))),
+        Expression::ObjectConstruction(ref oc) => gen_object_construction(ctx, oc),
     }
 }
 
 unsafe fn store(ctx: &mut Context, e: &Expression, ptr: &ValueRef) -> Result<(), CompileError>
 {
     let v = try!(gen_expression(ctx, e));
-    let v_typ = v.get_type();
-    let dst_typ = ptr.get_type();
-    if let Some(cv) = convert(ctx, v, dst_typ)
-    {
-        if ctx.in_global_context()
-        {
-            if cv.is_constant_value() {
-                LLVMSetInitializer(ptr.get(), cv.get());
-            } else {
-                return err(e.span().start, ErrorType::ExpectedConstExpr(format!("Global variables and constants must be initialized with a constant expression")));
-            }
-        }
-        else
-        {
-            try!(ptr.store(&cv, e.span().start));
-        }
-        Ok(())
-    }
-    else
-    {
-       let msg = format!("Wrong type ({}, expected {})", type_name(v_typ), type_name(dst_typ));
-       return err(e.span().start, ErrorType::TypeError(msg));
-    }
+    try!(ptr.store(ctx, v, e.span().start));
+    Ok(())
 }
 
 pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: &ValueRef) -> Result<(), CompileError>
 {
     match *e
     {
-        Expression::ObjectConstruction(ref oc) => gen_object_construction(ctx, oc, ptr),
+        Expression::ObjectConstruction(ref oc) => gen_object_construction_store(ctx, oc, ptr),
         Expression::ArrayLiteral(ref a) => gen_array_literal_store(ctx, a, ptr),
         Expression::ArrayInitializer(ref a) => gen_array_initializer_store(ctx, a, ptr),
         _ => store(ctx, e, &ptr),

@@ -283,11 +283,13 @@ fn test_object_passing()
 struct Point:
     pub var x = 0, y = 0
 
-func sum(p: &Point) -> int:
+func test(var p: Point) -> int:
+    p.x += 1
+    p.y += 1
     return p.x + p.y
 
 func main() -> int:
-    return sum(Point{10, 12})
-    "#, false).unwrap() == 22);
+    return test(Point{10, 12})
+    "#, false).unwrap() == 24);
 }
 */

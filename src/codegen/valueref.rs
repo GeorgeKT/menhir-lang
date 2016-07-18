@@ -1,10 +1,11 @@
 use llvm::prelude::*;
 use llvm::core::*;
 use llvm::{LLVMTypeKind, LLVMLinkage};
-use codegen::cstr;
+use codegen::{type_name, cstr};
 use codegen::context::Context;
 use codegen::conversions::{is_same_kind};
 use codegen::expressions::{const_int};
+use codegen::conversions::convert;
 use compileerror::{Pos, CompileError, ErrorType, err, type_error};
 
 
@@ -89,20 +90,41 @@ impl ValueRef
 
     }
 
-    pub fn store(&self, val: &ValueRef, pos: Pos) -> Result<ValueRef, CompileError>
+    pub unsafe fn store(&self, ctx: &Context, val: ValueRef, pos: Pos) -> Result<ValueRef, CompileError>
     {
-        if self.is_pointer()
+        if !self.is_pointer() {
+            return Err(type_error(pos, format!("Store must be called on pointer types")));
+        }
+
+        let dst_typ = self.get_element_type();
+        let val_typ = val.get_element_type();
+        if let Some(cv) = convert(ctx, val, dst_typ)
         {
-            if self.constant {
-                return err(pos, ErrorType::ConstantModification);
+            if ctx.in_global_context()
+            {
+                if cv.is_constant_value()
+                {
+                    // We need to initialize globals when we are in the global context
+                    LLVMSetInitializer(self.ptr, cv.get());
+                    Ok(cv)
+                }
+                else
+                {
+                    return err(pos, ErrorType::ExpectedConstExpr(format!("Global variables and constants must be initialized with a constant expression")));
+                }
             }
-            unsafe {
-                Ok(ValueRef::new(LLVMBuildStore(self.builder, val.load(), self.ptr), self.constant, self.builder))
+            else
+            {
+                if self.constant {
+                    return err(pos, ErrorType::ConstantModification);
+                }
+
+                Ok(ValueRef::new(LLVMBuildStore(self.builder, cv.load(), self.ptr), self.constant, self.builder))
             }
         }
         else
         {
-            Err(type_error(pos, format!("Values cannot be set")))
+            Err(type_error(pos, format!("Wrong type ({}, expected {})", type_name(val_typ), type_name(dst_typ))))
         }
     }
 
@@ -116,7 +138,12 @@ impl ValueRef
         self.constant
     }
 
-    pub fn get_type(&self) -> LLVMTypeRef
+    pub fn get_value_type(&self) -> LLVMTypeRef
+    {
+        unsafe{LLVMTypeOf(self.ptr)}
+    }
+
+    pub fn get_element_type(&self) -> LLVMTypeRef
     {
         unsafe{
             if self.is_pointer() {
@@ -166,7 +193,7 @@ impl ValueRef
         }
     }
 
-    pub fn get_array_element(&self, ctx: &Context, index: ValueRef, pos: Pos) -> Result<ValueRef, CompileError>
+    pub fn get_array_element(&self, ctx: &Context, index: LLVMValueRef, pos: Pos) -> Result<ValueRef, CompileError>
     {
         if !self.is_pointer() {
             return Err(type_error(pos, format!("Attempting to index a value")));
@@ -176,7 +203,7 @@ impl ValueRef
             let et = LLVMGetElementType(LLVMTypeOf(self.ptr));
             if is_same_kind(LLVMGetTypeKind(et), LLVMTypeKind::LLVMArrayTypeKind)
             {
-                let mut index_expr = vec![const_int(ctx.context, 0), index.load()];
+                let mut index_expr = vec![const_int(ctx.context, 0), index];
                 Ok(ValueRef::new(
                     LLVMBuildGEP(self.builder, self.ptr, index_expr.as_mut_ptr(), 2, cstr("el")),
                     self.constant,
@@ -185,7 +212,7 @@ impl ValueRef
             }
             else if is_same_kind(LLVMGetTypeKind(LLVMTypeOf(self.ptr)), LLVMTypeKind::LLVMArrayTypeKind)
             {
-                let mut index_expr = vec![index.load()];
+                let mut index_expr = vec![index];
                 Ok(ValueRef::new(
                     LLVMBuildGEP(self.builder, self.ptr, index_expr.as_mut_ptr(), 1, cstr("el")),
                     self.constant,
@@ -196,7 +223,7 @@ impl ValueRef
             else if is_same_kind(LLVMGetTypeKind(et), LLVMTypeKind::LLVMPointerTypeKind)
             {
                 let elptr = LLVMBuildLoad(self.builder, self.ptr, cstr("elptr"));
-                let mut index_expr = vec![index.load()];
+                let mut index_expr = vec![index];
                 Ok(ValueRef::new(
                     LLVMBuildGEP(self.builder, elptr, index_expr.as_mut_ptr(), 1, cstr("el")),
                     self.constant,
@@ -205,9 +232,6 @@ impl ValueRef
             }
             else
             {
-                use codegen::type_name;
-                println!("ptr: {}", type_name(LLVMTypeOf(self.ptr)));
-                println!("et: {}", type_name(et));
                 Err(type_error(pos, format!("Attempting to index, something which is not indexable")))
             }
         }
@@ -222,11 +246,8 @@ impl ValueRef
 
         unsafe {
             let et = LLVMGetElementType(LLVMTypeOf(self.ptr));
-            if is_same_kind(LLVMGetTypeKind(et), LLVMTypeKind::LLVMStructTypeKind)
-            {
-                Ok(ValueRef::new(self.load(), self.constant, self.builder))
-            }
-            else if is_same_kind(LLVMGetTypeKind(et), LLVMTypeKind::LLVMPointerTypeKind)
+            if is_same_kind(LLVMGetTypeKind(et), LLVMTypeKind::LLVMStructTypeKind) ||
+               is_same_kind(LLVMGetTypeKind(et), LLVMTypeKind::LLVMPointerTypeKind)
             {
                 Ok(ValueRef::new(self.load(), self.constant, self.builder))
             }
