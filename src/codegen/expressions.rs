@@ -6,14 +6,14 @@ use llvm::core::*;
 use llvm::prelude::*;
 use libc;
 
-use ast::*;
-use codegen::*;
-use codegen::context::*;
-use codegen::symbols::*;
-use codegen::conversions::*;
-use codegen::valueref::ValueRef;
-use compileerror::*;
-use parser::Operator;
+use ast::{UnaryOp, BinaryOp, Type, Expression, Call, MemberAccess, Member, IndexOperation, ObjectConstruction, NameRef, Assignment, ArrayLiteral, ArrayInitializer};
+use codegen::{cstr, type_name};
+use codegen::context::{Context};
+use codegen::symbols::{StructType, FunctionInstance, PassingMode};
+use codegen::conversions::{convert};
+use codegen::valueref::{ValueRef};
+use compileerror::{Span, Pos, CompileError, ErrorType, err, type_error, expected_const_expr};
+use parser::{Operator};
 
 unsafe fn is_integer(ctx: LLVMContextRef, tr: LLVMTypeRef) -> bool
 {

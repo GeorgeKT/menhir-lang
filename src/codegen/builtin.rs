@@ -1,7 +1,7 @@
 use std::rc::Rc;
-use llvm::core::*;
-use llvm::prelude::*;
-use ast::*;
+use llvm::core::{LLVMStructCreateNamed, LLVMInt64TypeInContext, LLVMPointerType, LLVMStructSetBody};
+use llvm::prelude::{LLVMTypeRef};
+use ast::{Type, Expression};
 use compileerror::Span;
 use codegen::{type_name, cstr};
 use codegen::context::Context;

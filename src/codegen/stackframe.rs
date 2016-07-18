@@ -1,5 +1,5 @@
 use llvm::prelude::*;
-use codegen::symbols::*;
+use codegen::symbols::{SymbolTable};
 
 
 pub struct StackFrame

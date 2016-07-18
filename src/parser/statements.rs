@@ -1,6 +1,7 @@
-use ast::*;
-use compileerror::*;
-use parser::*;
+use ast::{ModuleName, Statement, Import, Type, Variable, Block, Function, FunctionSignature,
+    Argument, ExternalFunction, While, If, ElsePart, Struct, Union, UnionCase, Match, MatchCase, Return};
+use compileerror::{CompileError, Pos, Span, ErrorType, err};
+use parser::{TokenQueue, TokenKind, Token, Operator, ParseMode, parse_expression};
 
 fn parse_module_name(tq: &mut TokenQueue) -> Result<ModuleName, CompileError>
 {

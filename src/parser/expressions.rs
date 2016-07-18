@@ -1,6 +1,6 @@
-use ast::*;
-use compileerror::*;
-use parser::*;
+use ast::{Expression, Call, NameRef, MemberAccess, Member, array_lit, array_init, index_op, object_construction, assignment, unary_op, pf_unary_op, bin_op, bin_op2};
+use compileerror::{CompileError, Pos, Span, ErrorType, err};
+use parser::{Token, TokenKind, TokenQueue, Operator};
 
 
 fn is_end_of_expression(tok: &Token) -> bool

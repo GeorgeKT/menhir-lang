@@ -10,12 +10,12 @@ use llvm::prelude::*;
 use llvm::core::*;
 use llvm::target_machine::*;
 
-use ast::*;
-use compileerror::*;
-use codegen::*;
-use codegen::modulecontext::*;
-use codegen::symbols::*;
-use codegen::builtin::*;
+use ast::{Type, NameRef, MemberAccess, Member, Call, ArrayLiteral, IndexOperation, Expression};
+use compileerror::{CompileError, Pos, ErrorType, err, type_error};
+use codegen::{cstr, cstr_mut};
+use codegen::modulecontext::{ModuleContext};
+use codegen::symbols::{SymbolTable, StructType, VariableInstance, FunctionInstance};
+use codegen::builtin::{get_slice_type};
 
 pub struct Context
 {

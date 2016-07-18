@@ -5,14 +5,14 @@ use llvm::prelude::*;
 use llvm::core::*;
 use libc;
 
-use ast::*;
-use codegen::*;
-use compileerror::*;
-use codegen::context::*;
-use codegen::expressions::*;
-use codegen::symbols::*;
-use codegen::conversions::*;
-use codegen::valueref::ValueRef;
+use ast::{Import, Variable, Function, Type, FunctionSignature, ExternalFunction, Block, While, If, ElsePart, Return, Struct, Union, Match, Statement, Module};
+use codegen::{type_name, cstr};
+use compileerror::{CompileError, Span, Pos, ErrorType, err, type_error};
+use codegen::context::{Context};
+use codegen::expressions::{gen_expression_store, gen_expression};
+use codegen::symbols::{FunctionInstance, PassingMode, StructMemberVar, StructType};
+use codegen::conversions::{is_struct, is_array};
+use codegen::valueref::{ValueRef};
 
 
 fn gen_import(ctx: &mut Context, import: &Import) -> Result<(), CompileError>

@@ -11,8 +11,8 @@ mod parser;
 
 use std::path::Path;
 use docopt::Docopt;
-use codegen::*;
-use parser::*;
+use codegen::{CodeGenOptions, llvm_init, codegen, link};
+use parser::{ParseMode, parse_file};
 
 
 static USAGE: &'static str =  "

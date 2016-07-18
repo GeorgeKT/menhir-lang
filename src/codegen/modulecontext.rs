@@ -1,10 +1,10 @@
 use std::rc::Rc;
 use llvm::prelude::*;
-use compileerror::*;
-use codegen::symbols::*;
-use codegen::stackframe::*;
-use codegen::context::*;
-use ast::*;
+use compileerror::{CompileError};
+use codegen::symbols::{SymbolTable, VariableInstance, FunctionInstance, StructType};
+use codegen::stackframe::{StackFrame};
+use codegen::context::{Context};
+use ast::{ModuleName};
 
 
 pub struct ModuleContext

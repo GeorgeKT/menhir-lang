@@ -2,7 +2,7 @@ use std::rc::Rc;
 use std::collections::HashMap;
 use llvm::prelude::*;
 
-use ast::*;
+use ast::{Type, FunctionSignature, Expression};
 
 
 pub struct VariableInstance

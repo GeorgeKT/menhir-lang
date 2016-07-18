@@ -16,11 +16,11 @@ use std::os::raw::c_char;
 use llvm::prelude::*;
 use llvm::core::*;
 
-use ast::*;
-use compileerror::*;
-use codegen::context::*;
-use codegen::statements::*;
-pub use codegen::linker::*;
+use ast::{Module};
+use compileerror::{CompileError};
+use codegen::context::{Context};
+use codegen::statements::{gen_module};
+pub use codegen::linker::{link};
 
 pub fn cstr(s: &str) -> *const c_char
 {

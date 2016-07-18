@@ -2,7 +2,7 @@ use llvm::prelude::*;
 use llvm::core::*;
 use llvm::{LLVMTypeKind, LLVMLinkage};
 use codegen::{type_name, cstr};
-use codegen::context::Context;
+use codegen::context::{Context};
 use codegen::expressions::{const_int};
 use codegen::conversions::{is_struct, is_array, is_pointer, convert, is_same_kind};
 use compileerror::{Pos, CompileError, ErrorType, err, type_error};

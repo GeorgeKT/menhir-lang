@@ -1,7 +1,7 @@
 use std::io::{Read, BufReader, BufRead};
 use std::mem;
 use compileerror::{Pos, Span, CompileError, ErrorType};
-use parser::*;
+use parser::{TokenQueue, TokenKind, Operator, Token};
 
 
 #[derive(Debug, Clone, Eq, PartialEq)]

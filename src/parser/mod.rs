@@ -10,14 +10,14 @@ use std::fs;
 use std::path::Path;
 use std::ffi::OsStr;
 
-use ast::*;
-use compileerror::*;
-use self::statements::*;
+use ast::{Module};
+use compileerror::{CompileError};
+use parser::statements::{parse_block};
 
-pub use self::lexer::Lexer;
-pub use self::tokenqueue::TokenQueue;
-pub use self::expressions::*;
-pub use self::tokens::*;
+pub use self::lexer::{Lexer};
+pub use self::tokenqueue::{TokenQueue};
+pub use self::expressions::{parse_expression};
+pub use self::tokens::{Operator, Token, TokenKind};
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub enum ParseMode

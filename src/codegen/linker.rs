@@ -1,8 +1,8 @@
 use std::process::{Output, Command};
 
-use codegen::*;
-use codegen::context::*;
-use compileerror::*;
+use codegen::{CodeGenOptions};
+use codegen::context::{Context};
+use compileerror::{CompileError, Pos, ErrorType, err};
 
 
 pub fn link(ctx: &Context, opts: &CodeGenOptions) -> Result<(), CompileError>
