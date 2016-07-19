@@ -5,7 +5,7 @@ use codegen::{type_name, cstr};
 use codegen::context::{Context};
 use codegen::expressions::{const_int};
 use codegen::conversions::{is_struct, is_array, is_pointer, convert, is_same_kind};
-use compileerror::{Pos, CompileError, ErrorType, err, type_error};
+use compileerror::{Pos, CompileResult, ErrorCode, err, type_error};
 
 
 #[derive(Debug, Clone)]
@@ -85,7 +85,7 @@ impl ValueRef
 
     }
 
-    pub unsafe fn store(&self, ctx: &Context, val: ValueRef, pos: Pos) -> Result<ValueRef, CompileError>
+    pub unsafe fn store(&self, ctx: &Context, val: ValueRef, pos: Pos) -> CompileResult<ValueRef>
     {
         if !self.is_pointer() {
             return Err(type_error(pos, format!("Store must be called on pointer types")));
@@ -105,13 +105,14 @@ impl ValueRef
                 }
                 else
                 {
-                    return err(pos, ErrorType::ExpectedConstExpr(format!("Global variables and constants must be initialized with a constant expression")));
+                    return err(pos, ErrorCode::ExpectedConstExpr,
+                        format!("Global variables and constants must be initialized with a constant expression"));
                 }
             }
             else
             {
                 if self.constant {
-                    return err(pos, ErrorType::ConstantModification);
+                    return err(pos, ErrorCode::ConstantModification, format!("Attempting to modify a constant"));
                 }
 
                 Ok(ValueRef::new(LLVMBuildStore(self.builder, cv.load(), self.ptr), self.constant, self.builder))
@@ -156,7 +157,7 @@ impl ValueRef
         }
     }
 
-    pub fn get_struct_element(&self, index: u32, pos: Pos) -> Result<ValueRef, CompileError>
+    pub fn get_struct_element(&self, index: u32, pos: Pos) -> CompileResult<ValueRef>
     {
         if !self.is_pointer() {
             return Err(type_error(pos, format!("Attempting to get a struct element of a value")));
@@ -187,7 +188,7 @@ impl ValueRef
         }
     }
 
-    pub fn get_array_element(&self, ctx: &Context, index: LLVMValueRef, pos: Pos) -> Result<ValueRef, CompileError>
+    pub fn get_array_element(&self, ctx: &Context, index: LLVMValueRef, pos: Pos) -> CompileResult<ValueRef>
     {
         if !self.is_pointer() {
             return Err(type_error(pos, format!("Attempting to index a value")));
@@ -232,7 +233,7 @@ impl ValueRef
     }
 
     // If it is a ptr to something, return something as a value, if it is a pointer to a pointer, return the new pointer as a ptr
-    pub fn deref(&self, pos: Pos) -> Result<ValueRef, CompileError>
+    pub fn deref(&self, pos: Pos) -> CompileResult<ValueRef>
     {
         if !self.is_pointer() {
             return Err(type_error(pos, format!("Attempting to dereference a value")));
@@ -252,7 +253,7 @@ impl ValueRef
         }
     }
 
-    pub unsafe fn copy(&self, ctx: &mut Context, pos: Pos) -> Result<ValueRef, CompileError>
+    pub unsafe fn copy(&self, ctx: &mut Context, pos: Pos) -> CompileResult<ValueRef>
     {
         let typ = self.get_element_type();
         if is_struct(typ)

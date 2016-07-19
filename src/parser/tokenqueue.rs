@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use compileerror::{Pos, Span, CompileError, ErrorType, err};
+use compileerror::{Pos, Span, CompileError, CompileResult, ErrorCode, err};
 use parser::{Token, TokenKind, Operator};
 
 
@@ -53,17 +53,17 @@ impl TokenQueue
         self.tokens.push_front(tok)
     }
 
-    pub fn pop(&mut self) -> Result<Token, CompileError>
+    pub fn pop(&mut self) -> CompileResult<Token>
     {
         if let Some(tok) = self.tokens.pop_front() {
             self.last_pos = tok.span.end;
             Ok(tok)
         } else {
-            err(self.last_pos, ErrorType::UnexpectedEOF)
+            err(self.last_pos, ErrorCode::UnexpectedEOF, format!("Unexpected end of file"))
         }
     }
 
-    pub fn pop_if<P>(&mut self, predicate: P) ->  Result<Option<Token>, CompileError>
+    pub fn pop_if<P>(&mut self, predicate: P) ->  CompileResult<Option<Token>>
         where P: Fn(&Token) -> bool
     {
         let pop = self.tokens.front().map(|tok| predicate(tok)).unwrap_or(false);
@@ -84,20 +84,20 @@ impl TokenQueue
         self.tokens.iter().nth(index)
     }
 
-    pub fn expect(&mut self, kind: TokenKind) -> Result<Token, CompileError>
+    pub fn expect(&mut self, kind: TokenKind) -> CompileResult<Token>
     {
-        self.pop()
-            .and_then(|tok| if tok.kind == kind
-                {
-                    Ok(tok)
-                }
-                else
-                {
-                    Err(CompileError::new(tok.span.start, ErrorType::UnexpectedToken(tok)))
-                })
+        self.pop().and_then(
+            |tok| if tok.kind == kind
+            {
+                Ok(tok)
+            }
+            else
+            {
+                Err(CompileError::new(tok.span.start, ErrorCode::UnexpectedToken, format!("Unexpected token {}", tok)))
+            })
     }
 
-    pub fn expect_indent(&mut self) -> Result<usize, CompileError>
+    pub fn expect_indent(&mut self) -> CompileResult<usize>
     {
         let tok = try!(self.pop());
         if let TokenKind::Indent(i) = tok.kind
@@ -106,26 +106,26 @@ impl TokenQueue
         }
         else
         {
-            Err(CompileError::new(tok.span.start, ErrorType::ExpectedIndent))
+            err(tok.span.start, ErrorCode::ExpectedIndent, format!("Expected indentation, found {}", tok))
         }
     }
 
-    pub fn expect_int(&mut self) -> Result<(u64, Pos), CompileError>
+    pub fn expect_int(&mut self) -> CompileResult<(u64, Pos)>
     {
         let tok = try!(self.pop());
         if let TokenKind::Number(v) = tok.kind
         {
             let pos = tok.span.start;
-            let val = try!(v.parse::<u64>().map_err(|_| CompileError::new(pos, ErrorType::InvalidInteger)));
+            let val = try!(v.parse::<u64>().map_err(|_| CompileError::new(pos, ErrorCode::InvalidInteger, format!("{} is not a valid integer", v))));
             Ok((val, tok.span.start))
         }
         else
         {
-            Err(CompileError::new(tok.span.start, ErrorType::ExpectedIntLiteral))
+            err(tok.span.start, ErrorCode::ExpectedIntLiteral, format!("Expected integer literal, found {}", tok))
         }
     }
 
-    pub fn expect_identifier(&mut self) -> Result<(String, Span), CompileError>
+    pub fn expect_identifier(&mut self) -> CompileResult<(String, Span)>
     {
         let tok = try!(self.pop());
         if let TokenKind::Identifier(s) = tok.kind
@@ -134,11 +134,11 @@ impl TokenQueue
         }
         else
         {
-            Err(CompileError::new(tok.span.start, ErrorType::ExpectedIdentifier))
+            err(tok.span.start, ErrorCode::ExpectedIdentifier, format!("Expected identifier, found {}", tok))
         }
     }
 
-    pub fn expect_operator(&mut self) -> Result<Operator, CompileError>
+    pub fn expect_operator(&mut self) -> CompileResult<Operator>
     {
         let tok = try!(self.pop());
         if let TokenKind::Operator(op) = tok.kind
@@ -147,7 +147,7 @@ impl TokenQueue
         }
         else
         {
-            Err(CompileError::new(tok.span.start, ErrorType::ExpectedOperator))
+            err(tok.span.start, ErrorCode::ExpectedOperator, format!("Expected operator, found {}", tok))
         }
     }
 

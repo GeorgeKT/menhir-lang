@@ -1,6 +1,6 @@
 use std::rc::Rc;
 use llvm::prelude::*;
-use compileerror::{CompileError};
+use compileerror::{CompileResult};
 use codegen::symbols::{SymbolTable, VariableInstance, FunctionInstance, StructType};
 use codegen::stackframe::{StackFrame};
 use codegen::context::{Context};
@@ -222,7 +222,7 @@ impl ModuleContext
     }
 }
 
-pub fn import_module(ctx: &mut Context, m: &ModuleName) -> Result<(), CompileError>
+pub fn import_module(ctx: &mut Context, m: &ModuleName) -> CompileResult<()>
 {
     use parser::*;
     use codegen::statements::gen_module;

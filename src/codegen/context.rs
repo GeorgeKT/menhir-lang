@@ -11,7 +11,7 @@ use llvm::core::*;
 use llvm::target_machine::*;
 
 use ast::{Type, NameRef, MemberAccess, Member, Call, ArrayLiteral, IndexOperation, Expression, Trait};
-use compileerror::{CompileError, Pos, ErrorType, err, type_error};
+use compileerror::{CompileError, CompileResult, Pos, ErrorCode, err, type_error};
 use codegen::{cstr, cstr_mut};
 use codegen::modulecontext::{ModuleContext};
 use codegen::symbols::{SymbolTable, StructType, VariableInstance, FunctionInstance};
@@ -74,7 +74,7 @@ impl Context
         self.current_module.prepend_namespace(n)
     }
 
-    pub fn verify(&self) -> Result<(), CompileError>
+    pub fn verify(&self) -> CompileResult<()>
     {
         use llvm::analysis::*;
         unsafe {
@@ -83,7 +83,7 @@ impl Context
                 let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
                 let e = format!("Module verification error: {}", msg);
                 LLVMDisposeMessage(error_message);
-                err(Pos::zero(), ErrorType::CodegenError(e))
+                err(Pos::zero(), ErrorCode::CodegenError, e)
             } else {
                 Ok(())
             }
@@ -122,7 +122,7 @@ impl Context
         }
     }
 
-    fn infer_member_var_type(&mut self, st: &StructType, nr: &NameRef) -> Result<Type, CompileError>
+    fn infer_member_var_type(&mut self, st: &StructType, nr: &NameRef) -> CompileResult<Type>
     {
         if let Some((_, mvar)) = st.get_member(&nr.name) {
             if mvar.typ == Type::Unknown {
@@ -131,17 +131,20 @@ impl Context
                 Ok(mvar.typ.clone())
             }
         } else {
-            err(nr.span.start, ErrorType::UnknownStructMember(st.name.clone(), nr.name.clone()))
+            err(nr.span.start, ErrorCode::UnknownStructMember,
+                format!("struct {} has no member named {}", st.name, nr.name))
         }
     }
 
-    fn infer_nested_member_type(&mut self, st: &StructType, next: &MemberAccess) -> Result<Type, CompileError>
+    fn infer_nested_member_type(&mut self, st: &StructType, next: &MemberAccess) -> CompileResult<Type>
     {
         let member_name = try!(next.name().ok_or(type_error(next.span.start, "Unexpected nexted member target expression".into())));
-        if let Some((_, mvar)) = st.get_member(&member_name) {
-            let st = match mvar.typ {
+        if let Some((_, mvar)) = st.get_member(&member_name)
+        {
+            let st = match mvar.typ
+            {
                 Type::Complex(ref ctype) => try!(self.get_complex_type(&ctype).ok_or(type_error(next.span.start, format!("Unknown type {}", ctype)))),
-                _ => return err(next.span.start, ErrorType::TypeError(format!("Member variable {} is not a struct", member_name))),
+                _ => return err(next.span.start, ErrorCode::TypeError, format!("Member variable {} is not a struct", member_name)),
             };
 
             match next.member
@@ -150,13 +153,16 @@ impl Context
                 Member::Var(ref nr) => self.infer_member_var_type(&st, nr),
                 Member::Nested(ref next) => self.infer_nested_member_type(&st, next),
             }
-        } else {
-            err(next.span.start, ErrorType::UnknownStructMember(st.name.clone(), member_name))
+        }
+        else
+        {
+            err(next.span.start, ErrorCode::UnknownStructMember,
+                format!("struct {} has no member named {}", st.name, member_name))
         }
     }
 
 
-    pub fn get_struct_type(&mut self, typ: &Type, pos: Pos) -> Result<Rc<StructType>, CompileError>
+    pub fn get_struct_type(&mut self, typ: &Type, pos: Pos) -> CompileResult<Rc<StructType>>
     {
         match *typ
         {
@@ -169,7 +175,7 @@ impl Context
         }
     }
 
-    fn infer_member_type(&mut self, a: &MemberAccess) -> Result<Type, CompileError>
+    fn infer_member_type(&mut self, a: &MemberAccess) -> CompileResult<Type>
     {
         let target_type = try!(self.infer_type(&a.target));
         let st = try!(self.get_struct_type(&target_type, a.span.start));
@@ -181,17 +187,17 @@ impl Context
         }
     }
 
-    fn infer_call_type(&self, c: &Call) -> Result<Type, CompileError>
+    fn infer_call_type(&self, c: &Call) -> CompileResult<Type>
     {
         let func_name = try!(c.get_function_name());
         if let Some(f) = self.get_function(&func_name) {
             Ok(f.sig.return_type.clone())
         } else {
-            err(c.span.start, ErrorType::UnknownFunction(func_name))
+            err(c.span.start, ErrorCode::UnknownFunction, format!("Unknown function {}", func_name))
         }
     }
 
-    pub fn infer_array_element_type(&mut self, a: &ArrayLiteral) -> Result<Type, CompileError>
+    pub fn infer_array_element_type(&mut self, a: &ArrayLiteral) -> CompileResult<Type>
     {
         for e in &a.elements {
             let t = self.infer_type(e);
@@ -205,10 +211,10 @@ impl Context
         } else {
             format!("Unable to infer the type of each array element")
         };
-        err(a.span.start, ErrorType::TypeError(msg))
+        err(a.span.start, ErrorCode::TypeError, msg)
     }
 
-    fn infer_index_operation_type(&mut self, iop: &IndexOperation) -> Result<Type, CompileError>
+    fn infer_index_operation_type(&mut self, iop: &IndexOperation) -> CompileResult<Type>
     {
         let target_typ = match *iop.target.deref()
         {
@@ -219,7 +225,7 @@ impl Context
                 }
                 else
                 {
-                    return err(iop.span.start, ErrorType::UnknownVariable(nr.name.clone()));
+                    return err(iop.span.start, ErrorCode::UnknownVariable, format!("Unknown variable {}", nr.name));
                 },
             Expression::IndexOperation(ref iop) => {
                 try!(self.infer_type(&iop.target))
@@ -229,18 +235,20 @@ impl Context
             },
             _ => {
                 let t = try!(self.infer_type(&iop.target));
-                return err(iop.span.start, ErrorType::IndexOperationNotSupported(format!("{}", t)))
+                return err(iop.span.start, ErrorCode::IndexOperationNotSupported,
+                    format!("Indexing is not supported on type {}", t))
             }
         };
 
         match target_typ
         {
             Type::Array(ref inner, _) | Type::Slice(ref inner) => Ok(Type::Pointer(inner.clone())),
-            _ => err(iop.span.start, ErrorType::IndexOperationNotSupported(format!("{}", target_typ))),
+            _ => err(iop.span.start, ErrorCode::IndexOperationNotSupported,
+                    format!("Indexing is not supported on type {}", target_typ)),
         }
     }
 
-    pub fn infer_type(&mut self, e: &Expression) -> Result<Type, CompileError>
+    pub fn infer_type(&mut self, e: &Expression) -> CompileResult<Type>
     {
         match *e
         {
@@ -254,7 +262,7 @@ impl Context
                 let rt = try!(self.infer_type(&op.right));
                 if lt != rt {
                     let msg = format!("Type mismatch in '{}' operation  (left hand side {}, right hand side {})", op.operator, lt, rt);
-                    err(op.span.start, ErrorType::TypeError(msg))
+                    err(op.span.start, ErrorCode::TypeError, msg)
                 } else {
                     Ok(rt)
                 }
@@ -265,7 +273,7 @@ impl Context
                 if let Some(v) = self.get_variable(&nr.name) {
                     Ok(v.typ.clone())
                 } else {
-                    err(nr.span.start, ErrorType::UnknownVariable(nr.name.clone()))
+                    err(nr.span.start, ErrorCode::UnknownVariable, format!("Unknown variable {}", nr.name))
                 }
             },
             Expression::Assignment(ref a) => self.infer_type(&a.expression),
@@ -289,7 +297,7 @@ impl Context
         }
     }
 
-    pub unsafe fn gen_object_file(&self, build_dir: &str) -> Result<String, CompileError>
+    pub unsafe fn gen_object_file(&self, build_dir: &str) -> CompileResult<String>
     {
         let target_triple = CStr::from_ptr(LLVMGetDefaultTargetTriple());
         let target_triple_str = target_triple.to_str().expect("Invalid target triple");
@@ -301,7 +309,7 @@ impl Context
             let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
             let e = format!("Unable to get an LLVM target reference for {}: {}", target_triple_str, msg);
             LLVMDisposeMessage(error_message);
-            return err(Pos::zero(), ErrorType::CodegenError(e));
+            return err(Pos::zero(), ErrorCode::CodegenError, e);
         }
 
         let target_machine = LLVMCreateTargetMachine(
@@ -315,7 +323,7 @@ impl Context
         );
         if target_machine == ptr::null_mut() {
             let e = format!("Unable to get a LLVM target machine for {}", target_triple_str);
-            return err(Pos::zero(), ErrorType::CodegenError(e));
+            return err(Pos::zero(), ErrorCode::CodegenError, e);
         }
 
         try!(DirBuilder::new()
@@ -323,8 +331,8 @@ impl Context
             .create(build_dir)
             .map_err(|e| CompileError::new(
                 Pos::zero(),
-                ErrorType::CodegenError(
-                    format!("Unable to create directory for {}: {}", build_dir, e)))));
+                ErrorCode::CodegenError,
+                format!("Unable to create directory for {}: {}", build_dir, e))));
 
 
         let obj_file_name = format!("{}/{}.cobra.o", build_dir, self.name);
@@ -336,7 +344,7 @@ impl Context
             let e = format!("Unable to create object file: {}", msg);
             LLVMDisposeMessage(error_message);
             LLVMDisposeTargetMachine(target_machine);
-            return err(Pos::zero(), ErrorType::CodegenError(e));
+            return err(Pos::zero(), ErrorCode::CodegenError, e);
         }
 
 
@@ -485,7 +493,7 @@ impl Context
         self.current_module.get_current_function()
     }
 
-    pub fn optimize(&self) -> Result<(), CompileError>
+    pub fn optimize(&self) -> CompileResult<()>
     {
         unsafe{
             use llvm::transforms::pass_manager_builder::*;

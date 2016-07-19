@@ -12,7 +12,7 @@ use codegen::context::{Context};
 use codegen::symbols::{StructType, FunctionInstance, PassingMode};
 use codegen::conversions::{convert};
 use codegen::valueref::{ValueRef};
-use compileerror::{Span, Pos, CompileError, ErrorType, err, type_error, expected_const_expr};
+use compileerror::{Span, Pos, CompileError, CompileResult, ErrorCode, err, type_error, expected_const_expr};
 use parser::{Operator};
 
 unsafe fn is_integer(ctx: LLVMContextRef, tr: LLVMTypeRef) -> bool
@@ -35,20 +35,20 @@ pub unsafe fn const_int(ctx: LLVMContextRef, v: u64) -> LLVMValueRef
     LLVMConstInt(LLVMInt64TypeInContext(ctx), v, 0)
 }
 
-unsafe fn gen_float(ctx: &Context, num: &str, span: &Span) -> Result<ValueRef, CompileError>
+unsafe fn gen_float(ctx: &Context, num: &str, span: &Span) -> CompileResult<ValueRef>
 {
     match num.parse::<f64>() {
         Ok(f) => Ok(ValueRef::new(LLVMConstReal(LLVMDoubleTypeInContext(ctx.context), f), true, ctx.builder)),
-        Err(_) => err(span.start, ErrorType::InvalidFloatingPoint)
+        Err(_) => err(span.start, ErrorCode::InvalidFloatingPoint, format!("{} is not a valid floating point number", num))
     }
 }
 
-unsafe fn gen_integer(ctx: &Context, i: u64, _span: &Span) -> Result<ValueRef, CompileError>
+unsafe fn gen_integer(ctx: &Context, i: u64, _span: &Span) -> CompileResult<ValueRef>
 {
     Ok(ValueRef::new(const_int(ctx.context, i), true, ctx.builder))
 }
 
-unsafe fn gen_string_literal(ctx: &Context, s: &str, _span: &Span) -> Result<ValueRef, CompileError>
+unsafe fn gen_string_literal(ctx: &Context, s: &str, _span: &Span) -> CompileResult<ValueRef>
 {
     let glob = LLVMAddGlobal(ctx.get_module_ref(), LLVMArrayType(LLVMInt8TypeInContext(ctx.context), s.len() as u32), cstr("string"));
 
@@ -60,49 +60,49 @@ unsafe fn gen_string_literal(ctx: &Context, s: &str, _span: &Span) -> Result<Val
     Ok(ValueRef::new(glob, true, ctx.builder))
 }
 
-unsafe fn gen_const_string_literal(ctx: &Context, s: &str) -> Result<ValueRef, CompileError>
+unsafe fn gen_const_string_literal(ctx: &Context, s: &str) -> CompileResult<ValueRef>
 {
     Ok(ValueRef::new(LLVMConstStringInContext(ctx.context, s.as_ptr() as *const i8, s.len() as u32, 1), true, ctx.builder))
 }
 
-unsafe fn gen_unary(ctx: &mut Context, op: &UnaryOp) -> Result<ValueRef, CompileError>
+unsafe fn gen_unary(ctx: &mut Context, op: &UnaryOp) -> CompileResult<ValueRef>
 {
     let e_val = try!(gen_expression(ctx, &op.expression));
     let e_type = e_val.get_element_type();
     match op.operator {
         Operator::Sub => {
             if !is_numeric(ctx.context, e_type) {
-                err(op.span.start, ErrorType::TypeError("Operator '-', expects and integer or floating point expression as argument".into()))
+                err(op.span.start, ErrorCode::TypeError, "Operator '-', expects and integer or floating point expression as argument".into())
             } else {
                 Ok(ValueRef::new(LLVMBuildNeg(ctx.builder, e_val.load(), cstr("neg")), true, ctx.builder))
             }
         },
         Operator::Not => {
             if !is_integer(ctx.context, e_type) {
-                err(op.span.start, ErrorType::TypeError("Operator '!', expects an integer or boolean expression".into()))
+                err(op.span.start, ErrorCode::TypeError, "Operator '!', expects an integer or boolean expression".into())
             } else {
                 Ok(ValueRef::new(LLVMBuildNot(ctx.builder, e_val.load(), cstr("not")), true, ctx.builder))
             }
         },
         Operator::Increment => {
             if !is_integer(ctx.context, e_type) {
-                err(op.span.start, ErrorType::TypeError("Operator '++', expects an integer expression".into()))
+                err(op.span.start, ErrorCode::TypeError, "Operator '++', expects an integer expression".into())
             } else {
                 Ok(ValueRef::new(LLVMBuildAdd(ctx.builder, e_val.load(), const_int(ctx.context, 1), cstr("inc")), true, ctx.builder))
             }
         },
         Operator::Decrement => {
             if !is_integer(ctx.context, e_type) {
-                err(op.span.start, ErrorType::TypeError("Operator '--', expects an integer expression".into()))
+                err(op.span.start, ErrorCode::TypeError, "Operator '--', expects an integer expression".into())
             } else {
                 Ok(ValueRef::new(LLVMBuildSub(ctx.builder, e_val.load(), const_int(ctx.context, 1), cstr("dec")), true, ctx.builder))
             }
         },
-        _ => err(op.span.start, ErrorType::InvalidUnaryOperator(op.operator)),
+        _ => err(op.span.start, ErrorCode::InvalidUnaryOperator, format!("Operator {} is not a unary operator", op.operator)),
     }
 }
 
-unsafe fn gen_pf_unary(ctx: &mut Context, op: &UnaryOp) -> Result<ValueRef, CompileError>
+unsafe fn gen_pf_unary(ctx: &mut Context, op: &UnaryOp) -> CompileResult<ValueRef>
 {
     match op.operator {
         Operator::Increment | Operator::Decrement =>
@@ -112,7 +112,7 @@ unsafe fn gen_pf_unary(ctx: &mut Context, op: &UnaryOp) -> Result<ValueRef, Comp
                 let ptr = try!(gen_target(ctx, &op.expression));
                 let val = ptr.load();
                 if !is_integer(ctx.context, LLVMTypeOf(val)) {
-                    return err(op.span.start, ErrorType::InvalidUnaryOperator(op.operator));
+                    return err(op.span.start, ErrorCode::TypeError, format!("Operator {} expects an integer expression", op.operator));
                 }
 
                 let nval = if op.operator == Operator::Increment {
@@ -129,34 +129,34 @@ unsafe fn gen_pf_unary(ctx: &mut Context, op: &UnaryOp) -> Result<ValueRef, Comp
             }
 
         },
-        _ => err(op.span.start, ErrorType::InvalidUnaryOperator(op.operator)),
+        _ => err(op.span.start, ErrorCode::InvalidUnaryOperator, format!("Operator {} is not a unary operator", op.operator)),
     }
 }
 
-unsafe fn check_numeric_operands(ctx: &Context, op: Operator, left_type: LLVMTypeRef, right_type: LLVMTypeRef, pos: Pos) -> Result<(), CompileError>
+unsafe fn check_numeric_operands(ctx: &Context, op: Operator, left_type: LLVMTypeRef, right_type: LLVMTypeRef, pos: Pos) -> CompileResult<()>
 {
     if left_type != right_type {
-        err(pos, ErrorType::TypeError(format!("Operator '{}', expects both operands to be of the same type", op)))
+        err(pos, ErrorCode::TypeError, format!("Operator '{}', expects both operands to be of the same type", op))
     } else if !is_numeric(ctx.context, left_type) || !is_numeric(ctx.context, right_type){
-        err(pos, ErrorType::TypeError(format!("Operator '{}', expects integer or floating point expression as operands", op)))
+        err(pos, ErrorCode::TypeError, format!("Operator '{}', expects integer or floating point expression as operands", op))
     } else {
         Ok(())
     }
 }
 
-unsafe fn check_bool_operands(ctx: &Context, op: Operator, left_type: LLVMTypeRef, right_type: LLVMTypeRef, pos: Pos) -> Result<(), CompileError>
+unsafe fn check_bool_operands(ctx: &Context, op: Operator, left_type: LLVMTypeRef, right_type: LLVMTypeRef, pos: Pos) -> CompileResult<()>
 {
     if left_type != right_type {
-        err(pos, ErrorType::TypeError(format!("Operator '{}', expects both operands to be of the same type", op, )))
+        err(pos, ErrorCode::TypeError, format!("Operator '{}', expects both operands to be of the same type", op, ))
     } else if !is_integer(ctx.context, left_type) || !is_integer(ctx.context, right_type){
-        err(pos, ErrorType::TypeError(format!("Operator '{}', expects integer or boolean point expression as operands", op)))
+        err(pos, ErrorCode::TypeError, format!("Operator '{}', expects integer or boolean point expression as operands", op))
     } else {
         Ok(())
     }
 }
 
 
-unsafe fn gen_binary(ctx: &mut Context, op: &BinaryOp) -> Result<ValueRef, CompileError>
+unsafe fn gen_binary(ctx: &mut Context, op: &BinaryOp) -> CompileResult<ValueRef>
 {
     let left_val = try!(gen_expression(ctx, &op.left)).load();
     let right_val = try!(gen_expression(ctx, &op.right)).load();
@@ -260,27 +260,27 @@ unsafe fn gen_binary(ctx: &mut Context, op: &BinaryOp) -> Result<ValueRef, Compi
                 Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left_val, right_val, cstr("cmp")))
             }
         },
-        _ => err(op.span.start, ErrorType::InvalidBinaryOperator(op.operator)),
+        _ => err(op.span.start, ErrorCode::InvalidBinaryOperator, format!("Operator {} is not a binary operator", op.operator)),
     };
 
     v.map(|val| ValueRef::new(val, true, ctx.builder))
 }
 
-unsafe fn gen_enclosed(ctx: &mut Context, e: &Expression, _span: &Span) -> Result<ValueRef, CompileError>
+unsafe fn gen_enclosed(ctx: &mut Context, e: &Expression, _span: &Span) -> CompileResult<ValueRef>
 {
     gen_expression(ctx, e)
 }
 
-unsafe fn gen_member_call(ctx: &mut Context, c: &Call, st: &StructType, self_ptr: ValueRef, private_allowed: bool) -> Result<ValueRef, CompileError>
+unsafe fn gen_member_call(ctx: &mut Context, c: &Call, st: &StructType, self_ptr: ValueRef, private_allowed: bool) -> CompileResult<ValueRef>
 {
     let func_name = try!(c.get_function_name());
     let full_name = format!("{}::{}", st.name, func_name);
     let func = try!(ctx
         .get_function(&full_name)
-        .ok_or(CompileError::new(c.span.start, ErrorType::UnknownFunction(full_name))));
+        .ok_or(CompileError::new(c.span.start, ErrorCode::UnknownFunction, format!("Unknown function {}", full_name))));
 
     if !private_allowed && !func.public {
-        return err(c.span.start, ErrorType::PrivateMemberAccess(func_name));
+        return err(c.span.start, ErrorCode::PrivateMemberAccess, format!("Attempting to access private member {}", func_name));
     }
 
     let mut arg_vals = Vec::with_capacity(c.args.len() + 1);
@@ -304,13 +304,13 @@ unsafe fn gen_member_call(ctx: &mut Context, c: &Call, st: &StructType, self_ptr
     gen_call_common(ctx, c, &func, arg_vals)
 }
 
-unsafe fn gen_call_common(ctx: &mut Context, c: &Call, func: &FunctionInstance, mut arg_vals: Vec<LLVMValueRef>)  -> Result<ValueRef, CompileError>
+unsafe fn gen_call_common(ctx: &mut Context, c: &Call, func: &FunctionInstance, mut arg_vals: Vec<LLVMValueRef>)  -> CompileResult<ValueRef>
 {
     let func_name = try!(c.get_function_name());
     if arg_vals.len() != func.args.len() {
-        return err(c.span.start, ErrorType::ArgumentCountMismatch(
+        return err(c.span.start, ErrorCode::ArgumentCountMismatch,
             format!("Function '{}', expects {} arguments, {} are provided",
-                func_name, func.args.len(), c.args.len())));
+                func_name, func.args.len(), c.args.len()));
     }
 
     for (i, arg) in c.args.iter().enumerate()
@@ -333,7 +333,7 @@ unsafe fn gen_call_common(ctx: &mut Context, c: &Call, func: &FunctionInstance, 
                 let val_type = LLVMTypeOf(arg_vals[i]);
                 let msg = format!("Argument {} of function '{}' has the wrong type\n  Expecting {}, got {}",
                                 i, func_name, type_name(*arg_type), type_name(val_type));
-                return err(arg.span().start, ErrorType::TypeError(msg));
+                return err(arg.span().start, ErrorCode::TypeError, msg);
             },
         }
     }
@@ -344,7 +344,7 @@ unsafe fn gen_call_common(ctx: &mut Context, c: &Call, func: &FunctionInstance, 
         ctx.builder))
 }
 
-unsafe fn gen_call(ctx: &mut Context, c: &Call) -> Result<ValueRef, CompileError>
+unsafe fn gen_call(ctx: &mut Context, c: &Call) -> CompileResult<ValueRef>
 {
     let mut arg_vals = Vec::with_capacity(c.args.len());
     for arg in &c.args {
@@ -355,12 +355,12 @@ unsafe fn gen_call(ctx: &mut Context, c: &Call) -> Result<ValueRef, CompileError
     let func_name = try!(c.get_function_name());
     let func = try!(ctx
         .get_function(&func_name)
-        .ok_or(CompileError::new(c.span.start, ErrorType::UnknownFunction(func_name))));
+        .ok_or(CompileError::new(c.span.start, ErrorCode::UnknownFunction, format!("Unknown function {}", func_name))));
 
     gen_call_common(ctx, c, &func, arg_vals)
 }
 
-unsafe fn gen_name_ref(ctx: &Context, nr: &NameRef) -> Result<ValueRef, CompileError>
+unsafe fn gen_name_ref(ctx: &Context, nr: &NameRef) -> CompileResult<ValueRef>
 {
     if let Some(ref v) = ctx.get_variable(&nr.name) {
         Ok(ValueRef::new(
@@ -369,11 +369,11 @@ unsafe fn gen_name_ref(ctx: &Context, nr: &NameRef) -> Result<ValueRef, CompileE
             ctx.builder,
         ))
     } else {
-        err(nr.span.start, ErrorType::UnknownVariable(nr.name.clone()))
+        err(nr.span.start, ErrorCode::UnknownVariable, format!("Unknown variable {}", nr.name))
     }
 }
 
-unsafe fn assign(ctx: &Context, op: Operator, var: ValueRef, val: ValueRef, span: &Span) -> Result<ValueRef, CompileError>
+unsafe fn assign(ctx: &Context, op: Operator, var: ValueRef, val: ValueRef, span: &Span) -> CompileResult<ValueRef>
 {
     if op == Operator::Assign {
         return var.store(ctx, val, span.start);
@@ -414,7 +414,7 @@ unsafe fn assign(ctx: &Context, op: Operator, var: ValueRef, val: ValueRef, span
             }
         },
         _ => {
-            return err(span.start, ErrorType::InvalidOperator(format!("'{}' isn't an assigment operator", op)));
+            return err(span.start, ErrorCode::InvalidOperator, format!("'{}' isn't an assigment operator", op));
         }
     };
 
@@ -423,12 +423,12 @@ unsafe fn assign(ctx: &Context, op: Operator, var: ValueRef, val: ValueRef, span
     Ok(new_val) // Return the new value
 }
 
-unsafe fn gen_member_var(_ctx: &Context, this: ValueRef, st: &StructType, nr: &NameRef, private_allowed: bool) -> Result<ValueRef, CompileError>
+unsafe fn gen_member_var(_ctx: &Context, this: ValueRef, st: &StructType, nr: &NameRef, private_allowed: bool) -> CompileResult<ValueRef>
 {
     if let Some((idx, mvar)) = st.get_member(&nr.name)
     {
         if !mvar.public && !private_allowed {
-            return err(nr.span.start, ErrorType::PrivateMemberAccess(nr.name.clone()));
+            return err(nr.span.start, ErrorCode::PrivateMemberAccess, format!("Attempting to access private member {}", nr.name.clone()));
         }
 
         let this_element_type = this.get_element_type();
@@ -443,12 +443,12 @@ unsafe fn gen_member_var(_ctx: &Context, this: ValueRef, st: &StructType, nr: &N
         }
         else
         {
-            return err(nr.span.start, ErrorType::TypeError(format!("Type mismatch when accessing member variable")));
+            return err(nr.span.start, ErrorCode::TypeError, format!("Type mismatch when accessing member variable"));
         }
     }
     else
     {
-        err(nr.span.start, ErrorType::UnknownStructMember(st.name.clone(), nr.name.clone()))
+        err(nr.span.start, ErrorCode::UnknownStructMember, format!("struct {} has no member named {}", st.name, nr.name))
     }
 }
 
@@ -458,11 +458,13 @@ unsafe fn gen_nested_member_access_by_name(
     st: &StructType,
     next: &MemberAccess,
     private_allowed: bool,
-    member_name: &str) -> Result<ValueRef, CompileError>
+    member_name: &str) -> CompileResult<ValueRef>
 {
-    let (idx, mvar) = try!(st.get_member(member_name).ok_or(CompileError::new(next.span.start, ErrorType::UnknownStructMember(st.name.clone(), member_name.into()))));
+    let (idx, mvar) = try!(st.get_member(member_name).ok_or(
+        CompileError::new(next.span.start, ErrorCode::UnknownStructMember, format!("struct {} has no member named {}", st.name, member_name))));
     if !mvar.public && !private_allowed {
-        return err(next.span.start, ErrorType::PrivateMemberAccess(mvar.name.clone()));
+        return err(next.span.start, ErrorCode::PrivateMemberAccess,
+            format!("Attempting to access private member {}", mvar.name));
     }
 
     let next_st = try!(ctx.get_struct_type(&mvar.typ, next.span.start));
@@ -475,7 +477,7 @@ unsafe fn gen_nested_member_access_by_name(
     }
 }
 
-unsafe fn gen_nested_member_access(ctx: &mut Context, this: ValueRef, st: &StructType, next: &MemberAccess, private_allowed: bool) -> Result<ValueRef, CompileError>
+unsafe fn gen_nested_member_access(ctx: &mut Context, this: ValueRef, st: &StructType, next: &MemberAccess, private_allowed: bool) -> CompileResult<ValueRef>
 {
     match *next.target.deref()
     {
@@ -488,7 +490,7 @@ unsafe fn gen_nested_member_access(ctx: &mut Context, this: ValueRef, st: &Struc
     }
 }
 
-unsafe fn gen_member_access(ctx: &mut Context, a: &MemberAccess) -> Result<ValueRef, CompileError>
+unsafe fn gen_member_access(ctx: &mut Context, a: &MemberAccess) -> CompileResult<ValueRef>
 {
     let st = try!(ctx
         .infer_type(&a.target)
@@ -509,7 +511,7 @@ unsafe fn gen_member_access(ctx: &mut Context, a: &MemberAccess) -> Result<Value
     }
 }
 
-unsafe fn gen_index_operation(ctx: &mut Context, iop: &IndexOperation) -> Result<ValueRef, CompileError>
+unsafe fn gen_index_operation(ctx: &mut Context, iop: &IndexOperation) -> CompileResult<ValueRef>
 {
     let index = try!(gen_expression(ctx, &iop.index_expr)).load();
     if !is_integer(ctx.context, LLVMTypeOf(index)) {
@@ -532,7 +534,7 @@ unsafe fn gen_index_operation(ctx: &mut Context, iop: &IndexOperation) -> Result
     }
 }
 
-unsafe fn gen_target(ctx: &mut Context, target: &Expression) -> Result<ValueRef, CompileError>
+unsafe fn gen_target(ctx: &mut Context, target: &Expression) -> CompileResult<ValueRef>
 {
     match *target
     {
@@ -547,11 +549,11 @@ unsafe fn gen_target(ctx: &mut Context, target: &Expression) -> Result<ValueRef,
         Expression::IndexOperation(ref iop) => {
             gen_index_operation(ctx, iop)
         },
-        _ => err(target.span().start, ErrorType::TypeError(format!("Invalid left hand side expression"))),
+        _ => err(target.span().start, ErrorCode::TypeError, format!("Invalid left hand side expression")),
     }
 }
 
-unsafe fn gen_assignment(ctx: &mut Context, a: &Assignment) -> Result<ValueRef, CompileError>
+unsafe fn gen_assignment(ctx: &mut Context, a: &Assignment) -> CompileResult<ValueRef>
 {
     let target_ptr = try!(gen_target(ctx, &a.target));
     let target_type = target_ptr.get_element_type();
@@ -565,20 +567,21 @@ unsafe fn gen_assignment(ctx: &mut Context, a: &Assignment) -> Result<ValueRef, 
     {
         let msg = format!("Attempting to assign an expression of type '{}' to a variable of type '{}'",
             type_name(rhs_type), type_name(target_type));
-        err(a.span.start, ErrorType::TypeError(msg))
+        err(a.span.start, ErrorCode::TypeError, msg)
     }
 }
 
-unsafe fn gen_const_object_construction(ctx: &mut Context, oc: &ObjectConstruction) -> Result<ValueRef, CompileError>
+unsafe fn gen_const_object_construction(ctx: &mut Context, oc: &ObjectConstruction) -> CompileResult<ValueRef>
 {
     let st: Rc<StructType> = try!(ctx
         .get_complex_type(&oc.object_type.name)
-        .ok_or(CompileError::new(oc.span.start, ErrorType::UnknownType(oc.object_type.name.clone()))));
+        .ok_or(CompileError::new(oc.span.start, ErrorCode::UnknownType,
+            format!("Unknown type {}", oc.object_type.name))));
 
     if oc.args.len() > st.members.len() {
-        return err(oc.span.start, ErrorType::ArgumentCountMismatch(
+        return err(oc.span.start, ErrorCode::ArgumentCountMismatch,
             format!("Too many arguments in construction of an object of type '{}', maximum {} allowed",
-                st.name, st.members.len())));
+                st.name, st.members.len()));
     }
 
     let mut vals = Vec::new();
@@ -593,7 +596,7 @@ unsafe fn gen_const_object_construction(ctx: &mut Context, oc: &ObjectConstructi
         if v.is_constant_value() {
             vals.push(v.load());
         } else {
-            return err(oc.span.start, ErrorType::ExpectedConstExpr(format!("Global structs must be initialized with constant expressions")));
+            return err(oc.span.start, ErrorCode::ExpectedConstExpr, format!("Global structs must be initialized with constant expressions"));
         }
     }
 
@@ -604,7 +607,7 @@ unsafe fn gen_const_object_construction(ctx: &mut Context, oc: &ObjectConstructi
     ))
 }
 
-unsafe fn gen_object_construction_store(ctx: &mut Context, oc: &ObjectConstruction, ptr: &ValueRef) -> Result<(), CompileError>
+unsafe fn gen_object_construction_store(ctx: &mut Context, oc: &ObjectConstruction, ptr: &ValueRef) -> CompileResult<()>
 {
     if ctx.in_global_context()
     {
@@ -614,12 +617,12 @@ unsafe fn gen_object_construction_store(ctx: &mut Context, oc: &ObjectConstructi
     {
         let st: Rc<StructType> = try!(ctx
             .get_complex_type(&oc.object_type.name)
-            .ok_or(CompileError::new(oc.span.start, ErrorType::UnknownType(oc.object_type.name.clone()))));
+            .ok_or(CompileError::new(oc.span.start, ErrorCode::UnknownType, format!("Unknown type {}", oc.object_type.name))));
 
         if oc.args.len() > st.members.len() {
-            return err(oc.span.start, ErrorType::ArgumentCountMismatch(
+            return err(oc.span.start, ErrorCode::ArgumentCountMismatch,
                 format!("Too many arguments in construction of an object of type '{}', maximum {} allowed",
-                    st.name, st.members.len())));
+                    st.name, st.members.len()));
         }
 
         for (idx, m) in st.members.iter().enumerate()
@@ -637,18 +640,19 @@ unsafe fn gen_object_construction_store(ctx: &mut Context, oc: &ObjectConstructi
     Ok(())
 }
 
-unsafe fn gen_object_construction(ctx: &mut Context, oc: &ObjectConstruction) -> Result<ValueRef, CompileError>
+unsafe fn gen_object_construction(ctx: &mut Context, oc: &ObjectConstruction) -> CompileResult<ValueRef>
 {
     let st: Rc<StructType> = try!(ctx
         .get_complex_type(&oc.object_type.name)
-        .ok_or(CompileError::new(oc.span.start, ErrorType::UnknownType(oc.object_type.name.clone()))));
+        .ok_or(CompileError::new(oc.span.start, ErrorCode::UnknownType,
+            format!("Unknown type {}", oc.object_type.name))));
 
     let ptr = ValueRef::local(ctx.builder, st.typ);
     try!(gen_object_construction_store(ctx, oc, &ptr));
     Ok(ptr)
 }
 
-unsafe fn gen_const_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> Result<ValueRef, CompileError>
+unsafe fn gen_const_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> CompileResult<ValueRef>
 {
     let element_type = try!(ctx.infer_array_element_type(a));
     let llvm_type = try!(ctx.resolve_type(&element_type).ok_or(
@@ -662,14 +666,15 @@ unsafe fn gen_const_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> Result
         if element_val.is_constant_value() {
             vals.push(element_val.load());
         } else {
-            return err(a.span.start, ErrorType::ExpectedConstExpr(format!("Global arrays must be initialized with constant expressions")));
+            return err(a.span.start, ErrorCode::ExpectedConstExpr,
+                format!("Global arrays must be initialized with constant expressions"));
         }
     }
 
     Ok(ValueRef::new(LLVMConstArray(llvm_type, vals.as_mut_ptr(), vals.len() as u32), true, ctx.builder))
 }
 
-unsafe fn gen_array_literal_store(ctx: &mut Context, a: &ArrayLiteral, ptr: &ValueRef) -> Result<(), CompileError>
+unsafe fn gen_array_literal_store(ctx: &mut Context, a: &ArrayLiteral, ptr: &ValueRef) -> CompileResult<()>
 {
     if ctx.in_global_context()
     {
@@ -689,7 +694,7 @@ unsafe fn gen_array_literal_store(ctx: &mut Context, a: &ArrayLiteral, ptr: &Val
     Ok(())
 }
 
-unsafe fn gen_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> Result<ValueRef, CompileError>
+unsafe fn gen_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> CompileResult<ValueRef>
 {
     let element_type = try!(ctx.infer_array_element_type(a));
     let llvm_type = try!(ctx.resolve_type(&element_type)
@@ -699,7 +704,7 @@ unsafe fn gen_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> Result<Value
     Ok(var)
 }
 
-unsafe fn gen_const_array_initializer(ctx: &mut Context, a: &ArrayInitializer) -> Result<ValueRef, CompileError>
+unsafe fn gen_const_array_initializer(ctx: &mut Context, a: &ArrayInitializer) -> CompileResult<ValueRef>
 {
     let element_type = try!(ctx.infer_type(&a.init));
     let llvm_type = try!(ctx.resolve_type(&element_type).ok_or(
@@ -708,7 +713,8 @@ unsafe fn gen_const_array_initializer(ctx: &mut Context, a: &ArrayInitializer) -
 
     let element_val = try!(gen_const_expression(ctx, &a.init));
     if !element_val.is_constant_value() {
-        return err(a.span.start, ErrorType::ExpectedConstExpr(format!("Global arrays must be initialized with constant expressions")));
+        return err(a.span.start, ErrorCode::ExpectedConstExpr,
+            format!("Global arrays must be initialized with constant expressions"));
     }
 
     let mut vals = Vec::with_capacity(a.times as usize);
@@ -719,7 +725,7 @@ unsafe fn gen_const_array_initializer(ctx: &mut Context, a: &ArrayInitializer) -
     Ok(ValueRef::new(LLVMConstArray(llvm_type, vals.as_mut_ptr(), vals.len() as u32), true, ctx.builder))
 }
 
-unsafe fn gen_array_initializer_store(ctx: &mut Context, a: &ArrayInitializer, ptr: &ValueRef) -> Result<(), CompileError>
+unsafe fn gen_array_initializer_store(ctx: &mut Context, a: &ArrayInitializer, ptr: &ValueRef) -> CompileResult<()>
 {
     if ctx.in_global_context()
     {
@@ -739,7 +745,7 @@ unsafe fn gen_array_initializer_store(ctx: &mut Context, a: &ArrayInitializer, p
     Ok(())
 }
 
-unsafe fn gen_array_initializer(ctx: &mut Context, a: &ArrayInitializer) -> Result<ValueRef, CompileError>
+unsafe fn gen_array_initializer(ctx: &mut Context, a: &ArrayInitializer) -> CompileResult<ValueRef>
 {
     let array_element_type = try!(ctx.infer_type(&a.init));
     let llvm_type = try!(ctx.resolve_type(&array_element_type)
@@ -749,7 +755,7 @@ unsafe fn gen_array_initializer(ctx: &mut Context, a: &ArrayInitializer) -> Resu
     Ok(var)
 }
 
-pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<ValueRef, CompileError>
+pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueRef>
 {
     match *e
     {
@@ -771,14 +777,14 @@ pub unsafe fn gen_expression(ctx: &mut Context, e: &Expression) -> Result<ValueR
     }
 }
 
-unsafe fn store(ctx: &mut Context, e: &Expression, ptr: &ValueRef) -> Result<(), CompileError>
+unsafe fn store(ctx: &mut Context, e: &Expression, ptr: &ValueRef) -> CompileResult<()>
 {
     let v = try!(gen_expression(ctx, e));
     try!(ptr.store(ctx, v, e.span().start));
     Ok(())
 }
 
-pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: &ValueRef) -> Result<(), CompileError>
+pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: &ValueRef) -> CompileResult<()>
 {
     match *e
     {
@@ -789,7 +795,7 @@ pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: &Valu
     }
 }
 
-unsafe fn gen_const_expression(ctx: &mut Context, e: &Expression) -> Result<ValueRef, CompileError>
+unsafe fn gen_const_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueRef>
 {
     match *e
     {

@@ -5,13 +5,13 @@
 #[cfg(test)] use llvm::prelude::*;
 #[cfg(test)] use llvm::core::*;
 #[cfg(test)] use llvm::execution_engine::*;
-#[cfg(test)] use compileerror::{ErrorType, err, CompileError, Pos};
+#[cfg(test)] use compileerror::{ErrorCode, err, CompileResult, Pos};
 #[cfg(test)] use parser::{parse_module, ParseMode};
 #[cfg(test)] use codegen::{CodeGenOptions, codegen, cstr};
 #[cfg(test)] use ast::{TreePrinter};
 
 #[cfg(test)]
-fn run(prog: &str, dump: bool) -> Result<u64, CompileError>
+fn run(prog: &str, dump: bool) -> CompileResult<u64>
 {
     let mut cursor = Cursor::new(prog);
     let md = try!(parse_module(&mut cursor, "test", ParseMode::Module));
@@ -38,7 +38,7 @@ fn run(prog: &str, dump: bool) -> Result<u64, CompileError>
             let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
             let e = format!("Unable to create interpreter: {}", msg);
             LLVMDisposeMessage(error_message);
-            return err(Pos::zero(), ErrorType::CodegenError(e));
+            return err(Pos::zero(), ErrorCode::CodegenError, e);
         }
 
         let mut func: LLVMValueRef = ptr::null_mut();
@@ -50,7 +50,7 @@ fn run(prog: &str, dump: bool) -> Result<u64, CompileError>
             Ok(result)
         } else {
             LLVMDisposeExecutionEngine(ee);
-            err(Pos::zero(), ErrorType::CodegenError("No main function found".into()))
+            err(Pos::zero(), ErrorCode::CodegenError, "No main function found".into())
         }
     }
 }
@@ -335,7 +335,7 @@ struct Foo impl Sum:
 func main() -> int:
     const f = Foo{1, 2, 3}
     return f.not_really_sum()
-    "#, false).is_err());
+    "#, false).unwrap_err().error == ErrorCode::TraitNotImplemented);
 }
 
 /*

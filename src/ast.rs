@@ -1,6 +1,6 @@
 use std::fmt;
 use std::ops::Deref;
-use compileerror::{Span, CompileError, ErrorType, err};
+use compileerror::{Span, CompileResult, ErrorCode, err};
 use parser::Operator;
 
 fn prefix(level: usize) -> String
@@ -87,12 +87,12 @@ impl Call
         }
     }
 
-    pub fn get_function_name(&self) -> Result<String, CompileError>
+    pub fn get_function_name(&self) -> CompileResult<String>
     {
         match *self.name.deref()
         {
             Expression::NameRef(ref nr) => Ok(nr.name.clone()),
-            _ => err(self.name.span().start, ErrorType::TypeError(format!("Unable to determine function name")))
+            _ => err(self.name.span().start, ErrorCode::TypeError, format!("Unable to determine function name"))
         }
     }
 }
@@ -413,12 +413,12 @@ impl Expression
         }
     }
 
-    pub fn to_name_ref(self) -> Result<NameRef, CompileError>
+    pub fn to_name_ref(self) -> CompileResult<NameRef>
     {
         match self
         {
             Expression::NameRef(nr) => Ok(nr),
-            _ => err(self.span().start, ErrorType::TypeError(format!("Expected name reference"))),
+            _ => err(self.span().start, ErrorCode::TypeError, format!("Expected name reference")),
         }
     }
 

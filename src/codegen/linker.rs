@@ -2,10 +2,10 @@ use std::process::{Output, Command};
 
 use codegen::{CodeGenOptions};
 use codegen::context::{Context};
-use compileerror::{CompileError, Pos, ErrorType, err};
+use compileerror::{CompileError, CompileResult, Pos, ErrorCode, err};
 
 
-pub fn link(ctx: &Context, opts: &CodeGenOptions) -> Result<(), CompileError>
+pub fn link(ctx: &Context, opts: &CodeGenOptions) -> CompileResult<()>
 {
 	let obj_file = unsafe{
         try!(ctx.gen_object_file(&opts.build_dir))
@@ -22,14 +22,14 @@ pub fn link(ctx: &Context, opts: &CodeGenOptions) -> Result<(), CompileError>
 		.output()
 		.map_err(|e| CompileError::new(
 			Pos::zero(),
-			ErrorType::CodegenError(
-				format!("Unable to spawn the linker: {}", e)))));
+			ErrorCode::CodegenError,
+			format!("Unable to spawn the linker: {}", e))));
 
 
 	if !output.status.success() {
 		let out = String::from_utf8(output.stderr).expect("Invalid stdout from ld");
 		let msg = format!("Linking {} failed:\n{}", program_path, out);
-		return err(Pos::zero(), ErrorType::CodegenError(msg));
+		return err(Pos::zero(), ErrorCode::CodegenError, msg);
 	}
 
 	Ok(())

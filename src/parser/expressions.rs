@@ -1,5 +1,5 @@
 use ast::{Expression, Call, NameRef, MemberAccess, Member, array_lit, array_init, index_op, object_construction, assignment, unary_op, pf_unary_op, bin_op, bin_op2};
-use compileerror::{CompileError, Pos, Span, ErrorType, err};
+use compileerror::{CompileResult, Pos, Span, ErrorCode, err};
 use parser::{Token, TokenKind, TokenQueue, Operator};
 
 
@@ -18,7 +18,7 @@ fn is_end_of_expression(tok: &Token) -> bool
     }
 }
 
-fn eat_comma(tq: &mut TokenQueue) -> Result<(), CompileError>
+fn eat_comma(tq: &mut TokenQueue) -> CompileResult<()>
 {
     if tq.is_next(TokenKind::Comma) {
         try!(tq.pop());
@@ -26,17 +26,17 @@ fn eat_comma(tq: &mut TokenQueue) -> Result<(), CompileError>
     Ok(())
 }
 
-fn parse_unary_expression(tq: &mut TokenQueue, indent_level: usize, op: Operator, op_pos: Pos) -> Result<Expression, CompileError>
+fn parse_unary_expression(tq: &mut TokenQueue, indent_level: usize, op: Operator, op_pos: Pos) -> CompileResult<Expression>
 {
     if op == Operator::Not || op == Operator::Sub || op == Operator::Increment || op == Operator::Decrement {
         let se = try!(parse_expression(tq, indent_level));
         Ok(unary_op(op, se, Span::new(op_pos, tq.pos())))
     } else {
-        err(op_pos, ErrorType::InvalidUnaryOperator(op))
+        err(op_pos, ErrorCode::InvalidUnaryOperator, format!("Invalid unary operator {}", op))
     }
 }
 
-fn parse_binary_op_rhs(tq: &mut TokenQueue, indent_level: usize, mut lhs: Expression) -> Result<Expression, CompileError>
+fn parse_binary_op_rhs(tq: &mut TokenQueue, indent_level: usize, mut lhs: Expression) -> CompileResult<Expression>
 {
     loop
     {
@@ -81,7 +81,7 @@ fn parse_binary_op_rhs(tq: &mut TokenQueue, indent_level: usize, mut lhs: Expres
     }
 }
 
-fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: Expression) -> Result<Call, CompileError>
+fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: Expression) -> CompileResult<Call>
 {
     let mut args = Vec::new();
     while !tq.is_next(TokenKind::CloseParen)
@@ -96,30 +96,30 @@ fn parse_function_call(tq: &mut TokenQueue, indent_level: usize, name: Expressio
     Ok(Call::new(name, args, Span::new(pos, tq.pos())))
 }
 
-fn parse_assignment(tq: &mut TokenQueue, indent_level: usize, lhs: Expression, op: Operator, pos: Pos) -> Result<Expression, CompileError>
+fn parse_assignment(tq: &mut TokenQueue, indent_level: usize, lhs: Expression, op: Operator, pos: Pos) -> CompileResult<Expression>
 {
     try!(tq.pop()); // pop operator
     let e = try!(parse_expression(tq, indent_level));
     Ok(assignment(op, lhs, e, Span::new(pos, tq.pos())))
 }
 
-fn parse_number(num: &str, span: Span) -> Result<Expression, CompileError>
+fn parse_number(num: &str, span: Span) -> CompileResult<Expression>
 {
     if num.find('.').is_some() || num.find('e').is_some() {
         match num.parse::<f64>() {
             Ok(_) => Ok(Expression::FloatLiteral(span, num.into())),
-            Err(_) => err(span.start, ErrorType::InvalidFloatingPoint)
+            Err(_) => err(span.start, ErrorCode::InvalidFloatingPoint, format!("{} is not a valid floating point number", num))
         }
     } else {
         // Should be an integer
         match num.parse::<u64>() {
             Ok(i) => Ok(Expression::IntLiteral(span, i)),
-            Err(_) => err(span.start, ErrorType::InvalidInteger)
+            Err(_) => err(span.start, ErrorCode::InvalidInteger, format!("{} is not a valid integer", num))
         }
     }
 }
 
-fn parse_object_construction(tq: &mut TokenQueue, indent_level: usize, name: NameRef) -> Result<Expression, CompileError>
+fn parse_object_construction(tq: &mut TokenQueue, indent_level: usize, name: NameRef) -> CompileResult<Expression>
 {
     let mut params = Vec::new();
 
@@ -134,7 +134,7 @@ fn parse_object_construction(tq: &mut TokenQueue, indent_level: usize, name: Nam
     Ok(object_construction(name, params, Span::new(pos, tq.pos())))
 }
 
-fn parse_member_access(tq: &mut TokenQueue, indent_level: usize, target: Expression) -> Result<MemberAccess, CompileError>
+fn parse_member_access(tq: &mut TokenQueue, indent_level: usize, target: Expression) -> CompileResult<MemberAccess>
 {
     let (next_name, next_name_span) = try!(tq.expect_identifier());
     let next_nr = NameRef::new(next_name, next_name_span);
@@ -159,7 +159,7 @@ fn parse_member_access(tq: &mut TokenQueue, indent_level: usize, target: Express
     Ok(MemberAccess::new(target, member, Span::new(pos, tq.pos())))
 }
 
-fn parse_name(tq: &mut TokenQueue, id: String, pos: Pos) -> Result<NameRef, CompileError>
+fn parse_name(tq: &mut TokenQueue, id: String, pos: Pos) -> CompileResult<NameRef>
 {
     let mut name = id;
     while tq.is_next(TokenKind::DoubleColon)
@@ -173,7 +173,7 @@ fn parse_name(tq: &mut TokenQueue, id: String, pos: Pos) -> Result<NameRef, Comp
     Ok(NameRef::new(name, Span::new(pos, tq.pos())))
 }
 
-fn parse_array_literal(tq: &mut TokenQueue, indent_level: usize, pos: Pos) -> Result<Expression, CompileError>
+fn parse_array_literal(tq: &mut TokenQueue, indent_level: usize, pos: Pos) -> CompileResult<Expression>
 {
     let mut expressions = Vec::new();
     loop
@@ -207,7 +207,7 @@ fn parse_array_literal(tq: &mut TokenQueue, indent_level: usize, pos: Pos) -> Re
     Ok(array_lit(expressions, Span::new(pos, tq.pos())))
 }
 
-fn parse_index_operation(tq: &mut TokenQueue, indent_level: usize, target: Expression) -> Result<Expression, CompileError>
+fn parse_index_operation(tq: &mut TokenQueue, indent_level: usize, target: Expression) -> CompileResult<Expression>
 {
     let index_expr = try!(parse_expression(tq, indent_level));
     try!(tq.expect(TokenKind::CloseBracket));
@@ -215,7 +215,7 @@ fn parse_index_operation(tq: &mut TokenQueue, indent_level: usize, target: Expre
     Ok(index_op(target, index_expr, span))
 }
 
-fn parse_lhs(tq: &mut TokenQueue, indent_level: usize, tok: Token) -> Result<Expression, CompileError>
+fn parse_lhs(tq: &mut TokenQueue, indent_level: usize, tok: Token) -> CompileResult<Expression>
 {
     match tok.kind
     {
@@ -244,11 +244,11 @@ fn parse_lhs(tq: &mut TokenQueue, indent_level: usize, tok: Token) -> Result<Exp
 
         TokenKind::Operator(op) => parse_unary_expression(tq, indent_level, op, tok.span.start),
 
-        _ => err(tok.span.start, ErrorType::UnexpectedToken(tok)),
+        _ => err(tok.span.start, ErrorCode::UnexpectedToken, format!("Unexpected token {}", tok)),
     }
 }
 
-fn parse_rhs(tq: &mut TokenQueue, indent_level: usize, lhs: Expression) -> Result<Expression, CompileError>
+fn parse_rhs(tq: &mut TokenQueue, indent_level: usize, lhs: Expression) -> CompileResult<Expression>
 {
     if is_end_of_expression(tq.peek().expect("Unexpected EOF")) {
         return Ok(lhs);
@@ -284,7 +284,7 @@ fn parse_rhs(tq: &mut TokenQueue, indent_level: usize, lhs: Expression) -> Resul
             try!(parse_index_operation(tq, indent_level, lhs))
         },
         _ => {
-            return err(tq.pos(), ErrorType::UnexpectedToken(next));
+            return err(tq.pos(), ErrorCode::UnexpectedToken, format!("Unexpected token {}", next));
         },
     };
 
@@ -292,11 +292,11 @@ fn parse_rhs(tq: &mut TokenQueue, indent_level: usize, lhs: Expression) -> Resul
 }
 
 
-pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize) -> Result<Expression, CompileError>
+pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize) -> CompileResult<Expression>
 {
     let tok = try!(tq.pop());
     if is_end_of_expression(&tok) {
-        return err(tq.pos(), ErrorType::ExpectedStartOfExpression);
+        return err(tq.pos(), ErrorCode::ExpectedStartOfExpression, format!("Expected the start of a new expression"));
     }
 
     let lhs = try!(parse_lhs(tq, indent_level, tok));

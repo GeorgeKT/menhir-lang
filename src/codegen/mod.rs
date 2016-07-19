@@ -17,7 +17,7 @@ use llvm::prelude::*;
 use llvm::core::*;
 
 use ast::{Module};
-use compileerror::{CompileError};
+use compileerror::{CompileResult};
 use codegen::context::{Context};
 use codegen::statements::{gen_module};
 pub use codegen::linker::{link};
@@ -79,7 +79,7 @@ pub fn llvm_init()
     }
 }
 
-pub fn codegen(m: &Module, opts: &CodeGenOptions) -> Result<Context, CompileError>
+pub fn codegen(m: &Module, opts: &CodeGenOptions) -> CompileResult<Context>
 {
     unsafe {
         // Set up a context, module and builder in that context.

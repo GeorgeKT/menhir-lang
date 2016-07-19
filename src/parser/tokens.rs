@@ -185,3 +185,12 @@ impl Token
         }
     }
 }
+
+
+impl Display for Token
+{
+    fn fmt(&self, fmt: &mut Formatter) -> Result<(), Error>
+    {
+        write!(fmt, "{}", self.kind)
+    }
+}

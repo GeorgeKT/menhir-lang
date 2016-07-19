@@ -1,6 +1,6 @@
 use std::io::{Read, BufReader, BufRead};
 use std::mem;
-use compileerror::{Pos, Span, CompileError, ErrorType};
+use compileerror::{Pos, Span, CompileResult, ErrorCode, err};
 use parser::{TokenQueue, TokenKind, Operator, Token};
 
 
@@ -63,7 +63,7 @@ impl Lexer
         if self.state != LexState::InString {self.data.push(c);}
     }
 
-    fn start_of_line(&mut self, c: char) -> Result<(), CompileError>
+    fn start_of_line(&mut self, c: char) -> CompileResult<()>
     {
         match c
         {
@@ -79,7 +79,7 @@ impl Lexer
     }
 
 
-    fn idle(&mut self, c: char) -> Result<(), CompileError>
+    fn idle(&mut self, c: char) -> CompileResult<()>
     {
         let pos = self.pos;
         match c
@@ -100,12 +100,12 @@ impl Lexer
             ch if is_identifier_start(ch) => {self.start(c, LexState::Identifier); Ok(())},
             ch if is_operator_start(ch) => {self.start(c, LexState::Operator); Ok(())}
             _ => {
-                Err(CompileError::new(self.pos, ErrorType::UnexpectedChar(c)))
+                err(self.pos, ErrorCode::UnexpectedChar, format!("Unexpected char {}", c))
             }
         }
     }
 
-    fn comment(&mut self, c: char) -> Result<(), CompileError>
+    fn comment(&mut self, c: char) -> CompileResult<()>
     {
         if c == '\n' {self.state = LexState::StartOfLine;}
         Ok(())
@@ -144,7 +144,7 @@ impl Lexer
         Span::new(self.token_start_pos, Pos::new(self.pos.line, self.pos.offset - 1))
     }
 
-    fn identifier(&mut self, c: char) -> Result<(), CompileError>
+    fn identifier(&mut self, c: char) -> CompileResult<()>
     {
         if is_identifier_start(c)
         {
@@ -161,7 +161,7 @@ impl Lexer
         }
     }
 
-    fn number(&mut self, c: char) -> Result<(), CompileError>
+    fn number(&mut self, c: char) -> CompileResult<()>
     {
         if c.is_numeric()
         {
@@ -178,7 +178,7 @@ impl Lexer
         }
     }
 
-    fn data_to_token_kind(&self) -> Result<TokenKind, CompileError>
+    fn data_to_token_kind(&self) -> CompileResult<TokenKind>
     {
         match &self.data[..]
         {
@@ -208,11 +208,11 @@ impl Lexer
             "." => Ok(TokenKind::Operator(Operator::Dot)),
             ":" => Ok(TokenKind::Colon),
             "::" => Ok(TokenKind::DoubleColon),
-            _ => Err(CompileError::new(self.pos, ErrorType::InvalidOperator(self.data.clone()))),
+            _ => err(self.pos, ErrorCode::InvalidOperator, format!("Invalid operator {}", self.data)),
         }
     }
 
-    fn operator(&mut self, c: char) -> Result<(), CompileError>
+    fn operator(&mut self, c: char) -> CompileResult<()>
     {
         if c.is_whitespace() || c.is_alphanumeric() || c == '{' || c == '(' || c == '['
         {
@@ -229,7 +229,7 @@ impl Lexer
         }
     }
 
-    fn in_string(&mut self, c: char) -> Result<(), CompileError>
+    fn in_string(&mut self, c: char) -> CompileResult<()>
     {
         if self.escape_code
         {
@@ -266,7 +266,7 @@ impl Lexer
         }
     }
 
-    fn feed(&mut self, c: char) -> Result<(), CompileError>
+    fn feed(&mut self, c: char) -> CompileResult<()>
     {
         match self.state
         {
@@ -285,7 +285,7 @@ impl Lexer
         self.tokens.add(Token::new(tok, span));
     }
 
-    pub fn read<Input: Read>(&mut self, input: &mut Input) -> Result<TokenQueue, CompileError>
+    pub fn read<Input: Read>(&mut self, input: &mut Input) -> CompileResult<TokenQueue>
     {
         for line in BufReader::new(input).lines()
         {

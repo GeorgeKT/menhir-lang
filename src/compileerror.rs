@@ -3,7 +3,6 @@ use std::cmp;
 use std::convert::From;
 use std::io;
 use std::fmt;
-use parser::{Operator, Token};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Pos
@@ -103,115 +102,86 @@ pub fn span(start_line: usize, start_offset: usize, end_line: usize, end_offset:
     Span::new(Pos::new(start_line, start_offset), Pos::new(end_line, end_offset))
 }
 
-
-#[derive(Debug)]
-pub enum ErrorType
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorCode
 {
     UnexpectedEOF,
-    IOError(io::Error),
-    UnexpectedChar(char),
-    UnexpectedToken(Token),
+    IOError,
+    UnexpectedChar,
+    UnexpectedToken,
     ExpectedIndent,
     ExpectedIdentifier,
     ExpectedIntLiteral,
     ExpectedOperator,
     ExpectedStartOfExpression,
-    InvalidOperator(String),
-    InvalidUnaryOperator(Operator),
-    InvalidBinaryOperator(Operator),
+    InvalidOperator,
+    InvalidUnaryOperator,
+    InvalidBinaryOperator,
     InvalidFloatingPoint,
     InvalidInteger,
-    TypeError(String),
+    TypeError,
     SelfNotAllowed,
-    RedefinitionOfVariable(String),
-    RedefinitionOfFunction(String),
-    RedefinitionOfStruct(String),
-    RedefinitionOfTrait(String),
-    UnknownVariable(String),
-    UnknownFunction(String),
-    UnknownType(String),
-    UnknownStructMember(String, String),
-    ArgumentCountMismatch(String),
-    CodegenError(String),
+    RedefinitionOfVariable,
+    RedefinitionOfFunction,
+    RedefinitionOfStruct,
+    RedefinitionOfTrait,
+    UnknownVariable,
+    UnknownFunction,
+    UnknownType,
+    UnknownStructMember,
+    ArgumentCountMismatch,
+    CodegenError,
     ConstantModification,
-    PrivateMemberAccess(String),
-    MissingReturn(String),
-    ExpectedConstExpr(String),
-    IndexOperationNotSupported(String),
+    PrivateMemberAccess,
+    MissingReturn,
+    ExpectedConstExpr,
+    IndexOperationNotSupported,
+    TraitNotImplemented,
 }
 
 
 #[derive(Debug)]
 pub struct CompileError
 {
-    pos: Pos,
-    error: ErrorType,
+    pub pos: Pos,
+    pub error: ErrorCode,
+    pub msg: String,
 }
 
 impl CompileError
 {
-    pub fn new(pos: Pos, error: ErrorType) -> CompileError
+    pub fn new(pos: Pos, error: ErrorCode, msg: String) -> CompileError
     {
         CompileError{
             pos: pos,
             error: error,
+            msg: msg,
         }
     }
 }
 
-pub fn err<T: Sized>(pos: Pos, e: ErrorType) -> Result<T, CompileError>
+pub type CompileResult<T> = Result<T, CompileError>;
+
+pub fn err<T: Sized>(pos: Pos, e: ErrorCode, msg: String) -> CompileResult<T>
 {
-    Err(CompileError::new(pos, e))
+    Err(CompileError::new(pos, e, msg))
 }
 
 pub fn type_error(pos: Pos, msg: String) -> CompileError
 {
-    CompileError::new(pos, ErrorType::TypeError(msg))
+    CompileError::new(pos, ErrorCode::TypeError, msg)
 }
 
 pub fn expected_const_expr(pos: Pos, msg: String) -> CompileError
 {
-    CompileError::new(pos, ErrorType::ExpectedConstExpr(msg))
+    CompileError::new(pos, ErrorCode::ExpectedConstExpr, msg)
 }
 
 impl fmt::Display for CompileError
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
-        match self.error
-        {
-            ErrorType::UnexpectedEOF => write!(f, "{}: Unexpected end of file", self.pos),
-            ErrorType::IOError(ref e) =>  write!(f, "{}: {}", self.pos, e.description()),
-            ErrorType::UnexpectedChar(c) =>  write!(f, "{}: Unexpected character {}", self.pos, c),
-            ErrorType::UnexpectedToken(ref tok) =>  write!(f, "{}: Unexpected token {:?}", self.pos, tok),
-            ErrorType::InvalidOperator(ref s) =>  write!(f, "{}: Invalid operator {}", self.pos, s),
-            ErrorType::InvalidUnaryOperator(op) => write!(f, "{}: Invalid operator {}", self.pos, op),
-            ErrorType::InvalidBinaryOperator(op) =>  write!(f, "{}: Invalid operator {}", self.pos, op),
-            ErrorType::ExpectedIdentifier =>  write!(f, "{}: Expected identifier", self.pos),
-            ErrorType::ExpectedIndent =>  write!(f, "{}: Expected indentation", self.pos),
-            ErrorType::ExpectedIntLiteral =>  write!(f, "{}: Expected integer literal", self.pos),
-            ErrorType::ExpectedOperator => write!(f, "{}: Expected operator", self.pos),
-            ErrorType::ExpectedStartOfExpression => write!(f, "{}: Expected an expression", self.pos),
-            ErrorType::SelfNotAllowed => write!(f, "{}: A self argument is only allowed as the first argument of a member function", self.pos),
-            ErrorType::InvalidFloatingPoint => write!(f, "{}: Invalid floating point number", self.pos),
-            ErrorType::InvalidInteger => write!(f, "{}: Invalid integer", self.pos),
-            ErrorType::TypeError(ref s) => write!(f, "{}: Wrong type: {}", self.pos, s),
-            ErrorType::RedefinitionOfVariable(ref v) =>  write!(f, "{}: Attempting to redefine variable {}", self.pos, v),
-            ErrorType::RedefinitionOfFunction(ref v) =>  write!(f, "{}: Attempting to redefine function {}", self.pos, v),
-            ErrorType::RedefinitionOfStruct(ref v) =>  write!(f, "{}: Attempting to redefine struct {}", self.pos, v),
-            ErrorType::RedefinitionOfTrait(ref v) =>  write!(f, "{}: Attempting to redefine trait {}", self.pos, v),
-            ErrorType::UnknownVariable(ref n) => write!(f, "{}: Unknown variable '{}'", self.pos, n),
-            ErrorType::UnknownFunction(ref n) => write!(f, "{}: Unknown function '{}'", self.pos, n),
-            ErrorType::UnknownType(ref n) => write!(f, "{}: Unknown type '{}'", self.pos, n),
-            ErrorType::UnknownStructMember(ref struct_name, ref member_name) => write!(f, "{}: Struct '{}' has no member named '{}'", self.pos, struct_name, member_name),
-            ErrorType::ArgumentCountMismatch(ref msg) => write!(f, "{}: {}", self.pos, msg),
-            ErrorType::CodegenError(ref msg) => write!(f, "{}: Code generation failed: {}", self.pos, msg),
-            ErrorType::ConstantModification => write!(f, "{}: Attempting to modify constant", self.pos),
-            ErrorType::PrivateMemberAccess(ref var) => write!(f, "{}: Attempting to access private member '{}'", self.pos, var),
-            ErrorType::MissingReturn(ref func) => write!(f, "{}: Missing return statement at end of function '{}'", self.pos, func),
-            ErrorType::ExpectedConstExpr(ref msg) => write!(f, "{}: {}", self.pos, msg),
-            ErrorType::IndexOperationNotSupported(ref typ) => write!(f, "{}: Indexing operation not supported on type '{}'", self.pos, typ),
-        }
+        write!(f, "{}: E{}: {}", self.pos, self.error as i32, self.msg)
     }
 }
 
@@ -229,7 +199,8 @@ impl From<io::Error> for CompileError
     {
         CompileError{
             pos: Pos::new(0, 0),
-            error: ErrorType::IOError(e),
+            error: ErrorCode::IOError,
+            msg: format!("IO Error: {}", e),
         }
     }
 }
