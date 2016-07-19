@@ -30,6 +30,19 @@ fn enclosed(span: Span, left: Expression) -> Expression
     Expression::Enclosed(span, Box::new(left))
 }
 
+pub fn name_ref(name: &str, span: Span) -> Expression
+{
+    Expression::NameRef(NameRef{
+        name: name.into(),
+        span: span,
+    })
+}
+
+pub fn name_ref2(name: &str, span: Span) -> NameRef
+{
+    NameRef::new(name.into(), span)
+}
+
 #[test]
 fn test_basic_expressions()
 {
