@@ -1,13 +1,12 @@
-#[cfg(test)] use std::io::Cursor;
-#[cfg(test)] use ast::*;
-#[cfg(test)] use compileerror::*;
-#[cfg(test)] use parser::expressions::*;
-#[cfg(test)] use parser::lexer::*;
-#[cfg(test)] use parser::tokens::*;
-#[cfg(test)] use parser::statements::*;
-#[cfg(test)] use parser::ParseMode;
+use std::io::Cursor;
+use ast::*;
+use compileerror::*;
+use parser::expressions::*;
+use parser::lexer::*;
+use parser::tokens::*;
+use parser::statements::*;
+use parser::ParseMode;
 
-#[cfg(test)]
 fn th_expr(data: &str) -> Expression
 {
     let mut cursor = Cursor::new(data);
@@ -19,13 +18,13 @@ fn th_expr(data: &str) -> Expression
     e
 }
 
-#[cfg(test)]
+
 pub fn number(v: u64, span: Span) -> Expression
 {
     Expression::IntLiteral(span, v)
 }
 
-#[cfg(test)]
+
 fn enclosed(span: Span, left: Expression) -> Expression
 {
     Expression::Enclosed(span, Box::new(left))
@@ -384,7 +383,7 @@ fn test_nested_index_op()
     ));
 }
 
-#[cfg(test)]
+
 fn th_statement(data: &str) -> Statement
 {
     let mut cursor = Cursor::new(data);
@@ -393,31 +392,31 @@ fn th_statement(data: &str) -> Statement
     parse_statement(&mut tq, lvl, ParseMode::Block).expect("Parsing failed")
 }
 
-#[cfg(test)]
+
 fn type_complex(typ: &str) -> Type
 {
     Type::ptr(Type::Complex(typ.into()))
 }
 
-#[cfg(test)]
+
 fn type_trait(typ: &str) -> Type
 {
     Type::ptr(Type::Trait(typ.into()))
 }
 
-#[cfg(test)]
+
 fn type_primitve(typ: &str) -> Type
 {
     Type::Primitive(typ.into())
 }
 
-#[cfg(test)]
+
 fn arg(name: &str, typ: &str, constant: bool, span: Span) -> Argument
 {
     Argument::new(name.into(), type_primitve(typ), constant, span)
 }
 
-#[cfg(test)]
+
 fn sig(name: &str, ret: Type, args: Vec<Argument>, span: Span) -> FunctionSignature
 {
     FunctionSignature{
@@ -429,7 +428,7 @@ fn sig(name: &str, ret: Type, args: Vec<Argument>, span: Span) -> FunctionSignat
     }
 }
 
-#[cfg(test)]
+
 fn generic_sig(name: &str, ret: Type, args: Vec<Argument>, generic_args: Vec<GenericArgument>, span: Span) -> FunctionSignature
 {
     FunctionSignature{
@@ -607,14 +606,14 @@ fn test_var_with_array()
 
 
 
-#[cfg(test)]
+
 fn call(name: Expression, args: Vec<Expression>, span: Span) -> Statement
 {
     Statement::Expression(Expression::Call(
         Call::new(name, args, span)))
 }
 
-#[cfg(test)]
+
 fn str_lit(s: &str, span: Span) -> Expression
 {
     Expression::StringLiteral(span, s.into())

@@ -1,16 +1,16 @@
-#[cfg(test)] use std::ptr;
-#[cfg(test)] use std::ffi::CStr;
-#[cfg(test)] use std::os::raw::c_char;
-#[cfg(test)] use std::io::Cursor;
-#[cfg(test)] use llvm::prelude::*;
-#[cfg(test)] use llvm::core::*;
-#[cfg(test)] use llvm::execution_engine::*;
-#[cfg(test)] use compileerror::{ErrorCode, err, CompileResult, Pos};
-#[cfg(test)] use parser::{parse_module, ParseMode};
-#[cfg(test)] use codegen::{CodeGenOptions, codegen, cstr};
-#[cfg(test)] use ast::{TreePrinter};
+use std::ptr;
+use std::ffi::CStr;
+use std::os::raw::c_char;
+use std::io::Cursor;
+use llvm::prelude::*;
+use llvm::core::*;
+use llvm::execution_engine::*;
+use compileerror::{ErrorCode, err, CompileResult, Pos};
+use parser::{parse_module, ParseMode};
+use codegen::{CodeGenOptions, codegen, cstr};
+use ast::{TreePrinter};
 
-#[cfg(test)]
+
 fn run(prog: &str, dump: bool) -> CompileResult<u64>
 {
     let mut cursor = Cursor::new(prog);

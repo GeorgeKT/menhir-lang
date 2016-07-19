@@ -3,6 +3,7 @@ mod expressions;
 mod lexer;
 mod tokens;
 mod tokenqueue;
+#[cfg(test)]
 mod tests;
 
 use std::io::Read;

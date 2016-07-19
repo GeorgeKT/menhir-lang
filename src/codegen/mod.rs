@@ -8,6 +8,7 @@ mod context;
 mod conversions;
 mod builtin;
 mod valueref;
+#[cfg(test)]
 mod tests;
 
 use std::ffi::{CStr, CString};
