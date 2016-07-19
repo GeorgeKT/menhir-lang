@@ -310,14 +310,36 @@ trait Sum:
 struct Foo impl Sum:
     var a = 0, b = 0, c = 0
 
-    func sum(self) -> int:
+    pub func sum(self) -> int:
         return self.a + self.b + self.c
-
-func sum<T: Sum>(x: *T) -> int:
-    return x.sum()
 
 func main() -> int:
     const f = Foo{1, 2, 3}
-    return sum(f)
+    return f.sum()
     "#, false).unwrap() == 6);
 }
+
+#[test]
+fn test_not_implemented_traits()
+{
+    assert!(run(r#"
+trait Sum:
+    func sum(self) -> int
+
+struct Foo impl Sum:
+    var a = 0, b = 0, c = 0
+
+    pub func not_really_sum(self) -> int:
+        return self.a + self.b + self.c
+
+func main() -> int:
+    const f = Foo{1, 2, 3}
+    return f.not_really_sum()
+    "#, false).is_err());
+}
+
+/*
+
+func sum<T: Sum>(x: *T) -> int:
+    return x.sum()
+    */

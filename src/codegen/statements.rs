@@ -355,7 +355,11 @@ fn gen_trait(ctx: &mut Context, t: &Trait) -> Result<(), CompileError>
     if let Some(_) = ctx.get_trait(&t.name) {
         return err(t.span.start, ErrorType::RedefinitionOfTrait(t.name.clone()));
     }
-    ctx.add_trait(Rc::new(t.clone()));
+    let mut new_trait = t.clone();
+    if ctx.in_global_context() {
+        new_trait.name = ctx.prepend_namespace(&new_trait.name);
+    }
+    ctx.add_trait(Rc::new(new_trait));
     Ok(())
 }
 

@@ -315,7 +315,6 @@ unsafe fn gen_call_common(ctx: &mut Context, c: &Call, func: &FunctionInstance, 
 
     for (i, arg) in c.args.iter().enumerate()
     {
-        println!("arg_vals[{}] : {}", i, type_name(LLVMTypeOf(arg_vals[i])));
         let (ref arg_type, ref arg_mode) = func.args[i];
         let arg_val = match *arg_mode
         {
