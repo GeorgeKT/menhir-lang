@@ -1,7 +1,7 @@
 use compileerror::{Span};
 
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ModuleName
 {
     pub parts: Vec<String>,

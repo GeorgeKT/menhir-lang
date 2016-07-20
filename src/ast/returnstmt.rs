@@ -1,7 +1,7 @@
 use ast::{Expression, TreePrinter, prefix};
 use compileerror::{Span};
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Return
 {
     pub expr: Expression,

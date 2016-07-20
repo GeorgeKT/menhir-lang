@@ -397,7 +397,7 @@ fn test_nested_index_op()
 }
 
 
-fn th_statement(data: &str) -> Statement
+pub fn th_statement(data: &str) -> Statement
 {
     let mut cursor = Cursor::new(data);
     let mut tq = Lexer::new().read(&mut cursor).expect("Lexing failed");
@@ -430,7 +430,7 @@ fn arg(name: &str, typ: &str, constant: bool, span: Span) -> Argument
 }
 
 
-fn sig(name: &str, ret: Type, args: Vec<Argument>, span: Span) -> FunctionSignature
+pub fn sig(name: &str, ret: Type, args: Vec<Argument>, span: Span) -> FunctionSignature
 {
     FunctionSignature{
         name: name.into(),

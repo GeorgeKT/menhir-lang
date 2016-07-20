@@ -3,6 +3,7 @@ mod block;
 mod call;
 mod expression;
 mod function;
+mod generics;
 mod ifelse;
 mod import;
 mod matchstmt;

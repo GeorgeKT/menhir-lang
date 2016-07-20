@@ -338,8 +338,25 @@ func main() -> int:
     "#, false).unwrap_err().error == ErrorCode::TraitNotImplemented);
 }
 
-/*
+
+#[test]
+fn test_generic_function()
+{
+    assert!(run(r#"
+trait Sum:
+    func sum(self) -> int
+
+struct Foo impl Sum:
+    var a = 0, b = 0, c = 0
+
+    pub func sum(self) -> int:
+        return self.a + self.b + self.c
 
 func sum<T: Sum>(x: *T) -> int:
     return x.sum()
-    */
+
+func main() -> int:
+    const f = Foo{1, 2, 3}
+    return sum(f)
+    "#, false).unwrap() == 6);
+}

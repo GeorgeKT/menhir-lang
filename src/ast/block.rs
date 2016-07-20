@@ -1,6 +1,6 @@
 use ast::{Statement, TreePrinter, prefix};
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Block
 {
     pub statements: Vec<Statement>,

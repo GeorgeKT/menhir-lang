@@ -1,7 +1,7 @@
 use ast::{Variable, Function, Type, TreePrinter, prefix};
 use compileerror::{Span};
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Struct
 {
     pub name: String,

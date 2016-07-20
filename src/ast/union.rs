@@ -1,7 +1,7 @@
 use ast::{Function, Argument, TreePrinter, prefix};
 use compileerror::{Span};
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct UnionCase
 {
     pub name: String,
@@ -32,7 +32,7 @@ impl TreePrinter for UnionCase
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Union
 {
     pub name: String,

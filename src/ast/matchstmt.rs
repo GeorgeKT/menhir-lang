@@ -1,7 +1,7 @@
 use ast::{Expression, Block, TreePrinter, prefix};
 use compileerror::{Span};
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct MatchCase
 {
     pub name: String,
@@ -32,7 +32,7 @@ impl TreePrinter for MatchCase
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Match
 {
     pub expr: Expression,

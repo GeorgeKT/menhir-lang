@@ -1,7 +1,7 @@
 use ast::{ModuleName, TreePrinter, prefix};
 use compileerror::{Span};
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Import
 {
     pub modules: Vec<ModuleName>,

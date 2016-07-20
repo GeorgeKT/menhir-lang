@@ -2,7 +2,7 @@ use ast::{Expression, Import, Variable, Function, ExternalFunction, While, If, R
     Union, Match, Trait, TreePrinter};
 
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Statement
 {
     Import(Import),

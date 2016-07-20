@@ -74,7 +74,7 @@ impl TreePrinter for FunctionSignature
     fn print(&self, level: usize)
     {
         let p = prefix(level);
-        println!("{}function {} (span: {})", p, self.name, self.span);
+        println!("{}sig {} (span: {})", p, self.name, self.span);
         println!("{} return_type: {}", p, self.return_type);
         println!("{} generic args:", p);
         for a in &self.generic_args {
@@ -87,7 +87,7 @@ impl TreePrinter for FunctionSignature
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Function
 {
     pub sig: FunctionSignature,
@@ -113,14 +113,16 @@ impl TreePrinter for Function
 {
     fn print(&self, level: usize)
     {
-        self.sig.print(level);
-        self.block.print(level + 1)
+        let p = prefix(level);
+        println!("{}function ({})", p, self.span);
+        self.sig.print(level + 1);
+        self.block.print(level + 2)
     }
 }
 
 
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ExternalFunction
 {
     pub sig: FunctionSignature,

@@ -20,6 +20,9 @@ pub use self::tokenqueue::{TokenQueue};
 pub use self::expressions::{parse_expression};
 pub use self::tokens::{Operator, Token, TokenKind};
 
+#[cfg(test)]
+pub use self::tests::{th_statement, sig, name_ref2, name_ref};
+
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub enum ParseMode
 {
