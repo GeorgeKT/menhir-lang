@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use ast::{Function, FunctionSignature, Type, Argument, Block, Statement, While, If, ElsePart,
+use ast::{Function, FunctionSignature, Type, GenericType, Argument, Block, Statement, While, If, ElsePart,
     Struct, Union, UnionCase, Match, MatchCase, Variable, ObjectConstruction, Expression, NameRef};
 
 #[allow(dead_code)]
@@ -63,7 +63,12 @@ impl GenericInstantiator
             Type::Pointer(ref st) => Type::Pointer(Box::new(self.gen_type(st))),
             Type::Array(ref at, count) => Type::Array(Box::new(self.gen_type(at)), count),
             Type::Slice(ref at) => Type::Slice(Box::new(self.gen_type(at))),
-            Type::Trait(ref t) => Type::Trait(t.clone()),
+            Type::Generic(ref g) => {
+                Type::Generic(GenericType::new(
+                    self.subst(&g.name),
+                    g.generic_args.iter().map(|t| self.gen_type(t)).collect()
+                ))
+            }
         }
     }
 

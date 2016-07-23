@@ -1,5 +1,23 @@
 use std::fmt;
+use ast::{TreePrinter, prefix};
 
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct GenericType // e.g. Foo<X, Y>
+{
+    pub name: String,
+    pub generic_args: Vec<Type>,
+}
+
+impl GenericType
+{
+    pub fn new(name: String, generic_args: Vec<Type>) -> GenericType
+    {
+        GenericType{
+            name: name,
+            generic_args: generic_args,
+        }
+    }
+}
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Type
@@ -8,10 +26,10 @@ pub enum Type
     Unknown,
     Primitive(String),
     Complex(String),
-    Trait(String),
     Pointer(Box<Type>),
     Array(Box<Type>, usize),
     Slice(Box<Type>),
+    Generic(GenericType),
 }
 
 impl Type
@@ -35,7 +53,15 @@ impl fmt::Display for Type
             Type::Pointer(ref st) => write!(f, "*{}", st),
             Type::Array(ref at, count) => write!(f, "[{}, {}]", at, count),
             Type::Slice(ref at) => write!(f, "[{}]", at),
-            Type::Trait(ref t) => write!(f, "{}", t),
+            Type::Generic(ref g) => write!(f, "{}<{}>", g.name, g.generic_args.iter().map(|s| format!("{}", s)).collect::<Vec<_>>().join(",")),
         }
+    }
+}
+
+impl TreePrinter for Type
+{
+    fn print(&self, level: usize)
+    {
+        println!("{}{}", prefix(level), self);
     }
 }

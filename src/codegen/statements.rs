@@ -269,7 +269,7 @@ fn check_trait_impls(ctx: &mut Context, s: &Struct) -> CompileResult<()>
     {
         match *t
         {
-            Type::Trait(ref name) => {
+            Type::Complex(ref name) => {
                 if let Some(tr) = ctx.get_trait(&name) {
                     if !tr.is_implemented_by(s) {
                         return err(s.span.start, ErrorCode::TraitNotImplemented, format!("Struct {} does not implement {} properly", s.name, name));

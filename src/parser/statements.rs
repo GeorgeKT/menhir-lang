@@ -1,6 +1,6 @@
 use ast::{ModuleName, Statement, Import, Type, Variable, Block, Function, FunctionSignature,
     Argument, ExternalFunction, While, If, ElsePart, Struct, Union, UnionCase, Match, MatchCase,
-    Return, Trait, GenericArgument};
+    Return, Trait, GenericArgument, GenericType};
 use compileerror::{CompileResult, Pos, Span, ErrorCode, err};
 use parser::{TokenQueue, TokenKind, Token, Operator, ParseMode, parse_expression};
 
@@ -53,19 +53,18 @@ fn is_primitive_type(name: &str) -> bool
 }
 
 
-fn parse_type<MakeComplex>(tq: &mut TokenQueue, make_complex: MakeComplex) -> CompileResult<Type>
-    where MakeComplex: Fn(String) -> Type
+fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
 {
     if tq.is_next(TokenKind::Operator(Operator::Mul))
     {
         try!(tq.pop());
-        let st = try!(parse_type(tq, make_complex));
+        let st = try!(parse_type(tq));
         Ok(Type::Pointer(Box::new(st)))
     }
     else if tq.is_next(TokenKind::OpenBracket)
     {
         try!(tq.pop());
-        let at = try!(parse_type(tq, make_complex));
+        let at = try!(parse_type(tq));
 
         if tq.is_next(TokenKind::Comma)
         {
@@ -83,10 +82,27 @@ fn parse_type<MakeComplex>(tq: &mut TokenQueue, make_complex: MakeComplex) -> Co
     else
     {
         let (name, _pos) = try!(tq.expect_identifier());
-        if is_primitive_type(&name) {
+        if is_primitive_type(&name)
+        {
             Ok(Type::Primitive(name))
-        } else {
-            Ok(make_complex(name))
+        }
+        else if tq.is_next(TokenKind::Operator(Operator::LessThan))
+        {
+            let mut generic_args = Vec::new();
+            try!(tq.pop());
+            while !tq.is_next(TokenKind::Operator(Operator::GreaterThan))
+            {
+                let arg = try!(parse_type(tq));
+                generic_args.push(arg);
+                try!(eat_comma(tq));
+            }
+
+            try!(tq.pop()); // eat the closing >
+            Ok(Type::Generic(GenericType::new(name, generic_args)))
+        }
+        else
+        {
+            Ok(Type::Complex(name))
         }
     }
 
@@ -98,7 +114,7 @@ fn parse_optional_type(tq: &mut TokenQueue) -> CompileResult<Type>
     {
         // variable with type declaration
         try!(tq.pop());
-        Ok(try!(parse_type(tq, |n| Type::Complex(n))))
+        Ok(try!(parse_type(tq)))
     }
     else
     {
@@ -179,7 +195,7 @@ fn parse_generic_argument_list(tq: &mut TokenQueue) -> CompileResult<Vec<Generic
     {
         let (name, _) = try!(tq.expect_identifier());
         try!(tq.expect(TokenKind::Colon));
-        let constraint = try!(parse_type(tq, |t| Type::Trait(t)));
+        let constraint = try!(parse_type(tq));
         try!(eat_comma(tq));
         generic_args.push(GenericArgument::new(name, constraint));
     }
@@ -222,7 +238,7 @@ fn parse_func_signature(tq: &mut TokenQueue, self_type: Type, pos: Pos) -> Compi
             }
         } else {
             try!(tq.expect(TokenKind::Colon));
-            let typ = try!(parse_type(tq, |n| Type::Complex(n)));
+            let typ = try!(parse_type(tq));
             args.push(Argument::new(arg_name, typ, const_arg, Span::new(arg_span.start, tq.pos())));
         }
 
@@ -237,15 +253,14 @@ fn parse_func_signature(tq: &mut TokenQueue, self_type: Type, pos: Pos) -> Compi
 
     let ret_type = if tq.is_next(TokenKind::Operator(Operator::Arrow)) {
         try!(tq.pop());
-        try!(parse_type(tq, |n| Type::Complex(n)))
+        try!(parse_type(tq))
     } else {
         Type::Void
     };
 
     let func_name = match self_type
     {
-        Type::Complex(ref type_name) |
-        Type::Trait(ref type_name) => format!("{}::{}", type_name, name),
+        Type::Complex(ref type_name) => format!("{}::{}", type_name, name),
         _ => name,
     };
     Ok(FunctionSignature{
@@ -364,7 +379,7 @@ fn parse_struct(tq: &mut TokenQueue, indent_level: usize, public: bool, pos: Pos
         try!(tq.pop());
         while !tq.is_next(TokenKind::Colon)
         {
-            let t = try!(parse_type(tq, |n| Type::Trait(n)));
+            let t = try!(parse_type(tq));
             s.impls.push(t);
             try!(eat_comma(tq));
         }
@@ -395,7 +410,7 @@ fn parse_union_case(tq: &mut TokenQueue) -> CompileResult<UnionCase>
         {
             let (name, span) = try!(tq.expect_identifier());
             try!(tq.expect(TokenKind::Colon));
-            let typ = try!(parse_type(tq, |n| Type::Complex(n)));
+            let typ = try!(parse_type(tq));
             uc.vars.push(Argument::new(name, typ, false, Span::new(span.start, tq.pos())));
             try!(eat_comma(tq));
         }
@@ -498,7 +513,7 @@ fn parse_trait(tq: &mut TokenQueue, indent_level: usize, pos: Pos, public: bool)
     try!(parse_indented_block(tq, indent_level, |q, _| {
         let pos = q.pos();
         try!(q.expect(TokenKind::Func));
-        let sig = try!(parse_func_signature(q, Type::Trait(name.clone()), pos));
+        let sig = try!(parse_func_signature(q, Type::Complex(name.clone()), pos));
         funcs.push(sig);
         Ok(())
     }));

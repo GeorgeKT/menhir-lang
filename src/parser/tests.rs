@@ -411,13 +411,6 @@ fn type_complex(typ: &str) -> Type
     Type::ptr(Type::Complex(typ.into()))
 }
 
-
-fn type_trait(typ: &str) -> Type
-{
-    Type::ptr(Type::Trait(typ.into()))
-}
-
-
 fn type_primitve(typ: &str) -> Type
 {
     Type::Primitive(typ.into())
@@ -617,8 +610,38 @@ fn test_var_with_array()
     }
 }
 
+#[test]
+fn test_var_with_generic_type()
+{
+    use ast::TreePrinter;
+    let stmt = th_statement("var x: Foo<Bar, Baz> = 0");
+    if let Statement::Variable(vars) = stmt
+    {
+        assert!(vars.len() == 1);
+        let v = &vars[0];
+        println!("");
+        v.print(0);
+        assert!(v.name == "x");
 
-
+        let et = Type::Generic(
+            GenericType::new(
+                "Foo".into(),
+                vec![
+                    Type::Complex("Bar".into()),
+                    Type::Complex("Baz".into()),
+                ]
+            )
+        );
+        et.print(0);
+        assert!(v.typ == et);
+        assert!(!v.is_const);
+        assert!(!v.public);
+    }
+    else
+    {
+        assert!(false);
+    }
+}
 
 fn call(name: Expression, args: Vec<Expression>, span: Span) -> Statement
 {
@@ -928,8 +951,8 @@ pub struct Blaat impl Foo, Bar:
         assert!(s.name == "Blaat");
         assert!(s.functions.len() == 2);
         assert!(s.impls == vec![
-            Type::Trait("Foo".into()),
-            Type::Trait("Bar".into()),
+            Type::Complex("Foo".into()),
+            Type::Complex("Bar".into()),
         ]);
 
         assert!(s.variables == vec![
@@ -1158,7 +1181,7 @@ trait Bar:
                     "Bar::bar",
                     Type::Primitive("int".into()),
                     vec![
-                        Argument::new("self".into(), type_trait("Bar"), true, span(3, 14, 3, 17)),
+                        Argument::new("self".into(), type_complex("Bar"), true, span(3, 14, 3, 17)),
                     ],
                     span(3, 5, 3, 25)
                 ),
@@ -1166,7 +1189,7 @@ trait Bar:
                     "Bar::foo",
                     Type::Primitive("double".into()),
                     vec![
-                        Argument::new("self".into(), type_trait("Bar"), true, span(4, 14, 4, 17)),
+                        Argument::new("self".into(), type_complex("Bar"), true, span(4, 14, 4, 17)),
                     ],
                     span(4, 5, 4, 28)
                 ),
@@ -1202,7 +1225,7 @@ func sum<T: Sum>(x: *T) -> int:
                     Argument::new("x".into(), type_complex("T"), true, span(2, 18, 2, 22)),
                 ],
                 vec![
-                    GenericArgument::new("T".into(), Type::Trait("Sum".into())),
+                    GenericArgument::new("T".into(), Type::Complex("Sum".into())),
                 ],
                 span(2, 1, 2, 30)
             ),
