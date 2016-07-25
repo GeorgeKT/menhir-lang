@@ -1,0 +1,226 @@
+use std::io::Cursor;
+use ast::{Expression, NameRef, TreePrinter, Call, unary_op, bin_op, array_lit};
+use compileerror::{Span, span};
+use parser::{Lexer, Operator, parse_expression};
+
+fn th_expr(data: &str) -> Expression
+{
+    let mut cursor = Cursor::new(data);
+    let mut tq = Lexer::new().read(&mut cursor).expect("Lexing failed");
+    let e = parse_expression(&mut tq).expect("Parsing failed");
+    println!("AST dump:");
+    e.print(0);
+    e
+}
+
+
+pub fn number(v: u64, span: Span) -> Expression
+{
+    Expression::IntLiteral(span, v)
+}
+
+
+fn enclosed(span: Span, left: Expression) -> Expression
+{
+    Expression::Enclosed(span, Box::new(left))
+}
+
+pub fn name_ref(name: &str, span: Span) -> Expression
+{
+    Expression::NameRef(NameRef{
+        name: name.into(),
+        span: span,
+    })
+}
+
+pub fn name_ref2(name: &str, span: Span) -> NameRef
+{
+    NameRef::new(name.into(), span)
+}
+
+#[test]
+fn test_basic_expressions()
+{
+    assert!(th_expr("1000") == number(1000, span(1, 1, 1, 4)));
+    assert!(th_expr("id") == name_ref("id", span(1, 1, 1, 2)));
+    assert!(th_expr("-1000") == unary_op(Operator::Sub, number(1000, span(1, 2, 1, 5)), span(1, 1, 1, 5)));
+    assert!(th_expr("!id") == unary_op(Operator::Not, name_ref("id", span(1, 2, 1, 3)), span(1, 1, 1, 3)));
+}
+
+#[test]
+fn test_binary_ops()
+{
+    let ops = [
+        (Operator::Add, "+"),
+        (Operator::Sub, "-"),
+        (Operator::Div, "/"),
+        (Operator::Mul, "*"),
+        (Operator::Mod, "%"),
+        (Operator::Equals, "=="),
+        (Operator::NotEquals, "!="),
+        (Operator::GreaterThan, ">"),
+        (Operator::GreaterThanEquals, ">="),
+        (Operator::LessThan, "<"),
+        (Operator::LessThanEquals, "<="),
+        (Operator::Or, "||"),
+        (Operator::And, "&&"),
+    ];
+
+    for &(op, op_txt) in &ops
+    {
+        let e_txt = format!("a {} b", op_txt);
+        let e = th_expr(&e_txt);
+        assert!(e == bin_op(
+            op,
+            name_ref("a", span(1, 1, 1, 1)),
+            name_ref("b", span(1, e_txt.len(), 1, e_txt.len())),
+            span(1, 1, 1, e_txt.len())
+        ));
+    }
+}
+
+
+#[test]
+fn test_precedence()
+{
+    let e = th_expr("a + b * c");
+    assert!(e == bin_op(
+        Operator::Add,
+        name_ref("a", span(1, 1, 1, 1)),
+        bin_op(Operator::Mul, name_ref("b", span(1, 5, 1, 5)), name_ref("c", span(1, 9, 1, 9)), span(1, 5, 1, 9)),
+        span(1, 1, 1, 9),
+    ));
+}
+
+
+#[test]
+fn test_precedence_2()
+{
+    let e = th_expr("a * b + c ");
+    assert!(e == bin_op(
+        Operator::Add,
+        bin_op(Operator::Mul, name_ref("a", span(1, 1, 1, 1)), name_ref("b", span(1, 5, 1, 5)), span(1, 1, 1, 5)),
+        name_ref("c", span(1, 9, 1, 9)),
+        span(1, 1, 1, 9),
+    ));
+}
+
+#[test]
+fn test_precedence_3()
+{
+    let e = th_expr("a * b + c / d ");
+    assert!(e == bin_op(
+        Operator::Add,
+        bin_op(Operator::Mul, name_ref("a", span(1, 1, 1, 1)), name_ref("b", span(1, 5, 1, 5)), span(1, 1, 1, 5)),
+        bin_op(Operator::Div, name_ref("c", span(1, 9, 1, 9)), name_ref("d", span(1, 13, 1, 13)), span(1, 9, 1, 13)),
+        span(1, 1, 1, 13),
+    ));
+}
+
+#[test]
+fn test_precedence_4()
+{
+    let e = th_expr("a && b || c && d ");
+    assert!(e == bin_op(
+        Operator::Or,
+        bin_op(Operator::And, name_ref("a", span(1, 1, 1, 1)), name_ref("b", span(1, 6, 1, 6)), span(1, 1, 1, 6)),
+        bin_op(Operator::And, name_ref("c", span(1, 11, 1, 11)), name_ref("d", span(1, 16, 1, 16)), span(1, 11, 1, 16)),
+        span(1, 1, 1, 16),
+    ));
+}
+
+#[test]
+fn test_precedence_5()
+{
+    let e = th_expr("a >= b && c < d");
+    assert!(e == bin_op(
+        Operator::And,
+        bin_op(Operator::GreaterThanEquals, name_ref("a", span(1, 1, 1, 1)), name_ref("b", span(1, 6, 1, 6)), span(1, 1, 1, 6)),
+        bin_op(Operator::LessThan, name_ref("c", span(1, 11, 1, 11)), name_ref("d", span(1, 15, 1, 15)), span(1, 11, 1, 15)),
+        span(1, 1, 1, 15),
+    ));
+}
+
+#[test]
+fn test_precedence_6()
+{
+    let e = th_expr("a * (b + c)");
+    assert!(e == bin_op(
+        Operator::Mul,
+        name_ref("a", span(1, 1, 1, 1)),
+        enclosed(
+            span(1, 5, 1, 11),
+            bin_op(Operator::Add, name_ref("b", span(1, 6, 1, 6)), name_ref("c", span(1, 10, 1, 10)), span(1, 6, 1, 10))),
+        span(1, 1, 1, 11),
+    ));
+}
+
+#[test]
+fn test_precedence_7()
+{
+    let e = th_expr("b + -c");
+    assert!(e == bin_op(
+        Operator::Add,
+        name_ref("b", span(1, 1, 1, 1)),
+        unary_op(Operator::Sub, name_ref("c", span(1, 6, 1, 6)), span(1, 5, 1, 6)),
+        span(1, 1, 1, 6),
+    ));
+}
+
+#[test]
+fn test_precedence_8()
+{
+    let e = th_expr("b + c(6)");
+    assert!(e == bin_op(
+        Operator::Add,
+        name_ref("b", span(1, 1, 1, 1)),
+        Expression::Call(Call::new(
+            name_ref2("c", span(1, 5, 1, 5)),
+            vec![number(6, span(1, 7, 1, 7))],
+            span(1, 5, 1, 8)
+        )),
+        span(1, 1, 1, 8),
+    ));
+}
+
+#[test]
+fn test_precedence_9()
+{
+    let e = th_expr("c(6) + b");
+    assert!(e == bin_op(
+        Operator::Add,
+        Expression::Call(Call::new(
+            name_ref2("c", span(1, 1, 1, 1)),
+            vec![number(6, span(1, 3, 1, 3))],
+            span(1, 1, 1, 4)
+        )),
+        name_ref("b", span(1, 8, 1, 8)),
+        span(1, 1, 1, 8),
+    ));
+}
+
+#[test]
+fn test_namespaced_call()
+{
+    let e = th_expr("foo::bar(7)");
+    assert!(e == Expression::Call(
+        Call::new(
+            name_ref2("foo::bar", span(1, 1, 1, 8)),
+            vec![number(7, span(1, 10, 1, 10))],
+            span(1, 1, 1, 11),
+        )));
+}
+
+#[test]
+fn test_array_literal()
+{
+    let e = th_expr("[1, 2, 3]");
+    assert!(e == array_lit(
+        vec![
+            number(1, span(1, 2, 1, 2)),
+            number(2, span(1, 5, 1, 5)),
+            number(3, span(1, 8, 1, 8)),
+        ],
+        span(1, 1, 1, 9)));
+
+}

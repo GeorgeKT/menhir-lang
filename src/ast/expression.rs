@@ -1,4 +1,4 @@
-use compileerror::{Span};
+use compileerror::{Span, CompileResult, ErrorCode, err};
 use ast::{Call, ArrayLiteral, ArrayInitializer, NameRef, BinaryOp, UnaryOp, Function, TreePrinter, prefix};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -44,6 +44,15 @@ impl Expression
             Expression::Call(ref c) => c.span,
             Expression::NameRef(ref nr) => nr.span,
             Expression::Function(ref f) => f.span,
+        }
+    }
+
+    pub fn to_name_ref(self) -> CompileResult<NameRef>
+    {
+        match self
+        {
+            Expression::NameRef(nr) => Ok(nr),
+            _ => err(self.span().start, ErrorCode::TypeError, format!("Expected name reference")),
         }
     }
 }
