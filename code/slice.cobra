@@ -1,0 +1,18 @@
+import cobra
+
+
+map(v: [$a], fn: ($a) -> $b) -> [$b] =
+    match v
+        [] => [],
+        [hd | tail] => [fn(hd) | map(tail, fn)]
+
+fold(v: [$a], accu: $b, fn: ($b, $a) -> $b) -> $b =
+    match v
+        [] => [],
+        [hd | tail] => fold(tail, fn(accu, hd), fn)
+
+
+
+sum(v: [int]) -> int = fold(v, 0, @(s, el) -> s + el)
+
+main() -> int = sum([4, 5, 6, 7])
