@@ -96,6 +96,7 @@ pub enum TokenKind
     Import,
     Lambda,
     Dollar,
+    Pipe,
     EOF,
 }
 
@@ -126,6 +127,7 @@ impl Display for TokenKind
             TokenKind::Lambda => write!(fmt, "@"),
             TokenKind::Assign => write!(fmt, "="),
             TokenKind::Dollar => write!(fmt, "$"),
+            TokenKind::Pipe => write!(fmt, "|"),
             TokenKind::EOF => write!(fmt, "EOF"),
         }
     }

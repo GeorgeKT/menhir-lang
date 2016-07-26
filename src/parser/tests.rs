@@ -1,6 +1,6 @@
 use std::io::Cursor;
 use ast::{Expression, NameRef, TreePrinter, Function, Argument, Call, Type,
-    sig, unary_op, bin_op, array_lit, match_expression, match_case};
+    sig, unary_op, bin_op, array_lit, match_expression, match_case, array_pattern};
 use compileerror::{Span, span};
 use parser::{Lexer, Operator, parse_expression};
 
@@ -224,6 +224,13 @@ fn test_array_literal()
         ],
         span(1, 1, 1, 9)));
 
+}
+
+#[test]
+fn test_array_pattern()
+{
+    let e = th_expr("[head | tail]");
+    assert!(e == array_pattern("head", "tail", span(1, 1, 1, 13)));
 }
 
 fn primitive(name: &str) -> Type

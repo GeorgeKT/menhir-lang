@@ -170,6 +170,7 @@ impl Lexer
             "=>" => Ok(TokenKind::FatArrow),
             ":" => Ok(TokenKind::Colon),
             "::" => Ok(TokenKind::DoubleColon),
+            "|" => Ok(TokenKind::Pipe),
             _ => err(self.pos, ErrorCode::InvalidOperator, format!("Invalid operator {}", self.data)),
         }
     }

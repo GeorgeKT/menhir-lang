@@ -1,6 +1,6 @@
 use std::fs;
 use ast::{Expression, Function, Call, NameRef, Type, Argument,
-    array_init, array_lit, unary_op, bin_op2, bin_op, sig, is_primitive_type,
+    array_init, array_lit, array_pattern, unary_op, bin_op2, bin_op, sig, is_primitive_type,
     match_expression, match_case};
 use compileerror::{CompileResult, ErrorCode, Span, Pos, err};
 use parser::{TokenQueue, Token, TokenKind, Operator, Lexer};
@@ -56,7 +56,16 @@ fn parse_array_literal(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expressio
             try!(tq.pop());
             let (times, _) = try!(tq.expect_int());
             try!(tq.expect(TokenKind::CloseBracket));
-            return Ok(array_init(e, times, Span::new(pos, tq.pos())))
+            return Ok(array_init(e, times, Span::new(pos, tq.pos())));
+        }
+        else if expressions.is_empty() && tq.is_next(TokenKind::Pipe)
+        {
+            // array pattern [head | tail]
+            let head = try!(e.to_name_ref());
+            try!(tq.expect(TokenKind::Pipe));
+            let (tail, _) = try!(tq.expect_identifier());
+            try!(tq.expect(TokenKind::CloseBracket));
+            return Ok(array_pattern(&head.name, &tail, Span::new(pos, tq.pos())));
         }
         else
         {

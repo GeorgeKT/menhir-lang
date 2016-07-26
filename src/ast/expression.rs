@@ -90,7 +90,7 @@ impl TreePrinter for Expression
                 a.init.print(level + 1);
             },
             Expression::ArrayPattern(ref a) => {
-                println!("{}array pattern [{} | {}]", p, a.head, a.tail);
+                println!("{}array pattern [{} | {}] ({})", p, a.head, a.tail, a.span);
             },
             Expression::UnaryOp(ref op) => {
                 println!("{}unary {} ({})", p, op.operator, op.span);
