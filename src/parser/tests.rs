@@ -233,6 +233,24 @@ fn test_array_pattern()
     assert!(e == array_pattern("head", "tail", span(1, 1, 1, 13)));
 }
 
+#[test]
+fn test_array_concat()
+{
+    let e = th_expr("a ++ [1, 2]");
+    assert!(e == bin_op(
+        Operator::Concat,
+        name_ref("a", span(1, 1, 1, 1)),
+        array_lit(
+            vec![
+                number(1, span(1, 7, 1, 7)),
+                number(2, span(1, 10, 1, 10)),
+            ],
+            span(1, 6, 1, 11)
+        ),
+        span(1, 1, 1, 11))
+    );
+}
+
 fn primitive(name: &str) -> Type
 {
     Type::Primitive(name.into())

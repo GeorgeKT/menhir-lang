@@ -18,6 +18,7 @@ pub enum Operator
     Not,
     And,
     Or,
+    Concat,
 }
 
 pub const TOP_PRECEDENCE: usize = 2000;
@@ -30,7 +31,7 @@ impl Operator
         {
             Operator::Not  => TOP_PRECEDENCE,
             Operator::Mul | Operator::Div | Operator::Mod => TOP_PRECEDENCE - 100,
-            Operator::Add | Operator::Sub => TOP_PRECEDENCE - 200,
+            Operator::Add | Operator::Sub | Operator::Concat => TOP_PRECEDENCE - 200,
             Operator::LessThan | Operator::GreaterThan | Operator::LessThanEquals |
             Operator::GreaterThanEquals | Operator::Equals | Operator::NotEquals => TOP_PRECEDENCE - 300,
             Operator::And => TOP_PRECEDENCE - 400,
@@ -68,6 +69,7 @@ impl Display for Operator
             Operator::Not => write!(fmt, "!"),
             Operator::And => write!(fmt, "&&"),
             Operator::Or => write!(fmt, "||"),
+            Operator::Concat => write!(fmt, "++"),
         }
     }
 }

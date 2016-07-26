@@ -1,5 +1,3 @@
-import cobra
-
 
 map(v: [$a], fn: ($a) -> $b) -> [$b] =
     match v

@@ -171,6 +171,7 @@ impl Lexer
             ":" => Ok(TokenKind::Colon),
             "::" => Ok(TokenKind::DoubleColon),
             "|" => Ok(TokenKind::Pipe),
+            "++" => Ok(TokenKind::Operator(Operator::Concat)),
             _ => err(self.pos, ErrorCode::InvalidOperator, format!("Invalid operator {}", self.data)),
         }
     }
