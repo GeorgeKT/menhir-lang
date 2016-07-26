@@ -6,18 +6,16 @@ pub struct Argument
 {
     pub name: String,
     pub typ: Type,
-    pub constant: bool,
     pub span: Span,
 }
 
 impl Argument
 {
-    pub fn new(name: String, typ: Type, constant: bool, span: Span) -> Argument
+    pub fn new(name: String, typ: Type, span: Span) -> Argument
     {
         Argument{
             name: name,
             typ: typ,
-            constant: constant,
             span: span,
         }
     }
@@ -28,7 +26,7 @@ impl TreePrinter for Argument
     fn print(&self, level: usize)
     {
         let p = prefix(level);
-        println!("{}{}: {} (constant: {}, span; {})", p, self.name, self.typ, self.constant, self.span);
+        println!("{}{}: {} (span; {})", p, self.name, self.typ, self.span);
     }
 }
 
@@ -85,6 +83,16 @@ impl TreePrinter for Function
         println!("{}function ({})", p, self.span);
         self.sig.print(level + 1);
         self.expression.print(level + 2)
+    }
+}
+
+pub fn sig(name: &str, ret: Type, args: Vec<Argument>, span: Span) -> FunctionSignature
+{
+    FunctionSignature{
+        name: name.into(),
+        return_type: ret,
+        args: args,
+        span: span,
     }
 }
 

@@ -1,5 +1,5 @@
 use std::io::Cursor;
-use ast::{Expression, NameRef, TreePrinter, Call, unary_op, bin_op, array_lit};
+use ast::{Expression, NameRef, TreePrinter, Function, Argument, Call, Type, sig, unary_op, bin_op, array_lit};
 use compileerror::{Span, span};
 use parser::{Lexer, Operator, parse_expression};
 
@@ -223,4 +223,68 @@ fn test_array_literal()
         ],
         span(1, 1, 1, 9)));
 
+}
+
+fn primitive(name: &str) -> Type
+{
+    Type::Primitive(name.into())
+}
+
+fn arg(name: &str, typ: Type, span: Span) -> Argument
+{
+    Argument::new(name.into(), typ, span)
+}
+
+#[test]
+fn test_function_with_args()
+{
+    let e = th_expr("foo(a: int, b: int) -> int = 7");
+    assert!(e == Expression::Function(Function::new(
+        sig(
+            "foo",
+            primitive("int"),
+            vec![
+                arg("a", primitive("int"), span(1, 5, 1, 10)),
+                arg("b", primitive("int"), span(1, 13, 1, 18)),
+            ],
+            span(1, 1, 1, 26)
+        ),
+        true,
+        number(7, span(1, 30, 1, 30)),
+        span(1, 1, 1, 30))
+    ))
+}
+
+#[test]
+fn test_function_with_no_args()
+{
+    let e = th_expr("foo() -> int = 7");
+    assert!(e == Expression::Function(Function::new(
+        sig(
+            "foo",
+            primitive("int"),
+            Vec::new(),
+            span(1, 1, 1, 12)
+        ),
+        true,
+        number(7, span(1, 16, 1, 16)),
+        span(1, 1, 1, 16))
+    ))
+}
+
+#[test]
+fn test_function_with_no_return_type()
+{
+    let e = th_expr("foo() = 7");
+    assert!(e == Expression::Function(Function::new(
+        sig(
+            "foo",
+            Type::Void,
+            Vec::new(),
+            span(1, 1, 1, 5)
+        ),
+        true,
+        number(7, span(1, 9, 1, 9)),
+        span(1, 1, 1, 9))
+    ))
 }

@@ -1,4 +1,5 @@
-use ast::{Expression, Call, NameRef, array_init, array_lit, unary_op, bin_op2, bin_op};
+use ast::{Expression, Function, Call, NameRef, Type, Argument,
+    array_init, array_lit, unary_op, bin_op2, bin_op, sig, is_primitive_type};
 use compileerror::{CompileResult, ErrorCode, Span, Pos, err};
 use parser::{TokenQueue, Token, TokenKind, Operator};
 
@@ -151,6 +152,74 @@ fn parse_function_call(tq: &mut TokenQueue, name: NameRef) -> CompileResult<Call
 }
 
 
+
+fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
+{
+    if tq.is_next(TokenKind::Dollar)
+    {
+        try!(tq.pop());
+        let (name, _pos) = try!(tq.expect_identifier());
+        Ok(Type::Generic(name))
+    }
+    else if tq.is_next(TokenKind::OpenBracket)
+    {
+        try!(tq.pop());
+        let at = try!(parse_type(tq));
+        try!(tq.expect(TokenKind::CloseBracket));
+        Ok(Type::Array(Box::new(at)))
+    }
+    else
+    {
+        let (name, _pos) = try!(tq.expect_identifier());
+        if is_primitive_type(&name)
+        {
+            Ok(Type::Primitive(name))
+        }
+        else
+        {
+            Ok(Type::Complex(name))
+        }
+    }
+}
+
+fn parse_function_argument(tq: &mut TokenQueue) -> CompileResult<Argument>
+{
+    let (name, span) = try!(tq.expect_identifier());
+    try!(tq.expect(TokenKind::Colon));
+    let typ = try!(parse_type(tq));
+    Ok(Argument::new(name, typ, Span::new(span.start, tq.pos())))
+}
+
+fn parse_function_definition(tq: &mut TokenQueue, name: NameRef) -> CompileResult<Function>
+{
+    let mut args = Vec::new();
+    while !tq.is_next(TokenKind::CloseParen)
+    {
+        let arg = try!(parse_function_argument(tq));
+        args.push(arg);
+        try!(eat_comma(tq));
+    }
+
+    try!(tq.pop());
+    let ret_type = if tq.is_next(TokenKind::Arrow) {
+        try!(tq.pop());
+        try!(parse_type(tq))
+    } else {
+        Type::Void
+    };
+
+    let sig_span_end = tq.pos();
+    try!(tq.expect(TokenKind::Assign));
+    let expr = try!(parse_expression(tq));
+
+    Ok(Function::new(
+        sig(&name.name, ret_type, args, Span::new(name.span.start, sig_span_end)),
+        true,
+        expr,
+        Span::new(name.span.start, tq.pos())))
+}
+
+
 fn parse_lhs(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expression>
 {
     match tok.kind
@@ -195,7 +264,14 @@ fn parse_rhs(tq: &mut TokenQueue, lhs: Expression) -> CompileResult<Expression>
     {
         TokenKind::OpenParen => {
             let nr = try!(lhs.to_name_ref());
-            try!(parse_function_call(tq, nr).map(|c| Expression::Call(c)))
+            if tq.is_next_at(1, TokenKind::Colon) || tq.is_next_at(1, TokenKind::Arrow) || tq.is_next_at(1, TokenKind::Assign)
+            {
+                try!(parse_function_definition(tq, nr).map(|f| Expression::Function(f)))
+            }
+            else
+            {
+                try!(parse_function_call(tq, nr).map(|c| Expression::Call(c)))
+            }
         },
 
         TokenKind::Operator(op) if op.is_binary_operator() => {
