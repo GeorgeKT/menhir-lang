@@ -1,5 +1,6 @@
 use std::io::Cursor;
-use ast::{Expression, NameRef, TreePrinter, Function, Argument, Call, Type, sig, unary_op, bin_op, array_lit};
+use ast::{Expression, NameRef, TreePrinter, Function, Argument, Call, Type,
+    sig, unary_op, bin_op, array_lit, match_expression, match_case};
 use compileerror::{Span, span};
 use parser::{Lexer, Operator, parse_expression};
 
@@ -286,5 +287,25 @@ fn test_function_with_no_return_type()
         true,
         number(7, span(1, 9, 1, 9)),
         span(1, 1, 1, 9))
+    ))
+}
+
+#[test]
+fn test_match()
+{
+    let e = th_expr(r#"
+match a
+    0 => 1,
+    1 => 2,
+    2 => 3
+"#);
+    assert!(e == Expression::Match(match_expression(
+        name_ref("a", span(2, 7, 2, 7)),
+        vec![
+            match_case(number(0, span(3, 5, 3, 5)), number(1, span(3, 10, 3, 10))),
+            match_case(number(1, span(4, 5, 4, 5)), number(2, span(4, 10, 4, 10))),
+            match_case(number(2, span(5, 5, 5, 5)), number(3, span(5, 10, 5, 10))),
+        ],
+        span(2, 1, 5, 10))
     ))
 }

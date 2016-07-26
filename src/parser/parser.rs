@@ -1,7 +1,9 @@
+use std::fs;
 use ast::{Expression, Function, Call, NameRef, Type, Argument,
-    array_init, array_lit, unary_op, bin_op2, bin_op, sig, is_primitive_type};
+    array_init, array_lit, unary_op, bin_op2, bin_op, sig, is_primitive_type,
+    match_expression, match_case};
 use compileerror::{CompileResult, ErrorCode, Span, Pos, err};
-use parser::{TokenQueue, Token, TokenKind, Operator};
+use parser::{TokenQueue, Token, TokenKind, Operator, Lexer};
 
 fn is_end_of_expression(tok: &Token) -> bool
 {
@@ -219,11 +221,33 @@ fn parse_function_definition(tq: &mut TokenQueue, name: NameRef) -> CompileResul
         Span::new(name.span.start, tq.pos())))
 }
 
+fn parse_match(tq: &mut TokenQueue, start: Pos) -> CompileResult<Expression>
+{
+    let target = try!(parse_expression(tq));
+    let mut cases = Vec::new();
+    loop
+    {
+        let c = try!(parse_expression(tq));
+        try!(tq.expect(TokenKind::FatArrow));
+        let t = try!(parse_expression(tq));
+        cases.push(match_case(c, t));
+        if tq.is_next(TokenKind::Comma) { // Continue, while we see a comman
+            try!(tq.pop());
+        } else {
+            break;
+        }
+    }
+    Ok(Expression::Match(match_expression(target, cases, Span::new(start, tq.pos()))))
+}
 
-fn parse_lhs(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expression>
+fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expression>
 {
     match tok.kind
     {
+        TokenKind::Match => {
+            parse_match(tq, tok.span.start)
+        },
+
         TokenKind::OpenParen => {
             let expr = try!(parse_expression(tq));
             try!(tq.expect(TokenKind::CloseParen));
@@ -253,7 +277,7 @@ fn parse_lhs(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expression>
     }
 }
 
-fn parse_rhs(tq: &mut TokenQueue, lhs: Expression) -> CompileResult<Expression>
+fn parse_expression_continued(tq: &mut TokenQueue, lhs: Expression) -> CompileResult<Expression>
 {
     if is_end_of_expression(tq.peek().expect("Unexpected EOF")) {
         return Ok(lhs);
@@ -279,20 +303,37 @@ fn parse_rhs(tq: &mut TokenQueue, lhs: Expression) -> CompileResult<Expression>
             try!(parse_binary_op_rhs(tq, lhs))
         },
         _ => {
-            return err(tq.pos(), ErrorCode::UnexpectedToken, format!("Unexpected token {}", next));
+            tq.push_front(next);
+            return Ok(lhs);
         },
     };
 
-    parse_rhs(tq, nlhs)
+    parse_expression_continued(tq, nlhs)
 }
 
 pub fn parse_expression(tq: &mut TokenQueue) -> CompileResult<Expression>
 {
     let tok = try!(tq.pop());
-    if is_end_of_expression(&tok) {
-        return err(tq.pos(), ErrorCode::ExpectedStartOfExpression, format!("Expected the start of a new expression"));
+    let lhs = try!(parse_expression_start(tq, tok));
+    parse_expression_continued(tq, lhs)
+}
+
+pub fn parse_expression_list(tq: &mut TokenQueue) -> CompileResult<Vec<Expression>>
+{
+    let mut expressions = Vec::new();
+    while !tq.is_next(TokenKind::EOF)
+    {
+        expressions.push(try!(parse_expression(tq)));
     }
 
-    let lhs = try!(parse_lhs(tq, tok));
-    parse_rhs(tq, lhs)
+    Ok(expressions)
+}
+
+pub fn parse_file(file_path: &str) -> CompileResult<Vec<Expression>>
+{
+    let mut file = try!(fs::File::open(file_path));
+    //let path = Path::new(file_path);
+    let mut tq = try!(Lexer::new().read(&mut file));
+    //let module_name: &OsStr = path.file_stem().expect("Invalid filename");
+    parse_expression_list(&mut tq/*, module_name.to_str().expect("Invalid UTF8 filename"), mode*/)
 }

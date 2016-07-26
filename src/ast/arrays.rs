@@ -25,6 +25,14 @@ pub struct IndexOperation
     pub span: Span,
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct ArrayPattern
+{
+    pub head: String,
+    pub tail: String,
+    pub span: Span,
+}
+
 /*
 pub fn index_op(target: Expression, index_expr: Expression, span: Span) -> Expression
 {
@@ -51,6 +59,15 @@ pub fn array_init(init: Expression, times: u64, span: Span) -> Expression
     Expression::ArrayInitializer(ArrayInitializer{
         init: Box::new(init),
         times: times,
+        span: span,
+    })
+}
+
+pub fn array_pattern(head: &str, tail: &str, span: Span) -> Expression
+{
+    Expression::ArrayPattern(ArrayPattern{
+        head: head.into(),
+        tail: tail.into(),
         span: span,
     })
 }

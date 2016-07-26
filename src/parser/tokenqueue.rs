@@ -54,17 +54,6 @@ impl TokenQueue
         }
     }
 
-    pub fn pop_if<P>(&mut self, predicate: P) ->  CompileResult<Option<Token>>
-        where P: Fn(&Token) -> bool
-    {
-        let pop = self.tokens.front().map(|tok| predicate(tok)).unwrap_or(false);
-        if pop {
-            self.pop().map(|tok| Some(tok))
-        } else {
-            Ok(None)
-        }
-    }
-
     pub fn peek(&self) -> Option<&Token>
     {
         self.tokens.front()
@@ -147,6 +136,7 @@ impl TokenQueue
         }
     }
 
+/*
     pub fn is_next_identifier(&self) -> bool
     {
         match self.tokens.front()
@@ -155,6 +145,7 @@ impl TokenQueue
             None => false,
         }
     }
+    */
 }
 
 impl Iterator for TokenQueue

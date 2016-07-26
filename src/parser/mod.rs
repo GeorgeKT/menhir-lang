@@ -9,4 +9,4 @@ mod tests;
 pub use self::lexer::{Lexer};
 pub use self::tokenqueue::{TokenQueue};
 pub use self::tokens::{Operator, Token, TokenKind};
-pub use self::parser::{parse_expression};
+pub use self::parser::{parse_expression, parse_file};

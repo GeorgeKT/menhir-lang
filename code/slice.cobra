@@ -4,7 +4,7 @@ import cobra
 map(v: [$a], fn: ($a) -> $b) -> [$b] =
     match v
         [] => [],
-        [hd | tail] => [fn(hd) | map(tail, fn)]
+        [hd | tail] => fn(hd) ++ map(tail, fn)
 
 fold(v: [$a], accu: $b, fn: ($b, $a) -> $b) -> $b =
     match v

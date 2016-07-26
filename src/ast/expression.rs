@@ -1,5 +1,6 @@
 use compileerror::{Span, CompileResult, ErrorCode, err};
-use ast::{Call, ArrayLiteral, ArrayInitializer, NameRef, BinaryOp, UnaryOp, Function, TreePrinter, prefix};
+use ast::{Call, ArrayLiteral, ArrayInitializer, ArrayPattern, NameRef, BinaryOp, UnaryOp, Function,
+    MatchExpression, TreePrinter, prefix};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
@@ -8,13 +9,15 @@ pub enum Expression
     FloatLiteral(Span, String), // Keep as string until we generate code, so we can compare it
     StringLiteral(Span, String),
     ArrayLiteral(ArrayLiteral),
-    ArrayInitializer(ArrayInitializer),
+    ArrayInitializer(ArrayInitializer), // [x; times]
+    ArrayPattern(ArrayPattern), // [hd | tail]
     UnaryOp(UnaryOp),
     BinaryOp(BinaryOp),
     Enclosed(Span, Box<Expression>), // Expression enclosed between parens
     Call(Call),
     NameRef(NameRef),
     Function(Function),
+    Match(MatchExpression),
 }
 
 
@@ -38,12 +41,14 @@ impl Expression
             Expression::StringLiteral(span, _) => span,
             Expression::ArrayLiteral(ref a) => a.span,
             Expression::ArrayInitializer(ref a) => a.span,
+            Expression::ArrayPattern(ref a) => a.span,
             Expression::UnaryOp(ref op) => op.span,
             Expression::BinaryOp(ref op) => op.span,
             Expression::Enclosed(span, _) => span,
             Expression::Call(ref c) => c.span,
             Expression::NameRef(ref nr) => nr.span,
             Expression::Function(ref f) => f.span,
+            Expression::Match(ref m) => m.span,
         }
     }
 
@@ -84,6 +89,9 @@ impl TreePrinter for Expression
                 println!("{}array initializer {} ({})", p, a.times, a.span);
                 a.init.print(level + 1);
             },
+            Expression::ArrayPattern(ref a) => {
+                println!("{}array pattern [{} | {}]", p, a.head, a.tail);
+            },
             Expression::UnaryOp(ref op) => {
                 println!("{}unary {} ({})", p, op.operator, op.span);
                 op.expression.print(level + 1)
@@ -100,6 +108,7 @@ impl TreePrinter for Expression
             Expression::Call(ref c) => c.print(level),
             Expression::NameRef(ref nr) => nr.print(level),
             Expression::Function(ref f) => f.print(level),
+            Expression::Match(ref m) => m.print(level),
         }
     }
 }
