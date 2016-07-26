@@ -1,4 +1,5 @@
 use std::fmt;
+use itertools::free::join;
 use ast::{TreePrinter, prefix};
 
 
@@ -11,6 +12,7 @@ pub enum Type
     Complex(String),
     Array(Box<Type>),
     Generic(String),
+    Func(Vec<Type>, Box<Type>), // args and return type
 }
 
 impl fmt::Display for Type
@@ -25,6 +27,7 @@ impl fmt::Display for Type
             Type::Complex(ref s) => write!(f, "{}", s),
             Type::Array(ref at) => write!(f, "[{}]", at),
             Type::Generic(ref g) => write!(f, "${}", g),
+            Type::Func(ref args, ref ret) => write!(f, "({}) -> {}", join(args.iter(), ", "), ret),
         }
     }
 }

@@ -1,5 +1,6 @@
 extern crate docopt;
 extern crate rustc_serialize;
+extern crate itertools;
 
 #[allow(dead_code)]
 mod compileerror;

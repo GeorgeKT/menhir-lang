@@ -179,6 +179,21 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
         try!(tq.expect(TokenKind::CloseBracket));
         Ok(Type::Array(Box::new(at)))
     }
+    else if tq.is_next(TokenKind::OpenParen)
+    {
+        // Function signature: (a, b) -> c
+        try!(tq.pop());
+        let mut args = Vec::new();
+        while !tq.is_next(TokenKind::CloseParen)
+        {
+            args.push(try!(parse_type(tq)));
+            try!(eat_comma(tq));
+        }
+        try!(tq.expect(TokenKind::CloseParen));
+        try!(tq.expect(TokenKind::Arrow));
+        let ret = try!(parse_type(tq));
+        Ok(Type::Func(args, Box::new(ret)))
+    }
     else
     {
         let (name, _pos) = try!(tq.expect_identifier());

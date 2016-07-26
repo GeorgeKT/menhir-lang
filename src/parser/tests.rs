@@ -316,6 +316,35 @@ fn test_function_with_no_return_type()
     ))
 }
 
+#[test]
+fn test_function_with_func_type()
+{
+    let e = th_expr("foo(a: (int, int) -> int) = 7");
+    assert!(e == Expression::Function(Function::new(
+        sig(
+            "foo",
+            Type::Void,
+            vec![
+                Argument::new(
+                    "a".into(),
+                    Type::Func(
+                        vec![
+                            primitive("int"),
+                            primitive("int"),
+                        ],
+                        Box::new(primitive("int")),
+                    ),
+                    span(1, 5, 1, 24)
+                ),
+            ],
+            span(1, 1, 1, 25)
+        ),
+        true,
+        number(7, span(1, 29, 1, 29)),
+        span(1, 1, 1, 29))
+    ))
+}
+
 
 #[test]
 fn test_lambda()
