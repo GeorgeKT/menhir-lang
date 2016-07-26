@@ -1,6 +1,6 @@
 use compileerror::{Span, CompileResult, ErrorCode, err};
 use ast::{Call, ArrayLiteral, ArrayInitializer, ArrayPattern, NameRef, BinaryOp, UnaryOp, Function,
-    MatchExpression, TreePrinter, prefix};
+    MatchExpression, TreePrinter, Lambda, prefix};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
@@ -18,6 +18,7 @@ pub enum Expression
     NameRef(NameRef),
     Function(Function),
     Match(MatchExpression),
+    Lambda(Lambda),
 }
 
 
@@ -49,6 +50,7 @@ impl Expression
             Expression::NameRef(ref nr) => nr.span,
             Expression::Function(ref f) => f.span,
             Expression::Match(ref m) => m.span,
+            Expression::Lambda(ref l) => l.span,
         }
     }
 
@@ -109,6 +111,7 @@ impl TreePrinter for Expression
             Expression::NameRef(ref nr) => nr.print(level),
             Expression::Function(ref f) => f.print(level),
             Expression::Match(ref m) => m.print(level),
+            Expression::Lambda(ref l) => l.print(level),
         }
     }
 }

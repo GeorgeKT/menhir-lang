@@ -1,7 +1,7 @@
 use std::fs;
 use ast::{Expression, Function, Call, NameRef, Type, Argument,
     array_init, array_lit, array_pattern, unary_op, bin_op2, bin_op, sig, is_primitive_type,
-    match_expression, match_case};
+    match_expression, match_case, lambda};
 use compileerror::{CompileResult, ErrorCode, Span, Pos, err};
 use parser::{TokenQueue, Token, TokenKind, Operator, Lexer};
 
@@ -196,12 +196,17 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
 fn parse_function_argument(tq: &mut TokenQueue) -> CompileResult<Argument>
 {
     let (name, span) = try!(tq.expect_identifier());
-    try!(tq.expect(TokenKind::Colon));
-    let typ = try!(parse_type(tq));
+    let typ = if tq.is_next(TokenKind::Colon) {
+        try!(tq.expect(TokenKind::Colon));
+        try!(parse_type(tq))
+    } else {
+        Type::Unknown
+    };
+
     Ok(Argument::new(name, typ, Span::new(span.start, tq.pos())))
 }
 
-fn parse_function_definition(tq: &mut TokenQueue, name: NameRef) -> CompileResult<Function>
+fn parse_function_arguments(tq: &mut TokenQueue) -> CompileResult<Vec<Argument>>
 {
     let mut args = Vec::new();
     while !tq.is_next(TokenKind::CloseParen)
@@ -211,7 +216,14 @@ fn parse_function_definition(tq: &mut TokenQueue, name: NameRef) -> CompileResul
         try!(eat_comma(tq));
     }
 
-    try!(tq.pop());
+    try!(tq.expect(TokenKind::CloseParen));
+    Ok(args)
+}
+
+fn parse_function_definition(tq: &mut TokenQueue, name: NameRef) -> CompileResult<Function>
+{
+    let args = try!(parse_function_arguments(tq));
+
     let ret_type = if tq.is_next(TokenKind::Arrow) {
         try!(tq.pop());
         try!(parse_type(tq))
@@ -249,10 +261,23 @@ fn parse_match(tq: &mut TokenQueue, start: Pos) -> CompileResult<Expression>
     Ok(Expression::Match(match_expression(target, cases, Span::new(start, tq.pos()))))
 }
 
+fn parse_lambda(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
+{
+    try!(tq.expect(TokenKind::OpenParen));
+    let args = try!(parse_function_arguments(tq));
+    try!(tq.expect(TokenKind::Arrow));
+    let expr = try!(parse_expression(tq));
+    Ok(Expression::Lambda(lambda(args, expr, Span::new(pos, tq.pos()))))
+}
+
 fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expression>
 {
     match tok.kind
     {
+        TokenKind::Lambda => {
+            parse_lambda(tq, tok.span.start)
+        },
+
         TokenKind::Match => {
             parse_match(tq, tok.span.start)
         },

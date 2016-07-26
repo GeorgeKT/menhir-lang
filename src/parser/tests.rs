@@ -1,6 +1,7 @@
 use std::io::Cursor;
 use ast::{Expression, NameRef, TreePrinter, Function, Argument, Call, Type,
-    sig, unary_op, bin_op, array_lit, match_expression, match_case, array_pattern};
+    sig, unary_op, bin_op, array_lit, match_expression, match_case,
+    array_pattern, lambda};
 use compileerror::{Span, span};
 use parser::{Lexer, Operator, parse_expression};
 
@@ -313,6 +314,26 @@ fn test_function_with_no_return_type()
         number(7, span(1, 9, 1, 9)),
         span(1, 1, 1, 9))
     ))
+}
+
+
+#[test]
+fn test_lambda()
+{
+    let e = th_expr("@(a, b) -> a + b");
+    assert!(e == Expression::Lambda(lambda(
+        vec![
+            Argument::new("a".into(), Type::Unknown, span(1, 3, 1, 3)),
+            Argument::new("b".into(), Type::Unknown, span(1, 6, 1, 6)),
+        ],
+        bin_op(
+            Operator::Add,
+            name_ref("a", span(1, 12, 1, 12)),
+            name_ref("b", span(1, 16, 1, 16)),
+            span(1, 12, 1, 16)
+        ),
+        span(1, 1, 1, 16)
+    )))
 }
 
 #[test]

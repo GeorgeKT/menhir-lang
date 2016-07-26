@@ -2,6 +2,7 @@ mod arrays;
 mod call;
 mod expression;
 mod function;
+mod lambda;
 mod matchexpression;
 mod nameref;
 mod operations;
@@ -11,6 +12,7 @@ pub use self::arrays::{ArrayLiteral, ArrayInitializer, ArrayPattern, array_lit, 
 pub use self::call::Call;
 pub use self::expression::Expression;
 pub use self::function::{Function, FunctionSignature, Argument, sig};
+pub use self::lambda::{Lambda, lambda};
 pub use self::matchexpression::{MatchExpression, match_case, match_expression};
 pub use self::nameref::NameRef;
 pub use self::operations::{BinaryOp, UnaryOp, unary_op, bin_op, bin_op2};
