@@ -1,5 +1,5 @@
 use std::fs;
-use ast::{Expression, Function, Call, NameRef, Type, Argument,
+use ast::{Expression, Function, Call, NameRef, Type, Argument, Module,
     array_init, array_lit, array_pattern, unary_op, bin_op2, bin_op, sig, is_primitive_type,
     match_expression, match_case, lambda};
 use compileerror::{CompileResult, ErrorCode, Span, Pos, err};
@@ -378,11 +378,20 @@ pub fn parse_expression_list(tq: &mut TokenQueue) -> CompileResult<Vec<Expressio
     Ok(expressions)
 }
 
-pub fn parse_file(file_path: &str) -> CompileResult<Vec<Expression>>
+
+pub fn parse_file(file_path: &str) -> CompileResult<Module>
 {
+    use std::path::Path;
+    use std::ffi::OsStr;
+    
     let mut file = try!(fs::File::open(file_path));
-    //let path = Path::new(file_path);
+    let path = Path::new(file_path);
     let mut tq = try!(Lexer::new().read(&mut file));
-    //let module_name: &OsStr = path.file_stem().expect("Invalid filename");
-    parse_expression_list(&mut tq/*, module_name.to_str().expect("Invalid UTF8 filename"), mode*/)
+    let module_name: &OsStr = path.file_stem().expect("Invalid filename");
+    let expressions = try!(parse_expression_list(&mut tq));
+
+    Ok(Module{
+        name: module_name.to_str().expect("Invalid UTF8 filename").into(),
+        expressions: expressions,
+    })
 }

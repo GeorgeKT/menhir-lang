@@ -32,3 +32,21 @@ pub trait TreePrinter
 {
     fn print(&self, level: usize);
 }
+
+pub struct Module
+{
+    pub name: String,
+    pub expressions: Vec<Expression>,
+}
+
+impl TreePrinter for Module
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        println!("{}Module: {}", p, self.name);
+        for e in &self.expressions {
+            e.print(level + 1);
+        }
+    }
+}

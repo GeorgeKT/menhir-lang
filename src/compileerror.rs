@@ -20,11 +20,6 @@ impl Pos
             offset: offset,
         }
     }
-
-    pub fn zero() -> Pos
-    {
-        Pos::new(0, 0)
-    }
 }
 
 impl fmt::Display for Pos
@@ -75,11 +70,6 @@ impl Span
         Span{start: start, end: start}
     }
 
-    pub fn zero() -> Span
-    {
-        Span::new(Pos::zero(), Pos::zero())
-    }
-
     pub fn merge(a: &Span, b: &Span) -> Span
     {
         let s = if a.start < b.start {a.start} else {b.start};
@@ -109,18 +99,16 @@ pub enum ErrorCode
     IOError,
     UnexpectedChar,
     UnexpectedToken,
-    ExpectedIndent,
     ExpectedIdentifier,
     ExpectedIntLiteral,
     ExpectedOperator,
-    ExpectedStartOfExpression,
     InvalidOperator,
     InvalidUnaryOperator,
-    InvalidBinaryOperator,
+    //InvalidBinaryOperator,
     InvalidFloatingPoint,
     InvalidInteger,
     TypeError,
-    SelfNotAllowed,
+    /*
     RedefinitionOfVariable,
     RedefinitionOfFunction,
     RedefinitionOfStruct,
@@ -137,6 +125,7 @@ pub enum ErrorCode
     ExpectedConstExpr,
     IndexOperationNotSupported,
     TraitNotImplemented,
+    */
 }
 
 
@@ -172,10 +161,12 @@ pub fn type_error(pos: Pos, msg: String) -> CompileError
     CompileError::new(pos, ErrorCode::TypeError, msg)
 }
 
+/*
 pub fn expected_const_expr(pos: Pos, msg: String) -> CompileError
 {
     CompileError::new(pos, ErrorCode::ExpectedConstExpr, msg)
 }
+*/
 
 impl fmt::Display for CompileError
 {

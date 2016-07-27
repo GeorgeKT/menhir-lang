@@ -1,15 +1,20 @@
 extern crate docopt;
 extern crate rustc_serialize;
 extern crate itertools;
+extern crate llvm_sys as llvm;
 
-#[allow(dead_code)]
+mod codegen;
 mod compileerror;
 mod parser;
 mod ast;
 
+use std::path::Path;
+
+use codegen::{CodeGenOptions, codegen};
 use docopt::Docopt;
 use ast::TreePrinter;
 use parser::parse_file;
+
 
 static USAGE: &'static str =  "
 Usage: cobra [options] <input-file>
@@ -32,6 +37,34 @@ struct Args
     flag_output: Option<String>,
 }
 
+fn find_runtime_library() -> Option<String>
+{
+    let paths = [
+        "/usr/lib/libcobraruntime.a",
+        "/usr/local/lib/libcobraruntime.a",
+        "../librt/libcobraruntime.a",
+        "./librt/libcobraruntime.a",
+        "./libcobraruntime.a",
+    ];
+
+    for p in &paths {
+        if Path::new(*p).exists() {
+            return Some((*p).into());
+        }
+    }
+
+    None
+}
+
+fn default_output_file(input_file: &str) -> String
+{
+    Path::new(&input_file)
+        .file_stem()
+        .expect("Invalid input file")
+        .to_str()
+        .expect("Invalid input file")
+        .into()
+}
 
 fn main()
 {
@@ -40,15 +73,24 @@ fn main()
         .unwrap_or_else(|e| e.exit());
 
     let input_file = args.arg_input_file.expect("Missing input file argument");
+    let output_file = args.flag_output.unwrap_or(default_output_file(&input_file));
+    let debug_compiler = args.flag_debug.unwrap_or(false);
+    let opts = CodeGenOptions{
+        dump_ir: debug_compiler,
+        build_dir: "build".into(),
+        program_name: output_file,
+        runtime_library: find_runtime_library().expect("Unable to find the cobra runtime library"),
+        optimize: args.flag_optimize.unwrap_or(false),
+    };
+
+
     //let output_file = args.flag_output.unwrap_or(default_output_file(&input_file));
-    match parse_file(&input_file)
+    match parse_file(&input_file).and_then(|module| {
+        module.print(0);
+        codegen(&module, &opts)
+    })
     {
-        Ok(expressions) => {
-            for e in expressions.iter()
-            {
-                e.print(0);
-            }
-        }
+        Ok(_) => {},
         Err(e) => println!("Error: {}", e),
     }
 }
