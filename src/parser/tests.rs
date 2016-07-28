@@ -5,7 +5,7 @@ use ast::{Expression, NameRef, TreePrinter, Function, Argument, Call, Type,
 use compileerror::{Span, span};
 use parser::{Lexer, Operator, parse_expression};
 
-fn th_expr(data: &str) -> Expression
+pub fn th_expr(data: &str) -> Expression
 {
     let mut cursor = Cursor::new(data);
     let mut tq = Lexer::new().read(&mut cursor).expect("Lexing failed");
@@ -47,6 +47,8 @@ fn test_basic_expressions()
     assert!(th_expr("id") == name_ref("id", span(1, 1, 1, 2)));
     assert!(th_expr("-1000") == unary_op(Operator::Sub, number(1000, span(1, 2, 1, 5)), span(1, 1, 1, 5)));
     assert!(th_expr("!id") == unary_op(Operator::Not, name_ref("id", span(1, 2, 1, 3)), span(1, 1, 1, 3)));
+    assert!(th_expr("true") == Expression::BoolLiteral(span(1, 1, 1, 4), true));
+    assert!(th_expr("false") == Expression::BoolLiteral(span(1, 1, 1, 5), false));
 }
 
 #[test]
@@ -252,10 +254,6 @@ fn test_array_concat()
     );
 }
 
-fn primitive(name: &str) -> Type
-{
-    Type::Primitive(name.into())
-}
 
 fn arg(name: &str, typ: Type, span: Span) -> Argument
 {
@@ -269,10 +267,10 @@ fn test_function_with_args()
     assert!(e == Expression::Function(Function::new(
         sig(
             "foo",
-            primitive("int"),
+            Type::Int,
             vec![
-                arg("a", primitive("int"), span(1, 5, 1, 10)),
-                arg("b", primitive("int"), span(1, 13, 1, 18)),
+                arg("a", Type::Int, span(1, 5, 1, 10)),
+                arg("b", Type::Int, span(1, 13, 1, 18)),
             ],
             span(1, 1, 1, 26)
         ),
@@ -289,7 +287,7 @@ fn test_function_with_no_args()
     assert!(e == Expression::Function(Function::new(
         sig(
             "foo",
-            primitive("int"),
+            Type::Int,
             Vec::new(),
             span(1, 1, 1, 12)
         ),
@@ -329,10 +327,10 @@ fn test_function_with_func_type()
                     "a".into(),
                     Type::Func(
                         vec![
-                            primitive("int"),
-                            primitive("int"),
+                            Type::Int,
+                            Type::Int,
                         ],
-                        Box::new(primitive("int")),
+                        Box::new(Type::Int),
                     ),
                     span(1, 5, 1, 24)
                 ),

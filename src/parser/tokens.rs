@@ -99,6 +99,8 @@ pub enum TokenKind
     Lambda,
     Dollar,
     Pipe,
+    True,
+    False,
     EOF,
 }
 
@@ -130,6 +132,8 @@ impl Display for TokenKind
             TokenKind::Assign => write!(fmt, "="),
             TokenKind::Dollar => write!(fmt, "$"),
             TokenKind::Pipe => write!(fmt, "|"),
+            TokenKind::True => write!(fmt, "true"),
+            TokenKind::False => write!(fmt, "false"),
             TokenKind::EOF => write!(fmt, "EOF"),
         }
     }

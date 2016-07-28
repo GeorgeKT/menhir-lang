@@ -6,6 +6,7 @@ use ast::{Call, ArrayLiteral, ArrayInitializer, ArrayPattern, NameRef, BinaryOp,
 pub enum Expression
 {
     IntLiteral(Span, u64),
+    BoolLiteral(Span, bool),
     FloatLiteral(Span, String), // Keep as string until we generate code, so we can compare it
     StringLiteral(Span, String),
     ArrayLiteral(ArrayLiteral),
@@ -39,6 +40,7 @@ impl Expression
         {
             Expression::IntLiteral(span, _) => span,
             Expression::FloatLiteral(span, _) => span,
+            Expression::BoolLiteral(span, _) => span,
             Expression::StringLiteral(span, _) => span,
             Expression::ArrayLiteral(ref a) => a.span,
             Expression::ArrayInitializer(ref a) => a.span,
@@ -72,6 +74,10 @@ impl TreePrinter for Expression
         let p = prefix(level);
         match *self
         {
+            Expression::BoolLiteral(ref span, b) => {
+                println!("{}bool {} ({})", p, b, span);
+            },
+            
             Expression::IntLiteral(ref span, integer) => {
                 println!("{}int {} ({})", p, integer, span);
             },

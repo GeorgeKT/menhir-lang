@@ -1,10 +1,11 @@
-use ast::{Expression};
+use ast::{Expression, Type};
 use compileerror::{Span};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ArrayLiteral
 {
     pub elements: Vec<Expression>,
+    pub array_type: Type,
     pub span: Span,
 }
 
@@ -14,9 +15,11 @@ pub struct ArrayInitializer
     // syntax [init; times]
     pub init: Box<Expression>,
     pub times: u64,
+    pub array_type: Type,
     pub span: Span,
 }
 
+/*
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct IndexOperation
 {
@@ -24,6 +27,7 @@ pub struct IndexOperation
     pub index_expr: Box<Expression>,
     pub span: Span,
 }
+*/
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ArrayPattern
@@ -50,6 +54,7 @@ pub fn array_lit(e: Vec<Expression>, span: Span) -> Expression
 {
     Expression::ArrayLiteral(ArrayLiteral{
         elements: e,
+        array_type: Type::Unknown,
         span: span,
     })
 }
@@ -59,6 +64,7 @@ pub fn array_init(init: Expression, times: u64, span: Span) -> Expression
     Expression::ArrayInitializer(ArrayInitializer{
         init: Box::new(init),
         times: times,
+        array_type: Type::Unknown,
         span: span,
     })
 }

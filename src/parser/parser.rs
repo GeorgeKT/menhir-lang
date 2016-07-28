@@ -1,6 +1,6 @@
 use std::fs;
 use ast::{Expression, Function, Call, NameRef, Type, Argument, Module,
-    array_init, array_lit, array_pattern, unary_op, bin_op2, bin_op, sig, is_primitive_type,
+    array_init, array_lit, array_pattern, unary_op, bin_op2, bin_op, sig, to_primitive,
     match_expression, match_case, lambda};
 use compileerror::{CompileResult, ErrorCode, Span, Pos, err};
 use parser::{TokenQueue, Token, TokenKind, Operator, Lexer};
@@ -197,36 +197,31 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
     else
     {
         let (name, _pos) = try!(tq.expect_identifier());
-        if is_primitive_type(&name)
-        {
-            Ok(Type::Primitive(name))
-        }
-        else
-        {
-            Ok(Type::Complex(name))
-        }
+        Ok(to_primitive(&name).unwrap_or(Type::Complex(name)))
     }
 }
 
-fn parse_function_argument(tq: &mut TokenQueue) -> CompileResult<Argument>
+fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool) -> CompileResult<Argument>
 {
     let (name, span) = try!(tq.expect_identifier());
     let typ = if tq.is_next(TokenKind::Colon) {
         try!(tq.expect(TokenKind::Colon));
         try!(parse_type(tq))
-    } else {
+    } else if type_is_optional{
         Type::Unknown
+    } else {
+        return err(span.start, ErrorCode::MissingType, format!("Type not specified of function argument {}", name));
     };
 
     Ok(Argument::new(name, typ, Span::new(span.start, tq.pos())))
 }
 
-fn parse_function_arguments(tq: &mut TokenQueue) -> CompileResult<Vec<Argument>>
+fn parse_function_arguments(tq: &mut TokenQueue, type_is_optional: bool) -> CompileResult<Vec<Argument>>
 {
     let mut args = Vec::new();
     while !tq.is_next(TokenKind::CloseParen)
     {
-        let arg = try!(parse_function_argument(tq));
+        let arg = try!(parse_function_argument(tq, type_is_optional));
         args.push(arg);
         try!(eat_comma(tq));
     }
@@ -237,7 +232,7 @@ fn parse_function_arguments(tq: &mut TokenQueue) -> CompileResult<Vec<Argument>>
 
 fn parse_function_definition(tq: &mut TokenQueue, name: NameRef) -> CompileResult<Function>
 {
-    let args = try!(parse_function_arguments(tq));
+    let args = try!(parse_function_arguments(tq, false));
 
     let ret_type = if tq.is_next(TokenKind::Arrow) {
         try!(tq.pop());
@@ -279,7 +274,7 @@ fn parse_match(tq: &mut TokenQueue, start: Pos) -> CompileResult<Expression>
 fn parse_lambda(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
 {
     try!(tq.expect(TokenKind::OpenParen));
-    let args = try!(parse_function_arguments(tq));
+    let args = try!(parse_function_arguments(tq, true));
     try!(tq.expect(TokenKind::Arrow));
     let expr = try!(parse_expression(tq));
     Ok(Expression::Lambda(lambda(args, expr, Span::new(pos, tq.pos()))))
@@ -289,6 +284,14 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
 {
     match tok.kind
     {
+        TokenKind::True => {
+            Ok(Expression::BoolLiteral(tok.span, true))
+        },
+
+        TokenKind::False => {
+            Ok(Expression::BoolLiteral(tok.span, false))
+        },
+
         TokenKind::Lambda => {
             parse_lambda(tq, tok.span.start)
         },
@@ -383,7 +386,7 @@ pub fn parse_file(file_path: &str) -> CompileResult<Module>
 {
     use std::path::Path;
     use std::ffi::OsStr;
-    
+
     let mut file = try!(fs::File::open(file_path));
     let path = Path::new(file_path);
     let mut tq = try!(Lexer::new().read(&mut file));

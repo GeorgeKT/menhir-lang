@@ -3,10 +3,12 @@ extern crate rustc_serialize;
 extern crate itertools;
 extern crate llvm_sys as llvm;
 
+mod ast;
 mod codegen;
 mod compileerror;
 mod parser;
-mod ast;
+mod passes;
+
 
 use std::path::Path;
 
@@ -14,6 +16,7 @@ use codegen::{CodeGenOptions, codegen};
 use docopt::Docopt;
 use ast::TreePrinter;
 use parser::parse_file;
+use passes::infer_and_check_types;
 
 
 static USAGE: &'static str =  "
@@ -85,8 +88,9 @@ fn main()
 
 
     //let output_file = args.flag_output.unwrap_or(default_output_file(&input_file));
-    match parse_file(&input_file).and_then(|module| {
+    match parse_file(&input_file).and_then(|mut module| {
         module.print(0);
+        try!(infer_and_check_types(&mut module));
         codegen(&module, &opts)
     })
     {

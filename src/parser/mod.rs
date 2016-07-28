@@ -6,6 +6,9 @@ mod parser;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+pub use self::tests::th_expr;
+
 pub use self::lexer::{Lexer};
 pub use self::tokenqueue::{TokenQueue};
 pub use self::tokens::{Operator, Token, TokenKind};

@@ -104,16 +104,20 @@ pub enum ErrorCode
     ExpectedOperator,
     InvalidOperator,
     InvalidUnaryOperator,
-    //InvalidBinaryOperator,
+    InvalidBinaryOperator,
     InvalidFloatingPoint,
     InvalidInteger,
     TypeError,
+    EmptyMatch,
+    UnknownName,
+    MissingType,
+    CallingNonCallable,
     /*
     RedefinitionOfVariable,
     RedefinitionOfFunction,
     RedefinitionOfStruct,
     RedefinitionOfTrait,
-    UnknownVariable,
+    
     UnknownFunction,
     UnknownType,
     UnknownStructMember,
@@ -155,18 +159,6 @@ pub fn err<T: Sized>(pos: Pos, e: ErrorCode, msg: String) -> CompileResult<T>
 {
     Err(CompileError::new(pos, e, msg))
 }
-
-pub fn type_error(pos: Pos, msg: String) -> CompileError
-{
-    CompileError::new(pos, ErrorCode::TypeError, msg)
-}
-
-/*
-pub fn expected_const_expr(pos: Pos, msg: String) -> CompileError
-{
-    CompileError::new(pos, ErrorCode::ExpectedConstExpr, msg)
-}
-*/
 
 impl fmt::Display for CompileError
 {
