@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::ops::Deref;
+use itertools::Itertools;
 use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral, ArrayInitializer, ArrayPattern,
     MatchExpression, Function, Lambda, Call, Type, func_type};
 use compileerror::{CompileResult, Pos, CompileError, ErrorCode, err};
@@ -134,36 +135,6 @@ fn infer(ctx: &TypeCheckerContext, e: &Expression) -> CompileResult<Type>
             err(a.span.start, ErrorCode::TypeError, "Cannot infer type of a pattern".into())
         },
 
-        Expression::UnaryOp(ref u) => {
-            match u.operator
-            {
-                Operator::Not => Ok(Type::Bool),
-                Operator::Sub => infer(ctx, &u.expression),
-                _ => invalid_unary_operator(u.span.start, u.operator),
-            }
-        },
-
-        Expression::BinaryOp(ref b) => {
-            match b.operator 
-            {
-                Operator::LessThan | Operator::GreaterThan | Operator::GreaterThanEquals | Operator::LessThanEquals |
-                Operator::Equals | Operator::NotEquals | Operator::Not | Operator::And | Operator::Or => Ok(Type::Bool),
-                Operator::Add | Operator::Sub | Operator::Mul | Operator::Div => {
-                    let left = try!(infer(ctx, &b.left));
-                    let right = try!(infer(ctx, &b.right));
-                    match (left, right)
-                    {
-                        (Type::Int, Type::Int) => Ok(Type::Int),
-                        (Type::Float, Type::Float) | 
-                        (Type::Int, Type::Float) |
-                        (Type::Float, Type::Int) => Ok(Type::Float), 
-                        _ => expected_numeric_operands(b.span.start, b.operator),
-                    }
-                },
-                Operator::Mod => Ok(Type::Int),
-                Operator::Concat => infer(ctx, &b.left),
-            }
-        },
 
         Expression::Call(ref c) => {
            
@@ -175,7 +146,7 @@ fn infer(ctx: &TypeCheckerContext, e: &Expression) -> CompileResult<Type>
         },
 
         Expression::Function(ref fun) => {
-            Ok(func_type(fun.sig.args.iter().map(|a| a.typ.clone()).collect(), fun.sig.return_type.clone()))
+            Ok()
         },
 
         Expression::Match(ref m) => {
@@ -233,8 +204,8 @@ fn infer_and_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> Co
 
 fn infer_and_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> CompileResult<Type>
 {
-    let left_type = try!(infer_and_check_expression(ctx, &mut b.right));
-    let right_type = try!(infer_and_check_expression(ctx, &mut b.left));
+    let left_type = try!(infer_and_check_expression(ctx, &mut b.left));
+    let right_type = try!(infer_and_check_expression(ctx, &mut b.right));
     match b.operator
     {
         Operator::Add |
@@ -272,7 +243,7 @@ fn infer_and_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> 
                 Ok(Type::Bool)
             },
         Operator::Concat => {
-            if left_type.concattable(&right_type) {
+            if left_type.concat_allowed(&right_type) {
                 Ok(right_type)
             } else {
                 err(b.span.start, ErrorCode::TypeError,
@@ -285,6 +256,11 @@ fn infer_and_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> 
 
 fn infer_and_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLiteral) -> CompileResult<Type>
 {
+    if a.elements.is_empty() {
+        a.array_type = Type::EmptyArray;
+        return Ok(Type::EmptyArray);
+    }
+
     let mut array_element_type = Type::Unknown;
     for e in a.elements.iter_mut() {
         let t = try!(infer_and_check_expression(ctx, e));
@@ -341,9 +317,19 @@ fn infer_and_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileRe
     }
 }
 
-fn infer_and_check_function(ctx: &mut TypeCheckerContext, f: &Function) -> CompileResult<Type>
+fn infer_and_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> CompileResult<Type>
 {
-err(f.span.start, ErrorCode::TypeError, format!("NYI"))
+    let ft = func_type(fun.sig.args.iter().map(|a| a.typ.clone()).collect(), fun.sig.return_type.clone());
+
+    ctx.push_stack();
+    fun.sig.args.iter().foreach(|arg| ctx.add_variable(&arg.name, arg.typ.clone()));
+    let et = try!(infer_and_check_expression(ctx, &mut fun.expression));
+    ctx.pop_stack();
+    if et != fun.sig.return_type {
+        return err(fun.span.start, ErrorCode::TypeError, format!("Function {} has return type {}, but it is returning an expression of type {}",
+            fun.sig.name, fun.sig.return_type, et));
+    }
+    Ok(ft)
 }
 
 fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &MatchExpression) -> CompileResult<Type>
@@ -356,9 +342,10 @@ fn infer_and_check_lambda(ctx: &mut TypeCheckerContext, m: &Lambda) -> CompileRe
 err(m.span.start, ErrorCode::TypeError, format!("NYI"))
 }
 
-fn infer_and_check_name(ctx: &mut TypeCheckerContext, nr: &NameRef) -> CompileResult<Type>
+fn infer_and_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef) -> CompileResult<Type>
 {
-err(nr.span.start, ErrorCode::TypeError, format!("NYI"))
+    nr.typ = try!(ctx.resolve_type(&nr.name).ok_or(unknown_name(nr.span.start, &nr.name)));
+    Ok(nr.typ.clone())
 }
 
 pub fn infer_and_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression) -> CompileResult<Type>
@@ -371,8 +358,8 @@ pub fn infer_and_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expressi
         Expression::ArrayInitializer(ref mut a) => infer_and_check_array_initializer(ctx, a),
         Expression::ArrayPattern(ref a) => Ok(Type::Unknown), // Doesn't really have a type
         Expression::Call(ref mut c) => infer_and_check_call(ctx, c),
-        Expression::NameRef(ref nr) => infer_and_check_name(ctx, nr),
-        Expression::Function(ref f) => infer_and_check_function(ctx, f),
+        Expression::NameRef(ref mut nr) => infer_and_check_name(ctx, nr),
+        Expression::Function(ref mut f) => infer_and_check_function(ctx, f),
         Expression::Match(ref m) => infer_and_check_match(ctx, m),
         Expression::Lambda(ref l) => infer_and_check_lambda(ctx, l),
         Expression::Enclosed(_, ref mut inner) => infer_and_check_expression(ctx, inner),

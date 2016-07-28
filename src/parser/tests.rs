@@ -31,6 +31,7 @@ pub fn name_ref(name: &str, span: Span) -> Expression
 {
     Expression::NameRef(NameRef{
         name: name.into(),
+        typ: Type::Unknown,
         span: span,
     })
 }

@@ -13,6 +13,7 @@ pub enum Type
     String,
     Bool,
     Complex(String),
+    EmptyArray,
     Array(Box<Type>),
     Generic(String),
     Func(Vec<Type>, Box<Type>), // args and return type
@@ -20,13 +21,18 @@ pub enum Type
 
 impl Type
 {
-    pub fn concattable(&self, other: &Type) -> bool
+    pub fn concat_allowed(&self, other: &Type) -> bool
     {
         use std::ops::Deref;
+        if *self == Type::EmptyArray || *other == Type::EmptyArray {
+            return true;
+        }
+        
         match (self, other)
         {
             (&Type::Array(ref s), &Type::Array(ref t)) => s == t,
             (ref s, &Type::Array(ref t)) => **s == *t.deref(),
+            (&Type::Array(ref t), ref s) => **s == *t.deref(),
             _ => false,
         }
     }
@@ -52,6 +58,7 @@ impl fmt::Display for Type
             Type::String => write!(f, "string"),
             Type::Bool => write!(f, "bool"),
             Type::Complex(ref s) => write!(f, "{}", s),
+            Type::EmptyArray => write!(f, "[]"),
             Type::Array(ref at) => write!(f, "[{}]", at),
             Type::Generic(ref g) => write!(f, "${}", g),
             Type::Func(ref args, ref ret) => write!(f, "({}) -> {}", join(args.iter(), ", "), ret),

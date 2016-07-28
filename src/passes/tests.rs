@@ -1,26 +1,64 @@
 use parser::th_expr;
 use passes::typechecker::{TypeCheckerContext, infer_and_check_expression};
+use ast::Type;
+use compileerror::{CompileResult, ErrorCode};
 
-#[test]
-fn test_wrong_type_unary_op()
+fn type_check(expr: &str) -> CompileResult<Type>
 {
 	let mut ctx = TypeCheckerContext::new();
-	let mut e = th_expr("-true");
-	assert!(infer_and_check_expression(&mut ctx, &mut e).is_err());
+	let mut e = th_expr(expr);
+	let r = infer_and_check_expression(&mut ctx, &mut e);
+	println!("result: {:?}", r);
+	r
 }
 
 #[test]
-fn test_wrong_type_unary_op2()
+fn test_unary_op()
 {
-	let mut ctx = TypeCheckerContext::new();
-	let mut e = th_expr("!0");
-	assert!(infer_and_check_expression(&mut ctx, &mut e).is_err());
+	assert!(type_check("-true").unwrap_err().error == ErrorCode::TypeError);
+	assert!(type_check("-5").is_ok());
+	assert!(type_check("!0").unwrap_err().error == ErrorCode::TypeError);
+	assert!(type_check("!false").is_ok());
 }
+
 
 #[test]
 fn test_wrong_type_bin_op()
 {
-	let mut ctx = TypeCheckerContext::new();
-	let mut e = th_expr("a ");
-	assert!(infer_and_check_expression(&mut ctx, &mut e).is_err());
+	assert!(type_check("4 + 6.3").unwrap_err().error == ErrorCode::TypeError);
+	assert!(type_check("4.4 % 6.3").unwrap_err().error == ErrorCode::TypeError);
+	assert!(type_check("4 - 7").is_ok());
+	assert!(type_check("4.5 * 7.6").is_ok());
+	assert!(type_check("true / 7").unwrap_err().error == ErrorCode::TypeError);
+
+	assert!(type_check("4 >= 6.3").unwrap_err().error == ErrorCode::TypeError);
+	assert!(type_check("4 > 7").is_ok());
+	assert!(type_check("4.5 > 7.6").is_ok());
+	assert!(type_check("true <= 7").unwrap_err().error == ErrorCode::TypeError);
+
+	assert!(type_check("(true && false) || true").is_ok());
+	assert!(type_check("true && 5").unwrap_err().error == ErrorCode::TypeError);
+}
+
+#[test]
+fn test_arrays()
+{
+	assert!(type_check("[4] ++ [5]").is_ok());
+	assert!(type_check("4 ++ [5]").is_ok());
+	assert!(type_check("[4] ++ 5").is_ok());
+	assert!(type_check("4 ++ [5.7]").unwrap_err().error == ErrorCode::TypeError);
+	assert!(type_check("[4] ++ [5.7]").unwrap_err().error == ErrorCode::TypeError);
+	assert!(type_check("4 ++ []").is_ok());
+	assert!(type_check("[4] ++ []").is_ok());
+	assert!(type_check("[4, 5.7]").unwrap_err().error == ErrorCode::TypeError);
+	assert!(type_check("[4, 5, 7]").is_ok());
+
+	assert!(type_check("[4; 10]").is_ok());
+}
+
+#[test]
+fn test_function()
+{
+	assert!(type_check("add(a: int, b: int) -> int = a + b").is_ok());
+	assert!(type_check("add(a: int, b: int) -> int = 7.5").unwrap_err().error == ErrorCode::TypeError);
 }

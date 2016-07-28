@@ -1,4 +1,4 @@
-use ast::{TreePrinter, prefix};
+use ast::{Type, TreePrinter, prefix};
 use compileerror::{Span};
 
 
@@ -6,6 +6,7 @@ use compileerror::{Span};
 pub struct NameRef
 {
     pub name: String,
+    pub typ: Type,
     pub span: Span,
 }
 
@@ -15,6 +16,7 @@ impl NameRef
     {
         NameRef{
             name: name,
+            typ: Type::Unknown,
             span: span,
         }
     }
