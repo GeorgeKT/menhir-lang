@@ -134,7 +134,7 @@ impl Lexer
 
     fn number(&mut self, c: char) -> CompileResult<()>
     {
-        if c.is_numeric()
+        if c.is_numeric() || c == '.' || c == 'e' 
         {
             self.data.push(c);
             Ok(())
