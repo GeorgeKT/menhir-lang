@@ -16,7 +16,7 @@ pub use self::lambda::{Lambda, lambda};
 pub use self::matchexpression::{MatchExpression, match_case, match_expression};
 pub use self::nameref::NameRef;
 pub use self::operations::{BinaryOp, UnaryOp, unary_op, bin_op, bin_op2};
-pub use self::types::{Type, to_primitive, func_type};
+pub use self::types::{Type, to_primitive, func_type, array_type};
 
 
 fn prefix(level: usize) -> String

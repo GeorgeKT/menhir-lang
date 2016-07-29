@@ -1,4 +1,5 @@
 use std::fmt;
+use std::ops::Deref;
 use itertools::free::join;
 use ast::{TreePrinter, prefix};
 
@@ -23,7 +24,6 @@ impl Type
 {
     pub fn concat_allowed(&self, other: &Type) -> bool
     {
-        use std::ops::Deref;
         if *self == Type::EmptyArray || *other == Type::EmptyArray {
             return true;
         }
@@ -37,12 +37,45 @@ impl Type
         }
     }
 
+    pub fn is_array(&self) -> bool 
+    {
+        match *self 
+        {
+            Type::Array(_) | Type::EmptyArray => true,
+            _ => false,
+        }
+    }
 
+    pub fn get_array_element_type(&self) -> Option<Type>
+    {
+        match *self 
+        {
+            Type::Array(ref et) => Some(et.deref().clone()),
+            Type::EmptyArray => Some(Type::Unknown),
+            _ => None,
+        }
+    }
+
+    pub fn is_matchable(&self, other: &Type) -> bool 
+    {
+        match (self, other)
+        {
+            (&Type::Array(ref s), &Type::Array(ref t)) => s == t,
+            (&Type::EmptyArray, &Type::Array(_)) => true,
+            (&Type::Array(_), &Type::EmptyArray) => true,
+            _ => *self == *other,
+        }
+    }
 }
 
 pub fn func_type(args: Vec<Type>, ret: Type) -> Type 
 {
     Type::Func(args, Box::new(ret))
+}
+
+pub fn array_type(element_type: Type) -> Type 
+{
+    Type::Array(Box::new(element_type))
 }
 
 impl fmt::Display for Type

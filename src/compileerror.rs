@@ -108,7 +108,6 @@ pub enum ErrorCode
     InvalidFloatingPoint,
     InvalidInteger,
     TypeError,
-    EmptyMatch,
     UnknownName,
     MissingType,
     CallingNonCallable,

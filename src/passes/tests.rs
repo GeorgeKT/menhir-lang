@@ -62,3 +62,29 @@ fn test_function()
 	assert!(type_check("add(a: int, b: int) -> int = a + b").is_ok());
 	assert!(type_check("add(a: int, b: int) -> int = 7.5").unwrap_err().error == ErrorCode::TypeError);
 }
+
+#[test]
+fn test_array_match()
+{
+	assert!(type_check(r#"
+foo(x: [int]) -> int =
+	match x
+		[] => 0,
+		[head | tail] => head + foo(tail)
+"#).is_ok());
+
+	assert!(type_check(r#"
+foo(x: [int]) -> int =
+	match x
+		7 => 0,
+		[head | tail] => head + foo(tail)
+"#).unwrap_err().error == ErrorCode::TypeError);
+
+	assert!(type_check(r#"
+foo(x: int) -> int =
+	match x
+		7 => 8,
+		6 => 7,
+		_ => 9
+"#).is_ok());
+}

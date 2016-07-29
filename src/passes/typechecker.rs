@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::ops::Deref;
 use itertools::Itertools;
-use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral, ArrayInitializer, ArrayPattern,
-    MatchExpression, Function, Lambda, Call, Type, func_type};
+use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral, ArrayInitializer,
+    MatchExpression, Function, Lambda, Call, Type, func_type, array_type};
 use compileerror::{CompileResult, Pos, CompileError, ErrorCode, err};
 use parser::{Operator};
 
@@ -320,6 +320,7 @@ fn infer_and_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileRe
 fn infer_and_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> CompileResult<Type>
 {
     let ft = func_type(fun.sig.args.iter().map(|a| a.typ.clone()).collect(), fun.sig.return_type.clone());
+    ctx.add_function(&fun.sig.name, ft.clone());
 
     ctx.push_stack();
     fun.sig.args.iter().foreach(|arg| ctx.add_variable(&arg.name, arg.typ.clone()));
@@ -329,12 +330,71 @@ fn infer_and_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) ->
         return err(fun.span.start, ErrorCode::TypeError, format!("Function {} has return type {}, but it is returning an expression of type {}",
             fun.sig.name, fun.sig.return_type, et));
     }
+
     Ok(ft)
 }
 
-fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &MatchExpression) -> CompileResult<Type>
+fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> CompileResult<Type>
 {
-err(m.span.start, ErrorCode::TypeError, format!("NYI"))
+    let target_type = try!(infer_and_check_expression(ctx, &mut m.target));
+    let mut return_type = Type::Unknown;
+    for c in &mut m.cases 
+    {
+        let infer_case_type = |ctx: &mut TypeCheckerContext, e: &mut Expression, return_type: &Type| {
+            let tt = try!(infer_and_check_expression(ctx, e));
+            if *return_type != Type::Unknown && *return_type != tt {
+                return err(e.span().start, ErrorCode::TypeError, format!("Expressions in match statements must return the same type"));
+            } else {
+                Ok(tt)
+            }             
+        };
+
+        match c.match_expr
+        {
+            Expression::ArrayPattern(ref ap) => {
+                if !target_type.is_array() {
+                    return err(ap.span.start, ErrorCode::TypeError, format!("Attempting to pattern match an expression of type {}, with an array", target_type));
+                }
+
+                let element_type = target_type.get_array_element_type().expect("target_type is not an array type");
+
+                ctx.push_stack();
+                ctx.add_variable(&ap.head, element_type.clone());
+                ctx.add_variable(&ap.tail, array_type(element_type.clone()));
+                return_type = try!(infer_case_type(ctx, &mut c.to_execute, &return_type));
+                ctx.pop_stack();
+            },
+
+            Expression::NameRef(ref nr) => {
+                if nr.name != "_" {
+                    return err(c.match_expr.span().start, ErrorCode::TypeError, format!("Invalid pattern match"));
+                }
+
+                return_type = try!(infer_case_type(ctx, &mut c.to_execute, &return_type));
+            },
+
+            Expression::ArrayLiteral(_) |
+            Expression::ArrayInitializer(_) |
+            Expression::IntLiteral(_, _) | 
+            Expression::BoolLiteral(_, _) | 
+            Expression::FloatLiteral(_, _) | 
+            Expression::StringLiteral(_, _) => {
+                let m_type = try!(infer_and_check_expression(ctx, &mut c.match_expr));
+                if !target_type.is_matchable(&m_type) {
+                    return err(c.match_expr.span().start, ErrorCode::TypeError, format!("Pattern match of type {}, cannot match with an expression of type {}",
+                        m_type, target_type));
+                }
+
+                return_type = try!(infer_case_type(ctx, &mut c.to_execute, &return_type));   
+            },
+
+            _ => {
+                return err(c.match_expr.span().start, ErrorCode::TypeError, format!("Invalid pattern match"));
+            }
+        }
+    }
+
+    Ok(return_type)
 }
 
 fn infer_and_check_lambda(ctx: &mut TypeCheckerContext, m: &Lambda) -> CompileResult<Type>
@@ -356,11 +416,11 @@ pub fn infer_and_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expressi
         Expression::BinaryOp(ref mut op) => infer_and_check_binary_op(ctx, op),
         Expression::ArrayLiteral(ref mut a) => infer_and_check_array_literal(ctx, a),
         Expression::ArrayInitializer(ref mut a) => infer_and_check_array_initializer(ctx, a),
-        Expression::ArrayPattern(ref a) => Ok(Type::Unknown), // Doesn't really have a type
+        Expression::ArrayPattern(_) => Ok(Type::Unknown), // Doesn't really have a type
         Expression::Call(ref mut c) => infer_and_check_call(ctx, c),
         Expression::NameRef(ref mut nr) => infer_and_check_name(ctx, nr),
         Expression::Function(ref mut f) => infer_and_check_function(ctx, f),
-        Expression::Match(ref m) => infer_and_check_match(ctx, m),
+        Expression::Match(ref mut m) => infer_and_check_match(ctx, m),
         Expression::Lambda(ref l) => infer_and_check_lambda(ctx, l),
         Expression::Enclosed(_, ref mut inner) => infer_and_check_expression(ctx, inner),
         Expression::IntLiteral(_, _) => Ok(Type::Int),
