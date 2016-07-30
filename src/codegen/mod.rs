@@ -1,7 +1,44 @@
-//use llvm::prelude::*;
+mod context;
+mod expressions;
+mod linker;
+mod symboltable;
+mod valueref;
+#[cfg(test)] 
+mod tests;
+
+use std::os::raw::c_char;
+use std::ffi::{CString, CStr};
+
+use llvm::prelude::*;
 use llvm::core::*;
+
 use ast::Module;
 use compileerror::CompileResult;
+use codegen::context::Context;
+use codegen::expressions::gen_expression;
+
+pub use codegen::linker::link;
+
+
+pub fn cstr(s: &str) -> *const c_char
+{
+    CString::new(s).expect("Valid C string").as_ptr()
+}
+
+pub fn cstr_mut(s: &str) -> *mut c_char
+{
+    CString::new(s).expect("Valid C string").into_raw()
+}
+
+pub fn type_name(tr: LLVMTypeRef) -> String
+{
+    unsafe {
+        let n = LLVMPrintTypeToString(tr);
+        let name = CStr::from_ptr(n).to_str().expect("Invalid C String").to_owned();
+        LLVMDisposeMessage(n);
+        name
+    }
+}
 
 fn llvm_init()
 {
@@ -39,10 +76,19 @@ pub struct CodeGenOptions
     pub optimize: bool,
 }
 
-pub fn codegen(_m: &Module, _opts: &CodeGenOptions) -> CompileResult<()>
+fn gen_module(ctx: &mut Context, module: &Module) -> CompileResult<()>
+{
+    for e in &module.expressions {
+        try!(gen_expression(ctx, e));
+    }
+
+    Ok(())
+}
+
+pub fn codegen(m: &Module, opts: &CodeGenOptions) -> CompileResult<Context>
 {
     llvm_init();
-    /*
+    
     unsafe {
         // Set up a context, module and builder in that context.
         let mut ctx = Context::new(&m.name);
@@ -51,7 +97,7 @@ pub fn codegen(_m: &Module, _opts: &CodeGenOptions) -> CompileResult<()>
         match ctx.verify()
         {
             Err(e) => {
-                LLVMDumpModule(ctx.get_module_ref());
+                LLVMDumpModule(ctx.module);
                 return Err(e);
             }
             _ => (),
@@ -64,13 +110,11 @@ pub fn codegen(_m: &Module, _opts: &CodeGenOptions) -> CompileResult<()>
         if opts.dump_ir {
             println!("LLVM IR: {}", m.name);
             // Dump the module as IR to stdout.
-            LLVMDumpModule(ctx.get_module_ref());
+            LLVMDumpModule(ctx.module);
             println!("----------------------");
         }
 
 
         Ok(ctx)
     }
-    */
-    Ok(())
 }

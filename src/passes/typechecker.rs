@@ -38,9 +38,13 @@ impl StackFrame
         self.functions.insert(name.into(), sig);
     }
 
-    pub fn add_variable(&mut self, name: &str, t: Type)
+    pub fn add_variable(&mut self, name: &str, t: Type, pos: Pos) -> CompileResult<()>
     {
-        self.variables.insert(name.into(), t);
+        if self.variables.insert(name.into(), t).is_some() {
+            err(pos, ErrorCode::RedefinitionOfVariable, format!("Variable {} has already been defined", name))
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -75,9 +79,9 @@ impl TypeCheckerContext
         self.stack.last_mut().expect("Empty stack").add_function(name, sig)
     }
 
-    pub fn add_variable(&mut self, name: &str, t: Type)
+    pub fn add_variable(&mut self, name: &str, t: Type, pos: Pos) -> CompileResult<()>
     {
-        self.stack.last_mut().expect("Empty stack").add_variable(name, t)
+        self.stack.last_mut().expect("Empty stack").add_variable(name, t, pos)
     }
 
     pub fn push_stack(&mut self)
@@ -101,67 +105,10 @@ fn expected_numeric_operands<T>(pos: Pos, op: Operator) -> CompileResult<T>
     err(pos, ErrorCode::TypeError, format!("Operator {} expects two numeric expression as operands", op))
 }
 
-
 fn unknown_name(pos: Pos, name: &str) -> CompileError
 {
     CompileError::new(pos, ErrorCode::UnknownName, format!("Unable to resolve name {}", name))
 }
-
-/*
-fn infer(ctx: &TypeCheckerContext, e: &Expression) -> CompileResult<Type>
-{
-    match *e
-    {
-        Expression::IntLiteral(_, _) => Ok(Type::Int),
-        Expression::FloatLiteral(_, _) => Ok(Type::Float),
-        Expression::StringLiteral(_, _) => Ok(Type::String),
-        Expression::Enclosed(_, ref e) => infer(ctx, &e),
-
-        Expression::ArrayLiteral(ref a) => {
-            if a.elements.is_empty() {
-                Ok(Type::Array(Box::new(Type::Unknown)))
-            } else {
-                let et = try!(infer(ctx, &a.elements[0]));
-                Ok(Type::Array(Box::new(et)))
-            }
-        },
-
-        Expression::ArrayInitializer(ref a) => {
-            let et = try!(infer(ctx, &a.init));
-            Ok(Type::Array(Box::new(et)))
-        },
-
-        Expression::ArrayPattern(ref a) => {
-            err(a.span.start, ErrorCode::TypeError, "Cannot infer type of a pattern".into())
-        },
-
-
-        Expression::Call(ref c) => {
-           
-        },
-
-        Expression::NameRef(ref nr) => {
-            ctx.resolve_type(&nr.name)
-                .ok_or(unknown_name(nr.span.start, &nr.name))
-        },
-
-        Expression::Function(ref fun) => {
-            Ok()
-        },
-
-        Expression::Match(ref m) => {
-            m.cases
-                .first()
-                .ok_or(CompileError::new(m.span.start, ErrorCode::EmptyMatch, "empty match".into())) 
-                .and_then(|c| infer(ctx, &c.to_execute))
-        },
-
-        Expression::Lambda(ref l) => {
-            infer(ctx, &l.expr)
-        },
-    }
-}
-*/
 
 fn is_numeric(t: &Type) -> bool
 {
@@ -323,7 +270,11 @@ fn infer_and_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) ->
     ctx.add_function(&fun.sig.name, ft.clone());
 
     ctx.push_stack();
-    fun.sig.args.iter().foreach(|arg| ctx.add_variable(&arg.name, arg.typ.clone()));
+    for arg in fun.sig.args.iter() 
+    {
+        try!(ctx.add_variable(&arg.name, arg.typ.clone(), arg.span.start));
+    }
+    
     let et = try!(infer_and_check_expression(ctx, &mut fun.expression));
     ctx.pop_stack();
     if et != fun.sig.return_type {
@@ -359,8 +310,8 @@ fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) 
                 let element_type = target_type.get_array_element_type().expect("target_type is not an array type");
 
                 ctx.push_stack();
-                ctx.add_variable(&ap.head, element_type.clone());
-                ctx.add_variable(&ap.tail, array_type(element_type.clone()));
+                try!(ctx.add_variable(&ap.head, element_type.clone(), ap.span.start));
+                try!(ctx.add_variable(&ap.tail, array_type(element_type.clone()), ap.span.start));
                 return_type = try!(infer_case_type(ctx, &mut c.to_execute, &return_type));
                 ctx.pop_stack();
             },

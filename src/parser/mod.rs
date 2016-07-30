@@ -12,4 +12,4 @@ pub use self::tests::th_expr;
 pub use self::lexer::{Lexer};
 pub use self::tokenqueue::{TokenQueue};
 pub use self::tokens::{Operator, Token, TokenKind};
-pub use self::parser::{parse_expression, parse_file};
+pub use self::parser::{parse_expression, parse_file, parse_module};

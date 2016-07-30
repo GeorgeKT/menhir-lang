@@ -20,6 +20,11 @@ impl Pos
             offset: offset,
         }
     }
+
+    pub fn zero() -> Pos 
+    {
+        Pos::new(0, 0)
+    }
 }
 
 impl fmt::Display for Pos
@@ -111,8 +116,10 @@ pub enum ErrorCode
     UnknownName,
     MissingType,
     CallingNonCallable,
-    /*
+    CodegenError,
     RedefinitionOfVariable,
+    /*
+    
     RedefinitionOfFunction,
     RedefinitionOfStruct,
     RedefinitionOfTrait,
@@ -121,7 +128,7 @@ pub enum ErrorCode
     UnknownType,
     UnknownStructMember,
     ArgumentCountMismatch,
-    CodegenError,
+    
     ConstantModification,
     PrivateMemberAccess,
     MissingReturn,

@@ -1,0 +1,66 @@
+use std::ptr;
+use std::ffi::CStr;
+use std::os::raw::c_char;
+use std::io::Cursor;
+use llvm::prelude::*;
+use llvm::core::*;
+use llvm::execution_engine::*;
+use compileerror::{ErrorCode, err, CompileResult, Pos};
+use parser::{parse_module};
+use codegen::{CodeGenOptions, codegen, cstr};
+use ast::{TreePrinter};
+
+
+
+fn run(prog: &str, dump: bool) -> CompileResult<u64>
+{
+    let mut cursor = Cursor::new(prog);
+    let md = try!(parse_module(&mut cursor, "test"));
+    if dump {
+        md.print(0);
+    }
+
+    let opts = CodeGenOptions{
+        dump_ir: dump,
+        build_dir: "build".into(),
+        program_name: "test".into(),
+        runtime_library: "libcobraruntime.a".into(),
+        optimize: true,
+    };
+
+    let mut ctx = try!(codegen(&md, &opts));
+
+    unsafe {
+        LLVMLinkInInterpreter();
+
+        let mut ee: LLVMExecutionEngineRef = ptr::null_mut();
+        let mut error_message: *mut c_char = ptr::null_mut();
+        if LLVMCreateInterpreterForModule(&mut ee, ctx.take_module_ref(), &mut error_message) != 0 {
+            let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
+            let e = format!("Unable to create interpreter: {}", msg);
+            LLVMDisposeMessage(error_message);
+            return err(Pos::zero(), ErrorCode::CodegenError, e);
+        }
+
+        let mut func: LLVMValueRef = ptr::null_mut();
+        if LLVMFindFunction(ee, cstr("main"), &mut func) == 0 {
+            let val = LLVMRunFunction(ee, func, 0, ptr::null_mut());
+            let result = LLVMGenericValueToInt(val, 0) as u64;
+            LLVMDisposeGenericValue(val);
+            LLVMDisposeExecutionEngine(ee);
+            Ok(result)
+        } else {
+            LLVMDisposeExecutionEngine(ee);
+            err(Pos::zero(), ErrorCode::CodegenError, "No main function found".into())
+        }
+    }
+}
+
+
+#[test]
+fn test_number()
+{
+    assert!(run(r#"
+main() -> int = 5
+    "#, false).unwrap() == 5);
+}

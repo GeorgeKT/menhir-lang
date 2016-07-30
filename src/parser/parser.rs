@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::Read;
 use ast::{Expression, Function, Call, NameRef, Type, Argument, Module,
     array_init, array_lit, array_pattern, unary_op, bin_op2, bin_op, sig, to_primitive,
     match_expression, match_case, lambda};
@@ -389,12 +390,16 @@ pub fn parse_file(file_path: &str) -> CompileResult<Module>
 
     let mut file = try!(fs::File::open(file_path));
     let path = Path::new(file_path);
-    let mut tq = try!(Lexer::new().read(&mut file));
     let module_name: &OsStr = path.file_stem().expect("Invalid filename");
-    let expressions = try!(parse_expression_list(&mut tq));
+    parse_module(&mut file, module_name.to_str().expect("Invalid UTF8 filename"))
+}
 
-    Ok(Module{
-        name: module_name.to_str().expect("Invalid UTF8 filename").into(),
+pub fn parse_module<Input: Read>(input: &mut Input, name: &str) -> CompileResult<Module>
+{
+    let mut tq = try!(Lexer::new().read(input));   
+    let expressions = try!(parse_expression_list(&mut tq));
+     Ok(Module{
+        name: name.into(),
         expressions: expressions,
     })
 }

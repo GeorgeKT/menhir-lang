@@ -1,7 +1,9 @@
+extern crate llvm_sys as llvm;
+extern crate libc;
 extern crate docopt;
 extern crate rustc_serialize;
+extern crate libffi;
 extern crate itertools;
-extern crate llvm_sys as llvm;
 
 mod ast;
 mod codegen;
@@ -12,7 +14,7 @@ mod passes;
 
 use std::path::Path;
 
-use codegen::{CodeGenOptions, codegen};
+use codegen::{CodeGenOptions, codegen, link};
 use docopt::Docopt;
 use ast::TreePrinter;
 use parser::parse_file;
@@ -91,7 +93,8 @@ fn main()
     match parse_file(&input_file).and_then(|mut module| {
         module.print(0);
         try!(infer_and_check_types(&mut module));
-        codegen(&module, &opts)
+        let mut ctx = try!(codegen(&module, &opts));
+        link(&mut ctx, &opts)
     })
     {
         Ok(_) => {},
