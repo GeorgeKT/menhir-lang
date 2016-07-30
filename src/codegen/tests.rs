@@ -87,7 +87,15 @@ main() -> bool = !true
 fn test_binary_operators()
 {
     assert!(run("main() -> int = 4 + 5 * 7 - 9 / 3 + 5 % 4", false).unwrap() == (4 + 35 - 3 + 1));
-    assert!(run("main() -> bool = 4 < 5 * 7 && 9 / 3 > 5 % 4", true).unwrap() == 1);
+    assert!(run("main() -> bool = 4 < 5 * 7 && 9 / 3 > 5 % 4", false).unwrap() == 1);
 }
 
+#[test]
+fn test_call()
+{
+    assert!(run(r#"
+add(a: int, b: int) -> int = a + b
+main() -> int = add(6, 7)
+    "#, false).unwrap() == 13);
+}
 

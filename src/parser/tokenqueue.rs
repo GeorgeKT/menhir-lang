@@ -136,16 +136,15 @@ impl TokenQueue
         }
     }
 
-/*
-    pub fn is_next_identifier(&self) -> bool
+
+    pub fn is_next_operator(&self) -> bool
     {
         match self.tokens.front()
         {
-            Some(tok) => if let TokenKind::Identifier(_) = tok.kind {true} else {false},
+            Some(tok) => if let TokenKind::Operator(_) = tok.kind {true} else {false},
             None => false,
         }
     }
-    */
 }
 
 impl Iterator for TokenQueue

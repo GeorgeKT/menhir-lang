@@ -6,7 +6,7 @@ use llvm::core::*;
 use llvm::prelude::*;
 use llvm::*;
 
-use ast::{Expression, UnaryOp, BinaryOp, Function, FunctionSignature};
+use ast::{Expression, UnaryOp, BinaryOp, Function, FunctionSignature, Call, NameRef};
 use parser::Operator;
 use codegen::{type_name, cstr};
 use codegen::context::Context;
@@ -211,11 +211,12 @@ unsafe fn is_block_terminated(bb: LLVMBasicBlockRef) -> bool
 
 unsafe fn gen_function(ctx: &mut Context, f: &Function) -> CompileResult<ValueRef>
 {
-    let fi = try!(gen_function_sig(ctx, &f.sig, &f.span));
+    let fi = Rc::new(try!(gen_function_sig(ctx, &f.sig, &f.span)));
     let bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, cstr("entry"));
     let current_bb = LLVMGetInsertBlock(ctx.builder);
     LLVMPositionBuilderAtEnd(ctx.builder, bb);
 
+    ctx.add_function(fi.clone());
     ctx.push_stack();
 
     for (i, arg) in f.sig.args.iter().enumerate() {
@@ -233,7 +234,6 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> CompileResult<ValueRe
         ctx.add_variable(var);
     }
 
-    ctx.add_function(Rc::new(fi));
 
     let ret = try!(gen_expression(ctx, &f.expression));
     LLVMBuildRet(ctx.builder, ret.get());
@@ -244,6 +244,38 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> CompileResult<ValueRe
     }
 
     Ok(ret)
+}
+
+unsafe fn gen_call(ctx: &mut Context, c: &Call) -> CompileResult<ValueRef>
+{
+    let func = try!(
+        ctx.get_function(&c.callee.name).ok_or(
+            CompileError::new(c.span.start, ErrorCode::UnknownName, format!("Unknown function {}", c.callee.name)))
+    );
+
+    let mut arg_vals = Vec::with_capacity(c.args.len());
+    for arg in &c.args 
+    {
+        let a = try!(gen_expression(ctx, arg));
+        arg_vals.push(a.load());
+    }
+
+    Ok(ValueRef::new(
+        LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr("")),
+        true,
+        ctx.builder)
+    )
+}
+
+unsafe fn gen_name_ref(ctx: &mut Context, nr: &NameRef) -> CompileResult<ValueRef>
+{
+    if let Some(vi) = ctx.get_variable(&nr.name) {
+        Ok(ValueRef::new(LLVMBuildLoad(ctx.builder, vi.value, cstr("load")), true, ctx.builder))
+    } else if let Some(fi) = ctx.get_function(&nr.name) {
+        Ok(ValueRef::new(fi.function, true, ctx.builder))
+    } else {
+        err(nr.span.start, ErrorCode::UnknownName, format!("Unknown name {}", nr.name))
+    }
 }
 
 pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueRef>
@@ -257,8 +289,8 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::ArrayLiteral(ref a) => err(a.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),
             Expression::ArrayInitializer(ref a) => err(a.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),
             Expression::ArrayPattern(ref a) => err(a.span.start, ErrorCode::UnexpectedEOF, format!("NYI")), 
-            Expression::Call(ref c) => err(c.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),
-            Expression::NameRef(ref nr) => err(nr.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),
+            Expression::Call(ref c) => gen_call(ctx, c),
+            Expression::NameRef(ref nr) => gen_name_ref(ctx, nr),
             Expression::Function(ref f) => gen_function(ctx, f),
             Expression::Match(ref m) => err(m.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),
             Expression::Lambda(ref l) => err(l.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),

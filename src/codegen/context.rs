@@ -47,7 +47,15 @@ impl Context
 
     pub fn get_variable(&self, name: &str) -> Option<Rc<VariableInstance>>
     {
-        self.stack.last().expect("Stack is empty").get_variable(name)
+        for sf in self.stack.iter().rev() 
+        {
+            let v = sf.get_variable(name);
+            if v.is_some() {
+                return v;
+            }
+        }
+
+        None
     }
 
     pub fn add_function(&mut self, f: Rc<FunctionInstance>)
@@ -57,7 +65,15 @@ impl Context
 
     pub fn get_function(&self, name: &str) -> Option<Rc<FunctionInstance>>
     {
-        self.stack.last().expect("Stack is empty").get_function(name)
+        for sf in self.stack.iter().rev() 
+        {
+            let func = sf.get_function(name);
+            if func.is_some() {
+                return func;
+            }
+        }
+
+        None
     }
 
     pub fn push_stack(&mut self)

@@ -129,6 +129,10 @@ fn parse_binary_op_rhs(tq: &mut TokenQueue, mut lhs: Expression) -> CompileResul
             return Ok(lhs);
         }
 
+        if !tq.is_next_operator() {
+            return Ok(lhs);
+        }
+
         let op = try!(tq.expect_operator());
         let next_tok = try!(tq.pop());
         let rhs = try!(parse_expression_start(tq, next_tok));
