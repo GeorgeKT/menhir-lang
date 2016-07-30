@@ -40,7 +40,7 @@ pub fn type_name(tr: LLVMTypeRef) -> String
     }
 }
 
-fn llvm_init()
+pub fn llvm_init()
 {
     unsafe {
         use llvm::initialization::*;
@@ -86,9 +86,7 @@ fn gen_module(ctx: &mut Context, module: &Module) -> CompileResult<()>
 }
 
 pub fn codegen(m: &Module, opts: &CodeGenOptions) -> CompileResult<Context>
-{
-    llvm_init();
-    
+{    
     unsafe {
         // Set up a context, module and builder in that context.
         let mut ctx = Context::new(&m.name);

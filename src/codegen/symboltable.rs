@@ -2,7 +2,7 @@ use std::rc::Rc;
 use std::collections::HashMap;
 use llvm::prelude::*;
 
-use ast::{Type, FunctionSignature, Expression};
+use ast::{Type, FunctionSignature};
 
 pub struct FunctionInstance
 {

@@ -205,6 +205,40 @@ fn test_precedence_9()
 }
 
 #[test]
+fn test_precedence_10() 
+{
+    let e = th_expr("4 + 5 * 7 - 9 / 3 + 5 % 4");
+
+    let mul = bin_op(
+        Operator::Mul, 
+        number(5, span(1, 5, 1, 5)), 
+        number(7, span(1, 9, 1, 9)), 
+        span(1, 5, 1, 9));
+
+    let s1 = bin_op(Operator::Add, number(4, span(1, 1, 1, 1)), mul, span(1, 1, 1, 9));
+
+    let div = bin_op(
+        Operator::Div, 
+        number(9, span(1, 13, 1, 13)), 
+        number(3, span(1, 17, 1, 17)), 
+        span(1, 13, 1, 17));
+
+    let s2 = bin_op(Operator::Sub, s1, div, span(1, 1, 1, 17));
+
+    let rem = bin_op(
+        Operator::Mod, 
+        number(5, span(1, 21, 1, 21)), 
+        number(4, span(1, 25, 1, 25)), 
+        span(1, 21, 1, 25));
+
+    let s3 = bin_op(Operator::Add, s2, rem,span(1, 1, 1, 25));
+
+    println!("s3:");
+    s3.print(0);
+    assert!(e == s3);
+}
+
+#[test]
 fn test_namespaced_call()
 {
     let e = th_expr("foo::bar(7)");

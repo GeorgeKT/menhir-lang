@@ -12,7 +12,7 @@ use ast::{TreePrinter};
 
 
 
-fn run(prog: &str, dump: bool) -> CompileResult<u64>
+fn run(prog: &str, dump: bool) -> CompileResult<i64>
 {
     let mut cursor = Cursor::new(prog);
     let md = try!(parse_module(&mut cursor, "test"));
@@ -45,9 +45,10 @@ fn run(prog: &str, dump: bool) -> CompileResult<u64>
         let mut func: LLVMValueRef = ptr::null_mut();
         if LLVMFindFunction(ee, cstr("main"), &mut func) == 0 {
             let val = LLVMRunFunction(ee, func, 0, ptr::null_mut());
-            let result = LLVMGenericValueToInt(val, 0) as u64;
+            let result = LLVMGenericValueToInt(val, 0) as i64;
             LLVMDisposeGenericValue(val);
             LLVMDisposeExecutionEngine(ee);
+            println!("result {}", result);  
             Ok(result)
         } else {
             LLVMDisposeExecutionEngine(ee);
@@ -64,3 +65,29 @@ fn test_number()
 main() -> int = 5
     "#, false).unwrap() == 5);
 }
+
+#[test]
+fn test_unary_sub()
+{
+    assert!(run(r#"
+main() -> int = -5
+    "#, false).unwrap() == -5);
+}
+
+#[test]
+fn test_unary_not()
+{
+    assert!(run(r#"
+main() -> bool = !true
+    "#, false).unwrap() == 0);
+}
+
+
+#[test]
+fn test_binary_operators()
+{
+    assert!(run("main() -> int = 4 + 5 * 7 - 9 / 3 + 5 % 4", false).unwrap() == (4 + 35 - 3 + 1));
+    assert!(run("main() -> bool = 4 < 5 * 7 && 9 / 3 > 5 % 4", true).unwrap() == 1);
+}
+
+

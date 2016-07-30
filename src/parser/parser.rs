@@ -1,7 +1,7 @@
 use std::fs;
 use std::io::Read;
 use ast::{Expression, Function, Call, NameRef, Type, Argument, Module,
-    array_init, array_lit, array_pattern, unary_op, bin_op2, bin_op, sig, to_primitive,
+    array_init, array_lit, array_pattern, unary_op, bin_op, sig, to_primitive,
     match_expression, match_case, lambda};
 use compileerror::{CompileResult, ErrorCode, Span, Pos, err};
 use parser::{TokenQueue, Token, TokenKind, Operator, Lexer};
@@ -103,48 +103,50 @@ fn parse_unary_expression(tq: &mut TokenQueue, op: Operator, op_pos: Pos) -> Com
     }
 }
 
+fn combine_binary_op(op: Operator, lhs: Expression, rhs: Expression) -> Expression
+{
+    if lhs.is_binary_op() && lhs.precedence() < op.precedence()
+    {
+        let bop = lhs.to_binary_op().expect("Not a binary op");
+        let nrhs = combine_binary_op(op, bop.right.clone(), rhs);
+        let span = Span::merge(&bop.left.span(), &nrhs.span());
+        bin_op(bop.operator, bop.left, nrhs, span)
+    }
+    else 
+    {
+        let span = Span::merge(&lhs.span(), &rhs.span());
+        bin_op(op, lhs, rhs, span)
+    }
+}
+
 fn parse_binary_op_rhs(tq: &mut TokenQueue, mut lhs: Expression) -> CompileResult<Expression>
 {
+    //use ast::TreePrinter;
+
     loop
     {
         if tq.peek().map(|tok| is_end_of_expression(tok)).unwrap_or(false) {
             return Ok(lhs);
         }
 
-        let prec = tq.peek().map(|tok| {
-            match tok.kind
-            {
-                TokenKind::Operator(op) => op.precedence(),
-                _ => 0,
-            }
-        }).unwrap_or(0);
-
-        if prec < lhs.precedence() {
-            return Ok(lhs);
-        }
-
         let op = try!(tq.expect_operator());
-        let rhs = try!(parse_expression(tq));
-        match rhs
-        {
-            //Expression::BinaryOp(span, rhs_op, left, right) => {
-            Expression::BinaryOp(bop) => {
-                if bop.operator.precedence() <= prec {
-                    let span = Span::merge(&lhs.span(), &bop.left.span());
-                    let e = bin_op2(op, lhs, bop.left, span);
-                    let span = Span::merge(&span, &bop.right.span());
-                    lhs = bin_op2(bop.operator, e, bop.right, span);
-                } else {
-                    let lhs_span = Span::merge(&bop.span, &lhs.span());
-                    let e = Expression::BinaryOp(bop);
-                    lhs = bin_op(op, lhs, e, lhs_span);
-                }
-            },
-            _ => {
-                let span = Span::merge(&lhs.span(), &rhs.span());
-                lhs = bin_op(op, lhs, rhs, span);
-            },
-        }
+        let next_tok = try!(tq.pop());
+        let rhs = try!(parse_expression_start(tq, next_tok));
+
+        /*
+        let prec = op.precedence();
+        println!("operator {} prec {}", op, prec);
+        println!("rhs: {}", rhs.precedence());
+        rhs.print(0);
+        println!("lhs: {}", lhs.precedence());
+        lhs.print(0);
+*/
+        lhs = combine_binary_op(op, lhs, rhs);
+/*
+        println!("new lhs: {}", lhs.precedence());
+        lhs.print(0);
+        println!("----------------------");
+        */
     }
 }
 
@@ -313,7 +315,24 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
 
         TokenKind::Identifier(id) => {
             let nr = try!(parse_name(tq, id, tok.span.start));
-            Ok(Expression::NameRef(nr))
+            if tq.is_next(TokenKind::OpenParen) 
+            {
+                try!(tq.pop());
+                if tq.is_next_at(1, TokenKind::Colon) || tq.is_next_at(1, TokenKind::Arrow) || tq.is_next_at(1, TokenKind::Assign)
+                {
+                    println!("parse_function_decl");
+                    parse_function_definition(tq, nr).map(|f| Expression::Function(f))
+                }
+                else
+                {
+                    println!("parse_function_call");
+                    parse_function_call(tq, nr).map(|c| Expression::Call(c))
+                }
+            } 
+            else 
+            {
+                Ok(Expression::NameRef(nr))    
+            }       
         },
 
         TokenKind::StringLiteral(s) => {
@@ -337,31 +356,17 @@ fn parse_expression_continued(tq: &mut TokenQueue, lhs: Expression) -> CompileRe
     }
 
     let next = try!(tq.pop());
-    let nlhs = match next.kind
+    match next.kind
     {
-        TokenKind::OpenParen => {
-            let nr = try!(lhs.to_name_ref());
-            if tq.is_next_at(1, TokenKind::Colon) || tq.is_next_at(1, TokenKind::Arrow) || tq.is_next_at(1, TokenKind::Assign)
-            {
-                try!(parse_function_definition(tq, nr).map(|f| Expression::Function(f)))
-            }
-            else
-            {
-                try!(parse_function_call(tq, nr).map(|c| Expression::Call(c)))
-            }
-        },
-
         TokenKind::Operator(op) if op.is_binary_operator() => {
             tq.push_front(next);
-            try!(parse_binary_op_rhs(tq, lhs))
+            parse_binary_op_rhs(tq, lhs)
         },
         _ => {
             tq.push_front(next);
-            return Ok(lhs);
+            Ok(lhs)
         },
-    };
-
-    parse_expression_continued(tq, nlhs)
+    }
 }
 
 pub fn parse_expression(tq: &mut TokenQueue) -> CompileResult<Expression>

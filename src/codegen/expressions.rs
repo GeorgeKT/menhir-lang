@@ -2,11 +2,12 @@ use std::ptr;
 use std::rc::Rc;
 
 use libc;
-use llvm::prelude::*;
 use llvm::core::*;
+use llvm::prelude::*;
 use llvm::*;
 
 use ast::{Expression, UnaryOp, BinaryOp, Function, FunctionSignature};
+use parser::Operator;
 use codegen::{type_name, cstr};
 use codegen::context::Context;
 use codegen::valueref::ValueRef;
@@ -14,9 +15,19 @@ use codegen::symboltable::{FunctionInstance, VariableInstance};
 use compileerror::{Span, CompileResult, CompileError, ErrorCode, err};
 
 
+unsafe fn is_floating_point(ctx: LLVMContextRef, tr: LLVMTypeRef) -> bool
+{
+    tr == LLVMDoubleTypeInContext(ctx)
+}
+
 unsafe fn gen_integer(ctx: &mut Context, v: u64) -> CompileResult<ValueRef>
 {
     Ok(ValueRef::new(LLVMConstInt(LLVMInt64TypeInContext(ctx.context), v, 0), true, ctx.builder))
+}
+
+unsafe fn gen_bool(ctx: &mut Context, v: bool) -> CompileResult<ValueRef>
+{
+    Ok(ValueRef::new(LLVMConstInt(LLVMInt1TypeInContext(ctx.context), if v {1} else {0}, 0), true, ctx.builder))
 }
 
 unsafe fn gen_float(ctx: &Context, num: &str, span: &Span) -> CompileResult<ValueRef>
@@ -45,14 +56,115 @@ unsafe fn gen_string_literal(ctx: &Context, s: &str, _span: &Span) -> CompileRes
     Ok(ValueRef::new(glob, true, ctx.builder))
 }
 
-unsafe fn gen_unary_op(ctx: &mut Context, u: &UnaryOp) -> CompileResult<ValueRef>
+unsafe fn gen_unary_op(ctx: &mut Context, op: &UnaryOp) -> CompileResult<ValueRef>
 {
-    err(u.span.start, ErrorCode::UnexpectedEOF, format!("NYI"))
+    let e_val = try!(gen_expression(ctx, &op.expression));
+    match op.operator 
+    {
+        Operator::Sub => {      
+            Ok(ValueRef::new(LLVMBuildNeg(ctx.builder, e_val.load(), cstr("neg")), true, ctx.builder))
+        },
+        Operator::Not => {
+            Ok(ValueRef::new(LLVMBuildNot(ctx.builder, e_val.load(), cstr("not")), true, ctx.builder))
+        },
+        _ => err(op.span.start, ErrorCode::InvalidUnaryOperator, format!("Operator {} is not a unary operator", op.operator)),
+    }
 }
 
-unsafe fn gen_binary_op(ctx: &mut Context, u: &BinaryOp) -> CompileResult<ValueRef>
+unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> CompileResult<ValueRef>
 {
-    err(u.span.start, ErrorCode::UnexpectedEOF, format!("NYI"))
+    let left_val = try!(gen_expression(ctx, &op.left)).load();
+    let right_val = try!(gen_expression(ctx, &op.right)).load();
+    let left_type = LLVMTypeOf(left_val);
+
+    let v = match op.operator {
+        Operator::Add => {
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFAdd(ctx.builder, left_val, right_val, cstr("add")))
+            } else {
+                Ok(LLVMBuildAdd(ctx.builder, left_val, right_val, cstr("add")))
+            }
+        },
+        Operator::Sub => {
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFSub(ctx.builder, left_val, right_val, cstr("sub")))
+            } else {
+                Ok(LLVMBuildSub(ctx.builder, left_val, right_val, cstr("sub")))
+            }
+        },
+        Operator::Div => {
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFDiv(ctx.builder, left_val, right_val, cstr("div")))
+            } else {
+                Ok(LLVMBuildUDiv(ctx.builder, left_val, right_val, cstr("div")))
+            }
+        },
+        Operator::Mod => {
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFRem(ctx.builder, left_val, right_val, cstr("mod")))
+            } else {
+                Ok(LLVMBuildURem(ctx.builder, left_val, right_val, cstr("mod")))
+            }
+        },
+        Operator::Mul => {
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFMul(ctx.builder, left_val, right_val, cstr("mul")))
+            } else {
+                Ok(LLVMBuildMul(ctx.builder, left_val, right_val, cstr("mul")))
+            }
+        },
+        Operator::And => {
+            Ok(LLVMBuildAnd(ctx.builder, left_val, right_val, cstr("and")))
+        },
+        Operator::Or => {
+            Ok(LLVMBuildOr(ctx.builder, left_val, right_val, cstr("or")))
+        },
+        Operator::LessThan => {
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLT, left_val, right_val, cstr("cmp")))
+            } else {
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, left_val, right_val, cstr("cmp")))
+            }
+        },
+        Operator::LessThanEquals => {
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLE, left_val, right_val, cstr("cmp")))
+            } else {
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLE, left_val, right_val, cstr("cmp")))
+            }
+        },
+        Operator::GreaterThan => {
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGT, left_val, right_val, cstr("cmp")))
+            } else {
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, left_val, right_val, cstr("cmp")))
+            }
+        },
+        Operator::GreaterThanEquals => {
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGE, left_val, right_val, cstr("cmp")))
+            } else {
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGE, left_val, right_val, cstr("cmp")))
+            }
+        },
+        Operator::Equals => {
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, left_val, right_val, cstr("cmp")))
+            } else {
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left_val, right_val, cstr("cmp")))
+            }
+        },
+        Operator::NotEquals => {
+            if is_floating_point(ctx.context, left_type) {
+                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealONE, left_val, right_val, cstr("cmp")))
+            } else {
+                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left_val, right_val, cstr("cmp")))
+            }
+        },
+        _ => err(op.span.start, ErrorCode::InvalidBinaryOperator, format!("Operator {} is not a binary operator", op.operator)),
+    };
+
+    v.map(|val| ValueRef::new(val, true, ctx.builder))
 }
 
 
@@ -86,6 +198,7 @@ unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, span: &Sp
     })
 }
 
+/*
 unsafe fn is_block_terminated(bb: LLVMBasicBlockRef) -> bool
 {
     if bb == ptr::null_mut() {
@@ -94,6 +207,7 @@ unsafe fn is_block_terminated(bb: LLVMBasicBlockRef) -> bool
     let last = LLVMGetLastInstruction(bb);
     last != ptr::null_mut() && LLVMIsATerminatorInst(last) != ptr::null_mut()
 }
+*/
 
 unsafe fn gen_function(ctx: &mut Context, f: &Function) -> CompileResult<ValueRef>
 {
@@ -152,7 +266,7 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::IntLiteral(_, v) => gen_integer(ctx, v),
             Expression::FloatLiteral(ref span, ref v_str) => gen_float(ctx, &v_str, span),
             Expression::StringLiteral(ref span, ref s)  => gen_string_literal(ctx, s, span),
-            Expression::BoolLiteral(_, v) => gen_integer(ctx, if v {1} else {0}),
+            Expression::BoolLiteral(_, v) => gen_bool(ctx, v),
         }
     }
 }

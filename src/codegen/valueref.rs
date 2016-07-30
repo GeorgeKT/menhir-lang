@@ -1,5 +1,6 @@
 use llvm::prelude::*;
 use llvm::core::*;
+use llvm::*;
 
 use codegen::cstr;
 
@@ -9,6 +10,16 @@ pub struct ValueRef
     ptr: LLVMValueRef,
     constant: bool,
     builder: LLVMBuilderRef,
+}
+
+pub fn is_same_kind(a: LLVMTypeKind, b: LLVMTypeKind) -> bool
+{
+    (a as usize) == (b as usize)
+}
+
+pub unsafe fn is_pointer(t: LLVMTypeRef) -> bool
+{
+    is_same_kind(LLVMGetTypeKind(t), LLVMTypeKind::LLVMPointerTypeKind)
 }
 
 impl ValueRef
@@ -25,7 +36,11 @@ impl ValueRef
     pub fn load(&self) -> LLVMValueRef
     {
         unsafe {
-            LLVMBuildLoad(self.builder, self.ptr, cstr("load"))   
+            if is_pointer(LLVMTypeOf(self.ptr)) {
+                LLVMBuildLoad(self.builder, self.ptr, cstr("load"))
+            } else {
+                self.ptr
+            }            
         }
     }
 

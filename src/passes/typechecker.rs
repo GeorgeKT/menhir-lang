@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::ops::Deref;
-use itertools::Itertools;
 use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral, ArrayInitializer,
     MatchExpression, Function, Lambda, Call, Type, func_type, array_type};
 use compileerror::{CompileResult, Pos, CompileError, ErrorCode, err};

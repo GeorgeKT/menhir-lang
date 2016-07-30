@@ -13,7 +13,7 @@ pub enum Expression
     ArrayInitializer(ArrayInitializer), // [x; times]
     ArrayPattern(ArrayPattern), // [hd | tail]
     UnaryOp(UnaryOp),
-    BinaryOp(BinaryOp),
+    BinaryOp(Box<BinaryOp>),
     Enclosed(Span, Box<Expression>), // Expression enclosed between parens
     Call(Call),
     NameRef(NameRef),
@@ -31,6 +31,24 @@ impl Expression
         {
             Expression::BinaryOp(ref op) => op.operator.precedence(),
             _ => 0,
+        }
+    }
+
+    pub fn is_binary_op(&self) -> bool 
+    {
+        match *self
+        {
+            Expression::BinaryOp(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn to_binary_op(self) -> Option<Box<BinaryOp>>
+    {
+        match self
+        {
+            Expression::BinaryOp(b) => Some(b),
+            _ => None,
         }
     }
 

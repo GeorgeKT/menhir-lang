@@ -178,7 +178,8 @@ impl Context
         match *typ
         {
             Type::Void => Some(LLVMVoidTypeInContext(self.context)),
-            Type::Int | Type::Bool => Some(LLVMInt64TypeInContext(self.context)),
+            Type::Int => Some(LLVMInt64TypeInContext(self.context)),
+            Type::Bool => Some(LLVMInt1TypeInContext(self.context)),
             Type::Float => Some(LLVMDoubleTypeInContext(self.context)),
             _ => None,
         }
