@@ -157,7 +157,15 @@ fn infer_and_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> 
         Operator::Add |
         Operator::Sub |
         Operator::Mul |
-        Operator::Div |
+        Operator::Div =>
+            if !is_numeric(&left_type) || !is_numeric(&right_type) {
+                expected_numeric_operands(b.span.start, b.operator)
+            } else if left_type != right_type {
+                err(b.span.start, ErrorCode::TypeError, format!("Operator {} expects operands of the same type", b.operator))
+            } else {
+                Ok(left_type)
+            },
+
         Operator::LessThan |
         Operator::GreaterThan |
         Operator::LessThanEquals |
@@ -167,8 +175,9 @@ fn infer_and_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> 
             } else if left_type != right_type {
                 err(b.span.start, ErrorCode::TypeError, format!("Operator {} expects operands of the same type", b.operator))
             } else {
-                Ok(left_type)
+                Ok(Type::Bool)
             },
+            
         Operator::Mod =>
             if !is_integer(&left_type) || !is_integer(&right_type) {
                 err(b.span.start, ErrorCode::TypeError, format!("Operator {} expects two integer expressions as operands", b.operator))
@@ -344,10 +353,15 @@ fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) 
         }
     }
 
+    if return_type == Type::Unknown {
+        return err(m.span.start, ErrorCode::TypeError, format!("Cannot infer type of match expression"));
+    }
+
+    m.typ = return_type.clone();
     Ok(return_type)
 }
 
-fn infer_and_check_lambda(ctx: &mut TypeCheckerContext, m: &Lambda) -> CompileResult<Type>
+fn infer_and_check_lambda(_ctx: &mut TypeCheckerContext, m: &Lambda) -> CompileResult<Type>
 {
 err(m.span.start, ErrorCode::TypeError, format!("NYI"))
 }

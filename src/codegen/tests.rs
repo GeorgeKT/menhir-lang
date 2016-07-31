@@ -8,6 +8,7 @@ use llvm::execution_engine::*;
 use compileerror::{ErrorCode, err, CompileResult, Pos};
 use parser::{parse_module};
 use codegen::{CodeGenOptions, codegen, cstr};
+use passes::infer_and_check_types;
 use ast::{TreePrinter};
 
 
@@ -15,10 +16,12 @@ use ast::{TreePrinter};
 fn run(prog: &str, dump: bool) -> CompileResult<i64>
 {
     let mut cursor = Cursor::new(prog);
-    let md = try!(parse_module(&mut cursor, "test"));
+    let mut md = try!(parse_module(&mut cursor, "test"));
     if dump {
         md.print(0);
     }
+
+    try!(infer_and_check_types(&mut md));
 
     let opts = CodeGenOptions{
         dump_ir: dump,
@@ -99,3 +102,29 @@ main() -> int = add(6, 7)
     "#, false).unwrap() == 13);
 }
 
+#[test]
+fn test_match_int()
+{
+    assert!(run(r#"
+foo(a: int) -> int =
+    match a 
+        0 => 100,
+        1 => 299,
+        _ => 0
+
+main() -> int = foo(1)
+    "#, false).unwrap() == 299);
+}
+
+#[test]
+fn test_match_bool()
+{
+    assert!(run(r#"
+foo(a: bool) -> int =
+    match a 
+        true => 100,
+        false => 299
+
+main() -> int = foo(true)
+    "#, false).unwrap() == 100);
+}

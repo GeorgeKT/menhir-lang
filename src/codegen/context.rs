@@ -13,6 +13,22 @@ use codegen::{cstr, cstr_mut};
 use compileerror::{Pos, CompileResult, CompileError, ErrorCode, err};
 use codegen::symboltable::{VariableInstance, FunctionInstance, SymbolTable};
 
+pub struct StackFrame 
+{
+    pub symbols: SymbolTable,
+    pub current_function: LLVMValueRef,
+}
+
+impl StackFrame
+{
+    pub fn new(current_function: LLVMValueRef) -> StackFrame
+    {
+        StackFrame{
+            symbols: SymbolTable::new(),
+            current_function: current_function,
+        }
+    }
+}
 
 pub struct Context
 {
@@ -20,7 +36,7 @@ pub struct Context
     pub module: LLVMModuleRef,
     pub builder: LLVMBuilderRef,
     name: String,
-    stack: Vec<SymbolTable>,
+    stack: Vec<StackFrame>,
 }
 
 impl Context
@@ -35,21 +51,21 @@ impl Context
                 module: LLVMModuleCreateWithNameInContext(cname.as_ptr(), context),
                 builder: LLVMCreateBuilderInContext(context),
                 name: module_name.into(),
-                stack: vec![SymbolTable::new()],
+                stack: vec![StackFrame::new(ptr::null_mut())],
             }
         }
 	}
 
     pub fn add_variable(&mut self, var: Rc<VariableInstance>)
     {
-        self.stack.last_mut().expect("Stack is empty").add_variable(var)
+        self.stack.last_mut().expect("Stack is empty").symbols.add_variable(var)
     }
 
     pub fn get_variable(&self, name: &str) -> Option<Rc<VariableInstance>>
     {
         for sf in self.stack.iter().rev() 
         {
-            let v = sf.get_variable(name);
+            let v = sf.symbols.get_variable(name);
             if v.is_some() {
                 return v;
             }
@@ -60,14 +76,14 @@ impl Context
 
     pub fn add_function(&mut self, f: Rc<FunctionInstance>)
     {
-        self.stack.last_mut().expect("Stack is empty").add_function(f)
+        self.stack.last_mut().expect("Stack is empty").symbols.add_function(f)
     }
 
     pub fn get_function(&self, name: &str) -> Option<Rc<FunctionInstance>>
     {
         for sf in self.stack.iter().rev() 
         {
-            let func = sf.get_function(name);
+            let func = sf.symbols.get_function(name);
             if func.is_some() {
                 return func;
             }
@@ -76,9 +92,9 @@ impl Context
         None
     }
 
-    pub fn push_stack(&mut self)
+    pub fn push_stack(&mut self, func: LLVMValueRef)
     {
-        self.stack.push(SymbolTable::new());
+        self.stack.push(StackFrame::new(func));
     }
 
     pub fn pop_stack(&mut self)
@@ -86,6 +102,10 @@ impl Context
         self.stack.pop();
     }
 
+    pub fn get_current_function(&self) -> LLVMValueRef
+    {
+        self.stack.last().expect("Invalid stack").current_function
+    }
 
     pub unsafe fn gen_object_file(&self, build_dir: &str) -> CompileResult<String>
     {
@@ -199,6 +219,11 @@ impl Context
             Type::Float => Some(LLVMDoubleTypeInContext(self.context)),
             _ => None,
         }
+    }
+
+    pub fn in_global_context(&self) -> bool
+    {
+        self.stack.len() == 1
     }
 
 }

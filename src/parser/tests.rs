@@ -410,9 +410,9 @@ match a
     assert!(e == Expression::Match(match_expression(
         name_ref("a", span(2, 7, 2, 7)),
         vec![
-            match_case(number(0, span(3, 5, 3, 5)), number(1, span(3, 10, 3, 10))),
-            match_case(number(1, span(4, 5, 4, 5)), number(2, span(4, 10, 4, 10))),
-            match_case(number(2, span(5, 5, 5, 5)), number(3, span(5, 10, 5, 10))),
+            match_case(number(0, span(3, 5, 3, 5)), number(1, span(3, 10, 3, 10)), span(3, 5, 3, 10)),
+            match_case(number(1, span(4, 5, 4, 5)), number(2, span(4, 10, 4, 10)), span(4, 5, 4, 10)),
+            match_case(number(2, span(5, 5, 5, 5)), number(3, span(5, 10, 5, 10)), span(5, 5, 5, 10)),
         ],
         span(2, 1, 5, 10))
     ))

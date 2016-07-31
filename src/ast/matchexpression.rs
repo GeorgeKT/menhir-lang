@@ -1,4 +1,4 @@
-use ast::{Expression, TreePrinter, prefix};
+use ast::{Expression, Type, TreePrinter, prefix};
 use compileerror::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -6,13 +6,15 @@ pub struct MatchCase
 {
     pub match_expr: Expression,
     pub to_execute: Expression,
+    pub span: Span,
 }
 
-pub fn match_case(e: Expression, to_execute: Expression) -> MatchCase
+pub fn match_case(e: Expression, to_execute: Expression, span: Span) -> MatchCase
 {
     MatchCase{
         match_expr: e,
         to_execute: to_execute,
+        span: span,
     }
 }
 
@@ -21,6 +23,7 @@ pub struct MatchExpression
 {
     pub target: Box<Expression>,
     pub cases: Vec<MatchCase>,
+    pub typ: Type,
     pub span: Span,
 }
 
@@ -29,6 +32,7 @@ pub fn match_expression(target: Expression, cases: Vec<MatchCase>, span: Span) -
     MatchExpression{
         target: Box::new(target),
         cases: cases,
+        typ: Type::Unknown,
         span: span,
     }
 }

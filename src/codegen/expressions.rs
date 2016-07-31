@@ -6,7 +6,7 @@ use llvm::core::*;
 use llvm::prelude::*;
 use llvm::*;
 
-use ast::{Expression, UnaryOp, BinaryOp, Function, FunctionSignature, Call, NameRef};
+use ast::{Expression, UnaryOp, BinaryOp, Function, FunctionSignature, Call, NameRef, MatchExpression, MatchCase};
 use parser::Operator;
 use codegen::{type_name, cstr};
 use codegen::context::Context;
@@ -217,7 +217,7 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> CompileResult<ValueRe
     LLVMPositionBuilderAtEnd(ctx.builder, bb);
 
     ctx.add_function(fi.clone());
-    ctx.push_stack();
+    ctx.push_stack(fi.function);
 
     for (i, arg) in f.sig.args.iter().enumerate() {
         let var = LLVMGetParam(fi.function, i as libc::c_uint);
@@ -236,7 +236,7 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> CompileResult<ValueRe
 
 
     let ret = try!(gen_expression(ctx, &f.expression));
-    LLVMBuildRet(ctx.builder, ret.get());
+    LLVMBuildRet(ctx.builder, ret.load());
     ctx.pop_stack();
 
     if current_bb != ptr::null_mut() {
@@ -278,6 +278,68 @@ unsafe fn gen_name_ref(ctx: &mut Context, nr: &NameRef) -> CompileResult<ValueRe
     }
 }
 
+unsafe fn gen_match_case(ctx: &mut Context, mc: &MatchCase, target: &ValueRef, 
+    func: LLVMValueRef, match_end_bb: LLVMBasicBlockRef, dst: &ValueRef) -> CompileResult<()>
+{
+    let match_case_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("match_case_bb"));
+    let next_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("next_bb"));
+
+    match mc.match_expr
+    {
+        Expression::IntLiteral(_, v) => {
+            let iv = try!(gen_integer(ctx, v));
+            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(), iv.load(), cstr("cmp"));
+            LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
+        },
+        Expression::FloatLiteral(ref span, ref v) => {
+            let iv = try!(gen_float(ctx, &v, span));
+            let cond = LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, target.load(), iv.load(), cstr("cmp"));
+            LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
+        },
+        Expression::BoolLiteral(_, v) => {
+            let iv = try!(gen_bool(ctx, v));
+            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(), iv.load(), cstr("cmp"));
+            LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
+        },
+        Expression::NameRef(ref nr) if nr.name == "_"  => {
+            LLVMBuildBr(ctx.builder, match_case_bb);
+        },
+
+        _ => return err(mc.span.start, ErrorCode::TypeError, format!("Expression is not a valid match pattern")),
+
+    }
+    
+    LLVMPositionBuilderAtEnd(ctx.builder, match_case_bb);
+    let ret = try!(gen_expression(ctx, &mc.to_execute));
+    try!(dst.store(ctx, ret, mc.span.start));
+    LLVMBuildBr(ctx.builder, match_end_bb);
+    LLVMPositionBuilderAtEnd(ctx.builder, next_bb);
+    
+    Ok(()) 
+}
+
+unsafe fn gen_match(ctx: &mut Context, m: &MatchExpression)-> CompileResult<ValueRef>
+{
+    let target = try!(gen_expression(ctx, &m.target));
+    let func = ctx.get_current_function();
+
+    let match_end_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("match_end_bb"));
+
+    let ret_type = try!(ctx
+        .resolve_type(&m.typ)
+        .ok_or(CompileError::new(m.span.start, ErrorCode::TypeError, format!("Cannot resolve the type of this match statement"))));
+
+    let dst = ValueRef::local(ctx.builder, ret_type);
+    for mc in &m.cases 
+    {
+        try!(gen_match_case(ctx, mc, &target, func, match_end_bb, &dst));
+    }
+
+    LLVMBuildBr(ctx.builder, match_end_bb);
+    LLVMPositionBuilderAtEnd(ctx.builder, match_end_bb); 
+    Ok(dst)
+}
+
 pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueRef>
 {
     unsafe 
@@ -292,7 +354,7 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::Call(ref c) => gen_call(ctx, c),
             Expression::NameRef(ref nr) => gen_name_ref(ctx, nr),
             Expression::Function(ref f) => gen_function(ctx, f),
-            Expression::Match(ref m) => err(m.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),
+            Expression::Match(ref m) => gen_match(ctx, m),
             Expression::Lambda(ref l) => err(l.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),
             Expression::Enclosed(_, ref inner) => gen_expression(ctx, inner),
             Expression::IntLiteral(_, v) => gen_integer(ctx, v),

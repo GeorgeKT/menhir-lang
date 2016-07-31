@@ -268,7 +268,8 @@ fn parse_match(tq: &mut TokenQueue, start: Pos) -> CompileResult<Expression>
         let c = try!(parse_expression(tq));
         try!(tq.expect(TokenKind::FatArrow));
         let t = try!(parse_expression(tq));
-        cases.push(match_case(c, t));
+        let case_start = c.span().start;
+        cases.push(match_case(c, t, Span::new(case_start, tq.pos())));
         if tq.is_next(TokenKind::Comma) { // Continue, while we see a comman
             try!(tq.pop());
         } else {
@@ -324,12 +325,10 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
                 try!(tq.pop());
                 if tq.is_next_at(1, TokenKind::Colon) || tq.is_next_at(1, TokenKind::Arrow) || tq.is_next_at(1, TokenKind::Assign)
                 {
-                    println!("parse_function_decl");
                     parse_function_definition(tq, nr).map(|f| Expression::Function(f))
                 }
                 else
                 {
-                    println!("parse_function_call");
                     parse_function_call(tq, nr).map(|c| Expression::Call(c))
                 }
             } 

@@ -118,6 +118,8 @@ pub enum ErrorCode
     CallingNonCallable,
     CodegenError,
     RedefinitionOfVariable,
+    ConstantModification,
+    ExpectedConstExpr,
     /*
     
     RedefinitionOfFunction,
@@ -129,10 +131,10 @@ pub enum ErrorCode
     UnknownStructMember,
     ArgumentCountMismatch,
     
-    ConstantModification,
+    
     PrivateMemberAccess,
     MissingReturn,
-    ExpectedConstExpr,
+   
     IndexOperationNotSupported,
     TraitNotImplemented,
     */
