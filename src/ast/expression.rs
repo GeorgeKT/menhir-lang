@@ -1,6 +1,6 @@
 use compileerror::{Span, CompileResult, ErrorCode, err};
 use ast::{Call, ArrayLiteral, ArrayInitializer, ArrayPattern, NameRef, BinaryOp, UnaryOp, Function,
-    MatchExpression, TreePrinter, Lambda, prefix};
+    MatchExpression, TreePrinter, Lambda, LetExpression, prefix};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
@@ -20,6 +20,7 @@ pub enum Expression
     Function(Function),
     Match(MatchExpression),
     Lambda(Lambda),
+    Let(Box<LetExpression>),
 }
 
 
@@ -71,6 +72,7 @@ impl Expression
             Expression::Function(ref f) => f.span,
             Expression::Match(ref m) => m.span,
             Expression::Lambda(ref l) => l.span,
+            Expression::Let(ref l) => l.span,
         }
     }
 
@@ -136,6 +138,7 @@ impl TreePrinter for Expression
             Expression::Function(ref f) => f.print(level),
             Expression::Match(ref m) => m.print(level),
             Expression::Lambda(ref l) => l.print(level),
+            Expression::Let(ref l) => l.print(level),
         }
     }
 }

@@ -6,10 +6,10 @@ use llvm::core::*;
 use llvm::prelude::*;
 use llvm::*;
 
-use ast::{Expression, UnaryOp, BinaryOp, Function, FunctionSignature, Call, NameRef, MatchExpression, MatchCase};
+use ast::{Expression, UnaryOp, BinaryOp, Function, FunctionSignature, Call, NameRef, MatchExpression, MatchCase, LetExpression};
 use parser::Operator;
 use codegen::{type_name, cstr};
-use codegen::context::Context;
+use codegen::Context;
 use codegen::valueref::ValueRef;
 use codegen::symboltable::{FunctionInstance, VariableInstance};
 use compileerror::{Span, CompileResult, CompileError, ErrorCode, err};
@@ -198,17 +198,6 @@ unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, span: &Sp
     })
 }
 
-/*
-unsafe fn is_block_terminated(bb: LLVMBasicBlockRef) -> bool
-{
-    if bb == ptr::null_mut() {
-        return true;
-    }
-    let last = LLVMGetLastInstruction(bb);
-    last != ptr::null_mut() && LLVMIsATerminatorInst(last) != ptr::null_mut()
-}
-*/
-
 unsafe fn gen_function(ctx: &mut Context, f: &Function) -> CompileResult<ValueRef>
 {
     let fi = Rc::new(try!(gen_function_sig(ctx, &f.sig, &f.span)));
@@ -318,7 +307,7 @@ unsafe fn gen_match_case(ctx: &mut Context, mc: &MatchCase, target: &ValueRef,
     Ok(()) 
 }
 
-unsafe fn gen_match(ctx: &mut Context, m: &MatchExpression)-> CompileResult<ValueRef>
+unsafe fn gen_match(ctx: &mut Context, m: &MatchExpression) -> CompileResult<ValueRef>
 {
     let target = try!(gen_expression(ctx, &m.target));
     let func = ctx.get_current_function();
@@ -340,6 +329,35 @@ unsafe fn gen_match(ctx: &mut Context, m: &MatchExpression)-> CompileResult<Valu
     Ok(dst)
 }
 
+pub unsafe fn gen_let(ctx: &mut Context, l: &LetExpression) -> CompileResult<ValueRef>
+{
+    ctx.push_stack(ptr::null_mut());
+
+    for b in &l.bindings 
+    {
+        let b_type = try!(ctx
+            .resolve_type(&b.typ)
+            .ok_or(CompileError::new(b.span.start, ErrorCode::TypeError, format!("Cannot resolve the type of the {} binding", b.name))));
+
+
+        let init = try!(gen_expression(ctx, &b.init));
+        let alloc = LLVMBuildAlloca(ctx.builder, b_type, cstr("binding"));
+        LLVMBuildStore(ctx.builder, init.load(), alloc);
+
+        let var = Rc::new(VariableInstance{
+            value: alloc,
+            name: b.name.clone(),
+            typ: b.typ.clone(),
+        });
+
+        ctx.add_variable(var);
+    }
+
+    let result = try!(gen_expression(ctx, &l.expression));
+    ctx.pop_stack();
+    Ok(result)
+}
+
 pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueRef>
 {
     unsafe 
@@ -356,6 +374,7 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::Function(ref f) => gen_function(ctx, f),
             Expression::Match(ref m) => gen_match(ctx, m),
             Expression::Lambda(ref l) => err(l.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),
+            Expression::Let(ref l) => gen_let(ctx, l),
             Expression::Enclosed(_, ref inner) => gen_expression(ctx, inner),
             Expression::IntLiteral(_, v) => gen_integer(ctx, v),
             Expression::FloatLiteral(ref span, ref v_str) => gen_float(ctx, &v_str, span),

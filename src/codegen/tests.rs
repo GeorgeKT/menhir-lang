@@ -128,3 +128,15 @@ foo(a: bool) -> int =
 main() -> int = foo(true)
     "#, false).unwrap() == 100);
 }
+
+#[test]
+fn test_let()
+{
+    assert!(run(r#"
+foo(a: int, b: int, c: int) -> int =
+    let x = a * b, y = b * c in
+        x + y
+
+main() -> int = foo(2, 3, 4)
+    "#, false).unwrap() == 18);
+}

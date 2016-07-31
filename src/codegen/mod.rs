@@ -14,9 +14,9 @@ use llvm::core::*;
 
 use ast::Module;
 use compileerror::CompileResult;
-use codegen::context::Context;
 use codegen::expressions::gen_expression;
 
+pub use codegen::context::Context;
 pub use codegen::linker::link;
 
 
