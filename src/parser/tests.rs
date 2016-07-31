@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use ast::{Expression, NameRef, TreePrinter, Function, Argument, Call, Type,
     sig, unary_op, bin_op, array_lit, match_expression, match_case,
-    array_pattern, lambda};
+    array_pattern, lambda, let_expression, let_binding};
 use compileerror::{Span, span};
 use parser::{Lexer, Operator, parse_expression};
 
@@ -416,4 +416,20 @@ match a
         ],
         span(2, 1, 5, 10))
     ))
+}
+
+#[test]
+fn test_let()
+{
+    let e = th_expr(r#"
+let x = 5, y = 7 in x * y
+"#);
+    assert!(e == let_expression(
+        vec![
+            let_binding("x".into(), number(5, span(2, 9, 2, 9)), span(2, 5, 2, 9)),
+            let_binding("y".into(), number(7, span(2, 16, 2, 16)), span(2, 12, 2, 16)),
+        ], 
+        bin_op(Operator::Mul, name_ref("x", span(2, 21, 2, 21)), name_ref("y", span(2, 25, 2, 25)), span(2, 21, 2, 25)), 
+        span(2, 1, 2, 25))
+    )
 }

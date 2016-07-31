@@ -104,7 +104,14 @@ impl Context
 
     pub fn get_current_function(&self) -> LLVMValueRef
     {
-        self.stack.last().expect("Invalid stack").current_function
+        for sf in self.stack.iter().rev() 
+        {
+            if sf.current_function != ptr::null_mut() {
+                return sf.current_function;
+            }
+        }
+        
+        panic!("No current function on stack, we should have caught this !");
     }
 
     pub unsafe fn gen_object_file(&self, build_dir: &str) -> CompileResult<String>

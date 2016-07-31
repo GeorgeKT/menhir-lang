@@ -101,6 +101,8 @@ impl Lexer
         {
             "import" => TokenKind::Import,
             "match" => TokenKind::Match,
+            "let" => TokenKind::Let,
+            "in" => TokenKind::In,
             "true" => TokenKind::True,
             "false" => TokenKind::False,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),

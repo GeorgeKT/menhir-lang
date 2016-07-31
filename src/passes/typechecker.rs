@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::ops::Deref;
 use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral, ArrayInitializer,
-    MatchExpression, Function, Lambda, Call, Type, func_type, array_type};
+    MatchExpression, Function, Lambda, Call, Type, LetExpression, func_type, array_type};
 use compileerror::{CompileResult, Pos, CompileError, ErrorCode, err};
 use parser::{Operator};
 
@@ -363,13 +363,27 @@ fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) 
 
 fn infer_and_check_lambda(_ctx: &mut TypeCheckerContext, m: &Lambda) -> CompileResult<Type>
 {
-err(m.span.start, ErrorCode::TypeError, format!("NYI"))
+    err(m.span.start, ErrorCode::TypeError, format!("NYI"))
 }
 
 fn infer_and_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef) -> CompileResult<Type>
 {
     nr.typ = try!(ctx.resolve_type(&nr.name).ok_or(unknown_name(nr.span.start, &nr.name)));
     Ok(nr.typ.clone())
+}
+
+fn infer_and_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> CompileResult<Type>
+{
+    ctx.push_stack();
+    for b in &mut l.bindings 
+    {
+        b.typ = try!(infer_and_check_expression(ctx, &mut b.init));
+        try!(ctx.add_variable(&b.name, b.typ.clone(), b.span.start));
+    }
+
+    l.typ = try!(infer_and_check_expression(ctx, &mut l.expression));
+    ctx.pop_stack();
+    Ok(l.typ.clone())
 }
 
 pub fn infer_and_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression) -> CompileResult<Type>
@@ -386,6 +400,7 @@ pub fn infer_and_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expressi
         Expression::Function(ref mut f) => infer_and_check_function(ctx, f),
         Expression::Match(ref mut m) => infer_and_check_match(ctx, m),
         Expression::Lambda(ref l) => infer_and_check_lambda(ctx, l),
+        Expression::Let(ref mut l) => infer_and_check_let(ctx, l),
         Expression::Enclosed(_, ref mut inner) => infer_and_check_expression(ctx, inner),
         Expression::IntLiteral(_, _) => Ok(Type::Int),
         Expression::FloatLiteral(_, _) => Ok(Type::Float),

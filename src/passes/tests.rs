@@ -64,7 +64,7 @@ fn test_function()
 }
 
 #[test]
-fn test_array_match()
+fn test_match()
 {
 	assert!(type_check(r#"
 foo(x: [int]) -> int =
@@ -87,4 +87,20 @@ foo(x: int) -> int =
 		6 => 7,
 		_ => 9
 "#).is_ok());
+}
+
+#[test]
+fn test_let()
+{
+	assert!(type_check(r#"
+let x = 6 in x + x
+"#).is_ok());
+
+	assert!(type_check(r#"
+let x = 6 in x + y
+"#).unwrap_err().error == ErrorCode::UnknownName);
+
+	assert!(type_check(r#"
+let x = [6, 7] in x + x
+"#).unwrap_err().error == ErrorCode::TypeError);
 }

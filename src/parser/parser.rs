@@ -2,7 +2,7 @@ use std::fs;
 use std::io::Read;
 use ast::{Expression, Function, Call, NameRef, Type, Argument, Module,
     array_init, array_lit, array_pattern, unary_op, bin_op, sig, to_primitive,
-    match_expression, match_case, lambda};
+    match_expression, match_case, lambda, let_expression, let_binding};
 use compileerror::{CompileResult, ErrorCode, Span, Pos, err};
 use parser::{TokenQueue, Token, TokenKind, Operator, Lexer};
 
@@ -288,6 +288,24 @@ fn parse_lambda(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
     Ok(Expression::Lambda(lambda(args, expr, Span::new(pos, tq.pos()))))
 }
 
+fn parse_let(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
+{
+    let mut bindings = Vec::new();
+    while !tq.is_next(TokenKind::In) 
+    {
+        let (name, span) = try!(tq.expect_identifier());
+        try!(tq.expect(TokenKind::Assign));
+        let init = try!(parse_expression(tq));
+        bindings.push(let_binding(name, init, Span::new(span.start, tq.pos())));
+        try!(eat_comma(tq));
+    }
+
+    try!(tq.expect(TokenKind::In));
+    let e = try!(parse_expression(tq));
+
+    Ok(let_expression(bindings, e, Span::new(pos, tq.pos())))
+}
+
 fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expression>
 {
     match tok.kind
@@ -306,6 +324,10 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
 
         TokenKind::Match => {
             parse_match(tq, tok.span.start)
+        },
+
+        TokenKind::Let => {
+            parse_let(tq, tok.span.start)
         },
 
         TokenKind::OpenParen => {
