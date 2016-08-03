@@ -224,6 +224,9 @@ impl Context
             Type::Int => Some(LLVMInt64TypeInContext(self.context)),
             Type::Bool => Some(LLVMInt1TypeInContext(self.context)),
             Type::Float => Some(LLVMDoubleTypeInContext(self.context)),
+            Type::Array(ref et, len) => {
+                self.resolve_type(et).map(|et| LLVMArrayType(et, len as u32))
+            },
             _ => None,
         }
     }

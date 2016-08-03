@@ -28,7 +28,7 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
         build_dir: "build".into(),
         program_name: "test".into(),
         runtime_library: "libcobraruntime.a".into(),
-        optimize: true,
+        optimize: false,
     };
 
     let mut ctx = try!(codegen(&md, &opts));
@@ -66,7 +66,7 @@ fn test_number()
 {
     assert!(run(r#"
 main() -> int = 5
-    "#, false).unwrap() == 5);
+    "#, false) == Ok(5));
 }
 
 #[test]
@@ -74,7 +74,7 @@ fn test_unary_sub()
 {
     assert!(run(r#"
 main() -> int = -5
-    "#, false).unwrap() == -5);
+    "#, false) == Ok(-5));
 }
 
 #[test]
@@ -82,15 +82,15 @@ fn test_unary_not()
 {
     assert!(run(r#"
 main() -> bool = !true
-    "#, false).unwrap() == 0);
+    "#, false) == Ok(0));
 }
 
 
 #[test]
 fn test_binary_operators()
 {
-    assert!(run("main() -> int = 4 + 5 * 7 - 9 / 3 + 5 % 4", false).unwrap() == (4 + 35 - 3 + 1));
-    assert!(run("main() -> bool = 4 < 5 * 7 && 9 / 3 > 5 % 4", false).unwrap() == 1);
+    assert!(run("main() -> int = 4 + 5 * 7 - 9 / 3 + 5 % 4", false) == Ok(4 + 35 - 3 + 1));
+    assert!(run("main() -> bool = 4 < 5 * 7 && 9 / 3 > 5 % 4", false) == Ok(1));
 }
 
 #[test]
@@ -99,7 +99,7 @@ fn test_call()
     assert!(run(r#"
 add(a: int, b: int) -> int = a + b
 main() -> int = add(6, 7)
-    "#, false).unwrap() == 13);
+    "#, false) == Ok(13));
 }
 
 #[test]
@@ -113,7 +113,7 @@ foo(a: int) -> int =
         _ => 0
 
 main() -> int = foo(1)
-    "#, false).unwrap() == 299);
+    "#, false) == Ok(299));
 }
 
 #[test]
@@ -126,7 +126,7 @@ foo(a: bool) -> int =
         false => 299
 
 main() -> int = foo(true)
-    "#, false).unwrap() == 100);
+    "#, false) == Ok(100));
 }
 
 #[test]
@@ -138,5 +138,26 @@ foo(a: int, b: int, c: int) -> int =
         x + y
 
 main() -> int = foo(2, 3, 4)
-    "#, false).unwrap() == 18);
+    "#, false) == Ok(18));
+}
+
+
+#[test]
+fn test_array()
+{
+    assert!(run(r#"
+main() -> int = 
+    let x = [2, 3, 4] in 5
+    "#, false) == Ok(5));
+}
+
+#[test]
+fn test_array_argument()
+{
+    assert!(run(r#"
+foo(v: [int; 3]) -> int = 5
+
+main() -> int = 
+    let x = [2, 3, 4] in foo(x)
+    "#, false) == Ok(5));
 }

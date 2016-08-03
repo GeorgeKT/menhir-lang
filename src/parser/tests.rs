@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use ast::{Expression, NameRef, TreePrinter, Function, Argument, Call, Type,
     sig, unary_op, bin_op, array_lit, match_expression, match_case,
-    array_pattern, lambda, let_expression, let_binding};
+    array_pattern, array_generator, lambda, let_expression, let_binding};
 use compileerror::{Span, span};
 use parser::{Lexer, Operator, parse_expression};
 
@@ -262,6 +262,23 @@ fn test_array_literal()
         ],
         span(1, 1, 1, 9)));
 
+}
+
+#[test]
+fn test_array_generator()
+{
+    let e = th_expr("[x * x | x <- v]");
+    assert!(e == array_generator(
+        bin_op(
+            Operator::Mul, 
+            name_ref("x", span(1, 2, 1, 2)), 
+            name_ref("x", span(1, 6, 1, 6)), 
+            span(1, 2, 1, 6)
+        ), 
+        "x".into(), 
+        name_ref("v", span(1, 15, 1, 15)), 
+        span(1, 1, 1, 16))
+    );
 }
 
 #[test]

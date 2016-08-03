@@ -1,4 +1,4 @@
-use ast::{Expression, Type};
+use ast::{Expression, TreePrinter, Type, prefix};
 use compileerror::{Span};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -13,8 +13,19 @@ pub struct ArrayLiteral
 pub struct ArrayInitializer
 {
     // syntax [init; times]
-    pub init: Box<Expression>,
+    pub init: Expression,
     pub times: u64,
+    pub array_type: Type,
+    pub span: Span,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct ArrayGenerator
+{
+    // syntax [expr | x <- array]
+    pub left: Expression,
+    pub var: String,
+    pub iterable: Expression,
     pub array_type: Type,
     pub span: Span,
 }
@@ -61,12 +72,12 @@ pub fn array_lit(e: Vec<Expression>, span: Span) -> Expression
 
 pub fn array_init(init: Expression, times: u64, span: Span) -> Expression
 {
-    Expression::ArrayInitializer(ArrayInitializer{
-        init: Box::new(init),
+    Expression::ArrayInitializer(Box::new(ArrayInitializer{
+        init: init,
         times: times,
         array_type: Type::Unknown,
         span: span,
-    })
+    }))
 }
 
 pub fn array_pattern(head: &str, tail: &str, span: Span) -> Expression
@@ -76,4 +87,26 @@ pub fn array_pattern(head: &str, tail: &str, span: Span) -> Expression
         tail: tail.into(),
         span: span,
     })
+}
+
+pub fn array_generator(left: Expression, var: &str, iterable: Expression, span: Span) -> Expression
+{
+    Expression::ArrayGenerator(Box::new(ArrayGenerator{
+        left: left,
+        var: var.into(),
+        iterable: iterable,
+        array_type: Type::Unknown,
+        span: span,
+    }))
+}
+
+impl TreePrinter for ArrayGenerator
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        println!("{}array generator {} ({})", p, self.var, self.span);
+        self.left.print(level + 1);
+        self.iterable.print(level + 1)
+    }
 }

@@ -52,8 +52,9 @@ fn test_arrays()
 	assert!(type_check("[4] ++ []").is_ok());
 	assert!(type_check("[4, 5.7]").unwrap_err().error == ErrorCode::TypeError);
 	assert!(type_check("[4, 5, 7]").is_ok());
-
 	assert!(type_check("[4; 10]").is_ok());
+	assert!(type_check("let v = [1, 2] in [x * 2 | x <- v]").is_ok());
+	assert!(type_check("let v = [1.0, 2.0] in [x * 2 | x <- v]").unwrap_err().error == ErrorCode::TypeError);
 }
 
 #[test]

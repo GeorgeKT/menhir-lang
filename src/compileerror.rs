@@ -141,7 +141,7 @@ pub enum ErrorCode
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct CompileError
 {
     pub pos: Pos,

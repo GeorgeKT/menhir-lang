@@ -16,7 +16,6 @@ use std::path::Path;
 
 use codegen::{CodeGenOptions, codegen, link, llvm_init};
 use docopt::Docopt;
-use ast::TreePrinter;
 use parser::parse_file;
 use passes::infer_and_check_types;
 
@@ -91,7 +90,7 @@ fn main()
 
     //let output_file = args.flag_output.unwrap_or(default_output_file(&input_file));
     match parse_file(&input_file).and_then(|mut module| {
-        module.print(0);
+        //module.print(0);
         try!(infer_and_check_types(&mut module));
         llvm_init();
         let mut ctx = try!(codegen(&module, &opts));

@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::ops::Deref;
 use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral, ArrayInitializer,
-    MatchExpression, Function, Lambda, Call, Type, LetExpression, func_type, array_type};
+    ArrayGenerator, MatchExpression, Function, Lambda, Call, Type, LetExpression, ArgumentPassingMode,
+    func_type, array_type, slice_type};
 use compileerror::{CompileResult, Pos, CompileError, ErrorCode, err};
 use parser::{Operator};
 
@@ -212,8 +213,8 @@ fn infer_and_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> 
 fn infer_and_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLiteral) -> CompileResult<Type>
 {
     if a.elements.is_empty() {
-        a.array_type = Type::EmptyArray;
-        return Ok(Type::EmptyArray);
+        a.array_type = array_type(Type::Unknown, 0);
+        return Ok(a.array_type.clone());
     }
 
     let mut array_element_type = Type::Unknown;
@@ -226,7 +227,7 @@ fn infer_and_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLite
         }
     }
 
-    let array_type = Type::Array(Box::new(array_element_type));
+    let array_type = array_type(array_element_type, a.elements.len());
     if a.array_type == Type::Unknown {
         a.array_type = array_type;
     } else if a.array_type != array_type {
@@ -239,13 +240,34 @@ fn infer_and_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLite
 fn infer_and_check_array_initializer(ctx: &mut TypeCheckerContext, a: &mut ArrayInitializer) -> CompileResult<Type>
 {
     let array_element_type = try!(infer_and_check_expression(ctx, &mut a.init));
-    let array_type = Type::Array(Box::new(array_element_type));
+    let array_type = array_type(array_element_type, a.times as usize);
     if a.array_type == Type::Unknown {
         a.array_type = array_type;
     } else if a.array_type != array_type {
         return err(a.span.start, ErrorCode::TypeError, format!("Array has type {}, but elements have type {}", a.array_type, array_type))
     }
 
+    Ok(a.array_type.clone())
+}
+
+fn infer_and_check_array_generator(ctx: &mut TypeCheckerContext, a: &mut ArrayGenerator) -> CompileResult<Type>
+{
+    ctx.push_stack();
+
+    // At the moment assume iterable is an array, in the future expand to all iterators
+    let it_type = try!(infer_and_check_expression(ctx, &mut a.iterable));
+    let it_element_type = match it_type.get_element_type()
+    {
+        Some(Type::Unknown) => return err(a.span.start, ErrorCode::TypeError, format!("Extract expression with empty array is pointless")),
+        Some(et) => et,
+        None => return err(a.span.start, ErrorCode::TypeError, format!("Iterable expression in array generator is not an array")),
+    };
+
+    try!(ctx.add_variable(&a.var, it_element_type, a.span.start));
+
+    let element_type = try!(infer_and_check_expression(ctx, &mut a.left));
+    a.array_type = slice_type(element_type);
+    ctx.pop_stack();
     Ok(a.array_type.clone())
 }
 
@@ -278,8 +300,11 @@ fn infer_and_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) ->
     ctx.add_function(&fun.sig.name, ft.clone());
 
     ctx.push_stack();
-    for arg in fun.sig.args.iter() 
+    for arg in fun.sig.args.iter_mut() 
     {
+        if arg.typ.is_sequence() {
+            arg.passing_mode = ArgumentPassingMode::ByPtr;
+        }
         try!(ctx.add_variable(&arg.name, arg.typ.clone(), arg.span.start));
     }
     
@@ -311,15 +336,15 @@ fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) 
         match c.match_expr
         {
             Expression::ArrayPattern(ref ap) => {
-                if !target_type.is_array() {
+                if !target_type.is_sequence() {
                     return err(ap.span.start, ErrorCode::TypeError, format!("Attempting to pattern match an expression of type {}, with an array", target_type));
                 }
 
-                let element_type = target_type.get_array_element_type().expect("target_type is not an array type");
+                let element_type = target_type.get_element_type().expect("target_type is not an array type");
 
                 ctx.push_stack();
                 try!(ctx.add_variable(&ap.head, element_type.clone(), ap.span.start));
-                try!(ctx.add_variable(&ap.tail, array_type(element_type.clone()), ap.span.start));
+                try!(ctx.add_variable(&ap.tail, slice_type(element_type.clone()), ap.span.start));
                 return_type = try!(infer_case_type(ctx, &mut c.to_execute, &return_type));
                 ctx.pop_stack();
             },
@@ -395,6 +420,7 @@ pub fn infer_and_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expressi
         Expression::ArrayLiteral(ref mut a) => infer_and_check_array_literal(ctx, a),
         Expression::ArrayInitializer(ref mut a) => infer_and_check_array_initializer(ctx, a),
         Expression::ArrayPattern(_) => Ok(Type::Unknown), // Doesn't really have a type
+        Expression::ArrayGenerator(ref mut a) => infer_and_check_array_generator(ctx, a),
         Expression::Call(ref mut c) => infer_and_check_call(ctx, c),
         Expression::NameRef(ref mut nr) => infer_and_check_name(ctx, nr),
         Expression::Function(ref mut f) => infer_and_check_function(ctx, f),

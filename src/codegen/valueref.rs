@@ -4,6 +4,7 @@ use llvm::*;
 
 use codegen::cstr;
 use codegen::context::Context;
+use codegen::expressions::const_int;
 use compileerror::{Pos, CompileResult, ErrorCode, err};
 
 #[derive(Debug, Clone)]
@@ -121,4 +122,49 @@ impl ValueRef
             is_pointer(LLVMTypeOf(self.ptr))
         }
     }
+
+    pub fn get_array_element(&self, ctx: &Context, index: LLVMValueRef, pos: Pos) -> CompileResult<ValueRef>
+    {
+        if !self.is_pointer() {
+            return err(pos, ErrorCode::TypeError, format!("Attempting to index a value"));
+        }
+
+        unsafe {
+            let et = LLVMGetElementType(LLVMTypeOf(self.ptr));
+            if is_same_kind(LLVMGetTypeKind(et), LLVMTypeKind::LLVMArrayTypeKind)
+            {
+                let mut index_expr = vec![const_int(ctx, 0), index];
+                Ok(ValueRef::new(
+                    LLVMBuildGEP(self.builder, self.ptr, index_expr.as_mut_ptr(), 2, cstr("el")),
+                    self.constant,
+                    self.builder,
+                ))
+            }
+            else if is_same_kind(LLVMGetTypeKind(LLVMTypeOf(self.ptr)), LLVMTypeKind::LLVMArrayTypeKind)
+            {
+                let mut index_expr = vec![index];
+                Ok(ValueRef::new(
+                    LLVMBuildGEP(self.builder, self.ptr, index_expr.as_mut_ptr(), 1, cstr("el")),
+                    self.constant,
+                    self.builder,
+                ))
+            }
+
+            else if is_same_kind(LLVMGetTypeKind(et), LLVMTypeKind::LLVMPointerTypeKind)
+            {
+                let elptr = LLVMBuildLoad(self.builder, self.ptr, cstr("elptr"));
+                let mut index_expr = vec![index];
+                Ok(ValueRef::new(
+                    LLVMBuildGEP(self.builder, elptr, index_expr.as_mut_ptr(), 1, cstr("el")),
+                    self.constant,
+                    self.builder,
+                ))
+            }
+            else
+            {
+                err(pos, ErrorCode::TypeError, format!("Attempting to index, something which is not indexable"))
+            }
+        }
+    }
+
 }

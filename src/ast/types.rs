@@ -14,8 +14,8 @@ pub enum Type
     String,
     Bool,
     Complex(String),
-    EmptyArray,
-    Array(Box<Type>),
+    Array(Box<Type>, usize),
+    Slice(Box<Type>),
     Generic(String),
     Func(Vec<Type>, Box<Type>), // args and return type
 }
@@ -24,47 +24,65 @@ impl Type
 {
     pub fn concat_allowed(&self, other: &Type) -> bool
     {
-        if *self == Type::EmptyArray || *other == Type::EmptyArray {
+        if self.is_empty_array() || other.is_empty_array() {
             return true;
         }
-        
-        match (self, other)
+
+        if self.is_sequence() && other.is_sequence() {
+            return self.get_element_type() == other.get_element_type();
+        }
+
+        if self.is_sequence() && !other.is_sequence() {
+            return self.get_element_type().map(|et| et == *other).unwrap_or(false);
+        }
+
+        if other.is_sequence() && !self.is_sequence() {
+            return other.get_element_type().map(|et| et == *self).unwrap_or(false);
+        }
+
+        false
+    }
+
+    pub fn is_empty_array(&self) -> bool 
+    {
+        match *self 
         {
-            (&Type::Array(ref s), &Type::Array(ref t)) => s == t,
-            (ref s, &Type::Array(ref t)) => **s == *t.deref(),
-            (&Type::Array(ref t), ref s) => **s == *t.deref(),
+            Type::Array(_, 0) => true,
             _ => false,
         }
     }
 
-    pub fn is_array(&self) -> bool 
+    pub fn is_sequence(&self) -> bool 
     {
         match *self 
         {
-            Type::Array(_) | Type::EmptyArray => true,
+            Type::Array(_, _) => true,
+            Type::Slice(_) => true,
             _ => false,
         }
     }
 
-    pub fn get_array_element_type(&self) -> Option<Type>
+    pub fn get_element_type(&self) -> Option<Type>
     {
         match *self 
         {
-            Type::Array(ref et) => Some(et.deref().clone()),
-            Type::EmptyArray => Some(Type::Unknown),
+            Type::Array(ref et, _) => Some(et.deref().clone()),
+            Type::Slice(ref et) => Some(et.deref().clone()),
             _ => None,
         }
     }
 
     pub fn is_matchable(&self, other: &Type) -> bool 
     {
-        match (self, other)
-        {
-            (&Type::Array(ref s), &Type::Array(ref t)) => s == t,
-            (&Type::EmptyArray, &Type::Array(_)) => true,
-            (&Type::Array(_), &Type::EmptyArray) => true,
-            _ => *self == *other,
+        if (self.is_empty_array() && other.is_sequence()) || (other.is_empty_array() && self.is_sequence()) {
+            return true;
         }
+
+        if self.is_sequence() && other.is_sequence() {
+            return self.get_element_type() == other.get_element_type();
+        }
+
+        *self == *other
     }
 }
 
@@ -73,9 +91,14 @@ pub fn func_type(args: Vec<Type>, ret: Type) -> Type
     Type::Func(args, Box::new(ret))
 }
 
-pub fn array_type(element_type: Type) -> Type 
+pub fn array_type(element_type: Type, len: usize) -> Type 
 {
-    Type::Array(Box::new(element_type))
+    Type::Array(Box::new(element_type), len)
+}
+
+pub fn slice_type(element_type: Type) -> Type 
+{
+    Type::Slice(Box::new(element_type))
 }
 
 impl fmt::Display for Type
@@ -91,8 +114,13 @@ impl fmt::Display for Type
             Type::String => write!(f, "string"),
             Type::Bool => write!(f, "bool"),
             Type::Complex(ref s) => write!(f, "{}", s),
-            Type::EmptyArray => write!(f, "[]"),
-            Type::Array(ref at) => write!(f, "[{}]", at),
+            Type::Array(ref at, len) => 
+                if len == 0 {
+                    write!(f, "[]")
+                } else {
+                    write!(f, "[{}; {}]", at, len)
+                },
+            Type::Slice(ref at) => write!(f, "[{}]", at),
             Type::Generic(ref g) => write!(f, "${}", g),
             Type::Func(ref args, ref ret) => write!(f, "({}) -> {}", join(args.iter(), ", "), ret),
         }

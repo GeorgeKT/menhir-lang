@@ -19,6 +19,7 @@ pub enum Operator
     And,
     Or,
     Concat,
+    Extract, // <- 
 }
 
 pub const TOP_PRECEDENCE: usize = 2000;
@@ -36,6 +37,7 @@ impl Operator
             Operator::GreaterThanEquals | Operator::Equals | Operator::NotEquals => TOP_PRECEDENCE - 300,
             Operator::And => TOP_PRECEDENCE - 400,
             Operator::Or => TOP_PRECEDENCE - 500,
+            Operator::Extract => TOP_PRECEDENCE - 600,
         }
     }
 
@@ -70,6 +72,7 @@ impl Display for Operator
             Operator::And => write!(fmt, "&&"),
             Operator::Or => write!(fmt, "||"),
             Operator::Concat => write!(fmt, "++"),
+            Operator::Extract => write!(fmt, "<-"),
         }
     }
 }

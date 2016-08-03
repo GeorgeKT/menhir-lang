@@ -1,5 +1,5 @@
 use compileerror::{Span, CompileResult, ErrorCode, err};
-use ast::{Call, ArrayLiteral, ArrayInitializer, ArrayPattern, NameRef, BinaryOp, UnaryOp, Function,
+use ast::{Call, ArrayLiteral, ArrayInitializer, ArrayPattern, ArrayGenerator, NameRef, BinaryOp, UnaryOp, Function,
     MatchExpression, TreePrinter, Lambda, LetExpression, prefix};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -10,8 +10,9 @@ pub enum Expression
     FloatLiteral(Span, String), // Keep as string until we generate code, so we can compare it
     StringLiteral(Span, String),
     ArrayLiteral(ArrayLiteral),
-    ArrayInitializer(ArrayInitializer), // [x; times]
+    ArrayInitializer(Box<ArrayInitializer>), // [x; times]
     ArrayPattern(ArrayPattern), // [hd | tail]
+    ArrayGenerator(Box<ArrayGenerator>), 
     UnaryOp(UnaryOp),
     BinaryOp(Box<BinaryOp>),
     Enclosed(Span, Box<Expression>), // Expression enclosed between parens
@@ -63,6 +64,7 @@ impl Expression
             Expression::StringLiteral(span, _) => span,
             Expression::ArrayLiteral(ref a) => a.span,
             Expression::ArrayInitializer(ref a) => a.span,
+            Expression::ArrayGenerator(ref a) => a.span,
             Expression::ArrayPattern(ref a) => a.span,
             Expression::UnaryOp(ref op) => op.span,
             Expression::BinaryOp(ref op) => op.span,
@@ -120,6 +122,7 @@ impl TreePrinter for Expression
             Expression::ArrayPattern(ref a) => {
                 println!("{}array pattern [{} | {}] ({})", p, a.head, a.tail, a.span);
             },
+            Expression::ArrayGenerator(ref a) => a.print(level),
             Expression::UnaryOp(ref op) => {
                 println!("{}unary {} ({})", p, op.operator, op.span);
                 op.expression.print(level + 1)

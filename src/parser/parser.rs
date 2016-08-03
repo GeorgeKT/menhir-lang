@@ -1,8 +1,8 @@
 use std::fs;
 use std::io::Read;
 use ast::{Expression, Function, Call, NameRef, Type, Argument, Module,
-    array_init, array_lit, array_pattern, unary_op, bin_op, sig, to_primitive,
-    match_expression, match_case, lambda, let_expression, let_binding};
+    array_init, array_lit, array_pattern, array_generator, unary_op, bin_op, sig, to_primitive,
+    match_expression, match_case, lambda, let_expression, let_binding, array_type, slice_type};
 use compileerror::{CompileResult, ErrorCode, Span, Pos, err};
 use parser::{TokenQueue, Token, TokenKind, Operator, Lexer};
 
@@ -61,12 +61,24 @@ fn parse_array_literal(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expressio
         }
         else if expressions.is_empty() && tq.is_next(TokenKind::Pipe)
         {
-            // array pattern [head | tail]
-            let head = try!(e.to_name_ref());
-            try!(tq.expect(TokenKind::Pipe));
-            let (tail, _) = try!(tq.expect_identifier());
-            try!(tq.expect(TokenKind::CloseBracket));
-            return Ok(array_pattern(&head.name, &tail, Span::new(pos, tq.pos())));
+            // array pattern [head | tail] or generator [left | x <- a]
+            if tq.is_next_at(2, TokenKind::Operator(Operator::Extract))
+            {
+                try!(tq.expect(TokenKind::Pipe));
+                let (var, _) = try!(tq.expect_identifier());
+                try!(tq.expect(TokenKind::Operator(Operator::Extract)));
+                let iterable = try!(parse_expression(tq));
+                try!(tq.expect(TokenKind::CloseBracket));
+                return Ok(array_generator(e, &var, iterable, Span::new(pos, tq.pos())));
+            } 
+            else 
+            {
+                let head = try!(e.to_name_ref());
+                try!(tq.expect(TokenKind::Pipe));
+                let (tail, _) = try!(tq.expect_identifier());
+                try!(tq.expect(TokenKind::CloseBracket));
+                return Ok(array_pattern(&head.name, &tail, Span::new(pos, tq.pos())));
+            }
         }
         else
         {
@@ -183,8 +195,18 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
     {
         try!(tq.pop());
         let at = try!(parse_type(tq));
-        try!(tq.expect(TokenKind::CloseBracket));
-        Ok(Type::Array(Box::new(at)))
+        if tq.is_next(TokenKind::SemiColon) 
+        {
+            try!(tq.pop());
+            let (len, _) = try!(tq.expect_int());
+            try!(tq.expect(TokenKind::CloseBracket));
+            Ok(array_type(at, len as usize))
+        }
+        else 
+        {
+            try!(tq.expect(TokenKind::CloseBracket));
+            Ok(slice_type(at))
+        }
     }
     else if tq.is_next(TokenKind::OpenParen)
     {

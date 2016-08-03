@@ -9,16 +9,16 @@ mod nameref;
 mod operations;
 mod types;
 
-pub use self::arrays::{ArrayLiteral, ArrayInitializer, ArrayPattern, array_lit, array_init, array_pattern};
-pub use self::call::Call;
+pub use self::arrays::{ArrayLiteral, ArrayInitializer, ArrayPattern, ArrayGenerator, array_lit, array_init, array_pattern, array_generator};
+pub use self::call::{Call};
 pub use self::expression::Expression;
-pub use self::function::{Function, FunctionSignature, Argument, sig};
+pub use self::function::{Function, FunctionSignature, Argument, ArgumentPassingMode, sig};
 pub use self::lambda::{Lambda, lambda};
 pub use self::letexpression::{LetExpression, Binding, let_expression, let_binding};
 pub use self::matchexpression::{MatchExpression, MatchCase, match_case, match_expression};
 pub use self::nameref::NameRef;
 pub use self::operations::{BinaryOp, UnaryOp, unary_op, bin_op};
-pub use self::types::{Type, to_primitive, func_type, array_type};
+pub use self::types::{Type, to_primitive, func_type, array_type, slice_type};
 
 
 fn prefix(level: usize) -> String
