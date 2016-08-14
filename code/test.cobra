@@ -1,4 +1,7 @@
-foo(v: [int; 3]) -> int = 5
+sum(v: [int]) -> int =
+    match v
+        [] => 0,
+        [head | tail] => head + sum(tail)
 
-main() -> int = 
-    let x = [2, 3, 4] in foo(x)
+main() -> int =
+    let x = [2, 3, 4] in sum(x)

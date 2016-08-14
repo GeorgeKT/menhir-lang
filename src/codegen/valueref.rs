@@ -2,10 +2,7 @@ use llvm::prelude::*;
 use llvm::core::*;
 use llvm::*;
 
-use codegen::cstr;
-use codegen::context::Context;
-use codegen::expressions::const_int;
-use codegen::slice::Slice;
+use codegen::{Context, Array, Slice, Sequence, cstr};
 use compileerror::{Pos, CompileResult, ErrorCode, err};
 
 
@@ -16,7 +13,7 @@ pub enum ValueRef
     Const(LLVMValueRef),
     Ptr(LLVMValueRef),
     Global(LLVMValueRef),
-    Array(LLVMValueRef),
+    Array(Array),
     Slice(Slice),
 }
 
@@ -44,34 +41,21 @@ impl ValueRef
         unsafe {
             let alloc = LLVMBuildAlloca(builder, typ, cstr("alloc"));
             if is_same_kind(LLVMGetTypeKind(typ), LLVMTypeKind::LLVMArrayTypeKind) {
-                ValueRef::Array(alloc)
+                ValueRef::Array(Array::new(alloc))
             } else {
                 ValueRef::Ptr(alloc)
             }
         }
     }
 
-    pub fn ptr(ptr: LLVMValueRef) -> ValueRef
+    pub unsafe fn const_array(arr: LLVMValueRef) -> ValueRef
     {
-        ValueRef::Ptr(ptr)
+        ValueRef::Array(Array::new(arr))
     }
 
-    pub fn global(ptr: LLVMValueRef) -> ValueRef
+    pub unsafe fn alloc_array(builder: LLVMBuilderRef, element_type: LLVMTypeRef, len: usize) -> ValueRef
     {
-        ValueRef::Global(ptr)
-    }
-
-    pub fn const_array(arr: LLVMValueRef) -> ValueRef
-    {
-        ValueRef::Array(arr)
-    }
-
-    pub fn alloc_array(builder: LLVMBuilderRef, element_type: LLVMTypeRef, len: usize) -> ValueRef
-    {
-        unsafe {
-            let typ = LLVMArrayType(element_type, len as u32);
-            ValueRef::Array(LLVMBuildAlloca(builder, typ, cstr("array_alloc")))
-        }
+        ValueRef::Array(Array::alloc(builder, element_type, len))
     }
 
     pub fn slice(slice: Slice) -> ValueRef
@@ -86,7 +70,7 @@ impl ValueRef
             ValueRef::Const(cv) => cv,
             ValueRef::Ptr(av) => LLVMBuildLoad(builder, av, cstr("load")),
             ValueRef::Global(ptr) => LLVMBuildLoad(builder, ptr, cstr("load")),
-            ValueRef::Array(arr) => arr,
+            ValueRef::Array(ref arr) => arr.get(),
             ValueRef::Slice(ref slice) => slice.get(),
         }
     }
@@ -98,7 +82,7 @@ impl ValueRef
             ValueRef::Const(cv) => cv,
             ValueRef::Ptr(av) => av,
             ValueRef::Global(ptr) => ptr,
-            ValueRef::Array(arr) => arr,
+            ValueRef::Array(ref arr) => arr.get(),
             ValueRef::Slice(ref slice) => slice.get(),
         }
     }
@@ -151,6 +135,7 @@ impl ValueRef
         }
     }
 
+/*
     pub unsafe fn get_element_type(&self, pos: Pos) -> CompileResult<LLVMTypeRef>
     {
         match *self
@@ -158,8 +143,8 @@ impl ValueRef
             ValueRef::Const(_) => {
                 err(pos, ErrorCode::CodegenError, format!("Const values don't have an element type"))
             },
-            ValueRef::Array(arr) => {
-                Ok(LLVMGetElementType(LLVMGetElementType(LLVMTypeOf(arr)))) // arr is a pointer to an array
+            ValueRef::Array(ref arr) => {
+                Ok(arr.get_element_type()) // arr is a pointer to an array
             },
             ValueRef::Ptr(ptr) => {
                 Ok(LLVMGetElementType(LLVMTypeOf(ptr)))
@@ -172,58 +157,14 @@ impl ValueRef
             },
         }
     }
-
-
-
-
-    pub unsafe fn get_array_element(&self, ctx: &Context, index: LLVMValueRef, pos: Pos) -> CompileResult<ValueRef>
+*/
+    pub unsafe fn index(&self, ctx: &Context, index: LLVMValueRef, pos: Pos) -> CompileResult<ValueRef>
     {
         match *self
         {
-            ValueRef::Array(arr) => {
-                let mut index_expr = vec![const_int(ctx, 0), index];
-                Ok(ValueRef::ptr(
-                    LLVMBuildGEP(ctx.builder, arr, index_expr.as_mut_ptr(), 2, cstr("el")),
-                ))
-            },
+            ValueRef::Array(ref arr) => Ok(arr.get_element(ctx, index)),
+            ValueRef::Slice(ref slice) => Ok(slice.get_element(ctx, index)),
             _ => err(pos, ErrorCode::CodegenError, format!("Attempting to get an array element from a none array")),
         }
-
-/*
-         {
-            let et = LLVMGetElementType(LLVMTypeOf(self.ptr));
-            if is_same_kind(LLVMGetTypeKind(et), LLVMTypeKind::LLVMArrayTypeKind)
-            {
-
-            }
-            else if is_same_kind(LLVMGetTypeKind(LLVMTypeOf(self.ptr)), LLVMTypeKind::LLVMArrayTypeKind)
-            {
-                let mut index_expr = vec![index];
-                Ok(ValueRef::new(
-                    LLVMBuildGEP(self.builder, self.ptr, index_expr.as_mut_ptr(), 1, cstr("el")),
-                    self.constant,
-                    self.builder,
-                ))
-            }
-
-            else if is_same_kind(LLVMGetTypeKind(et), LLVMTypeKind::LLVMPointerTypeKind)
-            {
-                let elptr = LLVMBuildLoad(self.builder, self.ptr, cstr("elptr"));
-                let mut index_expr = vec![index];
-                Ok(ValueRef::new(
-                    LLVMBuildGEP(self.builder, elptr, index_expr.as_mut_ptr(), 1, cstr("el")),
-                    self.constant,
-                    self.builder,
-                ))
-            }
-            else
-            {
-                err(pos, ErrorCode::TypeError, format!("Attempting to index, something which is not indexable"))
-            }
-        }
-            */
     }
-
-
-
 }

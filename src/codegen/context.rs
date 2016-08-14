@@ -10,7 +10,7 @@ use llvm::core::*;
 use llvm::target_machine::*;
 
 use ast::{Type};
-use codegen::{cstr, cstr_mut, type_name};
+use codegen::{cstr, cstr_mut, type_name, ValueRef};
 use compileerror::{Pos, CompileResult, CompileError, ErrorCode, err};
 use codegen::symboltable::{VariableInstance, FunctionInstance, SymbolTable};
 use codegen::slice::{new_slice_type};
@@ -60,8 +60,12 @@ impl Context
         }
 	}
 
-    pub fn add_variable(&mut self, var: Rc<VariableInstance>)
+    pub fn add_variable(&mut self, name: &str, vr: ValueRef)
     {
+        let var = Rc::new(VariableInstance{
+            value: vr,
+            name: name.into(),
+        });
         self.stack.last_mut().expect("Stack is empty").symbols.add_variable(var)
     }
 

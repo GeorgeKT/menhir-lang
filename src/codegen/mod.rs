@@ -1,3 +1,4 @@
+mod array;
 mod context;
 mod expressions;
 mod linker;
@@ -14,14 +15,33 @@ use llvm::prelude::*;
 use llvm::core::*;
 
 use ast::Module;
-use compileerror::CompileResult;
+use compileerror::{Pos, CompileResult};
 use codegen::expressions::gen_expression;
 
 pub use codegen::expressions::const_int;
 pub use codegen::context::{Context};
 pub use codegen::linker::link;
 pub use codegen::valueref::ValueRef;
+pub use codegen::slice::Slice;
+pub use codegen::array::Array;
 
+pub trait Sequence
+{
+    unsafe fn gen_length(&self, ctx: &Context) -> ValueRef;
+
+    unsafe fn get_element(&self, ctx: &Context, idx: LLVMValueRef) -> ValueRef;
+    unsafe fn subslice(&self, ctx: &mut Context, offset: u64, pos: Pos) -> CompileResult<ValueRef>;
+
+    unsafe fn head(&self, ctx: &Context) -> ValueRef
+    {
+        self.get_element(ctx, const_int(ctx, 0))
+    }
+
+    unsafe fn tail(&self, ctx: &mut Context, pos: Pos) -> CompileResult<ValueRef>
+    {
+       self.subslice(ctx, 1, pos)
+    }
+}
 
 pub fn cstr(s: &str) -> *const c_char
 {

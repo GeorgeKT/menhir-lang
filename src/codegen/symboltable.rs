@@ -2,7 +2,7 @@ use std::rc::Rc;
 use std::collections::HashMap;
 use llvm::prelude::*;
 
-use ast::{Type, FunctionSignature, ArgumentPassingMode};
+use ast::{FunctionSignature, ArgumentPassingMode};
 use codegen::ValueRef;
 
 pub struct FunctionInstance
@@ -18,7 +18,6 @@ pub struct VariableInstance
 {
     pub value: ValueRef,
     pub name: String,
-    pub typ: Type,
 }
 
 pub struct SymbolTable
