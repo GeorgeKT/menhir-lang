@@ -37,10 +37,10 @@ impl Slice
 
         let array_len = LLVMGetArrayLength(LLVMTypeOf(arr.get()));
         let length_ptr = slice.get_length_ptr();
-        try!(length_ptr.store(ctx, ValueRef::const_value(const_int(ctx, array_len as u64)), pos));
+        try!(length_ptr.store_direct(ctx, const_int(ctx, array_len as u64), pos));
 
         let offset_ptr = slice.get_offset_ptr();
-        try!(offset_ptr.store(ctx, ValueRef::const_value(const_int(ctx, 0)), pos));
+        try!(offset_ptr.store_direct(ctx, const_int(ctx, 0), pos));
 
         let first = try!(arr.get_array_element(ctx, const_int(ctx, 0), pos));
         let data_ptr = slice.get_data_ptr();
