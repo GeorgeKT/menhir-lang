@@ -22,6 +22,9 @@ pub enum Expression
     Match(MatchExpression),
     Lambda(Lambda),
     Let(Box<LetExpression>),
+
+    // Internal expressions
+    ArrayToSliceConversion(Box<Expression>),
 }
 
 
@@ -75,6 +78,7 @@ impl Expression
             Expression::Match(ref m) => m.span,
             Expression::Lambda(ref l) => l.span,
             Expression::Let(ref l) => l.span,
+            Expression::ArrayToSliceConversion(ref e) => e.span(),
         }
     }
 
@@ -142,6 +146,10 @@ impl TreePrinter for Expression
             Expression::Match(ref m) => m.print(level),
             Expression::Lambda(ref l) => l.print(level),
             Expression::Let(ref l) => l.print(level),
+            Expression::ArrayToSliceConversion(ref e) => {
+                println!("{}array->slice", p);
+                e.print(level + 1);
+            }
         }
     }
 }

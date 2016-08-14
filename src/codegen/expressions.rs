@@ -9,9 +9,10 @@ use llvm::*;
 use ast::{Expression, UnaryOp, BinaryOp, Function, FunctionSignature, Call, NameRef, MatchExpression, MatchCase, LetExpression,
     ArrayLiteral, ArgumentPassingMode};
 use parser::Operator;
-use codegen::{type_name, cstr};
+use codegen::{cstr};
 use codegen::Context;
 use codegen::valueref::ValueRef;
+use codegen::slice::Slice;
 use codegen::symboltable::{FunctionInstance, VariableInstance};
 use compileerror::{Span, CompileResult, CompileError, ErrorCode, err};
 
@@ -28,26 +29,26 @@ pub unsafe fn const_int(ctx: &Context, v: u64) -> LLVMValueRef
 
 unsafe fn gen_integer(ctx: &mut Context, v: u64) -> CompileResult<ValueRef>
 {
-    Ok(ValueRef::new(const_int(ctx, v), true, ctx.builder))
+    Ok(ValueRef::const_value(const_int(ctx, v)))
 }
 
 unsafe fn gen_bool(ctx: &mut Context, v: bool) -> CompileResult<ValueRef>
 {
-    Ok(ValueRef::new(LLVMConstInt(LLVMInt1TypeInContext(ctx.context), if v {1} else {0}, 0), true, ctx.builder))
+    Ok(ValueRef::const_value(LLVMConstInt(LLVMInt1TypeInContext(ctx.context), if v {1} else {0}, 0)))
 }
 
 unsafe fn gen_float(ctx: &Context, num: &str, span: &Span) -> CompileResult<ValueRef>
 {
-    match num.parse::<f64>() 
+    match num.parse::<f64>()
     {
-        Ok(f) => Ok(ValueRef::new(LLVMConstReal(LLVMDoubleTypeInContext(ctx.context), f), true, ctx.builder)),
+        Ok(f) => Ok(ValueRef::const_value(LLVMConstReal(LLVMDoubleTypeInContext(ctx.context), f))),
         Err(_) => err(span.start, ErrorCode::InvalidFloatingPoint, format!("{} is not a valid floating point number", num))
     }
 }
 
 unsafe fn gen_const_string_literal(ctx: &Context, s: &str) -> CompileResult<ValueRef>
 {
-    Ok(ValueRef::new(LLVMConstStringInContext(ctx.context, s.as_ptr() as *const i8, s.len() as u32, 1), true, ctx.builder))
+    Ok(ValueRef::const_value(LLVMConstStringInContext(ctx.context, s.as_ptr() as *const i8, s.len() as u32, 1)))
 }
 
 unsafe fn gen_string_literal(ctx: &Context, s: &str, _span: &Span) -> CompileResult<ValueRef>
@@ -58,20 +59,20 @@ unsafe fn gen_string_literal(ctx: &Context, s: &str, _span: &Span) -> CompileRes
     LLVMSetGlobalConstant(glob, 1);
 
     // Initialize with string:
-    LLVMSetInitializer(glob, try!(gen_const_string_literal(ctx, s)).load());
-    Ok(ValueRef::new(glob, true, ctx.builder))
+    LLVMSetInitializer(glob, try!(gen_const_string_literal(ctx, s)).load(ctx.builder));
+    Ok(ValueRef::global(glob))
 }
 
 unsafe fn gen_unary_op(ctx: &mut Context, op: &UnaryOp) -> CompileResult<ValueRef>
 {
     let e_val = try!(gen_expression(ctx, &op.expression));
-    match op.operator 
+    match op.operator
     {
-        Operator::Sub => {      
-            Ok(ValueRef::new(LLVMBuildNeg(ctx.builder, e_val.load(), cstr("neg")), true, ctx.builder))
+        Operator::Sub => {
+            Ok(ValueRef::const_value(LLVMBuildNeg(ctx.builder, e_val.load(ctx.builder), cstr("neg"))))
         },
         Operator::Not => {
-            Ok(ValueRef::new(LLVMBuildNot(ctx.builder, e_val.load(), cstr("not")), true, ctx.builder))
+            Ok(ValueRef::const_value(LLVMBuildNot(ctx.builder, e_val.load(ctx.builder), cstr("not"))))
         },
         _ => err(op.span.start, ErrorCode::InvalidUnaryOperator, format!("Operator {} is not a unary operator", op.operator)),
     }
@@ -79,8 +80,8 @@ unsafe fn gen_unary_op(ctx: &mut Context, op: &UnaryOp) -> CompileResult<ValueRe
 
 unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> CompileResult<ValueRef>
 {
-    let left_val = try!(gen_expression(ctx, &op.left)).load();
-    let right_val = try!(gen_expression(ctx, &op.right)).load();
+    let left_val = try!(gen_expression(ctx, &op.left)).load(ctx.builder);
+    let right_val = try!(gen_expression(ctx, &op.right)).load(ctx.builder);
     let left_type = LLVMTypeOf(left_val);
 
     let v = match op.operator {
@@ -170,7 +171,7 @@ unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> CompileResult<Value
         _ => err(op.span.start, ErrorCode::InvalidBinaryOperator, format!("Operator {} is not a binary operator", op.operator)),
     };
 
-    v.map(|val| ValueRef::new(val, true, ctx.builder))
+    v.map(|val| ValueRef::const_value(val))
 }
 
 
@@ -197,8 +198,8 @@ unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, span: &Sp
                 let arg_ptr_type = LLVMPointerType(arg_type, 0);
                 arg_types.push(arg_ptr_type);
                 arg_types_with_passing_mode.push((arg_ptr_type, arg.passing_mode));
-            } 
-        } 
+            }
+        }
     }
 
     let name = sig.name.clone();
@@ -228,8 +229,9 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> CompileResult<ValueRe
     for (i, arg) in f.sig.args.iter().enumerate() {
         let var = LLVMGetParam(fi.function, i as libc::c_uint);
         let (llvm_arg, _) = fi.args[i];
-        let alloc = LLVMBuildAlloca(ctx.builder, llvm_arg, cstr("argtmp"));
-        LLVMBuildStore(ctx.builder, var, alloc);
+
+        let alloc = ValueRef::alloc(ctx.builder, llvm_arg);
+        LLVMBuildStore(ctx.builder, var, alloc.get());
 
         let var = Rc::new(VariableInstance{
             value: alloc,
@@ -242,7 +244,7 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> CompileResult<ValueRe
 
 
     let ret = try!(gen_expression(ctx, &f.expression));
-    LLVMBuildRet(ctx.builder, ret.load());
+    LLVMBuildRet(ctx.builder, ret.load(ctx.builder));
     ctx.pop_stack();
 
     if current_bb != ptr::null_mut() {
@@ -263,34 +265,31 @@ unsafe fn gen_call(ctx: &mut Context, c: &Call) -> CompileResult<ValueRef>
     for (ref arg, passing_mode) in c.args.iter().zip(func.args.iter().map(|&(_, passing_mode)| passing_mode.clone()))
     {
         let a = try!(gen_expression(ctx, &arg));
-        println!("arg: {} {:?}", type_name(a.get_value_type()), passing_mode);
         match passing_mode
         {
-            ArgumentPassingMode::ByValue => arg_vals.push(a.load()),
+            ArgumentPassingMode::ByValue => arg_vals.push(a.load(ctx.builder)),
             ArgumentPassingMode::ByPtr => arg_vals.push(a.get()),
         }
 
     }
 
-    Ok(ValueRef::new(
-        LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr("")),
-        true,
-        ctx.builder)
+    Ok(ValueRef::const_value(
+        LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr("")))
     )
 }
 
 unsafe fn gen_name_ref(ctx: &mut Context, nr: &NameRef) -> CompileResult<ValueRef>
 {
     if let Some(vi) = ctx.get_variable(&nr.name) {
-        Ok(ValueRef::new(vi.value, true, ctx.builder))
+        Ok(vi.value.clone())
     } else if let Some(fi) = ctx.get_function(&nr.name) {
-        Ok(ValueRef::new(fi.function, true, ctx.builder))
+        Ok(ValueRef::const_value(fi.function))
     } else {
         err(nr.span.start, ErrorCode::UnknownName, format!("Unknown name {}", nr.name))
     }
 }
 
-unsafe fn gen_match_case(ctx: &mut Context, mc: &MatchCase, target: &ValueRef, 
+unsafe fn gen_match_case(ctx: &mut Context, mc: &MatchCase, target: &ValueRef,
     func: LLVMValueRef, match_end_bb: LLVMBasicBlockRef, dst: &ValueRef) -> CompileResult<()>
 {
     let match_case_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("match_case_bb"));
@@ -300,17 +299,17 @@ unsafe fn gen_match_case(ctx: &mut Context, mc: &MatchCase, target: &ValueRef,
     {
         Expression::IntLiteral(_, v) => {
             let iv = try!(gen_integer(ctx, v));
-            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(), iv.load(), cstr("cmp"));
+            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(ctx.builder), iv.load(ctx.builder), cstr("cmp"));
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
         },
         Expression::FloatLiteral(ref span, ref v) => {
             let iv = try!(gen_float(ctx, &v, span));
-            let cond = LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, target.load(), iv.load(), cstr("cmp"));
+            let cond = LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, target.load(ctx.builder), iv.load(ctx.builder), cstr("cmp"));
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
         },
         Expression::BoolLiteral(_, v) => {
             let iv = try!(gen_bool(ctx, v));
-            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(), iv.load(), cstr("cmp"));
+            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(ctx.builder), iv.load(ctx.builder), cstr("cmp"));
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
         },
         Expression::NameRef(ref nr) if nr.name == "_"  => {
@@ -320,14 +319,14 @@ unsafe fn gen_match_case(ctx: &mut Context, mc: &MatchCase, target: &ValueRef,
         _ => return err(mc.span.start, ErrorCode::TypeError, format!("Expression is not a valid match pattern")),
 
     }
-    
+
     LLVMPositionBuilderAtEnd(ctx.builder, match_case_bb);
     let ret = try!(gen_expression(ctx, &mc.to_execute));
     try!(dst.store(ctx, ret, mc.span.start));
     LLVMBuildBr(ctx.builder, match_end_bb);
     LLVMPositionBuilderAtEnd(ctx.builder, next_bb);
-    
-    Ok(()) 
+
+    Ok(())
 }
 
 unsafe fn gen_match(ctx: &mut Context, m: &MatchExpression) -> CompileResult<ValueRef>
@@ -341,14 +340,14 @@ unsafe fn gen_match(ctx: &mut Context, m: &MatchExpression) -> CompileResult<Val
         .resolve_type(&m.typ)
         .ok_or(CompileError::new(m.span.start, ErrorCode::TypeError, format!("Cannot resolve the type of this match statement"))));
 
-    let dst = ValueRef::local(ctx.builder, ret_type);
-    for mc in &m.cases 
+    let dst = ValueRef::alloc(ctx.builder, ret_type);
+    for mc in &m.cases
     {
         try!(gen_match_case(ctx, mc, &target, func, match_end_bb, &dst));
     }
 
     LLVMBuildBr(ctx.builder, match_end_bb);
-    LLVMPositionBuilderAtEnd(ctx.builder, match_end_bb); 
+    LLVMPositionBuilderAtEnd(ctx.builder, match_end_bb);
     Ok(dst)
 }
 
@@ -356,18 +355,17 @@ unsafe fn gen_let(ctx: &mut Context, l: &LetExpression) -> CompileResult<ValueRe
 {
     ctx.push_stack(ptr::null_mut());
 
-    for b in &l.bindings 
+    for b in &l.bindings
     {
         let b_type = try!(ctx
             .resolve_type(&b.typ)
             .ok_or(CompileError::new(b.span.start, ErrorCode::TypeError, format!("Cannot resolve the type of the {} binding", b.name))));
 
-
-        let vr = ValueRef::local(ctx.builder, b_type);
+        let vr = ValueRef::alloc(ctx.builder, b_type);
         try!(gen_expression_store(ctx, &b.init, &vr));
 
         let var = Rc::new(VariableInstance{
-            value: vr.get(),
+            value: vr,
             name: b.name.clone(),
             typ: b.typ.clone(),
         });
@@ -391,14 +389,10 @@ unsafe fn gen_const_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> Compil
     for element in &a.elements
     {
         let element_val = try!(gen_const_expression(ctx, element));
-        if element_val.is_constant_value() {
-            vals.push(element_val.load());
-        } else {
-            return err(a.span.start, ErrorCode::ExpectedConstExpr, format!("Global arrays must be initialized with constant expressions"));
-        }
+        vals.push(element_val.load(ctx.builder));
     }
 
-    Ok(ValueRef::new(LLVMConstArray(llvm_type, vals.as_mut_ptr(), vals.len() as u32), true, ctx.builder))
+    Ok(ValueRef::const_array(LLVMConstArray(llvm_type, vals.as_mut_ptr(), vals.len() as u32)))
 }
 
 
@@ -406,7 +400,8 @@ unsafe fn gen_array_literal_store(ctx: &mut Context, a: &ArrayLiteral, ptr: &Val
 {
     if ctx.in_global_context()
     {
-        LLVMSetInitializer(ptr.get(), try!(gen_const_array_literal(ctx, a)).load());
+        let v = try!(gen_const_array_literal(ctx, a));
+        try!(ptr.store(ctx, v, a.span.start));
     }
     else
     {
@@ -428,7 +423,7 @@ unsafe fn gen_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> CompileResul
 
     let llvm_type = try!(ctx.resolve_type(&element_type)
         .ok_or(CompileError::new(a.span.start, ErrorCode::TypeError, format!("Unknown type '{}'", element_type))));
-    let var = ValueRef::local(ctx.builder, LLVMArrayType(llvm_type, a.elements.len() as u32));
+    let var = ValueRef::alloc_array(ctx.builder, llvm_type, a.elements.len());
     try!(gen_array_literal_store(ctx, a, &var));
     Ok(var)
 }
@@ -441,17 +436,10 @@ unsafe fn gen_const_expression(ctx: &mut Context, e: &Expression) -> CompileResu
         Expression::FloatLiteral(ref span, ref s) => gen_float(ctx, s, span),
         Expression::StringLiteral(_, ref s) => gen_const_string_literal(ctx, s),
         Expression::ArrayLiteral(ref a) => gen_const_array_literal(ctx, a),
-        _ => {
-            let v = try!(gen_expression(ctx, e));
-            if !v.is_constant_value() {
-                err(e.span().start, ErrorCode::ExpectedConstExpr, format!("Expected a constant expression"))
-            } else {
-                Ok(v)
-            }
-        },
+        _ => err(e.span().start, ErrorCode::ExpectedConstExpr, format!("Expected a constant expression")),
     }
 }
-   
+
 
 unsafe fn store(ctx: &mut Context, e: &Expression, ptr: &ValueRef) -> CompileResult<()>
 {
@@ -469,10 +457,19 @@ pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: &Valu
     }
 }
 
+pub unsafe fn gen_array_to_slice_conversion(ctx: &mut Context, e: &Expression) -> CompileResult<ValueRef>
+{
+    let v = try!(gen_expression(ctx, e));
+    let element_type = try!(v.get_element_type(e.span().start));
+    let slice_type = ctx.get_slice_type(element_type);
+    let slice = try!(Slice::from_array(ctx, slice_type, &v, e.span().start));
+    Ok(ValueRef::slice(slice))
+}
+
 
 pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueRef>
 {
-    unsafe 
+    unsafe
     {
         match *e
         {
@@ -480,8 +477,8 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::BinaryOp(ref op) => gen_binary_op(ctx, op),
             Expression::ArrayLiteral(ref a) => gen_array_literal(ctx, a),
             Expression::ArrayInitializer(ref a) => err(a.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),
-            Expression::ArrayPattern(ref a) => err(a.span.start, ErrorCode::UnexpectedEOF, format!("NYI")), 
-            Expression::ArrayGenerator(ref a) => err(a.span.start, ErrorCode::UnexpectedEOF, format!("NYI")), 
+            Expression::ArrayPattern(ref a) => err(a.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),
+            Expression::ArrayGenerator(ref a) => err(a.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),
             Expression::Call(ref c) => gen_call(ctx, c),
             Expression::NameRef(ref nr) => gen_name_ref(ctx, nr),
             Expression::Function(ref f) => gen_function(ctx, f),
@@ -493,6 +490,7 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::FloatLiteral(ref span, ref v_str) => gen_float(ctx, &v_str, span),
             Expression::StringLiteral(ref span, ref s)  => gen_string_literal(ctx, s, span),
             Expression::BoolLiteral(_, v) => gen_bool(ctx, v),
+            Expression::ArrayToSliceConversion(ref e) => gen_array_to_slice_conversion(ctx, e),
         }
     }
 }

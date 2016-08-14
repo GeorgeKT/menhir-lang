@@ -51,7 +51,7 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
             let result = LLVMGenericValueToInt(val, 0) as i64;
             LLVMDisposeGenericValue(val);
             LLVMDisposeExecutionEngine(ee);
-            println!("result {}", result);  
+            println!("result {}", result);
             Ok(result)
         } else {
             LLVMDisposeExecutionEngine(ee);
@@ -107,7 +107,7 @@ fn test_match_int()
 {
     assert!(run(r#"
 foo(a: int) -> int =
-    match a 
+    match a
         0 => 100,
         1 => 299,
         _ => 0
@@ -121,7 +121,7 @@ fn test_match_bool()
 {
     assert!(run(r#"
 foo(a: bool) -> int =
-    match a 
+    match a
         true => 100,
         false => 299
 
@@ -145,19 +145,36 @@ main() -> int = foo(2, 3, 4)
 #[test]
 fn test_array()
 {
-    assert!(run(r#"
-main() -> int = 
+    let r = run(r#"
+main() -> int =
     let x = [2, 3, 4] in 5
-    "#, false) == Ok(5));
+    "#, false);
+    println!("r: {:?}", r);
+    assert!(r == Ok(5));
 }
 
 #[test]
 fn test_array_argument()
 {
-    assert!(run(r#"
+    let r = run(r#"
 foo(v: [int; 3]) -> int = 5
 
-main() -> int = 
+main() -> int =
     let x = [2, 3, 4] in foo(x)
-    "#, false) == Ok(5));
+    "#, false);
+    println!("r: {:?}", r);
+    assert!(r == Ok(5));
+}
+
+#[test]
+fn test_slice_argument()
+{
+    let r = run(r#"
+foo(v: [int]) -> int = 5
+
+main() -> int =
+    let x = [2, 3, 4] in foo(x)
+    "#, false);
+    println!("r: {:?}", r);
+    assert!(r == Ok(5));
 }

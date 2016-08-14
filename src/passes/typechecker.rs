@@ -7,7 +7,7 @@ use compileerror::{CompileResult, Pos, CompileError, ErrorCode, err};
 use parser::{Operator};
 
 
-pub struct StackFrame 
+pub struct StackFrame
 {
     variables: HashMap<String, Type>,
     functions: HashMap<String, Type>,
@@ -89,7 +89,7 @@ impl TypeCheckerContext
         self.stack.push(StackFrame::new());
     }
 
-    pub fn pop_stack(&mut self) 
+    pub fn pop_stack(&mut self)
     {
         self.stack.pop();
     }
@@ -178,7 +178,7 @@ fn infer_and_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> 
             } else {
                 Ok(Type::Bool)
             },
-            
+
         Operator::Mod =>
             if !is_integer(&left_type) || !is_integer(&right_type) {
                 err(b.span.start, ErrorCode::TypeError, format!("Operator {} expects two integer expressions as operands", b.operator))
@@ -274,21 +274,28 @@ fn infer_and_check_array_generator(ctx: &mut TypeCheckerContext, a: &mut ArrayGe
 fn infer_and_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileResult<Type>
 {
     let func_type = try!(ctx.resolve_type(&c.callee.name).ok_or(unknown_name(c.span.start, &c.callee.name)));
-    
-    if let Type::Func(arg_types, ret) = func_type 
+
+    if let Type::Func(arg_types, ret) = func_type
     {
         for (idx, (arg, expected_arg_type)) in c.args.iter_mut().zip(arg_types).enumerate()
         {
             let arg_type = try!(infer_and_check_expression(ctx, arg));
-            if arg_type != expected_arg_type {
-                return err(arg.span().start, ErrorCode::TypeError, 
-                    format!("Argument {} has the wrong type, function {} expects the type {}, argument provided has type {}", 
+            if arg_type == expected_arg_type {continue};
+
+            if let Some(conversion_expr) = expected_arg_type.convert(&arg_type, &arg)
+            {
+                *arg = conversion_expr;
+            }
+            else
+            {
+                return err(arg.span().start, ErrorCode::TypeError,
+                    format!("Argument {} has the wrong type, function {} expects the type {}, argument provided has type {}",
                         idx, c.callee.name, expected_arg_type, arg_type))
             }
         }
         Ok(ret.deref().clone())
-    } 
-    else 
+    }
+    else
     {
         err(c.span.start, ErrorCode::CallingNonCallable, format!("{} is not callable", c.callee.name))
     }
@@ -300,14 +307,14 @@ fn infer_and_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) ->
     ctx.add_function(&fun.sig.name, ft.clone());
 
     ctx.push_stack();
-    for arg in fun.sig.args.iter_mut() 
+    for arg in fun.sig.args.iter_mut()
     {
         if arg.typ.is_sequence() {
             arg.passing_mode = ArgumentPassingMode::ByPtr;
         }
         try!(ctx.add_variable(&arg.name, arg.typ.clone(), arg.span.start));
     }
-    
+
     let et = try!(infer_and_check_expression(ctx, &mut fun.expression));
     ctx.pop_stack();
     if et != fun.sig.return_type {
@@ -322,7 +329,7 @@ fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) 
 {
     let target_type = try!(infer_and_check_expression(ctx, &mut m.target));
     let mut return_type = Type::Unknown;
-    for c in &mut m.cases 
+    for c in &mut m.cases
     {
         let infer_case_type = |ctx: &mut TypeCheckerContext, e: &mut Expression, return_type: &Type| {
             let tt = try!(infer_and_check_expression(ctx, e));
@@ -330,7 +337,7 @@ fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) 
                 return err(e.span().start, ErrorCode::TypeError, format!("Expressions in match statements must return the same type"));
             } else {
                 Ok(tt)
-            }             
+            }
         };
 
         match c.match_expr
@@ -359,9 +366,9 @@ fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) 
 
             Expression::ArrayLiteral(_) |
             Expression::ArrayInitializer(_) |
-            Expression::IntLiteral(_, _) | 
-            Expression::BoolLiteral(_, _) | 
-            Expression::FloatLiteral(_, _) | 
+            Expression::IntLiteral(_, _) |
+            Expression::BoolLiteral(_, _) |
+            Expression::FloatLiteral(_, _) |
             Expression::StringLiteral(_, _) => {
                 let m_type = try!(infer_and_check_expression(ctx, &mut c.match_expr));
                 if !target_type.is_matchable(&m_type) {
@@ -369,7 +376,7 @@ fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) 
                         m_type, target_type));
                 }
 
-                return_type = try!(infer_case_type(ctx, &mut c.to_execute, &return_type));   
+                return_type = try!(infer_case_type(ctx, &mut c.to_execute, &return_type));
             },
 
             _ => {
@@ -400,7 +407,7 @@ fn infer_and_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef) -> Compi
 fn infer_and_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> CompileResult<Type>
 {
     ctx.push_stack();
-    for b in &mut l.bindings 
+    for b in &mut l.bindings
     {
         b.typ = try!(infer_and_check_expression(ctx, &mut b.init));
         try!(ctx.add_variable(&b.name, b.typ.clone(), b.span.start));
@@ -432,6 +439,7 @@ pub fn infer_and_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expressi
         Expression::FloatLiteral(_, _) => Ok(Type::Float),
         Expression::StringLiteral(_, _)  => Ok(Type::String),
         Expression::BoolLiteral(_, _) => Ok(Type::Bool),
+        Expression::ArrayToSliceConversion(ref mut inner) => infer_and_check_expression(ctx, inner),
     }
 }
 

@@ -21,7 +21,7 @@ impl Pos
         }
     }
 
-    pub fn zero() -> Pos 
+    pub fn zero() -> Pos
     {
         Pos::new(0, 0)
     }
@@ -118,23 +118,22 @@ pub enum ErrorCode
     CallingNonCallable,
     CodegenError,
     RedefinitionOfVariable,
-    ConstantModification,
     ExpectedConstExpr,
     /*
-    
+ConstantModification,
     RedefinitionOfFunction,
     RedefinitionOfStruct,
     RedefinitionOfTrait,
-    
+
     UnknownFunction,
     UnknownType,
     UnknownStructMember,
     ArgumentCountMismatch,
-    
-    
+
+
     PrivateMemberAccess,
     MissingReturn,
-   
+
     IndexOperationNotSupported,
     TraitNotImplemented,
     */

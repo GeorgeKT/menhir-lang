@@ -1,9 +1,10 @@
 mod context;
 mod expressions;
 mod linker;
+mod slice;
 mod symboltable;
 mod valueref;
-#[cfg(test)] 
+#[cfg(test)]
 mod tests;
 
 use std::os::raw::c_char;
@@ -16,8 +17,10 @@ use ast::Module;
 use compileerror::CompileResult;
 use codegen::expressions::gen_expression;
 
-pub use codegen::context::Context;
+pub use codegen::expressions::const_int;
+pub use codegen::context::{Context};
 pub use codegen::linker::link;
+pub use codegen::valueref::ValueRef;
 
 
 pub fn cstr(s: &str) -> *const c_char
@@ -86,7 +89,7 @@ fn gen_module(ctx: &mut Context, module: &Module) -> CompileResult<()>
 }
 
 pub fn codegen(m: &Module, opts: &CodeGenOptions) -> CompileResult<Context>
-{    
+{
     unsafe {
         // Set up a context, module and builder in that context.
         let mut ctx = Context::new(&m.name);

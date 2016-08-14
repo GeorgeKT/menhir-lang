@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use llvm::prelude::*;
 
 use ast::{Type, FunctionSignature, ArgumentPassingMode};
+use codegen::ValueRef;
 
 pub struct FunctionInstance
 {
@@ -15,7 +16,7 @@ pub struct FunctionInstance
 
 pub struct VariableInstance
 {
-    pub value: LLVMValueRef,
+    pub value: ValueRef,
     pub name: String,
     pub typ: Type,
 }
@@ -39,7 +40,7 @@ impl SymbolTable
     pub fn add_variable(&mut self, var: Rc<VariableInstance>)
     {
         // We already checked for duplicates during the type checking fase
-        let name = var.name.clone(); 
+        let name = var.name.clone();
         self.vars.insert(name, var);
     }
 

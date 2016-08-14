@@ -1,19 +1,21 @@
 use std::ptr;
 use std::rc::Rc;
-use std::os::raw::c_char;
+use std::os::raw::{c_char};
 use std::ffi::{CStr, CString};
 use std::fs::DirBuilder;
+use std::collections::HashMap;
 
 use llvm::prelude::*;
 use llvm::core::*;
 use llvm::target_machine::*;
 
 use ast::{Type};
-use codegen::{cstr, cstr_mut};
+use codegen::{cstr, cstr_mut, type_name};
 use compileerror::{Pos, CompileResult, CompileError, ErrorCode, err};
 use codegen::symboltable::{VariableInstance, FunctionInstance, SymbolTable};
+use codegen::slice::{new_slice_type};
 
-pub struct StackFrame 
+pub struct StackFrame
 {
     pub symbols: SymbolTable,
     pub current_function: LLVMValueRef,
@@ -37,6 +39,7 @@ pub struct Context
     pub builder: LLVMBuilderRef,
     name: String,
     stack: Vec<StackFrame>,
+    slice_type_cache: HashMap<String, LLVMTypeRef>,
 }
 
 impl Context
@@ -52,6 +55,7 @@ impl Context
                 builder: LLVMCreateBuilderInContext(context),
                 name: module_name.into(),
                 stack: vec![StackFrame::new(ptr::null_mut())],
+                slice_type_cache: HashMap::new(),
             }
         }
 	}
@@ -63,7 +67,7 @@ impl Context
 
     pub fn get_variable(&self, name: &str) -> Option<Rc<VariableInstance>>
     {
-        for sf in self.stack.iter().rev() 
+        for sf in self.stack.iter().rev()
         {
             let v = sf.symbols.get_variable(name);
             if v.is_some() {
@@ -81,7 +85,7 @@ impl Context
 
     pub fn get_function(&self, name: &str) -> Option<Rc<FunctionInstance>>
     {
-        for sf in self.stack.iter().rev() 
+        for sf in self.stack.iter().rev()
         {
             let func = sf.symbols.get_function(name);
             if func.is_some() {
@@ -104,13 +108,13 @@ impl Context
 
     pub fn get_current_function(&self) -> LLVMValueRef
     {
-        for sf in self.stack.iter().rev() 
+        for sf in self.stack.iter().rev()
         {
             if sf.current_function != ptr::null_mut() {
                 return sf.current_function;
             }
         }
-        
+
         panic!("No current function on stack, we should have caught this !");
     }
 
@@ -216,6 +220,18 @@ impl Context
         mem::replace(&mut self.module, ptr::null_mut())
     }
 
+    pub unsafe fn get_slice_type(&mut self, element_type: LLVMTypeRef) -> LLVMTypeRef
+    {
+        let name = format!("slice-{}", type_name(element_type));
+        if let Some(t) = self.slice_type_cache.get(&name) {
+            return *t;
+        }
+
+        let slice_type = new_slice_type(self.context, element_type);
+        self.slice_type_cache.insert(name, slice_type);
+        slice_type
+    }
+
     pub unsafe fn resolve_type(&mut self, typ: &Type) -> Option<LLVMTypeRef>
     {
         match *typ
@@ -226,6 +242,9 @@ impl Context
             Type::Float => Some(LLVMDoubleTypeInContext(self.context)),
             Type::Array(ref et, len) => {
                 self.resolve_type(et).map(|et| LLVMArrayType(et, len as u32))
+            },
+            Type::Slice(ref et) => {
+                self.resolve_type(et).map(|et| self.get_slice_type(et))
             },
             _ => None,
         }

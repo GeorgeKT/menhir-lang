@@ -1,7 +1,7 @@
 use std::fmt;
 use std::ops::Deref;
 use itertools::free::join;
-use ast::{TreePrinter, prefix};
+use ast::{Expression, TreePrinter, prefix};
 
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -83,6 +83,19 @@ impl Type
         }
 
         *self == *other
+    }
+
+    // If possible generate a conversion expression
+    pub fn convert(&self, other: &Type, expr: &Expression) -> Option<Expression>
+    {
+        match (self, other)  
+        {
+            (&Type::Slice(ref s), &Type::Array(ref t, _)) if s == t => 
+                // arrays can be converted to slices if the element type is the same
+                Some(Expression::ArrayToSliceConversion(Box::new(expr.clone())))
+            , 
+            _ => None,
+        }
     }
 }
 
