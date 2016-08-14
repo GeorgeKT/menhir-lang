@@ -10,16 +10,6 @@ pub struct ArrayLiteral
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct ArrayInitializer
-{
-    // syntax [init; times]
-    pub init: Expression,
-    pub times: u64,
-    pub array_type: Type,
-    pub span: Span,
-}
-
-#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ArrayGenerator
 {
     // syntax [expr | x <- array]
@@ -68,16 +58,6 @@ pub fn array_lit(e: Vec<Expression>, span: Span) -> Expression
         array_type: Type::Unknown,
         span: span,
     })
-}
-
-pub fn array_init(init: Expression, times: u64, span: Span) -> Expression
-{
-    Expression::ArrayInitializer(Box::new(ArrayInitializer{
-        init: init,
-        times: times,
-        array_type: Type::Unknown,
-        span: span,
-    }))
 }
 
 pub fn array_pattern(head: &str, tail: &str, span: Span) -> Expression

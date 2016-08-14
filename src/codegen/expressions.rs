@@ -618,7 +618,6 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::UnaryOp(ref u) => gen_unary_op(ctx, u),
             Expression::BinaryOp(ref op) => gen_binary_op(ctx, op),
             Expression::ArrayLiteral(ref a) => gen_array_literal(ctx, a),
-            Expression::ArrayInitializer(ref a) => err(a.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),
             Expression::ArrayPattern(ref a) => err(a.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),
             Expression::ArrayGenerator(ref a) => err(a.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),
             Expression::Call(ref c) => gen_call(ctx, c),

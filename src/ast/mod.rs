@@ -9,7 +9,7 @@ mod nameref;
 mod operations;
 mod types;
 
-pub use self::arrays::{ArrayLiteral, ArrayInitializer, ArrayPattern, ArrayGenerator, array_lit, array_init, array_pattern, array_generator};
+pub use self::arrays::{ArrayLiteral, ArrayPattern, ArrayGenerator, array_lit, array_pattern, array_generator};
 pub use self::call::{Call};
 pub use self::expression::Expression;
 pub use self::function::{Function, FunctionSignature, Argument, ArgumentPassingMode, sig};

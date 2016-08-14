@@ -1,5 +1,5 @@
 use compileerror::{Span, CompileResult, ErrorCode, err};
-use ast::{Call, ArrayLiteral, ArrayInitializer, ArrayPattern, ArrayGenerator, NameRef, BinaryOp, UnaryOp, Function,
+use ast::{Call, ArrayLiteral, ArrayPattern, ArrayGenerator, NameRef, BinaryOp, UnaryOp, Function,
     MatchExpression, TreePrinter, Lambda, LetExpression, prefix};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -10,9 +10,8 @@ pub enum Expression
     FloatLiteral(Span, String), // Keep as string until we generate code, so we can compare it
     StringLiteral(Span, String),
     ArrayLiteral(ArrayLiteral),
-    ArrayInitializer(Box<ArrayInitializer>), // [x; times]
     ArrayPattern(ArrayPattern), // [hd | tail]
-    ArrayGenerator(Box<ArrayGenerator>), 
+    ArrayGenerator(Box<ArrayGenerator>),
     UnaryOp(UnaryOp),
     BinaryOp(Box<BinaryOp>),
     Enclosed(Span, Box<Expression>), // Expression enclosed between parens
@@ -39,7 +38,7 @@ impl Expression
         }
     }
 
-    pub fn is_binary_op(&self) -> bool 
+    pub fn is_binary_op(&self) -> bool
     {
         match *self
         {
@@ -66,7 +65,6 @@ impl Expression
             Expression::BoolLiteral(span, _) => span,
             Expression::StringLiteral(span, _) => span,
             Expression::ArrayLiteral(ref a) => a.span,
-            Expression::ArrayInitializer(ref a) => a.span,
             Expression::ArrayGenerator(ref a) => a.span,
             Expression::ArrayPattern(ref a) => a.span,
             Expression::UnaryOp(ref op) => op.span,
@@ -103,7 +101,7 @@ impl TreePrinter for Expression
             Expression::BoolLiteral(ref span, b) => {
                 println!("{}bool {} ({})", p, b, span);
             },
-            
+
             Expression::IntLiteral(ref span, integer) => {
                 println!("{}int {} ({})", p, integer, span);
             },
@@ -118,10 +116,6 @@ impl TreePrinter for Expression
                 for e in &a.elements {
                     e.print(level + 1);
                 }
-            },
-            Expression::ArrayInitializer(ref a) => {
-                println!("{}array initializer {} ({})", p, a.times, a.span);
-                a.init.print(level + 1);
             },
             Expression::ArrayPattern(ref a) => {
                 println!("{}array pattern [{} | {}] ({})", p, a.head, a.tail, a.span);

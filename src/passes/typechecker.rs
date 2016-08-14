@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::ops::Deref;
-use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral, ArrayInitializer,
+use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral,
     ArrayGenerator, MatchExpression, Function, Lambda, Call, Type, LetExpression, ArgumentPassingMode,
     func_type, array_type, slice_type};
 use compileerror::{CompileResult, Pos, CompileError, ErrorCode, err};
@@ -237,19 +237,6 @@ fn infer_and_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLite
     Ok(a.array_type.clone())
 }
 
-fn infer_and_check_array_initializer(ctx: &mut TypeCheckerContext, a: &mut ArrayInitializer) -> CompileResult<Type>
-{
-    let array_element_type = try!(infer_and_check_expression(ctx, &mut a.init));
-    let array_type = array_type(array_element_type, a.times as usize);
-    if a.array_type == Type::Unknown {
-        a.array_type = array_type;
-    } else if a.array_type != array_type {
-        return err(a.span.start, ErrorCode::TypeError, format!("Array has type {}, but elements have type {}", a.array_type, array_type))
-    }
-
-    Ok(a.array_type.clone())
-}
-
 fn infer_and_check_array_generator(ctx: &mut TypeCheckerContext, a: &mut ArrayGenerator) -> CompileResult<Type>
 {
     ctx.push_stack();
@@ -365,7 +352,6 @@ fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) 
             },
 
             Expression::ArrayLiteral(_) |
-            Expression::ArrayInitializer(_) |
             Expression::IntLiteral(_, _) |
             Expression::BoolLiteral(_, _) |
             Expression::FloatLiteral(_, _) |
@@ -425,7 +411,6 @@ pub fn infer_and_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expressi
         Expression::UnaryOp(ref mut op) => infer_and_check_unary_op(ctx, op),
         Expression::BinaryOp(ref mut op) => infer_and_check_binary_op(ctx, op),
         Expression::ArrayLiteral(ref mut a) => infer_and_check_array_literal(ctx, a),
-        Expression::ArrayInitializer(ref mut a) => infer_and_check_array_initializer(ctx, a),
         Expression::ArrayPattern(_) => Ok(Type::Unknown), // Doesn't really have a type
         Expression::ArrayGenerator(ref mut a) => infer_and_check_array_generator(ctx, a),
         Expression::Call(ref mut c) => infer_and_check_call(ctx, c),

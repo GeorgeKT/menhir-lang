@@ -1,7 +1,7 @@
 use std::fs;
 use std::io::Read;
 use ast::{Expression, Function, Call, NameRef, Type, Argument, Module,
-    array_init, array_lit, array_pattern, array_generator, unary_op, bin_op, sig, to_primitive,
+    array_lit, array_pattern, array_generator, unary_op, bin_op, sig, to_primitive,
     match_expression, match_case, lambda, let_expression, let_binding, array_type, slice_type};
 use compileerror::{CompileResult, ErrorCode, Span, Pos, err};
 use parser::{TokenQueue, Token, TokenKind, Operator, Lexer};
@@ -57,7 +57,7 @@ fn parse_array_literal(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expressio
             try!(tq.pop());
             let (times, _) = try!(tq.expect_int());
             try!(tq.expect(TokenKind::CloseBracket));
-            return Ok(array_init(e, times, Span::new(pos, tq.pos())));
+            return Ok(array_lit(vec![e; times as usize], Span::new(pos, tq.pos())));
         }
         else if expressions.is_empty() && tq.is_next(TokenKind::Pipe)
         {
@@ -70,8 +70,8 @@ fn parse_array_literal(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expressio
                 let iterable = try!(parse_expression(tq));
                 try!(tq.expect(TokenKind::CloseBracket));
                 return Ok(array_generator(e, &var, iterable, Span::new(pos, tq.pos())));
-            } 
-            else 
+            }
+            else
             {
                 let head = try!(e.to_name_ref());
                 try!(tq.expect(TokenKind::Pipe));
@@ -124,7 +124,7 @@ fn combine_binary_op(op: Operator, lhs: Expression, rhs: Expression) -> Expressi
         let span = Span::merge(&bop.left.span(), &nrhs.span());
         bin_op(bop.operator, bop.left, nrhs, span)
     }
-    else 
+    else
     {
         let span = Span::merge(&lhs.span(), &rhs.span());
         bin_op(op, lhs, rhs, span)
@@ -195,14 +195,14 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
     {
         try!(tq.pop());
         let at = try!(parse_type(tq));
-        if tq.is_next(TokenKind::SemiColon) 
+        if tq.is_next(TokenKind::SemiColon)
         {
             try!(tq.pop());
             let (len, _) = try!(tq.expect_int());
             try!(tq.expect(TokenKind::CloseBracket));
             Ok(array_type(at, len as usize))
         }
-        else 
+        else
         {
             try!(tq.expect(TokenKind::CloseBracket));
             Ok(slice_type(at))
@@ -313,7 +313,7 @@ fn parse_lambda(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
 fn parse_let(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
 {
     let mut bindings = Vec::new();
-    while !tq.is_next(TokenKind::In) 
+    while !tq.is_next(TokenKind::In)
     {
         let (name, span) = try!(tq.expect_identifier());
         try!(tq.expect(TokenKind::Assign));
@@ -364,7 +364,7 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
 
         TokenKind::Identifier(id) => {
             let nr = try!(parse_name(tq, id, tok.span.start));
-            if tq.is_next(TokenKind::OpenParen) 
+            if tq.is_next(TokenKind::OpenParen)
             {
                 try!(tq.pop());
                 if tq.is_next_at(1, TokenKind::Colon) || tq.is_next_at(1, TokenKind::Arrow) || tq.is_next_at(1, TokenKind::Assign)
@@ -375,11 +375,11 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
                 {
                     parse_function_call(tq, nr).map(|c| Expression::Call(c))
                 }
-            } 
-            else 
+            }
+            else
             {
-                Ok(Expression::NameRef(nr))    
-            }       
+                Ok(Expression::NameRef(nr))
+            }
         },
 
         TokenKind::StringLiteral(s) => {
@@ -448,7 +448,7 @@ pub fn parse_file(file_path: &str) -> CompileResult<Module>
 
 pub fn parse_module<Input: Read>(input: &mut Input, name: &str) -> CompileResult<Module>
 {
-    let mut tq = try!(Lexer::new().read(input));   
+    let mut tq = try!(Lexer::new().read(input));
     let expressions = try!(parse_expression_list(&mut tq));
      Ok(Module{
         name: name.into(),

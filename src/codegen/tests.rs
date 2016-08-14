@@ -194,3 +194,19 @@ main() -> int =
     println!("r: {:?}", r);
     assert!(r == Ok(9));
 }
+
+#[test]
+fn test_array_iteration2()
+{
+    let r = run(r#"
+sum(v: [int]) -> int =
+    match v
+        [] => 0,
+        [head | tail] => head + sum(tail)
+
+main() -> int =
+    let y = 7, x = [y; 7] in sum(x)
+    "#, false);
+    println!("r: {:?}", r);
+    assert!(r == Ok(49));
+}
