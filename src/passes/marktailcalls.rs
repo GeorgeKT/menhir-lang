@@ -36,6 +36,7 @@ fn mark_tail_call(ctx: &mut MarkTailCallContext, e: &mut Expression) -> CompileR
     match *e
     {
         Expression::Call(ref mut c) => {
+            // We only get here if this is a tail call, so only check if it is recursive
             if ctx.is_recursive_call(&c.callee.name) {
                 c.tail_call = true;
             }
@@ -43,7 +44,7 @@ fn mark_tail_call(ctx: &mut MarkTailCallContext, e: &mut Expression) -> CompileR
         },
 
         Expression::UnaryOp(ref mut op) => mark_tail_call(ctx, &mut op.expression),
-        Expression::BinaryOp(ref mut op) => mark_tail_call(ctx, &mut op.right),
+        Expression::BinaryOp(ref mut op) => mark_tail_call(ctx, &mut op.right), // Only right can be a tail call
 
         Expression::Function(ref mut f) => {
             ctx.push(&f.sig.name);
@@ -53,7 +54,7 @@ fn mark_tail_call(ctx: &mut MarkTailCallContext, e: &mut Expression) -> CompileR
         },
 
         Expression::Match(ref mut m) => {
-            let mut mc = m.cases.last_mut().expect("No cases in match statement");
+            let mut mc = m.cases.last_mut().expect("No cases in match statement"); // Only the last case can have a tail call
             mark_tail_call(ctx, &mut mc.to_execute)
         },
 
@@ -64,7 +65,7 @@ fn mark_tail_call(ctx: &mut MarkTailCallContext, e: &mut Expression) -> CompileR
 }
 
 /*
-    Type check and infer all the unkown types
+    Mark calls as tail calls
 */
 pub fn mark_tail_calls(module: &mut Module) -> CompileResult<()>
 {
