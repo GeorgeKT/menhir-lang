@@ -7,6 +7,7 @@ pub struct Call
     pub callee: NameRef,
     pub args: Vec<Expression>,
     pub span: Span,
+    pub tail_call: bool,
 }
 
 impl Call
@@ -17,6 +18,7 @@ impl Call
             callee: callee,
             args: args,
             span: span,
+            tail_call: false,
         }
     }
 }

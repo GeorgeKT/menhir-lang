@@ -36,10 +36,10 @@ impl ValueRef
         ValueRef::Const(v)
     }
 
-    pub fn alloc(builder: LLVMBuilderRef, typ: LLVMTypeRef) -> ValueRef
+    pub fn alloc(ctx: &Context, typ: LLVMTypeRef) -> ValueRef
     {
         unsafe {
-            let alloc = LLVMBuildAlloca(builder, typ, cstr("alloc"));
+            let alloc = ctx.alloc(typ, "alloc");
             if is_same_kind(LLVMGetTypeKind(typ), LLVMTypeKind::LLVMArrayTypeKind) {
                 ValueRef::Array(Array::new(alloc))
             } else {
@@ -53,9 +53,9 @@ impl ValueRef
         ValueRef::Array(Array::new(arr))
     }
 
-    pub unsafe fn alloc_array(builder: LLVMBuilderRef, element_type: LLVMTypeRef, len: usize) -> ValueRef
+    pub unsafe fn alloc_array(ctx: &Context, element_type: LLVMTypeRef, len: usize) -> ValueRef
     {
-        ValueRef::Array(Array::alloc(builder, element_type, len))
+        ValueRef::Array(Array::alloc(ctx, element_type, len))
     }
 
     pub fn slice(slice: Slice) -> ValueRef

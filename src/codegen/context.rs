@@ -8,9 +8,10 @@ use std::collections::HashMap;
 use llvm::prelude::*;
 use llvm::core::*;
 use llvm::target_machine::*;
+use llvm::target::*;
 
 use ast::{Type};
-use codegen::{cstr, cstr_mut, type_name, ValueRef};
+use codegen::{cstr, cstr_mut, type_name, ValueRef, CodeGenOptions};
 use compileerror::{Pos, CompileResult, CompileError, ErrorCode, err};
 use codegen::symboltable::{VariableInstance, FunctionInstance, SymbolTable};
 use codegen::slice::{new_slice_type};
@@ -122,7 +123,19 @@ impl Context
         panic!("No current function on stack, we should have caught this !");
     }
 
-    pub unsafe fn gen_object_file(&self, build_dir: &str) -> CompileResult<String>
+    pub unsafe fn alloc(&self, typ: LLVMTypeRef, name: &str) -> LLVMValueRef
+    {
+        let func = self.get_current_function();
+        let entry_bb = LLVMGetEntryBasicBlock(func);
+        let current_bb = LLVMGetInsertBlock(self.builder);
+        // We allocate in the entry block
+        LLVMPositionBuilder(self.builder, entry_bb, LLVMGetFirstInstruction(entry_bb));
+        let alloc = LLVMBuildAlloca(self.builder, typ, cstr(name));
+        LLVMPositionBuilderAtEnd(self.builder, current_bb); // Position the builder where it was before
+        alloc
+    }
+
+    pub unsafe fn gen_object_file(&self, opts: &CodeGenOptions) -> CompileResult<String>
     {
         let target_triple = CStr::from_ptr(LLVMGetDefaultTargetTriple());
         let target_triple_str = target_triple.to_str().expect("Invalid target triple");
@@ -151,16 +164,27 @@ impl Context
             return err(Pos::zero(), ErrorCode::CodegenError, e);
         }
 
+        if opts.optimize {
+            try!(self.optimize(target_machine));
+        }
+
+        if opts.dump_ir {
+            println!("LLVM IR: {}", self.name);
+            // Dump the module as IR to stdout.
+            LLVMDumpModule(self.module);
+            println!("----------------------");
+        }
+
         try!(DirBuilder::new()
             .recursive(true)
-            .create(build_dir)
+            .create(&opts.build_dir)
             .map_err(|e| CompileError::new(
                 Pos::zero(),
                 ErrorCode::CodegenError,
-                format!("Unable to create directory for {}: {}", build_dir, e))));
+                format!("Unable to create directory for {}: {}", opts.build_dir, e))));
 
 
-        let obj_file_name = format!("{}/{}.cobra.o", build_dir, self.name);
+        let obj_file_name = format!("{}/{}.cobra.o", opts.build_dir, self.name);
         println!("  Building {}", obj_file_name);
 
         let mut error_message: *mut c_char = ptr::null_mut();
@@ -177,26 +201,36 @@ impl Context
         Ok(obj_file_name)
     }
 
-    pub fn optimize(&self) -> CompileResult<()>
+    pub fn optimize(&self, target_machine: LLVMTargetMachineRef) -> CompileResult<()>
     {
         unsafe{
             use llvm::transforms::pass_manager_builder::*;
 
-            let pmb = LLVMPassManagerBuilderCreate();
-            let pm = LLVMCreateFunctionPassManagerForModule(self.module);
-            LLVMInitializeFunctionPassManager(pm);
+            let pass_builder = LLVMPassManagerBuilderCreate();
+            LLVMPassManagerBuilderSetOptLevel(pass_builder, 3);
+            LLVMPassManagerBuilderSetSizeLevel(pass_builder, 0);
 
-            LLVMPassManagerBuilderSetOptLevel(pmb, 2);
-            LLVMPassManagerBuilderPopulateFunctionPassManager(pmb, pm);
+            let function_passes = LLVMCreateFunctionPassManagerForModule(self.module);
+            let module_passes = LLVMCreatePassManager();
+
+            LLVMAddTargetData(LLVMGetTargetMachineData(target_machine), module_passes);
+
+            LLVMPassManagerBuilderPopulateFunctionPassManager(pass_builder, function_passes);
+            LLVMPassManagerBuilderPopulateModulePassManager(pass_builder, module_passes);
+
+            LLVMPassManagerBuilderDispose(pass_builder);
+
+            LLVMInitializeFunctionPassManager(function_passes);
 
             let mut func = LLVMGetFirstFunction(self.module);
             while func != ptr::null_mut() {
-                LLVMRunFunctionPassManager(pm, func);
+                LLVMRunFunctionPassManager(function_passes, func);
                 func = LLVMGetNextFunction(func);
             }
 
-            LLVMDisposePassManager(pm);
-            LLVMPassManagerBuilderDispose(pmb);
+            LLVMRunPassManager(module_passes, self.module);
+            LLVMDisposePassManager(function_passes);
+            LLVMDisposePassManager(module_passes);
         }
         Ok(())
     }

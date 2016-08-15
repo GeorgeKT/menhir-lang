@@ -7,8 +7,8 @@ use llvm::core::*;
 use llvm::execution_engine::*;
 use compileerror::{ErrorCode, err, CompileResult, Pos};
 use parser::{parse_module};
-use codegen::{CodeGenOptions, codegen, cstr};
-use passes::infer_and_check_types;
+use codegen::{codegen, cstr};
+use passes::{mark_tail_calls, infer_and_check_types};
 use ast::{TreePrinter};
 
 
@@ -22,16 +22,9 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
     }
 
     try!(infer_and_check_types(&mut md));
+    try!(mark_tail_calls(&mut md));
 
-    let opts = CodeGenOptions{
-        dump_ir: dump,
-        build_dir: "build".into(),
-        program_name: "test".into(),
-        runtime_library: "libcobraruntime.a".into(),
-        optimize: false,
-    };
-
-    let mut ctx = try!(codegen(&md, &opts));
+    let mut ctx = try!(codegen(&md));
 
     unsafe {
         LLVMLinkInInterpreter();

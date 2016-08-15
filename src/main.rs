@@ -19,7 +19,7 @@ use std::path::Path;
 use codegen::{CodeGenOptions, codegen, link, llvm_init};
 use docopt::Docopt;
 use parser::parse_file;
-use passes::infer_and_check_types;
+use passes::{infer_and_check_types, mark_tail_calls};
 
 
 static USAGE: &'static str =  "
@@ -94,8 +94,9 @@ fn main()
     match parse_file(&input_file).and_then(|mut module| {
         //module.print(0);
         try!(infer_and_check_types(&mut module));
+        try!(mark_tail_calls(&mut module));
         llvm_init();
-        let mut ctx = try!(codegen(&module, &opts));
+        let mut ctx = try!(codegen(&module));
         link(&mut ctx, &opts)
     })
     {

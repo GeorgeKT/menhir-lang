@@ -241,7 +241,7 @@ unsafe fn gen_function(ctx: &mut Context, f: &Function) -> CompileResult<ValueRe
                 }
             },
             ArgumentPassingMode::ByValue => {
-                let alloc = ValueRef::alloc(ctx.builder, llvm_arg);
+                let alloc = ValueRef::alloc(ctx, llvm_arg);
                 LLVMBuildStore(ctx.builder, var, alloc.get());
                 ctx.add_variable(&arg.name, alloc);
             },
@@ -279,9 +279,12 @@ unsafe fn gen_call(ctx: &mut Context, c: &Call) -> CompileResult<ValueRef>
 
     }
 
-    Ok(ValueRef::const_value(
-        LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr("")))
-    )
+    let call = LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr(""));
+    if c.tail_call {
+        LLVMSetTailCall(call, 1);
+    }
+
+    Ok(ValueRef::const_value(call))
 }
 
 unsafe fn gen_name_ref(ctx: &mut Context, nr: &NameRef) -> CompileResult<ValueRef>
@@ -387,7 +390,7 @@ unsafe fn gen_equals_seq<ASeq: Sequence, BSeq: Sequence>(
     LLVMPositionBuilderAtEnd(ctx.builder, after_equal_length_bb);
 
     // Then loop over each element and check equality
-    let counter = ValueRef::alloc(ctx.builder, LLVMInt64TypeInContext(ctx.context));
+    let counter = ValueRef::alloc(ctx, LLVMInt64TypeInContext(ctx.context));
     try!(counter.store_direct(ctx, const_int(ctx, 0), Pos::zero()));
     LLVMBuildBr(ctx.builder, for_cond_bb);
 
@@ -479,7 +482,7 @@ unsafe fn gen_match(ctx: &mut Context, m: &MatchExpression) -> CompileResult<Val
         .resolve_type(&m.typ)
         .ok_or(CompileError::new(m.span.start, ErrorCode::TypeError, format!("Cannot resolve the type of this match statement"))));
 
-    let dst = ValueRef::alloc(ctx.builder, ret_type);
+    let dst = ValueRef::alloc(ctx, ret_type);
     for mc in &m.cases
     {
         try!(gen_match_case(ctx, mc, &target, func, match_end_bb, &dst));
@@ -500,7 +503,7 @@ unsafe fn gen_let(ctx: &mut Context, l: &LetExpression) -> CompileResult<ValueRe
             .resolve_type(&b.typ)
             .ok_or(CompileError::new(b.span.start, ErrorCode::TypeError, format!("Cannot resolve the type of the {} binding", b.name))));
 
-        let vr = ValueRef::alloc(ctx.builder, b_type);
+        let vr = ValueRef::alloc(ctx, b_type);
         try!(gen_expression_store(ctx, &b.init, &vr));
         ctx.add_variable(&b.name, vr);
     }
@@ -559,7 +562,7 @@ unsafe fn gen_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> CompileResul
     let element_type = a.array_type.get_element_type().expect("Invalid array type");
     let llvm_type = try!(ctx.resolve_type(&element_type)
         .ok_or(CompileError::new(a.span.start, ErrorCode::TypeError, format!("Unknown type '{}'", element_type))));
-    let var = ValueRef::alloc_array(ctx.builder, llvm_type, a.elements.len());
+    let var = ValueRef::alloc_array(ctx, llvm_type, a.elements.len());
     try!(gen_array_literal_store(ctx, a, &var));
     Ok(var)
 }

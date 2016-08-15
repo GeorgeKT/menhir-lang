@@ -8,7 +8,7 @@ use compileerror::{CompileError, CompileResult, Pos, ErrorCode, err};
 pub fn link(ctx: &Context, opts: &CodeGenOptions) -> CompileResult<()>
 {
     let obj_file = unsafe{
-        try!(ctx.gen_object_file(&opts.build_dir))
+        try!(ctx.gen_object_file(&opts))
     };
 
     let program_path = format!("{}/{}", opts.build_dir, opts.program_name);

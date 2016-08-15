@@ -108,7 +108,7 @@ fn gen_module(ctx: &mut Context, module: &Module) -> CompileResult<()>
     Ok(())
 }
 
-pub fn codegen(m: &Module, opts: &CodeGenOptions) -> CompileResult<Context>
+pub fn codegen(m: &Module) -> CompileResult<Context>
 {
     unsafe {
         // Set up a context, module and builder in that context.
@@ -123,18 +123,6 @@ pub fn codegen(m: &Module, opts: &CodeGenOptions) -> CompileResult<Context>
             }
             _ => (),
         }
-
-        if opts.optimize {
-            try!(ctx.optimize());
-        }
-
-        if opts.dump_ir {
-            println!("LLVM IR: {}", m.name);
-            // Dump the module as IR to stdout.
-            LLVMDumpModule(ctx.module);
-            println!("----------------------");
-        }
-
 
         Ok(ctx)
     }

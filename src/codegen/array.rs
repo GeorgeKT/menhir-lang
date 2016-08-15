@@ -23,11 +23,11 @@ impl Array
         }
     }
 
-    pub unsafe fn alloc(builder: LLVMBuilderRef, element_type: LLVMTypeRef, len: usize) -> Array
+    pub unsafe fn alloc(ctx: &Context, element_type: LLVMTypeRef, len: usize) -> Array
     {
         let typ = LLVMArrayType(element_type, len as u32);
         Array{
-            array: LLVMBuildAlloca(builder, typ, cstr("array_alloc")),
+            array: ctx.alloc(typ, "array"),
             element_type: element_type,
             len: len,
         }

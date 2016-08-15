@@ -49,7 +49,7 @@ impl Slice
             builder: ctx.builder,
             element_type: element_type,
             slice_type: slice_type,
-            slice: LLVMBuildAlloca(ctx.builder, slice_type, cstr("slice")),
+            slice: ctx.alloc(slice_type, "slice"),
         };
 
         let length_ptr = slice.get_length_ptr();
@@ -69,7 +69,7 @@ impl Slice
             builder: ctx.builder,
             element_type: arr.get_element_type(),
             slice_type: slice_type,
-            slice: LLVMBuildAlloca(ctx.builder, slice_type, cstr("slice")),
+            slice: ctx.alloc(slice_type, "slice"),
         };
 
         let array_len = arr.get_length();
@@ -118,7 +118,7 @@ impl Sequence for Slice
             builder: self.builder,
             element_type: self.element_type,
             slice_type: self.slice_type,
-            slice: LLVMBuildAlloca(ctx.builder, self.slice_type, cstr("subslice")),
+            slice: ctx.alloc(self.slice_type, "subslice"),
         };
 
         let slice_length_ptr = slice.get_length_ptr();

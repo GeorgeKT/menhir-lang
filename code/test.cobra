@@ -3,5 +3,4 @@ sum(v: [int]) -> int =
         [] => 0,
         [head | tail] => head + sum(tail)
 
-main() -> int =
-    let x = [2, 3, 4] in sum(x)
+main() -> int = sum([5, 6, 7])
