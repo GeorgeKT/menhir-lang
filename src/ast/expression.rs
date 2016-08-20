@@ -13,7 +13,7 @@ pub enum Expression
     ArrayPattern(ArrayPattern), // [hd | tail]
     ArrayGenerator(Box<ArrayGenerator>),
     UnaryOp(UnaryOp),
-    BinaryOp(Box<BinaryOp>),
+    BinaryOp(BinaryOp),
     Enclosed(Span, Box<Expression>), // Expression enclosed between parens
     Call(Call),
     NameRef(NameRef),
@@ -47,7 +47,7 @@ impl Expression
         }
     }
 
-    pub fn to_binary_op(self) -> Option<Box<BinaryOp>>
+    pub fn to_binary_op(self) -> Option<BinaryOp>
     {
         match self
         {

@@ -14,20 +14,20 @@ pub struct UnaryOp
 pub struct BinaryOp
 {
     pub operator: Operator,
-    pub left: Expression,
-    pub right: Expression,
+    pub left: Box<Expression>,
+    pub right: Box<Expression>,
     pub span: Span,
 }
 
 
 pub fn bin_op(op: Operator, left: Expression, right: Expression, span: Span) -> Expression
 {
-    Expression::BinaryOp(Box::new(BinaryOp{
+    Expression::BinaryOp(BinaryOp{
         operator: op,
-        left: left,
-        right: right,
+        left: Box::new(left),
+        right: Box::new(right),
         span: span,
-    }))
+    })
 }
 
 /*
