@@ -242,7 +242,20 @@ apply(x: int, fn: (int) -> int) -> int =
     fn(x)
 
 main() -> int =
-    let triple =  @(x) -> x * 3 in apply(5, triple)
+    let triple = @(x) -> x * 3 in apply(5, triple)
+    "#, true);
+    println!("r: {:?}", r);
+    assert!(r == Ok(15));
+}
+
+#[test]
+fn test_func_var()
+{
+    let r = run(r#"
+triple(x: int) -> int = x * 3
+
+main() -> int =
+    let f = triple in f(5)
     "#, true);
     println!("r: {:?}", r);
     assert!(r == Ok(15));
