@@ -10,8 +10,7 @@ use passes::instantiate_generics;
 
 pub struct StackFrame
 {
-    variables: HashMap<String, Type>,
-    functions: HashMap<String, Type>,
+    symbols: HashMap<String, Type>,
 }
 
 impl StackFrame
@@ -19,30 +18,19 @@ impl StackFrame
     pub fn new() -> StackFrame
     {
         StackFrame{
-            variables: HashMap::new(),
-            functions: HashMap::new(),
+            symbols: HashMap::new(),
         }
     }
 
     pub fn resolve_type(&self, name: &str) -> Option<Type>
     {
-        let v = self.variables.get(name).map(|t| t.clone());
-        if v.is_some() {
-            return v;
-        }
-
-        self.functions.get(name).map(|t| t.clone())
+        self.symbols.get(name).map(|t| t.clone())
     }
 
-    pub fn add_function(&mut self, name: &str, sig: Type)
+    pub fn add(&mut self, name: &str, t: Type, pos: Pos) -> CompileResult<()>
     {
-        self.functions.insert(name.into(), sig);
-    }
-
-    pub fn add_variable(&mut self, name: &str, t: Type, pos: Pos) -> CompileResult<()>
-    {
-        if self.variables.insert(name.into(), t).is_some() {
-            err(pos, ErrorCode::RedefinitionOfVariable, format!("Variable {} has already been defined", name))
+        if self.symbols.insert(name.into(), t).is_some() {
+            err(pos, ErrorCode::RedefinitionOfVariable, format!("Symbol {} has already been defined", name))
         } else {
             Ok(())
         }
@@ -75,14 +63,9 @@ impl TypeCheckerContext
         None
     }
 
-    pub fn add_function(&mut self, name: &str, sig: Type)
+    pub fn add(&mut self, name: &str, t: Type, pos: Pos) -> CompileResult<()>
     {
-        self.stack.last_mut().expect("Empty stack").add_function(name, sig)
-    }
-
-    pub fn add_variable(&mut self, name: &str, t: Type, pos: Pos) -> CompileResult<()>
-    {
-        self.stack.last_mut().expect("Empty stack").add_variable(name, t, pos)
+        self.stack.last_mut().expect("Empty stack").add(name, t, pos)
     }
 
     pub fn push_stack(&mut self)
@@ -251,7 +234,7 @@ fn infer_and_check_array_generator(ctx: &mut TypeCheckerContext, a: &mut ArrayGe
         None => return err(a.span.start, ErrorCode::TypeError, format!("Iterable expression in array generator is not an array")),
     };
 
-    try!(ctx.add_variable(&a.var, it_element_type, a.span.start));
+    try!(ctx.add(&a.var, it_element_type, a.span.start));
 
     let element_type = try!(infer_and_check_expression(ctx, &mut a.left, None));
     a.array_type = slice_type(element_type);
@@ -326,7 +309,7 @@ fn infer_and_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) ->
         if arg.typ.is_sequence() || arg.typ.is_function() {
             arg.passing_mode = ArgumentPassingMode::ByPtr;
         }
-        try!(ctx.add_variable(&arg.name, arg.typ.clone(), arg.span.start));
+        try!(ctx.add(&arg.name, arg.typ.clone(), arg.span.start));
     }
 
     let et = try!(infer_and_check_expression(ctx, &mut fun.expression, None));
@@ -365,8 +348,8 @@ fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) 
                 let element_type = target_type.get_element_type().expect("target_type is not an array type");
 
                 ctx.push_stack();
-                try!(ctx.add_variable(&ap.head, element_type.clone(), ap.span.start));
-                try!(ctx.add_variable(&ap.tail, slice_type(element_type.clone()), ap.span.start));
+                try!(ctx.add(&ap.head, element_type.clone(), ap.span.start));
+                try!(ctx.add(&ap.tail, slice_type(element_type.clone()), ap.span.start));
                 return_type = try!(infer_case_type(ctx, &mut c.to_execute, &return_type));
                 ctx.pop_stack();
             },
@@ -414,7 +397,7 @@ fn infer_and_check_lambda_body(ctx: &mut TypeCheckerContext, m: &mut Lambda) -> 
         if arg.typ.is_sequence() || arg.typ.is_function() {
             arg.passing_mode = ArgumentPassingMode::ByPtr;
         }
-        try!(ctx.add_variable(&arg.name, arg.typ.clone(), arg.span.start));
+        try!(ctx.add(&arg.name, arg.typ.clone(), arg.span.start));
     }
 
     let return_type = try!(infer_and_check_expression(ctx, m.expr.deref_mut(), None));
@@ -460,7 +443,7 @@ fn infer_and_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> C
     for b in &mut l.bindings
     {
         b.typ = try!(infer_and_check_expression(ctx, &mut b.init, None));
-        try!(ctx.add_variable(&b.name, b.typ.clone(), b.span.start));
+        try!(ctx.add(&b.name, b.typ.clone(), b.span.start));
     }
 
     l.typ = try!(infer_and_check_expression(ctx, &mut l.expression, None));
@@ -480,7 +463,7 @@ pub fn infer_and_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expressi
         Expression::Call(ref mut c) => infer_and_check_call(ctx, c),
         Expression::NameRef(ref mut nr) => infer_and_check_name(ctx, nr),
         Expression::Function(ref mut f) => {
-            ctx.add_function(&f.sig.name, f.get_type());
+            try!(ctx.add(&f.sig.name, f.get_type(), f.span.start));
             infer_and_check_function(ctx, f)
         },
         Expression::Match(ref mut m) => infer_and_check_match(ctx, m),
@@ -504,7 +487,7 @@ pub fn infer_and_check_types(module: &mut Module) -> CompileResult<()>
     loop {
         let mut ctx = TypeCheckerContext::new();
         for (_, ref f) in module.functions.iter() {
-            ctx.add_function(&f.sig.name, f.get_type());
+            try!(ctx.add(&f.sig.name, f.get_type(), f.span.start));
         }
 
         for (_, ref mut f) in module.functions.iter_mut() {
