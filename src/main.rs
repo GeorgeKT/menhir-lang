@@ -4,6 +4,7 @@ extern crate libc;
 extern crate docopt;
 extern crate rustc_serialize;
 extern crate itertools;
+extern crate uuid;
 
 
 

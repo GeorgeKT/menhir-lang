@@ -7,7 +7,7 @@ fn type_check(expr: &str) -> CompileResult<Type>
 {
 	let mut ctx = TypeCheckerContext::new();
 	let mut e = th_expr(expr);
-	let r = infer_and_check_expression(&mut ctx, &mut e);
+	let r = infer_and_check_expression(&mut ctx, &mut e, None);
 	println!("result: {:?}", r);
 	r
 }

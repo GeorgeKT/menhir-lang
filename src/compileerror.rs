@@ -56,6 +56,15 @@ impl cmp::Ord for Pos
     }
 }
 
+
+impl Default for Pos
+{
+    fn default() -> Self
+    {
+        Pos::zero()
+    }
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Span
 {
@@ -80,6 +89,14 @@ impl Span
         let s = if a.start < b.start {a.start} else {b.start};
         let e = if a.end >= b.end {a.end} else {b.end};
         Span::new(s, e)
+    }
+}
+
+impl Default for Span
+{
+    fn default() -> Self
+    {
+        Span::single(Pos::default())
     }
 }
 
@@ -122,6 +139,7 @@ pub enum ErrorCode
     ExpectedConstExpr,
     GenericTypeSubstitutionError,
     ExpressionNotAllowedAtTopLevel,
+    LambdaDoesNotMatch,
 }
 
 

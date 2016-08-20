@@ -1,12 +1,13 @@
 use std::ptr;
+use std::rc::Rc;
 
 use libc;
 use llvm::core::*;
 use llvm::prelude::*;
 use llvm::*;
 
-use ast::{Expression, UnaryOp, BinaryOp, Function, FunctionSignature, Call, NameRef, MatchExpression, MatchCase, LetExpression,
-    ArrayLiteral, ArgumentPassingMode, ArrayPattern, Type};
+use ast::{Expression, UnaryOp, BinaryOp, FunctionSignature, Call, NameRef, MatchExpression, MatchCase, LetExpression,
+    ArrayLiteral, ArgumentPassingMode, ArrayPattern, Type, Lambda, anon_sig};
 use parser::Operator;
 use codegen::{cstr, Context, ValueRef, Slice, Sequence, Array};
 use codegen::symboltable::{FunctionInstance};
@@ -212,20 +213,52 @@ pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, span:
     })
 }
 
-pub unsafe fn gen_function(ctx: &mut Context, f: &Function) -> CompileResult<ValueRef>
+pub unsafe fn gen_function_ptr(ctx: &mut Context, func_ptr: LLVMValueRef, sig: FunctionSignature) -> CompileResult<FunctionInstance>
 {
-    let fi = try!(ctx.get_function(&f.sig.name).ok_or(
-        CompileError::new(f.span.start, ErrorCode::UnknownName, format!("Unknown function {}", f.sig.name))));
+    let ret_type = try!(ctx
+        .resolve_type(&sig.return_type)
+        .ok_or(CompileError::new(sig.span.start, ErrorCode::TypeError, format!("Cannot resolve the return type of function '{}'", sig.name))));
+
+    let mut arg_types_with_passing_mode = Vec::new();
+    for arg in &sig.args {
+        let arg_type = try!(ctx
+            .resolve_type(&arg.typ)
+            .ok_or(CompileError::new(arg.span.start, ErrorCode::TypeError, format!("Cannot resolve the type of argument '{}'", arg.name))));
+
+        match arg.passing_mode
+        {
+            ArgumentPassingMode::ByValue => {
+                arg_types_with_passing_mode.push((arg_type, arg.passing_mode));
+            },
+            ArgumentPassingMode::ByPtr => {
+                let arg_ptr_type = LLVMPointerType(arg_type, 0);
+                arg_types_with_passing_mode.push((arg_ptr_type, arg.passing_mode));
+            }
+        }
+    }
+
+    Ok(FunctionInstance{
+        name: sig.name.clone(),
+        args: arg_types_with_passing_mode,
+        return_type: ret_type,
+        function: func_ptr,
+        sig: sig,
+    })
+}
+
+pub unsafe fn gen_function(ctx: &mut Context, signature: &FunctionSignature, body: &Expression) -> CompileResult<ValueRef>
+{
+    let fi = try!(ctx.get_function(&signature.name).ok_or(
+        CompileError::new(signature.span.start, ErrorCode::UnknownName, format!("Unknown function {}", signature.name))));
     let bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, cstr("entry"));
     let current_bb = LLVMGetInsertBlock(ctx.builder);
     LLVMPositionBuilderAtEnd(ctx.builder, bb);
 
     ctx.push_stack(fi.function);
 
-    for (i, arg) in f.sig.args.iter().enumerate() {
+    for (i, arg) in signature.args.iter().enumerate() {
         let var = LLVMGetParam(fi.function, i as libc::c_uint);
         let (llvm_arg, mode) = fi.args[i];
-
         match mode
         {
             ArgumentPassingMode::ByPtr => {
@@ -235,6 +268,11 @@ pub unsafe fn gen_function(ctx: &mut Context, f: &Function) -> CompileResult<Val
                     Type::Slice(_) => {
                         let builder = ctx.builder;
                         ctx.add_variable(&arg.name, ValueRef::Slice(Slice::new(builder, var)));
+                    },
+                    Type::Func(ref args, ref ret) => {
+                        let func_sig = anon_sig(&arg.name, ret, args);
+                        let fi = try!(gen_function_ptr(ctx, var, func_sig));
+                        ctx.add_function(Rc::new(fi));
                     },
                     _ => ctx.add_variable(&arg.name, ValueRef::Ptr(var)),
                 }
@@ -248,7 +286,7 @@ pub unsafe fn gen_function(ctx: &mut Context, f: &Function) -> CompileResult<Val
     }
 
 
-    let ret = try!(gen_expression(ctx, &f.expression));
+    let ret = try!(gen_expression(ctx, body));
     LLVMBuildRet(ctx.builder, ret.load(ctx.builder));
     ctx.pop_stack();
 
@@ -257,6 +295,15 @@ pub unsafe fn gen_function(ctx: &mut Context, f: &Function) -> CompileResult<Val
     }
 
     Ok(ret)
+}
+
+unsafe fn gen_lambda(ctx: &mut Context, l: &Lambda) -> CompileResult<ValueRef>
+{
+    let fi = try!(gen_function_sig(ctx, &l.sig, &l.span));
+    let ret = fi.function;
+    ctx.add_function(Rc::new(fi));
+    try!(gen_function(ctx, &l.sig, &l.expr));
+    Ok(ValueRef::Ptr(ret))
 }
 
 unsafe fn gen_call(ctx: &mut Context, c: &Call) -> CompileResult<ValueRef>
@@ -610,7 +657,6 @@ pub unsafe fn gen_array_to_slice_conversion(ctx: &mut Context, e: &Expression) -
     }
 }
 
-
 pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueRef>
 {
     unsafe
@@ -620,13 +666,13 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::UnaryOp(ref u) => gen_unary_op(ctx, u),
             Expression::BinaryOp(ref op) => gen_binary_op(ctx, op),
             Expression::ArrayLiteral(ref a) => gen_array_literal(ctx, a),
-            Expression::ArrayPattern(ref a) => err(a.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),
-            Expression::ArrayGenerator(ref a) => err(a.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),
+            Expression::ArrayPattern(ref a) => err(a.span.start, ErrorCode::UnexpectedEOF, format!("NYI gen_expression ArrayPattern")),
+            Expression::ArrayGenerator(ref a) => err(a.span.start, ErrorCode::UnexpectedEOF, format!("NYI gen_expression ArrayGenerator")),
             Expression::Call(ref c) => gen_call(ctx, c),
             Expression::NameRef(ref nr) => gen_name_ref(ctx, nr),
-            Expression::Function(ref f) => gen_function(ctx, f),
+            Expression::Function(ref f) => gen_function(ctx, &f.sig, &f.expression),
             Expression::Match(ref m) => gen_match(ctx, m),
-            Expression::Lambda(ref l) => err(l.span.start, ErrorCode::UnexpectedEOF, format!("NYI")),
+            Expression::Lambda(ref l) => gen_lambda(ctx, l),
             Expression::Let(ref l) => gen_let(ctx, l),
             Expression::Enclosed(_, ref inner) => gen_expression(ctx, inner),
             Expression::IntLiteral(_, v) => gen_integer(ctx, v),

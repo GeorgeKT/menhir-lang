@@ -114,7 +114,7 @@ fn gen_module(ctx: &mut Context, module: &Module) -> CompileResult<()>
     for (_, ref func) in &module.functions {
         if !func.is_generic() {
             unsafe{
-                try!(gen_function(ctx, func));
+                try!(gen_function(ctx, &func.sig, &func.expression));
             }
         }
     }

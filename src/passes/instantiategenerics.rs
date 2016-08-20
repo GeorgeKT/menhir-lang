@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use itertools::free::join;
 use ast::{Module, Expression, Function, FunctionSignature, Argument, Type, Call, unary_op, bin_op, array_lit,
-    array_generator, match_case, match_expression, let_expression, let_binding, sig};
+    array_generator, match_case, match_expression, let_expression, let_binding, sig, lambda};
 use compileerror::{CompileResult, ErrorCode, err};
 
 
@@ -61,6 +61,12 @@ fn substitute_types(generic_args: &HashMap<Type, Type>, e: &Expression) -> Compi
             Ok(Expression::Function(new_f))
         },
 
+        Expression::Lambda(ref l) => {
+            let args: Vec<Argument> = l.sig.args.iter().map(|a| Argument::new(a.name.clone(), substitute(generic_args, &a.typ), a.span)).collect();
+            let expr = try!(substitute_types(generic_args, &l.expr));
+            Ok(Expression::Lambda(lambda(args, expr, l.span)))
+        },
+
         Expression::Match(ref m) => {
             let target = try!(substitute_types(generic_args, &m.target));
             let mut cases = Vec::with_capacity(m.cases.len());
@@ -71,10 +77,6 @@ fn substitute_types(generic_args: &HashMap<Type, Type>, e: &Expression) -> Compi
                 cases.push(match_case(match_expr, to_execute, c.span));
             }
             Ok(Expression::Match(match_expression(target, cases, m.span)))
-        },
-
-        Expression::Lambda(ref l) => {
-            err(l.span.start, ErrorCode::UnexpectedEOF, format!("NYI"))
         },
 
         Expression::Let(ref l) => {
@@ -145,11 +147,6 @@ fn resolve_generic_call(new_functions: &mut FunctionMap, module: &Module, call: 
     }
 }
 
-fn resolve_generics_function(new_functions: &mut FunctionMap, module: &Module, func: &Function) -> CompileResult<()>
-{
-    resolve_generics(new_functions, module, &func.expression)
-}
-
 fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expression) -> CompileResult<()>
 {
     match *e
@@ -184,7 +181,7 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
         },
 
         Expression::Function(ref f) => {
-            resolve_generics_function(new_functions, module, f)
+            resolve_generics(new_functions, module, &f.expression)
         },
 
         Expression::Match(ref m) => {
@@ -198,7 +195,7 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
         },
 
         Expression::Lambda(ref l) => {
-            err(l.span.start, ErrorCode::UnexpectedEOF, format!("NYI"))
+            resolve_generics(new_functions, module, &l.expr)
         },
 
         Expression::Let(ref l) => {
@@ -258,6 +255,10 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
             replace_generic_calls(new_functions, &mut f.expression)
         },
 
+        Expression::Lambda(ref mut l) => {
+            replace_generic_calls(new_functions, &mut l.expr)
+        },
+
         Expression::Match(ref mut m) => {
             try!(replace_generic_calls(new_functions, &mut m.target));
             for c in m.cases.iter_mut()
@@ -266,10 +267,6 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
                 try!(replace_generic_calls(new_functions, &mut c.to_execute));
             }
             Ok(())
-        },
-
-        Expression::Lambda(ref l) => {
-            err(l.span.start, ErrorCode::UnexpectedEOF, format!("NYI"))
         },
 
         Expression::Let(ref mut l) => {
@@ -295,7 +292,7 @@ pub fn instantiate_generics(module: &mut Module) -> CompileResult<()>
     for (_, ref f) in module.functions.iter()
     {
         if !f.generics_resolved {
-            try!(resolve_generics_function(&mut new_functions, module, f));
+            try!(resolve_generics(&mut new_functions, module, &f.expression));
         }
     }
 

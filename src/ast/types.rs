@@ -107,6 +107,15 @@ impl Type
             _ => false,
         }
     }
+
+    pub fn is_function(&self) -> bool
+    {
+        match *self
+        {
+            Type::Func(_, _) => true,
+            _ => false,
+        }
+    }
 }
 
 pub fn func_type(args: Vec<Type>, ret: Type) -> Type

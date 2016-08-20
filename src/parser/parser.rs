@@ -238,7 +238,7 @@ fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool) -> Compi
         try!(tq.expect(TokenKind::Colon));
         try!(parse_type(tq))
     } else if type_is_optional{
-        Type::Unknown
+        Type::Generic(name.clone()) // If the type is not known threat it as generic arg
     } else {
         return err(span.start, ErrorCode::MissingType, format!("Type not specified of function argument {}", name));
     };

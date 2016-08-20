@@ -48,6 +48,14 @@ pub struct FunctionSignature
     pub span: Span,
 }
 
+impl FunctionSignature
+{
+    pub fn get_type(&self) -> Type
+    {
+        func_type(self.args.iter().map(|a| a.typ.clone()).collect(), self.return_type.clone())
+    }
+}
+
 impl TreePrinter for FunctionSignature
 {
     fn print(&self, level: usize)
@@ -94,7 +102,7 @@ impl Function
 
     pub fn get_type(&self) -> Type
     {
-        func_type(self.sig.args.iter().map(|a| a.typ.clone()).collect(), self.sig.return_type.clone())
+        self.sig.get_type()
     }
 }
 
@@ -116,6 +124,16 @@ pub fn sig(name: &str, ret: Type, args: Vec<Argument>, span: Span) -> FunctionSi
         return_type: ret,
         args: args,
         span: span,
+    }
+}
+
+pub fn anon_sig(name: &str, ret: &Type, args: &Vec<Type>) -> FunctionSignature
+{
+    FunctionSignature{
+        name: name.into(),
+        return_type: ret.clone(),
+        args: args.iter().enumerate().map(|(idx, arg_type)| Argument::new(format!("arg{}", idx), arg_type.clone(), Span::default())).collect(),
+        span: Span::default(),
     }
 }
 

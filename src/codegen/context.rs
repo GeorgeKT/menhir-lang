@@ -1,6 +1,6 @@
 use std::ptr;
 use std::rc::Rc;
-use std::os::raw::{c_char};
+use std::os::raw::{c_char, c_uint};
 use std::ffi::{CStr, CString};
 use std::fs::DirBuilder;
 use std::collections::HashMap;
@@ -283,6 +283,19 @@ impl Context
             },
             Type::Slice(ref et) => {
                 self.resolve_type(et).map(|et| self.get_slice_type(et))
+            },
+            Type::Func(ref args, ref ret) => {
+                let mut llvm_arg_types = Vec::with_capacity(args.len());
+                for arg in args {
+                    let at = self.resolve_type(arg);
+                    match at
+                    {
+                        Some(arg_typ) => llvm_arg_types.push(arg_typ),
+                        None => return None,
+                    }
+                }
+
+                self.resolve_type(ret).map(|rt| LLVMFunctionType(rt, llvm_arg_types.as_mut_ptr(), args.len() as c_uint, 0))
             },
             _ => None,
         }

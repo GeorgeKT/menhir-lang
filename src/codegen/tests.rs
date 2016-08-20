@@ -216,7 +216,20 @@ combine(x: $a, y: $a) -> $a =
     add(x, y) + mul(x, y)
 
 main() -> int = combine(3, 2)
-    "#, true);
+    "#, false);
     println!("r: {:?}", r);
     assert!(r == Ok(11));
+}
+
+#[test]
+fn test_lambda()
+{
+    let r = run(r#"
+apply(x: int, fn: (int) -> int) -> int =
+    fn(x)
+
+main() -> int = apply(5, @(x) -> x * 2)
+    "#, true);
+    println!("r: {:?}", r);
+    assert!(r == Ok(10));
 }

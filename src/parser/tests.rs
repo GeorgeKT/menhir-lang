@@ -205,30 +205,30 @@ fn test_precedence_9()
 }
 
 #[test]
-fn test_precedence_10() 
+fn test_precedence_10()
 {
     let e = th_expr("4 + 5 * 7 - 9 / 3 + 5 % 4");
 
     let mul = bin_op(
-        Operator::Mul, 
-        number(5, span(1, 5, 1, 5)), 
-        number(7, span(1, 9, 1, 9)), 
+        Operator::Mul,
+        number(5, span(1, 5, 1, 5)),
+        number(7, span(1, 9, 1, 9)),
         span(1, 5, 1, 9));
 
     let s1 = bin_op(Operator::Add, number(4, span(1, 1, 1, 1)), mul, span(1, 1, 1, 9));
 
     let div = bin_op(
-        Operator::Div, 
-        number(9, span(1, 13, 1, 13)), 
-        number(3, span(1, 17, 1, 17)), 
+        Operator::Div,
+        number(9, span(1, 13, 1, 13)),
+        number(3, span(1, 17, 1, 17)),
         span(1, 13, 1, 17));
 
     let s2 = bin_op(Operator::Sub, s1, div, span(1, 1, 1, 17));
 
     let rem = bin_op(
-        Operator::Mod, 
-        number(5, span(1, 21, 1, 21)), 
-        number(4, span(1, 25, 1, 25)), 
+        Operator::Mod,
+        number(5, span(1, 21, 1, 21)),
+        number(4, span(1, 25, 1, 25)),
         span(1, 21, 1, 25));
 
     let s3 = bin_op(Operator::Add, s2, rem,span(1, 1, 1, 25));
@@ -270,13 +270,13 @@ fn test_array_generator()
     let e = th_expr("[x * x | x <- v]");
     assert!(e == array_generator(
         bin_op(
-            Operator::Mul, 
-            name_ref("x", span(1, 2, 1, 2)), 
-            name_ref("x", span(1, 6, 1, 6)), 
+            Operator::Mul,
+            name_ref("x", span(1, 2, 1, 2)),
+            name_ref("x", span(1, 6, 1, 6)),
             span(1, 2, 1, 6)
-        ), 
-        "x".into(), 
-        name_ref("v", span(1, 15, 1, 15)), 
+        ),
+        "x".into(),
+        name_ref("v", span(1, 15, 1, 15)),
         span(1, 1, 1, 16))
     );
 }
@@ -402,8 +402,8 @@ fn test_lambda()
     let e = th_expr("@(a, b) -> a + b");
     assert!(e == Expression::Lambda(lambda(
         vec![
-            Argument::new("a".into(), Type::Unknown, span(1, 3, 1, 3)),
-            Argument::new("b".into(), Type::Unknown, span(1, 6, 1, 6)),
+            Argument::new("a".into(), Type::Generic("a".into()), span(1, 3, 1, 3)),
+            Argument::new("b".into(), Type::Generic("b".into()), span(1, 6, 1, 6)),
         ],
         bin_op(
             Operator::Add,
@@ -445,8 +445,8 @@ let x = 5, y = 7 in x * y
         vec![
             let_binding("x".into(), number(5, span(2, 9, 2, 9)), span(2, 5, 2, 9)),
             let_binding("y".into(), number(7, span(2, 16, 2, 16)), span(2, 12, 2, 16)),
-        ], 
-        bin_op(Operator::Mul, name_ref("x", span(2, 21, 2, 21)), name_ref("y", span(2, 25, 2, 25)), span(2, 21, 2, 25)), 
+        ],
+        bin_op(Operator::Mul, name_ref("x", span(2, 21, 2, 21)), name_ref("y", span(2, 25, 2, 25)), span(2, 21, 2, 25)),
         span(2, 1, 2, 25))
     )
 }

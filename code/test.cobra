@@ -1,10 +1,5 @@
-add(x: $a, y: $a) -> $a =
-    x + y
+apply(x: int, fn: (int) -> int) -> int =
+    fn(x)
 
-mul(x: $a, y: $a) -> $a =
-    x * y
-
-combine(x: $a, y: $a) -> $a =
-    add(x, y) + mul(x, y)
-
-main() -> int = combine(3, 2)
+main() -> int =
+    apply(5, @(x) -> x * 2)
