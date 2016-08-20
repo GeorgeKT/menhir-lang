@@ -549,9 +549,20 @@ unsafe fn gen_let(ctx: &mut Context, l: &LetExpression) -> CompileResult<ValueRe
             .resolve_type(&b.typ)
             .ok_or(CompileError::new(b.span.start, ErrorCode::TypeError, format!("Cannot resolve the type of the {} binding", b.name))));
 
-        let vr = ValueRef::alloc(ctx, b_type);
-        try!(gen_expression_store(ctx, &b.init, &vr));
-        ctx.add_variable(&b.name, vr);
+        match b.typ
+        {
+            Type::Func(ref args, ref ret) => {
+                let func_ptr = try!(gen_expression(ctx, &b.init));
+                let func_sig = anon_sig(&b.name, ret, args);
+                let fi = try!(gen_function_ptr(ctx, func_ptr.get(), func_sig));
+                ctx.add_function(Rc::new(fi));
+            },
+            _ => {
+                let vr = ValueRef::alloc(ctx, b_type);
+                try!(gen_expression_store(ctx, &b.init, &vr));
+                ctx.add_variable(&b.name, vr);
+            }
+        }
     }
 
     let result = try!(gen_expression(ctx, &l.expression));

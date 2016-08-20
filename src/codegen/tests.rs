@@ -233,3 +233,17 @@ main() -> int = apply(5, @(x) -> x * 2)
     println!("r: {:?}", r);
     assert!(r == Ok(10));
 }
+
+#[test]
+fn test_lambda_var()
+{
+    let r = run(r#"
+apply(x: int, fn: (int) -> int) -> int =
+    fn(x)
+
+main() -> int =
+    let triple =  @(x) -> x * 3 in apply(5, triple)
+    "#, true);
+    println!("r: {:?}", r);
+    assert!(r == Ok(15));
+}

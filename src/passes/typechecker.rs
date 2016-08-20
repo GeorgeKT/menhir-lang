@@ -35,6 +35,11 @@ impl StackFrame
             Ok(())
         }
     }
+
+    pub fn update(&mut self, name: &str, t: Type)
+    {
+        self.symbols.insert(name.into(), t);
+    }
 }
 
 pub struct TypeCheckerContext
@@ -66,6 +71,11 @@ impl TypeCheckerContext
     pub fn add(&mut self, name: &str, t: Type, pos: Pos) -> CompileResult<()>
     {
         self.stack.last_mut().expect("Empty stack").add(name, t, pos)
+    }
+
+    pub fn update(&mut self, name: &str, t: Type)
+    {
+        self.stack.last_mut().expect("Empty stack").update(name, t)
     }
 
     pub fn push_stack(&mut self)
@@ -264,6 +274,10 @@ fn infer_and_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileRe
             {
                 continue
             }
+            else if arg_type == Type::Unknown
+            {
+
+            }
             else
             {
                 if let Some(conversion_expr) = expected_arg_type.convert(&arg_type, &arg)
@@ -431,10 +445,14 @@ fn infer_and_check_lambda(ctx: &mut TypeCheckerContext, m: &mut Lambda, type_hin
     }
 }
 
-fn infer_and_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef) -> CompileResult<Type>
+fn infer_and_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint: Option<Type>) -> CompileResult<Type>
 {
     nr.typ = try!(ctx.resolve_type(&nr.name).ok_or(unknown_name(nr.span.start, &nr.name)));
-    Ok(nr.typ.clone())
+    if nr.typ == Type::Unknown && type_hint.is_some() {
+        err(nr.span.start, ErrorCode::UnknownType(nr.name.clone(), type_hint.unwrap()), format!("{} has unknown type", nr.name))
+    } else {
+        Ok(nr.typ.clone())
+    }
 }
 
 fn infer_and_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> CompileResult<Type>
@@ -446,7 +464,30 @@ fn infer_and_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> C
         try!(ctx.add(&b.name, b.typ.clone(), b.span.start));
     }
 
-    l.typ = try!(infer_and_check_expression(ctx, &mut l.expression, None));
+    match infer_and_check_expression(ctx, &mut l.expression, None)
+    {
+        Err(cr) => {
+            if let ErrorCode::UnknownType(name, expected_type) = cr.error {
+                for b in &mut l.bindings
+                {
+                    if b.name == name
+                    {
+                        // It's one we know, so lets try again with a proper type hint
+                        b.typ = try!(infer_and_check_expression(ctx, &mut b.init, Some(expected_type)));
+                        ctx.update(&b.name, b.typ.clone());
+                        l.typ = try!(infer_and_check_expression(ctx, &mut l.expression, None));
+                        break;
+                    }
+                }
+            } else {
+                return Err(cr);
+            }
+        },
+        Ok(typ) => {
+            l.typ = typ;
+        }
+    }
+
     ctx.pop_stack();
     Ok(l.typ.clone())
 }
@@ -461,7 +502,7 @@ pub fn infer_and_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expressi
         Expression::ArrayPattern(_) => Ok(Type::Unknown), // Doesn't really have a type
         Expression::ArrayGenerator(ref mut a) => infer_and_check_array_generator(ctx, a),
         Expression::Call(ref mut c) => infer_and_check_call(ctx, c),
-        Expression::NameRef(ref mut nr) => infer_and_check_name(ctx, nr),
+        Expression::NameRef(ref mut nr) => infer_and_check_name(ctx, nr, type_hint),
         Expression::Function(ref mut f) => {
             try!(ctx.add(&f.sig.name, f.get_type(), f.span.start));
             infer_and_check_function(ctx, f)

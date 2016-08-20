@@ -3,6 +3,7 @@ use std::cmp;
 use std::convert::From;
 use std::io;
 use std::fmt;
+use ast::Type;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Pos
@@ -114,7 +115,7 @@ pub fn span(start_line: usize, start_offset: usize, end_line: usize, end_offset:
     Span::new(Pos::new(start_line, start_offset), Pos::new(end_line, end_offset))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ErrorCode
 {
     UnexpectedEOF,
@@ -140,6 +141,7 @@ pub enum ErrorCode
     GenericTypeSubstitutionError,
     ExpressionNotAllowedAtTopLevel,
     LambdaDoesNotMatch,
+    UnknownType(String, Type), // Name and expected type
 }
 
 
@@ -174,7 +176,7 @@ impl fmt::Display for CompileError
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
-        write!(f, "{}: E{}: {}", self.pos, self.error as i32, self.msg)
+        write!(f, "{}: {}", self.pos, self.msg)
     }
 }
 
