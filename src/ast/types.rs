@@ -1,4 +1,5 @@
 use std::fmt;
+use std::hash::{Hasher, Hash};
 use std::ops::Deref;
 use itertools::free::join;
 use ast::{Expression, TreePrinter, prefix};
@@ -43,18 +44,18 @@ impl Type
         false
     }
 
-    pub fn is_empty_array(&self) -> bool 
+    pub fn is_empty_array(&self) -> bool
     {
-        match *self 
+        match *self
         {
             Type::Array(_, 0) => true,
             _ => false,
         }
     }
 
-    pub fn is_sequence(&self) -> bool 
+    pub fn is_sequence(&self) -> bool
     {
-        match *self 
+        match *self
         {
             Type::Array(_, _) => true,
             Type::Slice(_) => true,
@@ -64,7 +65,7 @@ impl Type
 
     pub fn get_element_type(&self) -> Option<Type>
     {
-        match *self 
+        match *self
         {
             Type::Array(ref et, _) => Some(et.deref().clone()),
             Type::Slice(ref et) => Some(et.deref().clone()),
@@ -72,7 +73,7 @@ impl Type
         }
     }
 
-    pub fn is_matchable(&self, other: &Type) -> bool 
+    pub fn is_matchable(&self, other: &Type) -> bool
     {
         if (self.is_empty_array() && other.is_sequence()) || (other.is_empty_array() && self.is_sequence()) {
             return true;
@@ -88,28 +89,37 @@ impl Type
     // If possible generate a conversion expression
     pub fn convert(&self, other: &Type, expr: &Expression) -> Option<Expression>
     {
-        match (self, other)  
+        match (self, other)
         {
-            (&Type::Slice(ref s), &Type::Array(ref t, _)) if s == t => 
+            (&Type::Slice(ref s), &Type::Array(ref t, _)) if s == t =>
                 // arrays can be converted to slices if the element type is the same
                 Some(Expression::ArrayToSliceConversion(Box::new(expr.clone())))
-            , 
+            ,
             _ => None,
+        }
+    }
+
+    pub fn is_generic(&self) -> bool
+    {
+        match *self
+        {
+            Type::Generic(_) => true,
+            _ => false,
         }
     }
 }
 
-pub fn func_type(args: Vec<Type>, ret: Type) -> Type 
+pub fn func_type(args: Vec<Type>, ret: Type) -> Type
 {
     Type::Func(args, Box::new(ret))
 }
 
-pub fn array_type(element_type: Type, len: usize) -> Type 
+pub fn array_type(element_type: Type, len: usize) -> Type
 {
     Type::Array(Box::new(element_type), len)
 }
 
-pub fn slice_type(element_type: Type) -> Type 
+pub fn slice_type(element_type: Type) -> Type
 {
     Type::Slice(Box::new(element_type))
 }
@@ -127,7 +137,7 @@ impl fmt::Display for Type
             Type::String => write!(f, "string"),
             Type::Bool => write!(f, "bool"),
             Type::Complex(ref s) => write!(f, "{}", s),
-            Type::Array(ref at, len) => 
+            Type::Array(ref at, len) =>
                 if len == 0 {
                     write!(f, "[]")
                 } else {
@@ -157,5 +167,14 @@ pub fn to_primitive(name: &str) -> Option<Type>
         "string" => Some(Type::String),
         "bool" => Some(Type::Bool),
         _ => None,
+    }
+}
+
+impl Hash for Type
+{
+    fn hash<H>(&self, state: &mut H) where H: Hasher
+    {
+        let s = format!("{}", self);
+        s.hash(state);
     }
 }

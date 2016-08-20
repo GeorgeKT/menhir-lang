@@ -1,5 +1,4 @@
 use std::ptr;
-use std::rc::Rc;
 
 use libc;
 use llvm::core::*;
@@ -172,7 +171,7 @@ unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> CompileResult<Value
 }
 
 
-unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, span: &Span) -> CompileResult<FunctionInstance>
+pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, span: &Span) -> CompileResult<FunctionInstance>
 {
     let ret_type = try!(ctx
         .resolve_type(&sig.return_type)
@@ -213,14 +212,14 @@ unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, span: &Sp
     })
 }
 
-unsafe fn gen_function(ctx: &mut Context, f: &Function) -> CompileResult<ValueRef>
+pub unsafe fn gen_function(ctx: &mut Context, f: &Function) -> CompileResult<ValueRef>
 {
-    let fi = Rc::new(try!(gen_function_sig(ctx, &f.sig, &f.span)));
+    let fi = try!(ctx.get_function(&f.sig.name).ok_or(
+        CompileError::new(f.span.start, ErrorCode::UnknownName, format!("Unknown function {}", f.sig.name))));
     let bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, cstr("entry"));
     let current_bb = LLVMGetInsertBlock(ctx.builder);
     LLVMPositionBuilderAtEnd(ctx.builder, bb);
 
-    ctx.add_function(fi.clone());
     ctx.push_stack(fi.function);
 
     for (i, arg) in f.sig.args.iter().enumerate() {

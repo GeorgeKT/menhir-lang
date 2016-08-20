@@ -10,13 +10,14 @@ mod tests;
 
 use std::os::raw::c_char;
 use std::ffi::{CString, CStr};
+use std::rc::Rc;
 
 use llvm::prelude::*;
 use llvm::core::*;
 
 use ast::Module;
 use compileerror::{Pos, CompileResult};
-use codegen::expressions::gen_expression;
+use codegen::expressions::{gen_function, gen_function_sig};
 
 pub use codegen::expressions::const_int;
 pub use codegen::context::{Context};
@@ -101,8 +102,21 @@ pub struct CodeGenOptions
 
 fn gen_module(ctx: &mut Context, module: &Module) -> CompileResult<()>
 {
-    for e in &module.expressions {
-        try!(gen_expression(ctx, e));
+    for (_, ref func) in &module.functions {
+        if !func.is_generic() {
+            unsafe {
+                let fi = Rc::new(try!(gen_function_sig(ctx, &func.sig, &func.span)));
+                ctx.add_function(fi);
+            }
+        }
+    }
+
+    for (_, ref func) in &module.functions {
+        if !func.is_generic() {
+            unsafe{
+                try!(gen_function(ctx, func));
+            }
+        }
     }
 
     Ok(())

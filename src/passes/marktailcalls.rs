@@ -1,4 +1,4 @@
-use ast::{Expression, Module};
+use ast::{Expression, Module, Function};
 use compileerror::{CompileResult};
 
 struct MarkTailCallContext
@@ -31,6 +31,14 @@ impl MarkTailCallContext
     }
 }
 
+fn mark_tail_call_in_function(ctx: &mut MarkTailCallContext, f: &mut Function) ->  CompileResult<()>
+{
+    ctx.push(&f.sig.name);
+    try!(mark_tail_call(ctx, &mut f.expression));
+    ctx.pop();
+    Ok(())
+}
+
 fn mark_tail_call(ctx: &mut MarkTailCallContext, e: &mut Expression) -> CompileResult<()>
 {
     match *e
@@ -47,10 +55,7 @@ fn mark_tail_call(ctx: &mut MarkTailCallContext, e: &mut Expression) -> CompileR
         Expression::BinaryOp(ref mut op) => mark_tail_call(ctx, &mut op.right), // Only right can be a tail call
 
         Expression::Function(ref mut f) => {
-            ctx.push(&f.sig.name);
-            try!(mark_tail_call(ctx, &mut f.expression));
-            ctx.pop();
-            Ok(())
+            mark_tail_call_in_function(ctx, f)
         },
 
         Expression::Match(ref mut m) => {
@@ -70,9 +75,9 @@ fn mark_tail_call(ctx: &mut MarkTailCallContext, e: &mut Expression) -> CompileR
 pub fn mark_tail_calls(module: &mut Module) -> CompileResult<()>
 {
     let mut ctx = MarkTailCallContext::new();
-    for ref mut e in module.expressions.iter_mut()
+    for (_, ref mut f) in module.functions.iter_mut()
     {
-        try!(mark_tail_call(&mut ctx, e));
+        try!(mark_tail_call_in_function(&mut ctx, f));
     }
 
     Ok(())

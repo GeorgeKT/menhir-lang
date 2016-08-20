@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 mod arrays;
 mod call;
 mod expression;
@@ -38,7 +40,7 @@ pub trait TreePrinter
 pub struct Module
 {
     pub name: String,
-    pub expressions: Vec<Expression>,
+    pub functions: HashMap<String, Function>,
 }
 
 impl TreePrinter for Module
@@ -47,8 +49,8 @@ impl TreePrinter for Module
     {
         let p = prefix(level);
         println!("{}Module: {}", p, self.name);
-        for e in &self.expressions {
-            e.print(level + 1);
+        for (_, ref func) in &self.functions {
+            func.print(level + 1);
         }
     }
 }

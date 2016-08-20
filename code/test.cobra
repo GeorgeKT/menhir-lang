@@ -1,6 +1,10 @@
-sum(v: [int]) -> int =
-    match v
-        [] => 0,
-        [head | tail] => head + sum(tail)
+add(x: $a, y: $a) -> $a =
+    x + y
 
-main() -> int = sum([5, 6, 7])
+mul(x: $a, y: $a) -> $a =
+    x * y
+
+combine(x: $a, y: $a) -> $a =
+    add(x, y) + mul(x, y)
+
+main() -> int = combine(3, 2)

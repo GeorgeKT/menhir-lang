@@ -203,3 +203,20 @@ main() -> int =
     println!("r: {:?}", r);
     assert!(r == Ok(49));
 }
+
+#[test]
+fn test_generic()
+{
+    let r = run(r#"
+add(x: $a, y: $a) -> $a = x + y
+
+mul(x: $a, y: $a) -> $a = x * y
+
+combine(x: $a, y: $a) -> $a =
+    add(x, y) + mul(x, y)
+
+main() -> int = combine(3, 2)
+    "#, true);
+    println!("r: {:?}", r);
+    assert!(r == Ok(11));
+}

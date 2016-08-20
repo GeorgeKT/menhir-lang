@@ -5,6 +5,7 @@ use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral,
     func_type, array_type, slice_type};
 use compileerror::{CompileResult, Pos, CompileError, ErrorCode, err};
 use parser::{Operator};
+use passes::instantiate_generics;
 
 
 pub struct StackFrame
@@ -267,20 +268,44 @@ fn infer_and_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileRe
         for (idx, (arg, expected_arg_type)) in c.args.iter_mut().zip(arg_types).enumerate()
         {
             let arg_type = try!(infer_and_check_expression(ctx, arg));
-            if arg_type == expected_arg_type {continue};
-
-            if let Some(conversion_expr) = expected_arg_type.convert(&arg_type, &arg)
+            if expected_arg_type.is_generic()
             {
-                *arg = conversion_expr;
+                if let Some(prev_arg_type) = c.generic_args.insert(expected_arg_type.clone(), arg_type.clone()) {
+                    if prev_arg_type != arg_type {
+                        return err(c.span.start, ErrorCode::GenericTypeSubstitutionError,
+                            format!("Generic argument {} mismatch, expecting type {}, not {}", expected_arg_type, prev_arg_type, arg_type));
+                    }
+                }
+            }
+            else if arg_type == expected_arg_type
+            {
+                continue
             }
             else
             {
-                return err(arg.span().start, ErrorCode::TypeError,
-                    format!("Argument {} has the wrong type, function {} expects the type {}, argument provided has type {}",
-                        idx, c.callee.name, expected_arg_type, arg_type))
+                if let Some(conversion_expr) = expected_arg_type.convert(&arg_type, &arg)
+                {
+                    *arg = conversion_expr;
+                }
+                else
+                {
+                    return err(arg.span().start, ErrorCode::TypeError,
+                        format!("Argument {} has the wrong type, function {} expects the type {}, argument provided has type {}",
+                            idx, c.callee.name, expected_arg_type, arg_type))
+                }
             }
         }
-        Ok(ret.deref().clone())
+
+        if ret.is_generic() {
+            if let Some(resolved_ret) = c.generic_args.get(ret.deref()) {
+                Ok(resolved_ret.clone())
+            } else {
+                err(c.span.start, ErrorCode::GenericTypeSubstitutionError,
+                    format!("Cannot determine the type of the generic return type {}", ret))
+            }
+        } else {
+            Ok(ret.deref().clone())
+        }
     }
     else
     {
@@ -288,10 +313,12 @@ fn infer_and_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileRe
     }
 }
 
+
 fn infer_and_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> CompileResult<Type>
 {
-    let ft = func_type(fun.sig.args.iter().map(|a| a.typ.clone()).collect(), fun.sig.return_type.clone());
-    ctx.add_function(&fun.sig.name, ft.clone());
+    if fun.is_generic() { // Generics have to be instantiated at call time
+        return Ok(Type::Unknown);
+    }
 
     ctx.push_stack();
     for arg in fun.sig.args.iter_mut()
@@ -309,7 +336,8 @@ fn infer_and_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) ->
             fun.sig.name, fun.sig.return_type, et));
     }
 
-    Ok(ft)
+    fun.type_checked = true;
+    Ok(fun.get_type())
 }
 
 fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> CompileResult<Type>
@@ -415,7 +443,10 @@ pub fn infer_and_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expressi
         Expression::ArrayGenerator(ref mut a) => infer_and_check_array_generator(ctx, a),
         Expression::Call(ref mut c) => infer_and_check_call(ctx, c),
         Expression::NameRef(ref mut nr) => infer_and_check_name(ctx, nr),
-        Expression::Function(ref mut f) => infer_and_check_function(ctx, f),
+        Expression::Function(ref mut f) => {
+            ctx.add_function(&f.sig.name, f.get_type());
+            infer_and_check_function(ctx, f)
+        },
         Expression::Match(ref mut m) => infer_and_check_match(ctx, m),
         Expression::Lambda(ref l) => infer_and_check_lambda(ctx, l),
         Expression::Let(ref mut l) => infer_and_check_let(ctx, l),
@@ -428,15 +459,30 @@ pub fn infer_and_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expressi
     }
 }
 
+
 /*
     Type check and infer all the unkown types
 */
 pub fn infer_and_check_types(module: &mut Module) -> CompileResult<()>
 {
-    let mut ctx = TypeCheckerContext::new();
-    for ref mut e in module.expressions.iter_mut()
-    {
-        try!(infer_and_check_expression(&mut ctx, e));
+    loop {
+        let mut ctx = TypeCheckerContext::new();
+        for (_, ref f) in module.functions.iter() {
+            ctx.add_function(&f.sig.name, f.get_type());
+        }
+
+        for (_, ref mut f) in module.functions.iter_mut() {
+            if !f.type_checked {
+                try!(infer_and_check_function(&mut ctx, f));
+            }
+        }
+
+        let count = module.functions.len();
+        try!(instantiate_generics(module));
+        // As long as we are adding new generic functions, we need to type check the module again
+        if count == module.functions.len() {
+            break;
+        }
     }
 
     Ok(())

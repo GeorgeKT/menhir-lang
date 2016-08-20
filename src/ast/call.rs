@@ -1,4 +1,5 @@
-use ast::{Expression, NameRef, TreePrinter, prefix};
+use std::collections::HashMap;
+use ast::{Expression, NameRef, TreePrinter, Type, prefix};
 use compileerror::{Span};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -8,6 +9,7 @@ pub struct Call
     pub args: Vec<Expression>,
     pub span: Span,
     pub tail_call: bool,
+    pub generic_args: HashMap<Type, Type>,
 }
 
 impl Call
@@ -19,6 +21,7 @@ impl Call
             args: args,
             span: span,
             tail_call: false,
+            generic_args: HashMap::new(),
         }
     }
 }

@@ -1,5 +1,6 @@
 use std::fs;
 use std::io::Read;
+use std::collections::HashMap;
 use ast::{Expression, Function, Call, NameRef, Type, Argument, Module,
     array_lit, array_pattern, array_generator, unary_op, bin_op, sig, to_primitive,
     match_expression, match_case, lambda, let_expression, let_binding, array_type, slice_type};
@@ -423,18 +424,6 @@ pub fn parse_expression(tq: &mut TokenQueue) -> CompileResult<Expression>
     parse_expression_continued(tq, lhs)
 }
 
-pub fn parse_expression_list(tq: &mut TokenQueue) -> CompileResult<Vec<Expression>>
-{
-    let mut expressions = Vec::new();
-    while !tq.is_next(TokenKind::EOF)
-    {
-        expressions.push(try!(parse_expression(tq)));
-    }
-
-    Ok(expressions)
-}
-
-
 pub fn parse_file(file_path: &str) -> CompileResult<Module>
 {
     use std::path::Path;
@@ -449,9 +438,27 @@ pub fn parse_file(file_path: &str) -> CompileResult<Module>
 pub fn parse_module<Input: Read>(input: &mut Input, name: &str) -> CompileResult<Module>
 {
     let mut tq = try!(Lexer::new().read(input));
-    let expressions = try!(parse_expression_list(&mut tq));
+    let mut funcs = HashMap::new();
+    while !tq.is_next(TokenKind::EOF)
+    {
+        let e = try!(parse_expression(&mut tq));
+        match e
+        {
+            Expression::Function(func) => {
+                let pos = func.span.start;
+                if funcs.contains_key(&func.sig.name) {
+                    return err(pos, ErrorCode::RedefinitionOfFunction, format!("Function {} redefined", func.sig.name));
+                }
+                funcs.insert(func.sig.name.clone(), func);
+            },
+            _ => {
+                return err(e.span().start, ErrorCode::ExpressionNotAllowedAtTopLevel, format!("Expression is not allowed at toplevel"));
+            }
+        }
+    }
+
      Ok(Module{
         name: name.into(),
-        expressions: expressions,
+        functions: funcs,
     })
 }

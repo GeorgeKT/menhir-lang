@@ -118,25 +118,10 @@ pub enum ErrorCode
     CallingNonCallable,
     CodegenError,
     RedefinitionOfVariable,
-    ExpectedConstExpr,
-    /*
-ConstantModification,
     RedefinitionOfFunction,
-    RedefinitionOfStruct,
-    RedefinitionOfTrait,
-
-    UnknownFunction,
-    UnknownType,
-    UnknownStructMember,
-    ArgumentCountMismatch,
-
-
-    PrivateMemberAccess,
-    MissingReturn,
-
-    IndexOperationNotSupported,
-    TraitNotImplemented,
-    */
+    ExpectedConstExpr,
+    GenericTypeSubstitutionError,
+    ExpressionNotAllowedAtTopLevel,
 }
 
 

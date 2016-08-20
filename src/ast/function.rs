@@ -1,8 +1,8 @@
-use ast::{Type, Expression, TreePrinter, prefix};
+use ast::{Type, Expression, TreePrinter, prefix, func_type};
 use compileerror::{Span};
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
-pub enum ArgumentPassingMode 
+pub enum ArgumentPassingMode
 {
     ByValue,
     ByPtr,
@@ -69,6 +69,8 @@ pub struct Function
     pub public: bool,
     pub expression: Box<Expression>,
     pub span: Span,
+    pub type_checked: bool,
+    pub generics_resolved: bool,
 }
 
 impl Function
@@ -80,7 +82,19 @@ impl Function
             public: public,
             expression: Box::new(expr),
             span: span,
+            type_checked: false,
+            generics_resolved: false,
         }
+    }
+
+    pub fn is_generic(&self) -> bool
+    {
+        self.sig.return_type.is_generic() || self.sig.args.iter().any(|a| a.typ.is_generic())
+    }
+
+    pub fn get_type(&self) -> Type
+    {
+        func_type(self.sig.args.iter().map(|a| a.typ.clone()).collect(), self.sig.return_type.clone())
     }
 }
 
