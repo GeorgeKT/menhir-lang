@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use ast::{Expression, NameRef, TreePrinter, Function, Argument, Call, Type,
-    sig, unary_op, bin_op, array_lit, match_expression, match_case, struct_member, struct_declaration,
-    array_pattern, array_generator, lambda, let_expression, let_binding};
+    sig, unary_op, bin_op, array_lit, match_expression, match_case, array_pattern, array_generator,
+    lambda, let_expression, let_binding, struct_member, struct_declaration, struct_initializer};
 use compileerror::{Span, span};
 use parser::{Lexer, Operator, parse_expression};
 
@@ -464,5 +464,21 @@ type Point = {x: int, y: int}
             struct_member("y", Type::Int, span(2, 23, 2, 28)),
         ],
         span(2, 1, 2, 29))
+    ))
+}
+
+#[test]
+fn test_struct_initializer()
+{
+    let e = th_expr(r#"
+Point{6, 7}
+"#);
+    assert!(e == Expression::StructInitializer(struct_initializer(
+        "Point",
+        vec![
+            number(6, span(2, 7, 2, 7)),
+            number(7, span(2, 10, 2, 10)),
+        ],
+        span(2, 1, 2, 11))
     ))
 }

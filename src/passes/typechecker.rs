@@ -521,6 +521,7 @@ pub fn infer_and_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expressi
         Expression::BoolLiteral(_, _) => Ok(Type::Bool),
         Expression::ArrayToSliceConversion(ref mut inner) => infer_and_check_expression(ctx, inner, type_hint),
         Expression::StructDeclaration(ref sd) => err(sd.span.start, ErrorCode::UnexpectedEOF, format!("NYI infer_and_check_expression StructDeclaration")),
+        Expression::StructInitializer(ref si) => err(si.span.start, ErrorCode::UnexpectedEOF, format!("NYI infer_and_check_expression StructInitializer")), 
     }
 }
 

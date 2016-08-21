@@ -278,3 +278,18 @@ main() -> int =
     println!("r: {:?}", r);
     assert!(r == Ok(22));
 }
+
+#[test]
+fn test_name() {
+    let r = run(r#"
+type Point = {x: int, y: int}
+
+add(a: Point, b: Point) -> Point =
+    Point{a.x + b.x, a.y + b.y}
+
+main() -> int =
+    let p = add(Point{4, 5}, Point{5, 6}) in p.x + p.y
+    "#, false);
+    println!("r: {:?}", r);
+    assert!(r == Ok(20));
+}

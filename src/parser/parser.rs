@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use ast::{Expression, Function, Call, NameRef, Type, Argument, Module,
     array_lit, array_pattern, array_generator, unary_op, bin_op, sig, to_primitive,
     match_expression, match_case, lambda, let_expression, let_binding, array_type, slice_type,
-    struct_member, struct_declaration};
+    struct_member, struct_declaration, struct_initializer};
 use compileerror::{CompileResult, ErrorCode, Span, Pos, err};
 use parser::{TokenQueue, Token, TokenKind, Operator, Lexer};
 
@@ -331,7 +331,7 @@ fn parse_let(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
     Ok(let_expression(bindings, e, Span::new(pos, tq.pos())))
 }
 
-fn parse_complex_type(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
+fn parse_struct_type(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
 {
     let (name, _) = try!(tq.expect_identifier());
     try!(tq.expect(TokenKind::Assign));
@@ -347,6 +347,23 @@ fn parse_complex_type(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression
     }
     try!(tq.expect(TokenKind::CloseCurly));
     Ok(Expression::StructDeclaration(struct_declaration(&name, members, Span::new(pos, tq.pos()))))
+}
+
+fn parse_struct_initializer(tq: &mut TokenQueue, struct_name: NameRef) -> CompileResult<Expression>
+{
+    try!(tq.expect(TokenKind::OpenCurly));
+    let mut expressions = Vec::new();
+    while !tq.is_next(TokenKind::CloseCurly)
+    {
+        let e = try!(parse_expression(tq));
+        expressions.push(e);
+        try!(eat_comma(tq));
+    }
+    try!(tq.expect(TokenKind::CloseCurly));
+
+    Ok(Expression::StructInitializer(
+        struct_initializer(&struct_name.name, expressions, Span::new(struct_name.span.start, tq.pos()))
+    ))
 }
 
 fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expression>
@@ -397,6 +414,10 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
                     parse_function_call(tq, nr).map(|c| Expression::Call(c))
                 }
             }
+            else if tq.is_next(TokenKind::OpenCurly)
+            {
+                parse_struct_initializer(tq, nr)
+            }
             else
             {
                 Ok(Expression::NameRef(nr))
@@ -413,7 +434,7 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
 
         TokenKind::Operator(op) => parse_unary_expression(tq, op, tok.span.start),
 
-        TokenKind::Type => parse_complex_type(tq, tok.span.start),
+        TokenKind::Type => parse_struct_type(tq, tok.span.start),
 
         _ => err(tok.span.start, ErrorCode::UnexpectedToken, format!("Unexpected token '{}'", tok)),
     }

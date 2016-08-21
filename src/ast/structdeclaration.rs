@@ -1,4 +1,4 @@
-use ast::{TreePrinter, Type, prefix};
+use ast::{Expression, TreePrinter, Type, prefix};
 use compileerror::{Span};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -35,6 +35,23 @@ pub fn struct_declaration(name: &str, members: Vec<StructMember>, span: Span) ->
     }
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct StructInitializer
+{
+    pub struct_name: String,
+    pub member_initializers: Vec<Expression>,
+    pub span: Span,
+}
+
+pub fn struct_initializer(struct_name: &str, member_initializers: Vec<Expression>, span: Span) -> StructInitializer
+{
+    StructInitializer{
+        struct_name: struct_name.into(),
+        member_initializers: member_initializers,
+        span: span,
+    }
+}
+
 impl TreePrinter for StructMember
 {
     fn print(&self, level: usize)
@@ -51,6 +68,18 @@ impl TreePrinter for StructDeclaration
         let p = prefix(level);
         println!("{}struct {} ({})", p, self.name, self.span);
         for m in &self.members {
+            m.print(level + 1)
+        }
+    }
+}
+
+impl TreePrinter for StructInitializer
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        println!("{}struct initializer {} ({})", p, self.struct_name, self.span);
+        for m in &self.member_initializers {
             m.print(level + 1)
         }
     }

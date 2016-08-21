@@ -21,7 +21,7 @@ pub use self::letexpression::{LetExpression, Binding, let_expression, let_bindin
 pub use self::matchexpression::{MatchExpression, MatchCase, match_case, match_expression};
 pub use self::nameref::NameRef;
 pub use self::operations::{BinaryOp, UnaryOp, unary_op, bin_op};
-pub use self::structdeclaration::{StructDeclaration, StructMember, struct_member, struct_declaration};
+pub use self::structdeclaration::{StructDeclaration, StructMember, StructInitializer, struct_member, struct_declaration, struct_initializer};
 pub use self::types::{Type, to_primitive, func_type, array_type, slice_type};
 
 
