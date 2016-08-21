@@ -19,7 +19,8 @@ pub enum Operator
     And,
     Or,
     Concat,
-    Extract, // <- 
+    Extract, // <-
+    Dot,
 }
 
 pub const TOP_PRECEDENCE: usize = 2000;
@@ -30,7 +31,7 @@ impl Operator
     {
         match *self
         {
-            Operator::Not  => TOP_PRECEDENCE,
+            Operator::Not | Operator::Dot => TOP_PRECEDENCE,
             Operator::Mul | Operator::Div | Operator::Mod => TOP_PRECEDENCE - 100,
             Operator::Add | Operator::Sub | Operator::Concat => TOP_PRECEDENCE - 200,
             Operator::LessThan | Operator::GreaterThan | Operator::LessThanEquals |
@@ -73,6 +74,7 @@ impl Display for Operator
             Operator::Or => write!(fmt, "||"),
             Operator::Concat => write!(fmt, "++"),
             Operator::Extract => write!(fmt, "<-"),
+            Operator::Dot => write!(fmt, "."),
         }
     }
 }
@@ -106,6 +108,7 @@ pub enum TokenKind
     Pipe,
     True,
     False,
+    Type,
     EOF,
 }
 
@@ -141,6 +144,7 @@ impl Display for TokenKind
             TokenKind::Pipe => write!(fmt, "|"),
             TokenKind::True => write!(fmt, "true"),
             TokenKind::False => write!(fmt, "false"),
+            TokenKind::Type => write!(fmt, "type"),
             TokenKind::EOF => write!(fmt, "EOF"),
         }
     }

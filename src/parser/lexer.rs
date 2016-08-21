@@ -105,6 +105,7 @@ impl Lexer
             "in" => TokenKind::In,
             "true" => TokenKind::True,
             "false" => TokenKind::False,
+            "type" => TokenKind::Type,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
         };
 
@@ -136,7 +137,7 @@ impl Lexer
 
     fn number(&mut self, c: char) -> CompileResult<()>
     {
-        if c.is_numeric() || c == '.' || c == 'e' 
+        if c.is_numeric() || c == '.' || c == 'e'
         {
             self.data.push(c);
             Ok(())
@@ -177,6 +178,7 @@ impl Lexer
             "|" => Ok(TokenKind::Pipe),
             "++" => Ok(TokenKind::Operator(Operator::Concat)),
             "<-" => Ok(TokenKind::Operator(Operator::Extract)),
+            "." => Ok(TokenKind::Operator(Operator::Dot)),
             _ => err(self.pos, ErrorCode::InvalidOperator, format!("Invalid operator {}", self.data)),
         }
     }

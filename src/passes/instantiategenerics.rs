@@ -96,6 +96,7 @@ fn substitute_expr(generic_args: &HashMap<Type, Type>, e: &Expression) -> Compil
         Expression::StringLiteral(span, ref v) => Ok(Expression::StringLiteral(span, v.clone())),
         Expression::ArrayPattern(ref ap) => Ok(Expression::ArrayPattern(ap.clone())),
         Expression::NameRef(ref nr) => Ok(Expression::NameRef(nr.clone())),
+        Expression::StructDeclaration(ref sd) => Ok(Expression::StructDeclaration(sd.clone())),
     }
 }
 

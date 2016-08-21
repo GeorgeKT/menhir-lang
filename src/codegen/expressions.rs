@@ -691,6 +691,7 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::StringLiteral(ref span, ref s)  => gen_string_literal(ctx, s, span),
             Expression::BoolLiteral(_, v) => gen_bool(ctx, v),
             Expression::ArrayToSliceConversion(ref e) => gen_array_to_slice_conversion(ctx, e),
+            Expression::StructDeclaration(ref sd) => err(sd.span.start, ErrorCode::UnexpectedEOF, format!("NYI gen_expression StructDeclaration")),
         }
     }
 }

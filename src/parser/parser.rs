@@ -3,7 +3,8 @@ use std::io::Read;
 use std::collections::HashMap;
 use ast::{Expression, Function, Call, NameRef, Type, Argument, Module,
     array_lit, array_pattern, array_generator, unary_op, bin_op, sig, to_primitive,
-    match_expression, match_case, lambda, let_expression, let_binding, array_type, slice_type};
+    match_expression, match_case, lambda, let_expression, let_binding, array_type, slice_type,
+    struct_member, struct_declaration};
 use compileerror::{CompileResult, ErrorCode, Span, Pos, err};
 use parser::{TokenQueue, Token, TokenKind, Operator, Lexer};
 
@@ -330,6 +331,24 @@ fn parse_let(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
     Ok(let_expression(bindings, e, Span::new(pos, tq.pos())))
 }
 
+fn parse_complex_type(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
+{
+    let (name, _) = try!(tq.expect_identifier());
+    try!(tq.expect(TokenKind::Assign));
+    try!(tq.expect(TokenKind::OpenCurly));
+    let mut members = Vec::new();
+    while !tq.is_next(TokenKind::CloseCurly)
+    {
+        let (member_name, member_name_span) = try!(tq.expect_identifier());
+        try!(tq.expect(TokenKind::Colon));
+        let typ = try!(parse_type(tq));
+        members.push(struct_member(&member_name, typ, Span::new(member_name_span.start, tq.pos())));
+        try!(eat_comma(tq));
+    }
+    try!(tq.expect(TokenKind::CloseCurly));
+    Ok(Expression::StructDeclaration(struct_declaration(&name, members, Span::new(pos, tq.pos()))))
+}
+
 fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expression>
 {
     match tok.kind
@@ -394,7 +413,9 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
 
         TokenKind::Operator(op) => parse_unary_expression(tq, op, tok.span.start),
 
-        _ => err(tok.span.start, ErrorCode::UnexpectedToken, format!("Unexpected token {}", tok)),
+        TokenKind::Type => parse_complex_type(tq, tok.span.start),
+
+        _ => err(tok.span.start, ErrorCode::UnexpectedToken, format!("Unexpected token '{}'", tok)),
     }
 }
 
@@ -440,6 +461,7 @@ pub fn parse_module<Input: Read>(input: &mut Input, name: &str) -> CompileResult
 {
     let mut tq = try!(Lexer::new().read(input));
     let mut funcs = HashMap::new();
+    let mut structs = HashMap::new();
     while !tq.is_next(TokenKind::EOF)
     {
         let e = try!(parse_expression(&mut tq));
@@ -452,6 +474,13 @@ pub fn parse_module<Input: Read>(input: &mut Input, name: &str) -> CompileResult
                 }
                 funcs.insert(func.sig.name.clone(), func);
             },
+            Expression::StructDeclaration(sd) => {
+                let pos = sd.span.start;
+                if structs.contains_key(&sd.name) {
+                    return err(pos, ErrorCode::RedefinitionOfStruct, format!("Struct {} redefined", sd.name));
+                }
+                structs.insert(sd.name.clone(), sd);
+            },
             _ => {
                 return err(e.span().start, ErrorCode::ExpressionNotAllowedAtTopLevel, format!("Expression is not allowed at toplevel"));
             }
@@ -461,5 +490,6 @@ pub fn parse_module<Input: Read>(input: &mut Input, name: &str) -> CompileResult
      Ok(Module{
         name: name.into(),
         functions: funcs,
+        structs: structs,
     })
 }

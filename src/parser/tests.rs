@@ -1,6 +1,6 @@
 use std::io::Cursor;
 use ast::{Expression, NameRef, TreePrinter, Function, Argument, Call, Type,
-    sig, unary_op, bin_op, array_lit, match_expression, match_case,
+    sig, unary_op, bin_op, array_lit, match_expression, match_case, struct_member, struct_declaration,
     array_pattern, array_generator, lambda, let_expression, let_binding};
 use compileerror::{Span, span};
 use parser::{Lexer, Operator, parse_expression};
@@ -449,4 +449,20 @@ let x = 5, y = 7 in x * y
         bin_op(Operator::Mul, name_ref("x", span(2, 21, 2, 21)), name_ref("y", span(2, 25, 2, 25)), span(2, 21, 2, 25)),
         span(2, 1, 2, 25))
     )
+}
+
+#[test]
+fn test_struct()
+{
+    let e = th_expr(r#"
+type Point = {x: int, y: int}
+"#);
+    assert!(e == Expression::StructDeclaration(struct_declaration(
+        "Point",
+        vec![
+            struct_member("x", Type::Int, span(2, 15, 2, 20)),
+            struct_member("y", Type::Int, span(2, 23, 2, 28)),
+        ],
+        span(2, 1, 2, 29))
+    ))
 }

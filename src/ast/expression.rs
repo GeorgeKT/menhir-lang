@@ -1,6 +1,6 @@
 use compileerror::{Span, CompileResult, ErrorCode, err};
 use ast::{Call, ArrayLiteral, ArrayPattern, ArrayGenerator, NameRef, BinaryOp, UnaryOp, Function,
-    MatchExpression, TreePrinter, Lambda, LetExpression, prefix};
+    MatchExpression, TreePrinter, Lambda, LetExpression, StructDeclaration, prefix};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
@@ -21,6 +21,7 @@ pub enum Expression
     Match(MatchExpression),
     Lambda(Lambda),
     Let(Box<LetExpression>),
+    StructDeclaration(StructDeclaration),
 
     // Internal expressions
     ArrayToSliceConversion(Box<Expression>),
@@ -77,6 +78,7 @@ impl Expression
             Expression::Lambda(ref l) => l.span,
             Expression::Let(ref l) => l.span,
             Expression::ArrayToSliceConversion(ref e) => e.span(),
+            Expression::StructDeclaration(ref sd) => sd.span,
         }
     }
 
@@ -140,6 +142,7 @@ impl TreePrinter for Expression
             Expression::Match(ref m) => m.print(level),
             Expression::Lambda(ref l) => l.print(level),
             Expression::Let(ref l) => l.print(level),
+            Expression::StructDeclaration(ref sd) => sd.print(level),
             Expression::ArrayToSliceConversion(ref e) => {
                 println!("{}array->slice", p);
                 e.print(level + 1);

@@ -1,10 +1,7 @@
-fold(v: [$a], accu: $b, fn: ($b, $a) -> $b) -> $b =
-    match v
-        [] => accu,
-        [hd | tail] => fold(tail, fn(accu, hd), fn)
+type Point = {x: int, y: int}
 
-sum(v: [int]) -> int =
-    fold(v, 0, @(s, el) -> s + el)
+add(a: Point, b: Point) -> Point =
+    Point{a.x + b.x, a.y + b.y}
 
 main() -> int =
-    sum([4, 5, 6, 7])
+    let p = add(Point{4, 5}, Point{5, 6}) in p.x + p.y

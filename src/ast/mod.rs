@@ -9,6 +9,7 @@ mod letexpression;
 mod matchexpression;
 mod nameref;
 mod operations;
+mod structdeclaration;
 mod types;
 
 pub use self::arrays::{ArrayLiteral, ArrayPattern, ArrayGenerator, array_lit, array_pattern, array_generator};
@@ -20,6 +21,7 @@ pub use self::letexpression::{LetExpression, Binding, let_expression, let_bindin
 pub use self::matchexpression::{MatchExpression, MatchCase, match_case, match_expression};
 pub use self::nameref::NameRef;
 pub use self::operations::{BinaryOp, UnaryOp, unary_op, bin_op};
+pub use self::structdeclaration::{StructDeclaration, StructMember, struct_member, struct_declaration};
 pub use self::types::{Type, to_primitive, func_type, array_type, slice_type};
 
 
@@ -41,6 +43,7 @@ pub struct Module
 {
     pub name: String,
     pub functions: HashMap<String, Function>,
+    pub structs: HashMap<String, StructDeclaration>,
 }
 
 impl TreePrinter for Module

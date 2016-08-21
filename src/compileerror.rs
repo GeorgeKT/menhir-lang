@@ -137,6 +137,7 @@ pub enum ErrorCode
     CodegenError,
     RedefinitionOfVariable,
     RedefinitionOfFunction,
+    RedefinitionOfStruct,
     ExpectedConstExpr,
     GenericTypeSubstitutionError,
     ExpressionNotAllowedAtTopLevel,

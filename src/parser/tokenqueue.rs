@@ -73,7 +73,7 @@ impl TokenQueue
             }
             else
             {
-                Err(CompileError::new(tok.span.start, ErrorCode::UnexpectedToken, format!("Unexpected token {}", tok)))
+                Err(CompileError::new(tok.span.start, ErrorCode::UnexpectedToken, format!("Unexpected token '{}'", tok)))
             })
     }
 
