@@ -3,77 +3,69 @@ use itertools::free::join;
 use ast::{Module, Expression, Function, FunctionSignature, Argument, Type, Call, unary_op, bin_op, array_lit,
     array_generator, match_case, match_expression, let_expression, let_binding, sig, lambda};
 use compileerror::{CompileResult, ErrorCode, err};
+use passes::substitute_types;
 
 
-fn substitute(generic_args: &HashMap<Type, Type>, t: &Type) -> Type
-{
-    if let Some(new_t) = generic_args.get(&t) {
-        new_t.clone()
-    } else {
-        t.clone()
-    }
-}
-
-fn substitute_types(generic_args: &HashMap<Type, Type>, e: &Expression) -> CompileResult<Expression>
+fn substitute_expr(generic_args: &HashMap<Type, Type>, e: &Expression) -> CompileResult<Expression>
 {
     match *e
     {
         Expression::UnaryOp(ref op) => {
-            let e = try!(substitute_types(generic_args, &op.expression));
+            let e = try!(substitute_expr(generic_args, &op.expression));
             Ok(unary_op(op.operator, e, op.span))
         },
 
         Expression::BinaryOp(ref op) => {
-            let l = try!(substitute_types(generic_args, &op.left));
-            let r = try!(substitute_types(generic_args, &op.right));
+            let l = try!(substitute_expr(generic_args, &op.left));
+            let r = try!(substitute_expr(generic_args, &op.right));
             Ok(bin_op(op.operator, l, r, op.span))
         },
 
         Expression::ArrayLiteral(ref a) => {
             let mut new_elements = Vec::with_capacity(a.elements.len());
             for el in a.elements.iter() {
-                new_elements.push(try!(substitute_types(generic_args, el)));
+                new_elements.push(try!(substitute_expr(generic_args, el)));
             }
             Ok(array_lit(new_elements, a.span))
         },
 
         Expression::ArrayGenerator(ref a) => {
-            let iterable = try!(substitute_types(generic_args, &a.iterable));
-            let left = try!(substitute_types(generic_args, &a.left));
+            let iterable = try!(substitute_expr(generic_args, &a.iterable));
+            let left = try!(substitute_expr(generic_args, &a.left));
             Ok(array_generator(left, &a.var, iterable, a.span))
         },
 
         Expression::Call(ref c) => {
             let mut new_args = Vec::with_capacity(c.args.len());
             for a in c.args.iter() {
-                new_args.push(try!(substitute_types(generic_args, a)));
+                new_args.push(try!(substitute_expr(generic_args, a)));
             }
 
             Ok(Expression::Call(Call::new(c.callee.clone(), new_args, c.span)))
         },
 
         Expression::Function(ref f) => {
-            let args: Vec<Argument> = f.sig.args.iter().map(|a| Argument::new(a.name.clone(), substitute(generic_args, &a.typ), a.span)).collect();
-            let ret_type = substitute(generic_args, &f.sig.return_type);
-            let body = try!(substitute_types(generic_args, &f.expression));
+            let args: Vec<Argument> = f.sig.args.iter().map(|a| Argument::new(a.name.clone(), substitute_types(&a.typ, generic_args), a.span)).collect();
+            let ret_type = substitute_types(&f.sig.return_type, generic_args);
+            let body = try!(substitute_expr(generic_args, &f.expression));
 
             let new_f = Function::new(sig(&f.sig.name, ret_type, args, f.sig.span), f.public, body, f.span);
             Ok(Expression::Function(new_f))
         },
 
         Expression::Lambda(ref l) => {
-            let args: Vec<Argument> = l.sig.args.iter().map(|a| Argument::new(a.name.clone(), substitute(generic_args, &a.typ), a.span)).collect();
-            let expr = try!(substitute_types(generic_args, &l.expr));
+            let args: Vec<Argument> = l.sig.args.iter().map(|a| Argument::new(a.name.clone(), substitute_types(&a.typ, generic_args), a.span)).collect();
+            let expr = try!(substitute_expr(generic_args, &l.expr));
             Ok(Expression::Lambda(lambda(args, expr, l.span)))
         },
 
         Expression::Match(ref m) => {
-            let target = try!(substitute_types(generic_args, &m.target));
+            let target = try!(substitute_expr(generic_args, &m.target));
             let mut cases = Vec::with_capacity(m.cases.len());
             for c in m.cases.iter()
             {
-                let match_expr = try!(substitute_types(generic_args, &c.match_expr));
-                let to_execute = try!(substitute_types(generic_args, &c.to_execute));
+                let match_expr = try!(substitute_expr(generic_args, &c.match_expr));
+                let to_execute = try!(substitute_expr(generic_args, &c.to_execute));
                 cases.push(match_case(match_expr, to_execute, c.span));
             }
             Ok(Expression::Match(match_expression(target, cases, m.span)))
@@ -82,20 +74,20 @@ fn substitute_types(generic_args: &HashMap<Type, Type>, e: &Expression) -> Compi
         Expression::Let(ref l) => {
             let mut bindings = Vec::with_capacity(l.bindings.len());
             for b in l.bindings.iter() {
-                let binding_expr = try!(substitute_types(generic_args, &b.init));
+                let binding_expr = try!(substitute_expr(generic_args, &b.init));
                 bindings.push(let_binding(b.name.clone(), binding_expr, b.span));
             }
 
-            let expr = try!(substitute_types(generic_args, &l.expression));
+            let expr = try!(substitute_expr(generic_args, &l.expression));
             Ok(let_expression(bindings, expr, l.span))
         },
 
         Expression::Enclosed(span, ref inner) => {
-            let new_inner = try!(substitute_types(generic_args, inner));
+            let new_inner = try!(substitute_expr(generic_args, inner));
             Ok(Expression::Enclosed(span, Box::new(new_inner)))
         },
         Expression::ArrayToSliceConversion(ref inner) => {
-            let new_inner = try!(substitute_types(generic_args, inner));
+            let new_inner = try!(substitute_expr(generic_args, inner));
             Ok(Expression::ArrayToSliceConversion(Box::new(new_inner)))
         },
         Expression::IntLiteral(span, v) => Ok(Expression::IntLiteral(span, v)),
@@ -116,12 +108,12 @@ fn instantiate(func: &Function, generic_args: &HashMap<Type, Type>) -> CompileRe
 {
     let sig = FunctionSignature{
         name: new_func_name(&func.sig.name, generic_args),
-        return_type: substitute(generic_args, &func.sig.return_type),
-        args: func.sig.args.iter().map(|arg| Argument::new(arg.name.clone(), substitute(generic_args, &arg.typ), arg.span)).collect(),
+        return_type: substitute_types(&func.sig.return_type, generic_args),
+        args: func.sig.args.iter().map(|arg| Argument::new(arg.name.clone(), substitute_types(&arg.typ, generic_args), arg.span)).collect(),
         span: func.sig.span,
     };
 
-    let body = try!(substitute_types(generic_args, &func.expression));
+    let body = try!(substitute_expr(generic_args, &func.expression));
 
     Ok(Function::new(sig, func.public, body, func.span))
 }
@@ -133,11 +125,11 @@ fn resolve_generic_call(new_functions: &mut FunctionMap, module: &Module, call: 
     match module.functions.get(&call.callee.name)
     {
         None => {
-            err(call.span.start, ErrorCode::RedefinitionOfFunction, format!("Unknown function {}", call.callee.name))
+            err(call.span.start, ErrorCode::UnknownName, format!("Unknown function {}", call.callee.name))
         },
         Some(ref func) => {
             let name = new_func_name(&func.sig.name, &call.generic_args);
-            if !new_functions.contains_key(&name) {
+            if !new_functions.contains_key(&name) && !module.functions.contains_key(&name) {
                 let new_func = try!(instantiate(func, &call.generic_args));
                 new_functions.insert(name, new_func);
             }
@@ -240,12 +232,7 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
             }
 
             if !call.generic_args.is_empty() {
-                let name = new_func_name(&call.callee.name, &call.generic_args);
-                if !new_functions.contains_key(&name) {
-                    return err(call.span.start, ErrorCode::RedefinitionOfFunction, format!("Unknown function {}", call.callee.name));
-                }
-
-                call.callee.name = name;
+                call.callee.name = new_func_name(&call.callee.name, &call.generic_args);
             }
 
             Ok(())
@@ -291,17 +278,14 @@ pub fn instantiate_generics(module: &mut Module) -> CompileResult<()>
     let mut new_functions = FunctionMap::new();
     for (_, ref f) in module.functions.iter()
     {
-        if !f.generics_resolved {
+        if !f.generics_resolved && !f.is_generic() {
             try!(resolve_generics(&mut new_functions, module, &f.expression));
         }
     }
 
-
-    if new_functions.is_empty() {return Ok(());}
-
     for (_, ref mut f) in module.functions.iter_mut()
     {
-        if !f.generics_resolved {
+        if !f.generics_resolved && !f.is_generic() {
             try!(replace_generic_calls(&new_functions, &mut f.expression));
             f.generics_resolved = true;
         }

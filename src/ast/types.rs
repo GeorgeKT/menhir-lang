@@ -104,6 +104,9 @@ impl Type
         match *self
         {
             Type::Generic(_) => true,
+            Type::Array(ref inner, _) => inner.is_generic(),
+            Type::Slice(ref inner) => inner.is_generic(),
+            Type::Func(ref args, ref ret) => ret.is_generic() || args.iter().any(|a| a.is_generic()),
             _ => false,
         }
     }

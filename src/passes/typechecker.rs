@@ -1,11 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap};
 use std::ops::{DerefMut, Deref};
 use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral,
     ArrayGenerator, MatchExpression, Function, Lambda, Call, Type, LetExpression, ArgumentPassingMode,
     func_type, array_type, slice_type};
 use compileerror::{CompileResult, Pos, CompileError, ErrorCode, err};
 use parser::{Operator};
-use passes::instantiate_generics;
+use passes::{instantiate_generics, fill_in_generics, substitute_types};
 
 
 pub struct StackFrame
@@ -260,27 +260,21 @@ fn infer_and_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileRe
     {
         for (idx, (arg, expected_arg_type)) in c.args.iter_mut().zip(arg_types).enumerate()
         {
+            let expected_arg_type = substitute_types(&expected_arg_type, &c.generic_args);
             let arg_type = try!(infer_and_check_expression(ctx, arg, Some(expected_arg_type.clone())));
-            if expected_arg_type.is_generic()
-            {
-                if let Some(prev_arg_type) = c.generic_args.insert(expected_arg_type.clone(), arg_type.clone()) {
-                    if prev_arg_type != arg_type {
-                        return err(c.span.start, ErrorCode::GenericTypeSubstitutionError,
-                            format!("Generic argument {} mismatch, expecting type {}, not {}", expected_arg_type, prev_arg_type, arg_type));
-                    }
-                }
-            }
-            else if arg_type == expected_arg_type
+            let real_expected_arg_type = if expected_arg_type.is_generic() {
+                try!(fill_in_generics(&arg_type, &expected_arg_type, &mut c.generic_args, arg.span().start))
+            } else {
+                expected_arg_type
+            };
+
+            if arg_type == real_expected_arg_type
             {
                 continue
             }
-            else if arg_type == Type::Unknown
-            {
-
-            }
             else
             {
-                if let Some(conversion_expr) = expected_arg_type.convert(&arg_type, &arg)
+                if let Some(conversion_expr) = real_expected_arg_type.convert(&arg_type, &arg)
                 {
                     *arg = conversion_expr;
                 }
@@ -288,7 +282,7 @@ fn infer_and_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileRe
                 {
                     return err(arg.span().start, ErrorCode::TypeError,
                         format!("Argument {} has the wrong type, function {} expects the type {}, argument provided has type {}",
-                            idx, c.callee.name, expected_arg_type, arg_type))
+                            idx, c.callee.name, real_expected_arg_type, arg_type))
                 }
             }
         }
@@ -341,6 +335,7 @@ fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) 
 {
     let target_type = try!(infer_and_check_expression(ctx, &mut m.target, None));
     let mut return_type = Type::Unknown;
+
     for c in &mut m.cases
     {
         let infer_case_type = |ctx: &mut TypeCheckerContext, e: &mut Expression, return_type: &Type| {
@@ -352,7 +347,7 @@ fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) 
             }
         };
 
-        match c.match_expr
+        let case_type = match c.match_expr
         {
             Expression::ArrayPattern(ref ap) => {
                 if !target_type.is_sequence() {
@@ -364,8 +359,9 @@ fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) 
                 ctx.push_stack();
                 try!(ctx.add(&ap.head, element_type.clone(), ap.span.start));
                 try!(ctx.add(&ap.tail, slice_type(element_type.clone()), ap.span.start));
-                return_type = try!(infer_case_type(ctx, &mut c.to_execute, &return_type));
+                let ct = try!(infer_case_type(ctx, &mut c.to_execute, &return_type));
                 ctx.pop_stack();
+                ct
             },
 
             Expression::NameRef(ref nr) => {
@@ -373,7 +369,7 @@ fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) 
                     return err(c.match_expr.span().start, ErrorCode::TypeError, format!("Invalid pattern match"));
                 }
 
-                return_type = try!(infer_case_type(ctx, &mut c.to_execute, &return_type));
+                try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
             },
 
             Expression::ArrayLiteral(_) |
@@ -387,17 +383,19 @@ fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) 
                         m_type, target_type));
                 }
 
-                return_type = try!(infer_case_type(ctx, &mut c.to_execute, &return_type));
+                try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
             },
 
             _ => {
                 return err(c.match_expr.span().start, ErrorCode::TypeError, format!("Invalid pattern match"));
             }
-        }
-    }
+        };
 
-    if return_type == Type::Unknown {
-        return err(m.span.start, ErrorCode::TypeError, format!("Cannot infer type of match expression"));
+        if return_type == Type::Unknown {
+            return_type = case_type;
+        } else if return_type != case_type {
+            return err(m.span.start, ErrorCode::TypeError, format!("Cases of match statements must return the same type"));
+        }
     }
 
     m.typ = return_type.clone();
@@ -466,21 +464,27 @@ fn infer_and_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> C
 
     match infer_and_check_expression(ctx, &mut l.expression, None)
     {
-        Err(cr) => {
-            if let ErrorCode::UnknownType(name, expected_type) = cr.error {
+        Err(ref cr) => {
+            if let ErrorCode::UnknownType(ref name, ref expected_type) = cr.error {
+                let mut handled = false;
                 for b in &mut l.bindings
                 {
-                    if b.name == name
+                    if b.name == *name
                     {
                         // It's one we know, so lets try again with a proper type hint
-                        b.typ = try!(infer_and_check_expression(ctx, &mut b.init, Some(expected_type)));
+                        b.typ = try!(infer_and_check_expression(ctx, &mut b.init, Some(expected_type.clone())));
                         ctx.update(&b.name, b.typ.clone());
                         l.typ = try!(infer_and_check_expression(ctx, &mut l.expression, None));
+                        handled = true;
                         break;
                     }
                 }
+
+                if !handled {
+                    return Err(cr.clone());
+                }
             } else {
-                return Err(cr);
+                return Err(cr.clone());
             }
         },
         Ok(typ) => {

@@ -243,7 +243,7 @@ apply(x: int, fn: (int) -> int) -> int =
 
 main() -> int =
     let triple = @(x) -> x * 3 in apply(5, triple)
-    "#, true);
+    "#, false);
     println!("r: {:?}", r);
     assert!(r == Ok(15));
 }
@@ -256,7 +256,26 @@ triple(x: int) -> int = x * 3
 
 main() -> int =
     let f = triple in f(5)
-    "#, true);
+    "#, false);
     println!("r: {:?}", r);
     assert!(r == Ok(15));
+}
+
+#[test]
+fn test_generic_slice_arguments()
+{
+    let r = run(r#"
+fold(v: [$a], accu: $b, fn: ($b, $a) -> $b) -> $b =
+    match v
+        [] => accu,
+        [hd | tail] => fold(tail, fn(accu, hd), fn)
+
+sum(v: [int]) -> int =
+    fold(v, 0, @(s, el) -> s + el)
+
+main() -> int =
+    sum([4, 5, 6, 7])
+    ""#, false);
+    println!("r: {:?}", r);
+    assert!(r == Ok(22));
 }

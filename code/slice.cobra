@@ -1,5 +1,5 @@
 
-map(v: [$a], fn: ($a) -> $b) -> [$b] = [fn(x) | x <- v]
+#map(v: [$a], fn: ($a) -> $b) -> [$b] = [fn(x) | x <- v]
 
 fold(v: [$a], accu: $b, fn: ($b, $a) -> $b) -> $b =
     match v

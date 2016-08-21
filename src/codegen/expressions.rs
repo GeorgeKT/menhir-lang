@@ -526,7 +526,7 @@ unsafe fn gen_match(ctx: &mut Context, m: &MatchExpression) -> CompileResult<Val
 
     let ret_type = try!(ctx
         .resolve_type(&m.typ)
-        .ok_or(CompileError::new(m.span.start, ErrorCode::TypeError, format!("Cannot resolve the type of this match statement"))));
+        .ok_or(CompileError::new(m.span.start, ErrorCode::TypeError, format!("Cannot resolve the type '{}' of match statement", m.typ))));
 
     let dst = ValueRef::alloc(ctx, ret_type);
     for mc in &m.cases
