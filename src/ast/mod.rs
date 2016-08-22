@@ -9,7 +9,7 @@ mod letexpression;
 mod matchexpression;
 mod nameref;
 mod operations;
-mod structdeclaration;
+mod structs;
 mod types;
 
 pub use self::arrays::{ArrayLiteral, ArrayPattern, ArrayGenerator, array_lit, array_pattern, array_generator};
@@ -21,7 +21,8 @@ pub use self::letexpression::{LetExpression, Binding, let_expression, let_bindin
 pub use self::matchexpression::{MatchExpression, MatchCase, match_case, match_expression};
 pub use self::nameref::NameRef;
 pub use self::operations::{BinaryOp, UnaryOp, unary_op, bin_op};
-pub use self::structdeclaration::{StructDeclaration, StructMember, StructInitializer, struct_member, struct_declaration, struct_initializer};
+pub use self::structs::{StructDeclaration, StructMember, StructInitializer, StructMemberAccess,
+    struct_member, struct_declaration, struct_initializer, struct_member_access};
 pub use self::types::{Type, to_primitive, func_type, array_type, slice_type};
 
 

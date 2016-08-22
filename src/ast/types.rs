@@ -19,6 +19,7 @@ pub enum Type
     Slice(Box<Type>),
     Generic(String),
     Func(Vec<Type>, Box<Type>), // args and return type
+    Struct(String, Vec<Type>),
 }
 
 impl Type
@@ -158,6 +159,8 @@ impl fmt::Display for Type
             Type::Slice(ref at) => write!(f, "[{}]", at),
             Type::Generic(ref g) => write!(f, "${}", g),
             Type::Func(ref args, ref ret) => write!(f, "({}) -> {}", join(args.iter(), ", "), ret),
+            Type::Struct(ref name, ref members) =>
+                write!(f, "{}{{{}}}", name, join(members.iter(), ", ")),
         }
     }
 }

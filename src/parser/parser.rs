@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use ast::{Expression, Function, Call, NameRef, Type, Argument, Module,
     array_lit, array_pattern, array_generator, unary_op, bin_op, sig, to_primitive,
     match_expression, match_case, lambda, let_expression, let_binding, array_type, slice_type,
-    struct_member, struct_declaration, struct_initializer};
+    struct_member, struct_declaration, struct_initializer, struct_member_access};
 use compileerror::{CompileResult, ErrorCode, Span, Pos, err};
 use parser::{TokenQueue, Token, TokenKind, Operator, Lexer};
 
@@ -366,6 +366,22 @@ fn parse_struct_initializer(tq: &mut TokenQueue, struct_name: NameRef) -> Compil
     ))
 }
 
+fn parse_struct_member_access(tq: &mut TokenQueue, name: NameRef) -> CompileResult<Expression>
+{
+    let mut members = Vec::new();
+    try!(tq.expect(TokenKind::Operator(Operator::Dot)));
+    let (first_member, _) = try!(tq.expect_identifier());
+    members.push(first_member);
+    while tq.is_next(TokenKind::Operator(Operator::Dot))
+    {
+        try!(tq.pop());
+        let (next, _) = try!(tq.expect_identifier());
+        members.push(next);
+    }
+
+    Ok(Expression::StructMemberAccess(struct_member_access(&name.name, members, Span::new(name.span.start, tq.pos()))))
+}
+
 fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expression>
 {
     match tok.kind
@@ -417,6 +433,10 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
             else if tq.is_next(TokenKind::OpenCurly)
             {
                 parse_struct_initializer(tq, nr)
+            }
+            else if tq.is_next(TokenKind::Operator(Operator::Dot))
+            {
+                parse_struct_member_access(tq, nr)
             }
             else
             {

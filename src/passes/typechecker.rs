@@ -1,6 +1,6 @@
 use std::collections::{HashMap};
 use std::ops::{DerefMut, Deref};
-use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral,
+use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral, StructInitializer, StructMemberAccess,
     ArrayGenerator, MatchExpression, Function, Lambda, Call, Type, LetExpression, ArgumentPassingMode,
     func_type, array_type, slice_type};
 use compileerror::{CompileResult, Pos, CompileError, ErrorCode, err};
@@ -496,6 +496,39 @@ fn infer_and_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> C
     Ok(l.typ.clone())
 }
 
+fn infer_and_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructInitializer) -> CompileResult<Type>
+{
+    let st = try!(ctx.resolve_type(&si.struct_name).ok_or(unknown_name(si.span.start, &si.struct_name)));
+    match st
+    {
+        Type::Struct(name, members) => {
+            if members.len() != si.member_initializers.len() {
+                return err(si.span.start, ErrorCode::WrongArgumentCount,
+                    format!("Struct {} has {} members, but attempting to initialize {} members", name, members.len(), si.member_initializers.len()));
+            }
+
+            for (idx, (member, mi)) in members.iter().zip(si.member_initializers.iter_mut()).enumerate()
+            {
+                let t = try!(infer_and_check_expression(ctx, mi, Some(member.clone())));
+                if t != *member
+                {
+                    return err(mi.span().start, ErrorCode::TypeError,
+                        format!("Attempting to initialize member {} with type '{}', expecting an expression of type '{}'",
+                            idx, t, member));
+                }
+            }
+
+            Ok(Type::Struct(name, members))
+        },
+        _ => err(si.span.start, ErrorCode::TypeError, format!("{} is not a struct", si.struct_name)),
+    }
+}
+
+fn infer_and_check_struct_member_access(_ctx: &mut TypeCheckerContext, sma: &mut StructMemberAccess) -> CompileResult<Type>
+{
+    err(sma.span.start, ErrorCode::UnexpectedEOF, format!("NYI infer_and_check_struct_member_access"))
+}
+
 pub fn infer_and_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: Option<Type>) -> CompileResult<Type>
 {
     match *e
@@ -520,8 +553,12 @@ pub fn infer_and_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expressi
         Expression::StringLiteral(_, _)  => Ok(Type::String),
         Expression::BoolLiteral(_, _) => Ok(Type::Bool),
         Expression::ArrayToSliceConversion(ref mut inner) => infer_and_check_expression(ctx, inner, type_hint),
-        Expression::StructDeclaration(ref sd) => err(sd.span.start, ErrorCode::UnexpectedEOF, format!("NYI infer_and_check_expression StructDeclaration")),
-        Expression::StructInitializer(ref si) => err(si.span.start, ErrorCode::UnexpectedEOF, format!("NYI infer_and_check_expression StructInitializer")), 
+        Expression::StructDeclaration(ref sd) => {
+            try!(ctx.add(&sd.name, sd.get_type(), sd.span.start));
+            Ok(sd.get_type())
+        },
+        Expression::StructInitializer(ref mut si) => infer_and_check_struct_initializer(ctx, si),
+        Expression::StructMemberAccess(ref mut sma) => infer_and_check_struct_member_access(ctx, sma),
     }
 }
 
@@ -533,8 +570,12 @@ pub fn infer_and_check_types(module: &mut Module) -> CompileResult<()>
 {
     loop {
         let mut ctx = TypeCheckerContext::new();
-        for (_, ref f) in module.functions.iter() {
+        for ref f in module.functions.values() {
             try!(ctx.add(&f.sig.name, f.get_type(), f.span.start));
+        }
+
+        for ref s in module.structs.values() {
+            try!(ctx.add(&s.name, s.get_type(), s.span.start));
         }
 
         for (_, ref mut f) in module.functions.iter_mut() {

@@ -98,6 +98,7 @@ fn substitute_expr(generic_args: &HashMap<Type, Type>, e: &Expression) -> Compil
         Expression::NameRef(ref nr) => Ok(Expression::NameRef(nr.clone())),
         Expression::StructDeclaration(ref sd) => err(sd.span.start, ErrorCode::UnexpectedEOF, format!("NYI substitute_expr StructDeclaration")),
         Expression::StructInitializer(ref si) => err(si.span.start, ErrorCode::UnexpectedEOF, format!("NYI substitute_expr StructInitializer")),
+        Expression::StructMemberAccess(ref sma) => err(sma.span.start, ErrorCode::UnexpectedEOF, format!("NYI substitute_expr StructMemberAccess")),
     }
 }
 

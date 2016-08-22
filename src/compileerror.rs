@@ -142,6 +142,7 @@ pub enum ErrorCode
     GenericTypeSubstitutionError,
     ExpressionNotAllowedAtTopLevel,
     LambdaDoesNotMatch,
+    WrongArgumentCount,
     UnknownType(String, Type), // Name and expected type
 }
 

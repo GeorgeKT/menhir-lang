@@ -280,7 +280,7 @@ main() -> int =
 }
 
 #[test]
-fn test_name() {
+fn test_structs() {
     let r = run(r#"
 type Point = {x: int, y: int}
 

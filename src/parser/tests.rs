@@ -1,7 +1,8 @@
 use std::io::Cursor;
 use ast::{Expression, NameRef, TreePrinter, Function, Argument, Call, Type,
     sig, unary_op, bin_op, array_lit, match_expression, match_case, array_pattern, array_generator,
-    lambda, let_expression, let_binding, struct_member, struct_declaration, struct_initializer};
+    lambda, let_expression, let_binding, struct_member, struct_declaration, struct_initializer,
+    struct_member_access};
 use compileerror::{Span, span};
 use parser::{Lexer, Operator, parse_expression};
 
@@ -480,5 +481,20 @@ Point{6, 7}
             number(7, span(2, 10, 2, 10)),
         ],
         span(2, 1, 2, 11))
+    ))
+}
+
+#[test]
+fn test_struct_member_access()
+{
+    let e = th_expr(r#"
+a.b.c.d
+"#);
+    assert!(e == Expression::StructMemberAccess(
+        struct_member_access(
+            "a",
+            vec!["b".into(), "c".into(), "d".into()],
+            span(2, 1, 2, 7)
+        )
     ))
 }
