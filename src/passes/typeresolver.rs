@@ -78,7 +78,7 @@ fn resolve_struct_member_types(ctx: &mut TypeCheckerContext, sd: &mut StructDecl
             }
         }
 
-        member_types.push(m.typ.clone());
+        member_types.push(m.clone());
     }
 
     sd.typ = Type::Struct(member_types);

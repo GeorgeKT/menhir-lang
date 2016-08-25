@@ -297,6 +297,19 @@ impl Context
 
                 self.resolve_type(ret).map(|rt| LLVMFunctionType(rt, llvm_arg_types.as_mut_ptr(), args.len() as c_uint, 0))
             },
+            Type::Struct(ref members) => {
+                let mut llvm_member_types = Vec::with_capacity(members.len());
+                for m in members
+                {
+                    let mt = self.resolve_type(&m.typ);
+                    match mt
+                    {
+                        Some(arg_typ) => llvm_member_types.push(arg_typ),
+                        None => return None,
+                    }
+                }
+                Some(LLVMStructType(llvm_member_types.as_mut_ptr(), llvm_member_types.len() as c_uint, 0))
+            },
             _ => None,
         }
     }

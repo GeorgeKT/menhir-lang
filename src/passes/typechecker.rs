@@ -2,8 +2,8 @@ use std::collections::{HashMap};
 use std::ops::{DerefMut, Deref};
 use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral, ArrayGenerator,
     MatchExpression, Function, Lambda, Call, Type, LetExpression, ArgumentPassingMode,
-    StructInitializer, StructMemberAccess, func_type, array_type, slice_type};
-use compileerror::{CompileResult, Pos, ErrorCode, err, unknown_name};
+    StructInitializer, StructMemberAccess, StructMember, func_type, array_type, slice_type};
+use compileerror::{CompileResult, CompileError, Pos, ErrorCode, err, unknown_name};
 use parser::{Operator};
 use passes::{instantiate_generics, fill_in_generics, substitute_types, resolve_types, resolve_function_args_and_ret_type};
 
@@ -504,12 +504,12 @@ fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructIn
 
             for (idx, (member, mi)) in members.iter().zip(si.member_initializers.iter_mut()).enumerate()
             {
-                let t = try!(type_check_expression(ctx, mi, Some(member.clone())));
-                if t != *member
+                let t = try!(type_check_expression(ctx, mi, Some(member.typ.clone())));
+                if t != member.typ
                 {
                     return err(mi.span().start, ErrorCode::TypeError,
                         format!("Attempting to initialize member {} with type '{}', expecting an expression of type '{}'",
-                            idx, t, member));
+                            idx, t, member.typ));
                 }
             }
 
@@ -519,9 +519,33 @@ fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructIn
     }
 }
 
-fn type_check_struct_member_access(_ctx: &mut TypeCheckerContext, sma: &mut StructMemberAccess) -> CompileResult<Type>
+
+
+fn find_member_type(members: &Vec<StructMember>, member_name: &str, pos: Pos) -> CompileResult<Type>
 {
-    err(sma.span.start, ErrorCode::UnexpectedEOF, format!("NYI type_check_struct_member_access"))
+    members.iter()
+        .find(|m| m.name == member_name)
+        .map(|m| m.typ.clone())
+        .ok_or(CompileError::new(pos, ErrorCode::UnknownStructMember, format!("Unknown struct member {}", member_name)))
+}
+
+fn type_check_struct_member_access(ctx: &mut TypeCheckerContext, sma: &mut StructMemberAccess) -> CompileResult<Type>
+{
+    let mut st = try!(ctx.resolve_type(&sma.name).ok_or(unknown_name(sma.span.start, &sma.name)));
+    for member_name in &sma.members
+    {
+        st = match st
+        {
+            Type::Struct(ref members) => {
+                try!(find_member_type(members, member_name, sma.span.start))
+            },
+            _ => {
+                return err(sma.span.start, ErrorCode::TypeError, format!("Type '{}' is not a struct, so you cannot access it's members", st));
+            },
+        };
+    }
+
+    Ok(st)
 }
 
 pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: Option<Type>) -> CompileResult<Type>

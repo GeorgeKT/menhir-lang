@@ -101,8 +101,8 @@ pub struct CodeGenOptions
 }
 
 fn gen_module(ctx: &mut Context, module: &Module) -> CompileResult<()>
-{
-    for (_, ref func) in &module.functions {
+{    
+    for ref func in module.functions.values() {
         if !func.is_generic() {
             unsafe {
                 let fi = Rc::new(try!(gen_function_sig(ctx, &func.sig, &func.span)));
@@ -111,7 +111,7 @@ fn gen_module(ctx: &mut Context, module: &Module) -> CompileResult<()>
         }
     }
 
-    for (_, ref func) in &module.functions {
+    for ref func in module.functions.values() {
         if !func.is_generic() {
             unsafe{
                 try!(gen_function(ctx, &func.sig, &func.expression));

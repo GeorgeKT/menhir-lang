@@ -2,8 +2,7 @@ use std::fmt;
 use std::hash::{Hasher, Hash};
 use std::ops::Deref;
 use itertools::free::join;
-use ast::{Expression, TreePrinter, prefix};
-
+use ast::{Expression, TreePrinter, StructMember, prefix};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Type
@@ -19,7 +18,7 @@ pub enum Type
     Slice(Box<Type>),
     Generic(String),
     Func(Vec<Type>, Box<Type>), // args and return type
-    Struct(Vec<Type>),
+    Struct(Vec<StructMember>),
 }
 
 impl Type
@@ -175,7 +174,7 @@ impl fmt::Display for Type
             Type::Generic(ref g) => write!(f, "${}", g),
             Type::Func(ref args, ref ret) => write!(f, "({}) -> {}", join(args.iter(), ", "), ret),
             Type::Struct(ref members) =>
-                write!(f, "{{{}}}", join(members.iter(), ", ")),
+                write!(f, "{{{}}}", join(members.iter().map(|m| &m.typ), ", ")),
         }
     }
 }
