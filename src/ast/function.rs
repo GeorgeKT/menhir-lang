@@ -46,6 +46,7 @@ pub struct FunctionSignature
     pub return_type: Type,
     pub args: Vec<Argument>,
     pub span: Span,
+    pub typ: Type,
 }
 
 impl FunctionSignature
@@ -99,11 +100,6 @@ impl Function
     {
         self.sig.return_type.is_generic() || self.sig.args.iter().any(|a| a.typ.is_generic())
     }
-
-    pub fn get_type(&self) -> Type
-    {
-        self.sig.get_type()
-    }
 }
 
 impl TreePrinter for Function
@@ -124,6 +120,7 @@ pub fn sig(name: &str, ret: Type, args: Vec<Argument>, span: Span) -> FunctionSi
         return_type: ret,
         args: args,
         span: span,
+        typ: Type::Unknown,
     }
 }
 
@@ -134,6 +131,7 @@ pub fn anon_sig(name: &str, ret: &Type, args: &Vec<Type>) -> FunctionSignature
         return_type: ret.clone(),
         args: args.iter().enumerate().map(|(idx, arg_type)| Argument::new(format!("arg{}", idx), arg_type.clone(), Span::default())).collect(),
         span: Span::default(),
+        typ: Type::Unknown,
     }
 }
 

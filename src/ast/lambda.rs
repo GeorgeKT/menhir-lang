@@ -48,6 +48,7 @@ impl Lambda
 
                 use std::ops::Deref;
                 self.sig.return_type = ret.deref().clone();
+                self.sig.typ = typ.clone();
                 Ok(())
             },
             _ => err(self.span.start, ErrorCode::LambdaDoesNotMatch,

@@ -1,11 +1,11 @@
 use std::collections::{HashMap};
 use std::ops::{DerefMut, Deref};
-use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral, StructInitializer, StructMemberAccess,
-    ArrayGenerator, MatchExpression, Function, Lambda, Call, Type, LetExpression, ArgumentPassingMode,
-    func_type, array_type, slice_type};
-use compileerror::{CompileResult, Pos, CompileError, ErrorCode, err};
+use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral, ArrayGenerator,
+    MatchExpression, Function, Lambda, Call, Type, LetExpression, ArgumentPassingMode,
+    StructInitializer, StructMemberAccess, func_type, array_type, slice_type};
+use compileerror::{CompileResult, Pos, ErrorCode, err, unknown_name};
 use parser::{Operator};
-use passes::{instantiate_generics, fill_in_generics, substitute_types};
+use passes::{instantiate_generics, fill_in_generics, substitute_types, resolve_types, resolve_function_args_and_ret_type};
 
 
 pub struct StackFrame
@@ -99,11 +99,6 @@ fn expected_numeric_operands<T>(pos: Pos, op: Operator) -> CompileResult<T>
     err(pos, ErrorCode::TypeError, format!("Operator {} expects two numeric expression as operands", op))
 }
 
-fn unknown_name(pos: Pos, name: &str) -> CompileError
-{
-    CompileError::new(pos, ErrorCode::UnknownName, format!("Unable to resolve name {}", name))
-}
-
 fn is_numeric(t: &Type) -> bool
 {
     *t == Type::Int || *t == Type::Float
@@ -119,9 +114,9 @@ fn is_bool(t: &Type) -> bool
     *t == Type::Bool
 }
 
-fn infer_and_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> CompileResult<Type>
+fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> CompileResult<Type>
 {
-    let e_type = try!(infer_and_check_expression(ctx, &mut u.expression, None));
+    let e_type = try!(type_check_expression(ctx, &mut u.expression, None));
     match u.operator
     {
         Operator::Sub => {
@@ -143,10 +138,10 @@ fn infer_and_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> Co
     }
 }
 
-fn infer_and_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> CompileResult<Type>
+fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> CompileResult<Type>
 {
-    let left_type = try!(infer_and_check_expression(ctx, &mut b.left, None));
-    let right_type = try!(infer_and_check_expression(ctx, &mut b.right, None));
+    let left_type = try!(type_check_expression(ctx, &mut b.left, None));
+    let right_type = try!(type_check_expression(ctx, &mut b.right, None));
     match b.operator
     {
         Operator::Add |
@@ -204,7 +199,7 @@ fn infer_and_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> 
     }
 }
 
-fn infer_and_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLiteral) -> CompileResult<Type>
+fn type_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLiteral) -> CompileResult<Type>
 {
     if a.elements.is_empty() {
         a.array_type = array_type(Type::Unknown, 0);
@@ -213,7 +208,7 @@ fn infer_and_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLite
 
     let mut array_element_type = Type::Unknown;
     for e in a.elements.iter_mut() {
-        let t = try!(infer_and_check_expression(ctx, e, None));
+        let t = try!(type_check_expression(ctx, e, None));
         if array_element_type == Type::Unknown {
             array_element_type = t;
         } else if array_element_type != t {
@@ -231,12 +226,12 @@ fn infer_and_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLite
     Ok(a.array_type.clone())
 }
 
-fn infer_and_check_array_generator(ctx: &mut TypeCheckerContext, a: &mut ArrayGenerator) -> CompileResult<Type>
+fn type_check_array_generator(ctx: &mut TypeCheckerContext, a: &mut ArrayGenerator) -> CompileResult<Type>
 {
     ctx.push_stack();
 
     // At the moment assume iterable is an array, in the future expand to all iterators
-    let it_type = try!(infer_and_check_expression(ctx, &mut a.iterable, None));
+    let it_type = try!(type_check_expression(ctx, &mut a.iterable, None));
     let it_element_type = match it_type.get_element_type()
     {
         Some(Type::Unknown) => return err(a.span.start, ErrorCode::TypeError, format!("Extract expression with empty array is pointless")),
@@ -246,13 +241,13 @@ fn infer_and_check_array_generator(ctx: &mut TypeCheckerContext, a: &mut ArrayGe
 
     try!(ctx.add(&a.var, it_element_type, a.span.start));
 
-    let element_type = try!(infer_and_check_expression(ctx, &mut a.left, None));
+    let element_type = try!(type_check_expression(ctx, &mut a.left, None));
     a.array_type = slice_type(element_type);
     ctx.pop_stack();
     Ok(a.array_type.clone())
 }
 
-fn infer_and_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileResult<Type>
+fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileResult<Type>
 {
     let func_type = try!(ctx.resolve_type(&c.callee.name).ok_or(unknown_name(c.span.start, &c.callee.name)));
 
@@ -261,7 +256,7 @@ fn infer_and_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileRe
         for (idx, (arg, expected_arg_type)) in c.args.iter_mut().zip(arg_types).enumerate()
         {
             let expected_arg_type = substitute_types(&expected_arg_type, &c.generic_args);
-            let arg_type = try!(infer_and_check_expression(ctx, arg, Some(expected_arg_type.clone())));
+            let arg_type = try!(type_check_expression(ctx, arg, Some(expected_arg_type.clone())));
             let real_expected_arg_type = if expected_arg_type.is_generic() {
                 try!(fill_in_generics(&arg_type, &expected_arg_type, &mut c.generic_args, arg.span().start))
             } else {
@@ -305,7 +300,7 @@ fn infer_and_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileRe
 }
 
 
-fn infer_and_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> CompileResult<Type>
+fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> CompileResult<Type>
 {
     if fun.is_generic() { // Generics have to be instantiated at call time
         return Ok(Type::Unknown);
@@ -314,13 +309,13 @@ fn infer_and_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) ->
     ctx.push_stack();
     for arg in fun.sig.args.iter_mut()
     {
-        if arg.typ.is_sequence() || arg.typ.is_function() {
+        if arg.typ.pass_by_ptr() {
             arg.passing_mode = ArgumentPassingMode::ByPtr;
         }
         try!(ctx.add(&arg.name, arg.typ.clone(), arg.span.start));
     }
 
-    let et = try!(infer_and_check_expression(ctx, &mut fun.expression, None));
+    let et = try!(type_check_expression(ctx, &mut fun.expression, None));
     ctx.pop_stack();
     if et != fun.sig.return_type {
         return err(fun.span.start, ErrorCode::TypeError, format!("Function {} has return type {}, but it is returning an expression of type {}",
@@ -328,18 +323,18 @@ fn infer_and_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) ->
     }
 
     fun.type_checked = true;
-    Ok(fun.get_type())
+    Ok(fun.sig.typ.clone())
 }
 
-fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> CompileResult<Type>
+fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> CompileResult<Type>
 {
-    let target_type = try!(infer_and_check_expression(ctx, &mut m.target, None));
+    let target_type = try!(type_check_expression(ctx, &mut m.target, None));
     let mut return_type = Type::Unknown;
 
     for c in &mut m.cases
     {
         let infer_case_type = |ctx: &mut TypeCheckerContext, e: &mut Expression, return_type: &Type| {
-            let tt = try!(infer_and_check_expression(ctx, e, None));
+            let tt = try!(type_check_expression(ctx, e, None));
             if *return_type != Type::Unknown && *return_type != tt {
                 return err(e.span().start, ErrorCode::TypeError, format!("Expressions in match statements must return the same type"));
             } else {
@@ -377,7 +372,7 @@ fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) 
             Expression::BoolLiteral(_, _) |
             Expression::FloatLiteral(_, _) |
             Expression::StringLiteral(_, _) => {
-                let m_type = try!(infer_and_check_expression(ctx, &mut c.match_expr, None));
+                let m_type = try!(type_check_expression(ctx, &mut c.match_expr, None));
                 if !target_type.is_matchable(&m_type) {
                     return err(c.match_expr.span().start, ErrorCode::TypeError, format!("Pattern match of type {}, cannot match with an expression of type {}",
                         m_type, target_type));
@@ -402,23 +397,23 @@ fn infer_and_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) 
     Ok(return_type)
 }
 
-fn infer_and_check_lambda_body(ctx: &mut TypeCheckerContext, m: &mut Lambda) -> CompileResult<Type>
+fn type_check_lambda_body(ctx: &mut TypeCheckerContext, m: &mut Lambda) -> CompileResult<Type>
 {
     ctx.push_stack();
     for arg in &mut m.sig.args {
-        if arg.typ.is_sequence() || arg.typ.is_function() {
+        if arg.typ.pass_by_ptr() {
             arg.passing_mode = ArgumentPassingMode::ByPtr;
         }
         try!(ctx.add(&arg.name, arg.typ.clone(), arg.span.start));
     }
 
-    let return_type = try!(infer_and_check_expression(ctx, m.expr.deref_mut(), None));
+    let return_type = try!(type_check_expression(ctx, m.expr.deref_mut(), None));
     ctx.pop_stack();
     m.set_return_type(return_type);
-    Ok(m.sig.get_type())
+    Ok(m.sig.typ.clone())
 }
 
-fn infer_and_check_lambda(ctx: &mut TypeCheckerContext, m: &mut Lambda, type_hint: Option<Type>) -> CompileResult<Type>
+fn type_check_lambda(ctx: &mut TypeCheckerContext, m: &mut Lambda, type_hint: Option<Type>) -> CompileResult<Type>
 {
     match type_hint
     {
@@ -426,7 +421,7 @@ fn infer_and_check_lambda(ctx: &mut TypeCheckerContext, m: &mut Lambda, type_hin
             use uuid::{Uuid};
             m.sig.name = format!("lambda-{}", Uuid::new_v4()); // Add a uuid, so we don't get name clashes
             try!(m.apply_type(&typ));
-            let infered_type = try!(infer_and_check_lambda_body(ctx, m));
+            let infered_type = try!(type_check_lambda_body(ctx, m));
             if infered_type != typ {
                 return err(m.span.start, ErrorCode::TypeError, format!("Lambda body has the wrong type, expecting {}, got {}", typ, infered_type));
             }
@@ -438,12 +433,12 @@ fn infer_and_check_lambda(ctx: &mut TypeCheckerContext, m: &mut Lambda, type_hin
                 return Ok(Type::Unknown);
             }
 
-            infer_and_check_lambda_body(ctx, m)
+            type_check_lambda_body(ctx, m)
         },
     }
 }
 
-fn infer_and_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint: Option<Type>) -> CompileResult<Type>
+fn type_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint: Option<Type>) -> CompileResult<Type>
 {
     nr.typ = try!(ctx.resolve_type(&nr.name).ok_or(unknown_name(nr.span.start, &nr.name)));
     if nr.typ == Type::Unknown && type_hint.is_some() {
@@ -453,16 +448,16 @@ fn infer_and_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hin
     }
 }
 
-fn infer_and_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> CompileResult<Type>
+fn type_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> CompileResult<Type>
 {
     ctx.push_stack();
     for b in &mut l.bindings
     {
-        b.typ = try!(infer_and_check_expression(ctx, &mut b.init, None));
+        b.typ = try!(type_check_expression(ctx, &mut b.init, None));
         try!(ctx.add(&b.name, b.typ.clone(), b.span.start));
     }
 
-    match infer_and_check_expression(ctx, &mut l.expression, None)
+    match type_check_expression(ctx, &mut l.expression, None)
     {
         Err(ref cr) => {
             if let ErrorCode::UnknownType(ref name, ref expected_type) = cr.error {
@@ -472,9 +467,9 @@ fn infer_and_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> C
                     if b.name == *name
                     {
                         // It's one we know, so lets try again with a proper type hint
-                        b.typ = try!(infer_and_check_expression(ctx, &mut b.init, Some(expected_type.clone())));
+                        b.typ = try!(type_check_expression(ctx, &mut b.init, Some(expected_type.clone())));
                         ctx.update(&b.name, b.typ.clone());
-                        l.typ = try!(infer_and_check_expression(ctx, &mut l.expression, None));
+                        l.typ = try!(type_check_expression(ctx, &mut l.expression, None));
                         handled = true;
                         break;
                     }
@@ -496,20 +491,20 @@ fn infer_and_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> C
     Ok(l.typ.clone())
 }
 
-fn infer_and_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructInitializer) -> CompileResult<Type>
+fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructInitializer) -> CompileResult<Type>
 {
     let st = try!(ctx.resolve_type(&si.struct_name).ok_or(unknown_name(si.span.start, &si.struct_name)));
     match st
     {
-        Type::Struct(name, members) => {
+        Type::Struct(members) => {
             if members.len() != si.member_initializers.len() {
                 return err(si.span.start, ErrorCode::WrongArgumentCount,
-                    format!("Struct {} has {} members, but attempting to initialize {} members", name, members.len(), si.member_initializers.len()));
+                    format!("Struct {} has {} members, but attempting to initialize {} members", si.struct_name, members.len(), si.member_initializers.len()));
             }
 
             for (idx, (member, mi)) in members.iter().zip(si.member_initializers.iter_mut()).enumerate()
             {
-                let t = try!(infer_and_check_expression(ctx, mi, Some(member.clone())));
+                let t = try!(type_check_expression(ctx, mi, Some(member.clone())));
                 if t != *member
                 {
                     return err(mi.span().start, ErrorCode::TypeError,
@@ -518,47 +513,48 @@ fn infer_and_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut Str
                 }
             }
 
-            Ok(Type::Struct(name, members))
+            Ok(Type::Struct(members))
         },
         _ => err(si.span.start, ErrorCode::TypeError, format!("{} is not a struct", si.struct_name)),
     }
 }
 
-fn infer_and_check_struct_member_access(_ctx: &mut TypeCheckerContext, sma: &mut StructMemberAccess) -> CompileResult<Type>
+fn type_check_struct_member_access(_ctx: &mut TypeCheckerContext, sma: &mut StructMemberAccess) -> CompileResult<Type>
 {
-    err(sma.span.start, ErrorCode::UnexpectedEOF, format!("NYI infer_and_check_struct_member_access"))
+    err(sma.span.start, ErrorCode::UnexpectedEOF, format!("NYI type_check_struct_member_access"))
 }
 
-pub fn infer_and_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: Option<Type>) -> CompileResult<Type>
+pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: Option<Type>) -> CompileResult<Type>
 {
     match *e
     {
-        Expression::UnaryOp(ref mut op) => infer_and_check_unary_op(ctx, op),
-        Expression::BinaryOp(ref mut op) => infer_and_check_binary_op(ctx, op),
-        Expression::ArrayLiteral(ref mut a) => infer_and_check_array_literal(ctx, a),
+        Expression::UnaryOp(ref mut op) => type_check_unary_op(ctx, op),
+        Expression::BinaryOp(ref mut op) => type_check_binary_op(ctx, op),
+        Expression::ArrayLiteral(ref mut a) => type_check_array_literal(ctx, a),
         Expression::ArrayPattern(_) => Ok(Type::Unknown), // Doesn't really have a type
-        Expression::ArrayGenerator(ref mut a) => infer_and_check_array_generator(ctx, a),
-        Expression::Call(ref mut c) => infer_and_check_call(ctx, c),
-        Expression::NameRef(ref mut nr) => infer_and_check_name(ctx, nr, type_hint),
-        Expression::Function(ref mut f) => {
-            try!(ctx.add(&f.sig.name, f.get_type(), f.span.start));
-            infer_and_check_function(ctx, f)
-        },
-        Expression::Match(ref mut m) => infer_and_check_match(ctx, m),
-        Expression::Lambda(ref mut l) => infer_and_check_lambda(ctx, l, type_hint),
-        Expression::Let(ref mut l) => infer_and_check_let(ctx, l),
-        Expression::Enclosed(_, ref mut inner) => infer_and_check_expression(ctx, inner, type_hint),
+        Expression::ArrayGenerator(ref mut a) => type_check_array_generator(ctx, a),
+        Expression::Call(ref mut c) => type_check_call(ctx, c),
+        Expression::NameRef(ref mut nr) => type_check_name(ctx, nr, type_hint),
+        Expression::Match(ref mut m) => type_check_match(ctx, m),
+        Expression::Lambda(ref mut l) => type_check_lambda(ctx, l, type_hint),
+        Expression::Let(ref mut l) => type_check_let(ctx, l),
+        Expression::Enclosed(_, ref mut inner) => type_check_expression(ctx, inner, type_hint),
         Expression::IntLiteral(_, _) => Ok(Type::Int),
         Expression::FloatLiteral(_, _) => Ok(Type::Float),
         Expression::StringLiteral(_, _)  => Ok(Type::String),
         Expression::BoolLiteral(_, _) => Ok(Type::Bool),
-        Expression::ArrayToSliceConversion(ref mut inner) => infer_and_check_expression(ctx, inner, type_hint),
-        Expression::StructDeclaration(ref sd) => {
-            try!(ctx.add(&sd.name, sd.get_type(), sd.span.start));
-            Ok(sd.get_type())
+        Expression::ArrayToSliceConversion(ref mut inner) => type_check_expression(ctx, inner, type_hint),
+        Expression::StructInitializer(ref mut si) => type_check_struct_initializer(ctx, si),
+        Expression::StructMemberAccess(ref mut sma) => type_check_struct_member_access(ctx, sma),
+
+        // We should never get here in toplevel statements
+        Expression::Function(ref mut f) => {
+            try!(resolve_function_args_and_ret_type(ctx, f));
+            type_check_function(ctx, f)
         },
-        Expression::StructInitializer(ref mut si) => infer_and_check_struct_initializer(ctx, si),
-        Expression::StructMemberAccess(ref mut sma) => infer_and_check_struct_member_access(ctx, sma),
+        Expression::StructDeclaration(ref sd) => {
+            ctx.resolve_type(&sd.name).ok_or(unknown_name(sd.span.start, &sd.name))
+        },
     }
 }
 
@@ -566,21 +562,22 @@ pub fn infer_and_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expressi
 /*
     Type check and infer all the unkown types
 */
-pub fn infer_and_check_types(module: &mut Module) -> CompileResult<()>
+pub fn type_check_module(module: &mut Module) -> CompileResult<()>
 {
     loop {
         let mut ctx = TypeCheckerContext::new();
-        for ref f in module.functions.values() {
-            try!(ctx.add(&f.sig.name, f.get_type(), f.span.start));
+        try!(resolve_types(&mut ctx, module));
+
+        // Register all the generic functions
+        for f in module.functions.values() {
+            if f.is_generic() {
+                try!(ctx.add(&f.sig.name, f.sig.get_type(), f.span.start));
+            }
         }
 
-        for ref s in module.structs.values() {
-            try!(ctx.add(&s.name, s.get_type(), s.span.start));
-        }
-
-        for (_, ref mut f) in module.functions.iter_mut() {
+        for ref mut f in module.functions.values_mut() {
             if !f.type_checked {
-                try!(infer_and_check_function(&mut ctx, f));
+                try!(type_check_function(&mut ctx, f));
             }
         }
 

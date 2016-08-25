@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use itertools::free::join;
 use ast::{Module, Expression, Function, FunctionSignature, Argument, Type, Call, unary_op, bin_op, array_lit,
-    array_generator, match_case, match_expression, let_expression, let_binding, sig, lambda};
+    array_generator, match_case, match_expression, let_expression, let_binding, sig, lambda, func_type};
 use compileerror::{CompileResult, ErrorCode, err};
 use passes::substitute_types;
 
@@ -109,11 +109,15 @@ fn new_func_name(func_name: &str, generic_args: &HashMap<Type, Type>) -> String
 
 fn instantiate(func: &Function, generic_args: &HashMap<Type, Type>) -> CompileResult<Function>
 {
+    let arg_types = func.sig.args.iter().map(|arg| substitute_types(&arg.typ, generic_args)).collect();
+    let args = func.sig.args.iter().map(|arg| Argument::new(arg.name.clone(), substitute_types(&arg.typ, generic_args), arg.span)).collect();
+    let return_type = substitute_types(&func.sig.return_type, generic_args);
     let sig = FunctionSignature{
         name: new_func_name(&func.sig.name, generic_args),
-        return_type: substitute_types(&func.sig.return_type, generic_args),
-        args: func.sig.args.iter().map(|arg| Argument::new(arg.name.clone(), substitute_types(&arg.typ, generic_args), arg.span)).collect(),
+        return_type: return_type.clone(),
+        args: args,
         span: func.sig.span,
+        typ: func_type(arg_types, return_type),
     };
 
     let body = try!(substitute_expr(generic_args, &func.expression));

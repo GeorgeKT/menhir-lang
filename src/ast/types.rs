@@ -14,12 +14,12 @@ pub enum Type
     Float,
     String,
     Bool,
-    Complex(String),
+    Unresolved(String),
     Array(Box<Type>, usize),
     Slice(Box<Type>),
     Generic(String),
     Func(Vec<Type>, Box<Type>), // args and return type
-    Struct(String, Vec<Type>),
+    Struct(Vec<Type>),
 }
 
 impl Type
@@ -111,7 +111,7 @@ impl Type
             _ => false,
         }
     }
-
+/*
     pub fn is_function(&self) -> bool
     {
         match *self
@@ -120,6 +120,21 @@ impl Type
             _ => false,
         }
     }
+    */
+
+    pub fn pass_by_ptr(&self) -> bool
+    {
+        match *self
+        {
+            Type::Array(_, _) => true,
+            Type::Slice(_) => true,
+            Type::Func(_, _) => true,
+            Type::Struct(_) => true,
+            _ => false,
+        }
+    }
+
+
 }
 
 pub fn func_type(args: Vec<Type>, ret: Type) -> Type
@@ -149,7 +164,7 @@ impl fmt::Display for Type
             Type::Float => write!(f, "float"),
             Type::String => write!(f, "string"),
             Type::Bool => write!(f, "bool"),
-            Type::Complex(ref s) => write!(f, "{}", s),
+            Type::Unresolved(ref s) => write!(f, "{}", s),
             Type::Array(ref at, len) =>
                 if len == 0 {
                     write!(f, "[]")
@@ -159,8 +174,8 @@ impl fmt::Display for Type
             Type::Slice(ref at) => write!(f, "[{}]", at),
             Type::Generic(ref g) => write!(f, "${}", g),
             Type::Func(ref args, ref ret) => write!(f, "({}) -> {}", join(args.iter(), ", "), ret),
-            Type::Struct(ref name, ref members) =>
-                write!(f, "{}{{{}}}", name, join(members.iter(), ", ")),
+            Type::Struct(ref members) =>
+                write!(f, "{{{}}}", join(members.iter(), ", ")),
         }
     }
 }

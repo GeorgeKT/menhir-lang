@@ -174,6 +174,11 @@ pub fn err<T: Sized>(pos: Pos, e: ErrorCode, msg: String) -> CompileResult<T>
     Err(CompileError::new(pos, e, msg))
 }
 
+pub fn unknown_name(pos: Pos, name: &str) -> CompileError
+{
+    CompileError::new(pos, ErrorCode::UnknownName, format!("Unable to resolve name {}", name))
+}
+
 impl fmt::Display for CompileError
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>

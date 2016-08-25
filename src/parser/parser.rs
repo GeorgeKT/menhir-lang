@@ -229,7 +229,7 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
     else
     {
         let (name, _pos) = try!(tq.expect_identifier());
-        Ok(to_primitive(&name).unwrap_or(Type::Complex(name)))
+        Ok(to_primitive(&name).unwrap_or(Type::Unresolved(name)))
     }
 }
 

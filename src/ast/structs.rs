@@ -25,6 +25,7 @@ pub struct StructDeclaration
     pub name: String,
     pub members: Vec<StructMember>,
     pub span: Span,
+    pub typ: Type,
 }
 
 pub fn struct_declaration(name: &str, members: Vec<StructMember>, span: Span) -> StructDeclaration
@@ -33,14 +34,7 @@ pub fn struct_declaration(name: &str, members: Vec<StructMember>, span: Span) ->
         name: name.into(),
         members: members,
         span: span,
-    }
-}
-
-impl StructDeclaration
-{
-    pub fn get_type(&self) -> Type
-    {
-        Type::Struct(self.name.clone(), self.members.iter().map(|m| m.typ.clone()).collect())
+        typ: Type::Unknown,
     }
 }
 
@@ -50,6 +44,7 @@ pub struct StructInitializer
     pub struct_name: String,
     pub member_initializers: Vec<Expression>,
     pub span: Span,
+    pub typ: Type,
 }
 
 pub fn struct_initializer(struct_name: &str, member_initializers: Vec<Expression>, span: Span) -> StructInitializer
@@ -58,6 +53,7 @@ pub fn struct_initializer(struct_name: &str, member_initializers: Vec<Expression
         struct_name: struct_name.into(),
         member_initializers: member_initializers,
         span: span,
+        typ: Type::Unknown,
     }
 }
 
@@ -67,6 +63,7 @@ pub struct StructMemberAccess
     pub name: String,
     pub members: Vec<String>,
     pub span: Span,
+    pub typ: Type,
 }
 
 pub fn struct_member_access(name: &str, members: Vec<String>, span: Span) -> StructMemberAccess
@@ -75,6 +72,7 @@ pub fn struct_member_access(name: &str, members: Vec<String>, span: Span) -> Str
         name: name.into(),
         members: members,
         span: span,
+        typ: Type::Unknown,
     }
 }
 

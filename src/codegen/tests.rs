@@ -8,7 +8,7 @@ use llvm::execution_engine::*;
 use compileerror::{ErrorCode, err, CompileResult, Pos};
 use parser::{parse_module};
 use codegen::{codegen, cstr};
-use passes::{infer_and_check_types};
+use passes::{type_check_module};
 use ast::{TreePrinter};
 
 
@@ -21,7 +21,7 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
         md.print(0);
     }
 
-    try!(infer_and_check_types(&mut md));
+    try!(type_check_module(&mut md));
 
     let mut ctx = try!(codegen(&md));
 
