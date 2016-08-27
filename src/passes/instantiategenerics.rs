@@ -44,15 +44,6 @@ fn substitute_expr(generic_args: &HashMap<Type, Type>, e: &Expression) -> Compil
             Ok(Expression::Call(Call::new(c.callee.clone(), new_args, c.span)))
         },
 
-        Expression::Function(ref f) => {
-            let args: Vec<Argument> = f.sig.args.iter().map(|a| Argument::new(a.name.clone(), substitute_types(&a.typ, generic_args), a.span)).collect();
-            let ret_type = substitute_types(&f.sig.return_type, generic_args);
-            let body = try!(substitute_expr(generic_args, &f.expression));
-
-            let new_f = Function::new(sig(&f.sig.name, ret_type, args, f.sig.span), f.public, body, f.span);
-            Ok(Expression::Function(new_f))
-        },
-
         Expression::Lambda(ref l) => {
             let args: Vec<Argument> = l.sig.args.iter().map(|a| Argument::new(a.name.clone(), substitute_types(&a.typ, generic_args), a.span)).collect();
             let expr = try!(substitute_expr(generic_args, &l.expr));
@@ -96,7 +87,6 @@ fn substitute_expr(generic_args: &HashMap<Type, Type>, e: &Expression) -> Compil
         Expression::StringLiteral(span, ref v) => Ok(Expression::StringLiteral(span, v.clone())),
         Expression::ArrayPattern(ref ap) => Ok(Expression::ArrayPattern(ap.clone())),
         Expression::NameRef(ref nr) => Ok(Expression::NameRef(nr.clone())),
-        Expression::StructDeclaration(ref sd) => err(sd.span.start, ErrorCode::UnexpectedEOF, format!("NYI substitute_expr StructDeclaration")),
         Expression::StructInitializer(ref si) => err(si.span.start, ErrorCode::UnexpectedEOF, format!("NYI substitute_expr StructInitializer")),
         Expression::StructMemberAccess(ref sma) => err(sma.span.start, ErrorCode::UnexpectedEOF, format!("NYI substitute_expr StructMemberAccess")),
     }
@@ -179,10 +169,6 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
             }
         },
 
-        Expression::Function(ref f) => {
-            resolve_generics(new_functions, module, &f.expression)
-        },
-
         Expression::Match(ref m) => {
             try!(resolve_generics(new_functions, module, &m.target));
             for c in m.cases.iter()
@@ -243,10 +229,6 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
             }
 
             Ok(())
-        },
-
-        Expression::Function(ref mut f) => {
-            replace_generic_calls(new_functions, &mut f.expression)
         },
 
         Expression::Lambda(ref mut l) => {

@@ -1,7 +1,7 @@
 use std::fs;
 use std::io::Read;
 use std::collections::HashMap;
-use ast::{Expression, Function, Call, NameRef, Type, Argument, Module,
+use ast::{Expression, Function, Call, NameRef, Type, Argument, Module, StructDeclaration,
     array_lit, array_pattern, array_generator, unary_op, bin_op, sig, to_primitive,
     match_expression, match_case, lambda, let_expression, let_binding, array_type, slice_type,
     struct_member, struct_declaration, struct_initializer, struct_member_access};
@@ -262,8 +262,9 @@ fn parse_function_arguments(tq: &mut TokenQueue, type_is_optional: bool) -> Comp
     Ok(args)
 }
 
-fn parse_function_definition(tq: &mut TokenQueue, name: NameRef) -> CompileResult<Function>
+fn parse_function_definition(tq: &mut TokenQueue, name: &str, start_pos: Pos) -> CompileResult<Function>
 {
+    try!(tq.expect(TokenKind::OpenParen));
     let args = try!(parse_function_arguments(tq, false));
 
     let ret_type = if tq.is_next(TokenKind::Arrow) {
@@ -278,10 +279,10 @@ fn parse_function_definition(tq: &mut TokenQueue, name: NameRef) -> CompileResul
     let expr = try!(parse_expression(tq));
 
     Ok(Function::new(
-        sig(&name.name, ret_type, args, Span::new(name.span.start, sig_span_end)),
+        sig(name, ret_type, args, Span::new(start_pos, sig_span_end)),
         true,
         expr,
-        Span::new(name.span.start, tq.pos())))
+        Span::new(start_pos, tq.pos())))
 }
 
 fn parse_match(tq: &mut TokenQueue, start: Pos) -> CompileResult<Expression>
@@ -331,7 +332,7 @@ fn parse_let(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
     Ok(let_expression(bindings, e, Span::new(pos, tq.pos())))
 }
 
-fn parse_struct_type(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
+fn parse_struct_type(tq: &mut TokenQueue, pos: Pos) -> CompileResult<StructDeclaration>
 {
     let (name, _) = try!(tq.expect_identifier());
     try!(tq.expect(TokenKind::Assign));
@@ -346,7 +347,7 @@ fn parse_struct_type(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
         try!(eat_comma(tq));
     }
     try!(tq.expect(TokenKind::CloseCurly));
-    Ok(Expression::StructDeclaration(struct_declaration(&name, members, Span::new(pos, tq.pos()))))
+    Ok(struct_declaration(&name, members, Span::new(pos, tq.pos())))
 }
 
 fn parse_struct_initializer(tq: &mut TokenQueue, struct_name: NameRef) -> CompileResult<Expression>
@@ -421,14 +422,7 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
             if tq.is_next(TokenKind::OpenParen)
             {
                 try!(tq.pop());
-                if tq.is_next_at(1, TokenKind::Colon) || tq.is_next_at(1, TokenKind::Arrow) || tq.is_next_at(1, TokenKind::Assign)
-                {
-                    parse_function_definition(tq, nr).map(|f| Expression::Function(f))
-                }
-                else
-                {
-                    parse_function_call(tq, nr).map(|c| Expression::Call(c))
-                }
+                parse_function_call(tq, nr).map(|c| Expression::Call(c))
             }
             else if tq.is_next(TokenKind::OpenCurly)
             {
@@ -454,7 +448,7 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
 
         TokenKind::Operator(op) => parse_unary_expression(tq, op, tok.span.start),
 
-        TokenKind::Type => parse_struct_type(tq, tok.span.start),
+
 
         _ => err(tok.span.start, ErrorCode::UnexpectedToken, format!("Unexpected token '{}'", tok)),
     }
@@ -505,25 +499,27 @@ pub fn parse_module<Input: Read>(input: &mut Input, name: &str) -> CompileResult
     let mut structs = HashMap::new();
     while !tq.is_next(TokenKind::EOF)
     {
-        let e = try!(parse_expression(&mut tq));
-        match e
+        let tok = try!(tq.pop());
+        match tok.kind
         {
-            Expression::Function(func) => {
-                let pos = func.span.start;
-                if funcs.contains_key(&func.sig.name) {
-                    return err(pos, ErrorCode::RedefinitionOfFunction, format!("Function {} redefined", func.sig.name));
-                }
-                funcs.insert(func.sig.name.clone(), func);
-            },
-            Expression::StructDeclaration(sd) => {
+            TokenKind::Type => {
+                let sd = try!(parse_struct_type(&mut tq, tok.span.start));
                 let pos = sd.span.start;
                 if structs.contains_key(&sd.name) {
                     return err(pos, ErrorCode::RedefinitionOfStruct, format!("Struct {} redefined", sd.name));
                 }
                 structs.insert(sd.name.clone(), sd);
             },
+            TokenKind::Identifier(ref id) => {
+                let func = try!(parse_function_definition(&mut tq, &id, tok.span.start));
+                let pos = func.span.start;
+                if funcs.contains_key(&func.sig.name) {
+                    return err(pos, ErrorCode::RedefinitionOfFunction, format!("Function {} redefined", func.sig.name));
+                }
+                funcs.insert(func.sig.name.clone(), func);
+            }
             _ => {
-                return err(e.span().start, ErrorCode::ExpressionNotAllowedAtTopLevel, format!("Expression is not allowed at toplevel"));
+                return err(tok.span.start, ErrorCode::ExpressionNotAllowedAtTopLevel, format!("Expression is not allowed at toplevel"));
             }
         }
     }

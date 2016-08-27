@@ -5,7 +5,7 @@ use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral, ArrayGen
     StructInitializer, StructMemberAccess, StructMember, func_type, array_type, slice_type};
 use compileerror::{CompileResult, CompileError, Pos, ErrorCode, err, unknown_name};
 use parser::{Operator};
-use passes::{instantiate_generics, fill_in_generics, substitute_types, resolve_types, resolve_function_args_and_ret_type};
+use passes::{instantiate_generics, fill_in_generics, substitute_types, resolve_types};
 
 
 pub struct StackFrame
@@ -570,15 +570,6 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::ArrayToSliceConversion(ref mut inner) => type_check_expression(ctx, inner, type_hint),
         Expression::StructInitializer(ref mut si) => type_check_struct_initializer(ctx, si),
         Expression::StructMemberAccess(ref mut sma) => type_check_struct_member_access(ctx, sma),
-
-        // We should never get here in toplevel statements
-        Expression::Function(ref mut f) => {
-            try!(resolve_function_args_and_ret_type(ctx, f));
-            type_check_function(ctx, f)
-        },
-        Expression::StructDeclaration(ref sd) => {
-            ctx.resolve_type(&sd.name).ok_or(unknown_name(sd.span.start, &sd.name))
-        },
     }
 }
 

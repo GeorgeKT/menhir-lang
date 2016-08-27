@@ -1,10 +1,10 @@
 use std::io::Cursor;
-use ast::{Expression, NameRef, TreePrinter, Function, Argument, Call, Type,
+use ast::{Expression, NameRef, TreePrinter, Function, Argument, Call, Type, Module,
     sig, unary_op, bin_op, array_lit, match_expression, match_case, array_pattern, array_generator,
     lambda, let_expression, let_binding, struct_member, struct_declaration, struct_initializer,
     struct_member_access};
 use compileerror::{Span, span};
-use parser::{Lexer, Operator, parse_expression};
+use parser::{Lexer, Operator, parse_expression, parse_module};
 
 pub fn th_expr(data: &str) -> Expression
 {
@@ -14,6 +14,15 @@ pub fn th_expr(data: &str) -> Expression
     println!("AST dump:");
     e.print(0);
     e
+}
+
+pub fn th_mod(data: &str) -> Module
+{
+    let mut cursor = Cursor::new(data);
+    let md = parse_module(&mut cursor, "test").expect("Parsing failed");
+    println!("AST dump:");
+    md.print(0);
+    md
 }
 
 
@@ -316,8 +325,8 @@ fn arg(name: &str, typ: Type, span: Span) -> Argument
 #[test]
 fn test_function_with_args()
 {
-    let e = th_expr("foo(a: int, b: int) -> int = 7");
-    assert!(e == Expression::Function(Function::new(
+    let md = th_mod("foo(a: int, b: int) -> int = 7");
+    assert!(*md.functions.get("foo").unwrap() == Function::new(
         sig(
             "foo",
             Type::Int,
@@ -330,14 +339,14 @@ fn test_function_with_args()
         true,
         number(7, span(1, 30, 1, 30)),
         span(1, 1, 1, 30))
-    ))
+    )
 }
 
 #[test]
 fn test_function_with_no_args()
 {
-    let e = th_expr("foo() -> int = 7");
-    assert!(e == Expression::Function(Function::new(
+    let md = th_mod("foo() -> int = 7");
+    assert!(*md.functions.get("foo").unwrap() == Function::new(
         sig(
             "foo",
             Type::Int,
@@ -347,14 +356,14 @@ fn test_function_with_no_args()
         true,
         number(7, span(1, 16, 1, 16)),
         span(1, 1, 1, 16))
-    ))
+    )
 }
 
 #[test]
 fn test_function_with_no_return_type()
 {
-    let e = th_expr("foo() = 7");
-    assert!(e == Expression::Function(Function::new(
+    let md = th_mod("foo() = 7");
+    assert!(*md.functions.get("foo").unwrap() == Function::new(
         sig(
             "foo",
             Type::Void,
@@ -364,14 +373,14 @@ fn test_function_with_no_return_type()
         true,
         number(7, span(1, 9, 1, 9)),
         span(1, 1, 1, 9))
-    ))
+    )
 }
 
 #[test]
 fn test_function_with_func_type()
 {
-    let e = th_expr("foo(a: (int, int) -> int) = 7");
-    assert!(e == Expression::Function(Function::new(
+    let md = th_mod("foo(a: (int, int) -> int) = 7");
+    assert!(*md.functions.get("foo").unwrap() == Function::new(
         sig(
             "foo",
             Type::Void,
@@ -393,7 +402,7 @@ fn test_function_with_func_type()
         true,
         number(7, span(1, 29, 1, 29)),
         span(1, 1, 1, 29))
-    ))
+    )
 }
 
 
@@ -455,17 +464,17 @@ let x = 5, y = 7 in x * y
 #[test]
 fn test_struct()
 {
-    let e = th_expr(r#"
+    let md = th_mod(r#"
 type Point = {x: int, y: int}
 "#);
-    assert!(e == Expression::StructDeclaration(struct_declaration(
+    assert!(*md.structs.get("Point").unwrap() == struct_declaration(
         "Point",
         vec![
             struct_member("x", Type::Int, span(2, 15, 2, 20)),
             struct_member("y", Type::Int, span(2, 23, 2, 28)),
         ],
         span(2, 1, 2, 29))
-    ))
+    )
 }
 
 #[test]

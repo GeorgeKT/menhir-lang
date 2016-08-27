@@ -1,6 +1,6 @@
 use compileerror::{Span, CompileResult, ErrorCode, err};
-use ast::{Call, ArrayLiteral, ArrayPattern, ArrayGenerator, NameRef, BinaryOp, UnaryOp, Function,
-    MatchExpression, TreePrinter, Lambda, LetExpression, StructDeclaration, StructInitializer, StructMemberAccess, prefix};
+use ast::{Call, ArrayLiteral, ArrayPattern, ArrayGenerator, NameRef, BinaryOp, UnaryOp,
+    MatchExpression, TreePrinter, Lambda, LetExpression, StructInitializer, StructMemberAccess, prefix};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
@@ -17,11 +17,9 @@ pub enum Expression
     Enclosed(Span, Box<Expression>), // Expression enclosed between parens
     Call(Call),
     NameRef(NameRef),
-    Function(Function),
     Match(MatchExpression),
     Lambda(Lambda),
     Let(Box<LetExpression>),
-    StructDeclaration(StructDeclaration),
     StructInitializer(StructInitializer),
     StructMemberAccess(StructMemberAccess),
 
@@ -75,12 +73,10 @@ impl Expression
             Expression::Enclosed(span, _) => span,
             Expression::Call(ref c) => c.span,
             Expression::NameRef(ref nr) => nr.span,
-            Expression::Function(ref f) => f.span,
             Expression::Match(ref m) => m.span,
             Expression::Lambda(ref l) => l.span,
             Expression::Let(ref l) => l.span,
             Expression::ArrayToSliceConversion(ref e) => e.span(),
-            Expression::StructDeclaration(ref sd) => sd.span,
             Expression::StructInitializer(ref si) => si.span,
             Expression::StructMemberAccess(ref sma) => sma.span,
         }
@@ -142,11 +138,9 @@ impl TreePrinter for Expression
             },
             Expression::Call(ref c) => c.print(level),
             Expression::NameRef(ref nr) => nr.print(level),
-            Expression::Function(ref f) => f.print(level),
             Expression::Match(ref m) => m.print(level),
             Expression::Lambda(ref l) => l.print(level),
             Expression::Let(ref l) => l.print(level),
-            Expression::StructDeclaration(ref sd) => sd.print(level),
             Expression::StructInitializer(ref si) => si.print(level),
             Expression::StructMemberAccess(ref sma) => sma.print(level),
             Expression::ArrayToSliceConversion(ref e) => {

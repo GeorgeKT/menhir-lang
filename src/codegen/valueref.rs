@@ -2,7 +2,7 @@ use llvm::prelude::*;
 use llvm::core::*;
 use llvm::*;
 
-use codegen::{Context, Array, Slice, Sequence, cstr};
+use codegen::{Context, Array, Slice, Sequence, StructValue, cstr};
 use compileerror::{Pos, CompileResult, ErrorCode, err};
 
 
@@ -15,19 +15,13 @@ pub enum ValueRef
     Global(LLVMValueRef),
     Array(Array),
     Slice(Slice),
+    Struct(StructValue),
 }
 
 pub fn is_same_kind(a: LLVMTypeKind, b: LLVMTypeKind) -> bool
 {
     (a as usize) == (b as usize)
 }
-
-/*
-pub unsafe fn is_pointer(t: LLVMTypeRef) -> bool
-{
-    is_same_kind(LLVMGetTypeKind(t), LLVMTypeKind::LLVMPointerTypeKind)
-}
-*/
 
 impl ValueRef
 {
@@ -58,6 +52,11 @@ impl ValueRef
         ValueRef::Array(Array::alloc(ctx, element_type, len))
     }
 
+    pub unsafe fn alloc_struct(ctx: &Context, struct_type: LLVMTypeRef) -> ValueRef
+    {
+        ValueRef::Struct(StructValue::alloc(ctx, struct_type))
+    }
+
     pub fn slice(slice: Slice) -> ValueRef
     {
         ValueRef::Slice(slice)
@@ -72,6 +71,7 @@ impl ValueRef
             ValueRef::Global(ptr) => LLVMBuildLoad(builder, ptr, cstr("load")),
             ValueRef::Array(ref arr) => arr.get(),
             ValueRef::Slice(ref slice) => slice.get(),
+            ValueRef::Struct(ref sv) => sv.get(),
         }
     }
 
@@ -84,6 +84,7 @@ impl ValueRef
             ValueRef::Global(ptr) => ptr,
             ValueRef::Array(ref arr) => arr.get(),
             ValueRef::Slice(ref slice) => slice.get(),
+            ValueRef::Struct(ref sv) => sv.get(),
         }
     }
 
@@ -107,6 +108,9 @@ impl ValueRef
             },
             ValueRef::Slice(_) => {
                 err(pos, ErrorCode::CodegenError, format!("Cannot store a slice"))
+            },
+            ValueRef::Struct(_) => {
+                err(pos, ErrorCode::CodegenError, format!("Cannot store a struct"))
             },
         }
     }
@@ -132,32 +136,12 @@ impl ValueRef
             ValueRef::Slice(_) => {
                 err(pos, ErrorCode::CodegenError, format!("Cannot store a slice"))
             },
+            ValueRef::Struct(_) => {
+                err(pos, ErrorCode::CodegenError, format!("Cannot store a struct"))
+            },
         }
     }
 
-/*
-    pub unsafe fn get_element_type(&self, pos: Pos) -> CompileResult<LLVMTypeRef>
-    {
-        match *self
-        {
-            ValueRef::Const(_) => {
-                err(pos, ErrorCode::CodegenError, format!("Const values don't have an element type"))
-            },
-            ValueRef::Array(ref arr) => {
-                Ok(arr.get_element_type()) // arr is a pointer to an array
-            },
-            ValueRef::Ptr(ptr) => {
-                Ok(LLVMGetElementType(LLVMTypeOf(ptr)))
-            },
-            ValueRef::Global(ptr) => {
-                Ok(LLVMGetElementType(LLVMTypeOf(ptr)))
-            },
-            ValueRef::Slice(ref slice) => {
-                Ok(slice.get_element_type())
-            },
-        }
-    }
-*/
     pub unsafe fn index(&self, ctx: &Context, index: LLVMValueRef, pos: Pos) -> CompileResult<ValueRef>
     {
         match *self
@@ -165,6 +149,15 @@ impl ValueRef
             ValueRef::Array(ref arr) => Ok(arr.get_element(ctx, index)),
             ValueRef::Slice(ref slice) => Ok(slice.get_element(ctx, index)),
             _ => err(pos, ErrorCode::CodegenError, format!("Attempting to get an array element from a none array")),
+        }
+    }
+
+    pub unsafe fn member(&self, ctx: &Context, idx: usize, pos: Pos) -> CompileResult<ValueRef>
+    {
+        match *self
+        {
+            ValueRef::Struct(ref vr) => Ok(vr.get_member_ptr(ctx, idx)),
+            _ => err(pos, ErrorCode::CodegenError, format!("Attempting to get a struct member from a none struct")),
         }
     }
 }

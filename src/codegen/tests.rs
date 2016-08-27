@@ -282,14 +282,12 @@ main() -> int =
 #[test]
 fn test_structs() {
     let r = run(r#"
-type Point = {x: int, y: int}
+type Vec2D = {x: int, y: int}
 
-add(a: Point, b: Point) -> Point =
-    Point{a.x + b.x, a.y + b.y}
+dot(a: Vec2D, b: Vec2D) -> int = a.x * b.x + a.y * b.y
 
-main() -> int =
-    let p = add(Point{4, 5}, Point{5, 6}) in p.x + p.y
+main() -> int = dot(Vec2D{4, 5}, Vec2D{5, 6})
     "#, false);
     println!("r: {:?}", r);
-    assert!(r == Ok(20));
+    assert!(r == Ok(50));
 }

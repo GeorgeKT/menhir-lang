@@ -4,6 +4,7 @@ mod expressions;
 mod linker;
 mod slice;
 mod symboltable;
+mod structvalue;
 mod valueref;
 #[cfg(test)]
 mod tests;
@@ -25,6 +26,7 @@ pub use codegen::linker::link;
 pub use codegen::valueref::ValueRef;
 pub use codegen::slice::Slice;
 pub use codegen::array::Array;
+pub use codegen::structvalue::StructValue;
 
 pub trait Sequence
 {
@@ -101,7 +103,7 @@ pub struct CodeGenOptions
 }
 
 fn gen_module(ctx: &mut Context, module: &Module) -> CompileResult<()>
-{    
+{
     for ref func in module.functions.values() {
         if !func.is_generic() {
             unsafe {

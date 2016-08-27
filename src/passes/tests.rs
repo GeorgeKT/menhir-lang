@@ -1,5 +1,5 @@
-use parser::th_expr;
-use passes::typechecker::{TypeCheckerContext, type_check_expression};
+use parser::{th_expr, th_mod};
+use passes::typechecker::{TypeCheckerContext, type_check_expression, type_check_module};
 use ast::Type;
 use compileerror::{CompileResult, ErrorCode};
 
@@ -8,6 +8,15 @@ fn type_check(expr: &str) -> CompileResult<Type>
 	let mut ctx = TypeCheckerContext::new();
 	let mut e = th_expr(expr);
 	let r = type_check_expression(&mut ctx, &mut e, None);
+	println!("result: {:?}", r);
+	r
+}
+
+
+fn type_check_mod(expr: &str) -> CompileResult<()>
+{
+	let mut md = th_mod(expr);
+	let r = type_check_module(&mut md);
 	println!("result: {:?}", r);
 	r
 }
@@ -60,28 +69,28 @@ fn test_arrays()
 #[test]
 fn test_function()
 {
-	assert!(type_check("add(a: int, b: int) -> int = a + b").is_ok());
-	assert!(type_check("add(a: int, b: int) -> int = 7.5").unwrap_err().error == ErrorCode::TypeError);
+	assert!(type_check_mod("add(a: int, b: int) -> int = a + b").is_ok());
+	assert!(type_check_mod("add(a: int, b: int) -> int = 7.5").unwrap_err().error == ErrorCode::TypeError);
 }
 
 #[test]
 fn test_match()
 {
-	assert!(type_check(r#"
+	assert!(type_check_mod(r#"
 foo(x: [int]) -> int =
 	match x
 		[] => 0,
 		[head | tail] => head + foo(tail)
 "#).is_ok());
 
-	assert!(type_check(r#"
+	assert!(type_check_mod(r#"
 foo(x: [int]) -> int =
 	match x
 		7 => 0,
 		[head | tail] => head + foo(tail)
 "#).unwrap_err().error == ErrorCode::TypeError);
 
-	assert!(type_check(r#"
+	assert!(type_check_mod(r#"
 foo(x: int) -> int =
 	match x
 		7 => 8,

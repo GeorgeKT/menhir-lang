@@ -7,7 +7,7 @@ use llvm::prelude::*;
 use llvm::*;
 
 use ast::{Expression, UnaryOp, BinaryOp, FunctionSignature, Call, NameRef, MatchExpression, MatchCase, LetExpression,
-    ArrayLiteral, ArgumentPassingMode, ArrayPattern, Type, Lambda, anon_sig};
+    ArrayLiteral, ArgumentPassingMode, ArrayPattern, Type, Lambda, StructInitializer, anon_sig};
 use parser::Operator;
 use codegen::{cstr, Context, ValueRef, Slice, Sequence, Array};
 use codegen::symboltable::{FunctionInstance};
@@ -649,6 +649,7 @@ pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: &Valu
     match *e
     {
         Expression::ArrayLiteral(ref a) => gen_array_literal_store(ctx, a, ptr),
+        Expression::StructInitializer(ref si) => gen_struct_initializer_store(ctx, si, ptr),
         _ => store(ctx, e, &ptr),
     }
 }
@@ -668,6 +669,25 @@ pub unsafe fn gen_array_to_slice_conversion(ctx: &mut Context, e: &Expression) -
     }
 }
 
+unsafe fn gen_struct_initializer_store(ctx: &mut Context, si: &StructInitializer, struct_var: &ValueRef) -> CompileResult<()>
+{
+    for (idx, ref member_init) in si.member_initializers.iter().enumerate() {
+        let member_ptr = try!(struct_var.member(ctx, idx, si.span.start));
+        try!(gen_expression_store(ctx, member_init, &member_ptr));
+    }
+
+    Ok(())
+}
+
+unsafe fn gen_struct_initializer(ctx: &mut Context, si: &StructInitializer) -> CompileResult<ValueRef>
+{
+    let llvm_type = try!(ctx.resolve_type(&si.typ)
+        .ok_or(CompileError::new(si.span.start, ErrorCode::TypeError, format!("Unknown type '{}'", si.struct_name))));
+    let var = ValueRef::alloc_struct(ctx, llvm_type);
+    try!(gen_struct_initializer_store(ctx, si, &var));
+    Ok(var)
+}
+
 pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueRef>
 {
     unsafe
@@ -681,7 +701,6 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::ArrayGenerator(ref a) => err(a.span.start, ErrorCode::UnexpectedEOF, format!("NYI gen_expression ArrayGenerator")),
             Expression::Call(ref c) => gen_call(ctx, c),
             Expression::NameRef(ref nr) => gen_name_ref(ctx, nr),
-            Expression::Function(ref f) => gen_function(ctx, &f.sig, &f.expression),
             Expression::Match(ref m) => gen_match(ctx, m),
             Expression::Lambda(ref l) => gen_lambda(ctx, l),
             Expression::Let(ref l) => gen_let(ctx, l),
@@ -691,9 +710,8 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::StringLiteral(ref span, ref s)  => gen_string_literal(ctx, s, span),
             Expression::BoolLiteral(_, v) => gen_bool(ctx, v),
             Expression::ArrayToSliceConversion(ref e) => gen_array_to_slice_conversion(ctx, e),
-            Expression::StructDeclaration(ref sd) => err(sd.span.start, ErrorCode::UnexpectedEOF, format!("NYI gen_expression StructDeclaration")),
-            Expression::StructInitializer(ref si) => err(si.span.start, ErrorCode::UnexpectedEOF, format!("NYI gen_expression StructInitializer")),
-            Expression::StructMemberAccess(ref sma) => err(sma.span.start, ErrorCode::UnexpectedEOF, format!("NYI gen_expression StructMemberAccess")),
+            Expression::StructInitializer(ref si) => gen_struct_initializer(ctx, si),
+            Expression::StructMemberAccess(ref sma) =>  err(sma.span.start, ErrorCode::UnexpectedEOF, format!("NYI gen_expression StructMemberAccess")),
         }
     }
 }
