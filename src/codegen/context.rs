@@ -201,37 +201,38 @@ impl Context
         Ok(obj_file_name)
     }
 
-    pub fn optimize(&self, target_machine: LLVMTargetMachineRef) -> CompileResult<()>
+    pub unsafe fn optimize(&self, target_machine: LLVMTargetMachineRef) -> CompileResult<()>
     {
-        unsafe{
-            use llvm::transforms::pass_manager_builder::*;
+        use llvm::transforms::pass_manager_builder::*;
 
-            let pass_builder = LLVMPassManagerBuilderCreate();
-            LLVMPassManagerBuilderSetOptLevel(pass_builder, 3);
-            LLVMPassManagerBuilderSetSizeLevel(pass_builder, 0);
+        let pass_builder = LLVMPassManagerBuilderCreate();
+        LLVMPassManagerBuilderSetOptLevel(pass_builder, 3);
+        LLVMPassManagerBuilderSetSizeLevel(pass_builder, 0);
 
-            let function_passes = LLVMCreateFunctionPassManagerForModule(self.module);
-            let module_passes = LLVMCreatePassManager();
+        let function_passes = LLVMCreateFunctionPassManagerForModule(self.module);
+        let module_passes = LLVMCreatePassManager();
+        let lto_passes = LLVMCreatePassManager();
 
-            LLVMAddTargetData(LLVMGetTargetMachineData(target_machine), module_passes);
+        LLVMAddTargetData(LLVMGetTargetMachineData(target_machine), module_passes);
 
-            LLVMPassManagerBuilderPopulateFunctionPassManager(pass_builder, function_passes);
-            LLVMPassManagerBuilderPopulateModulePassManager(pass_builder, module_passes);
+        LLVMPassManagerBuilderPopulateFunctionPassManager(pass_builder, function_passes);
+        LLVMPassManagerBuilderPopulateModulePassManager(pass_builder, module_passes);
+        LLVMPassManagerBuilderPopulateLTOPassManager(pass_builder, lto_passes, 1, 1);
+        LLVMPassManagerBuilderDispose(pass_builder);
 
-            LLVMPassManagerBuilderDispose(pass_builder);
+        LLVMInitializeFunctionPassManager(function_passes);
 
-            LLVMInitializeFunctionPassManager(function_passes);
-
-            let mut func = LLVMGetFirstFunction(self.module);
-            while func != ptr::null_mut() {
-                LLVMRunFunctionPassManager(function_passes, func);
-                func = LLVMGetNextFunction(func);
-            }
-
-            LLVMRunPassManager(module_passes, self.module);
-            LLVMDisposePassManager(function_passes);
-            LLVMDisposePassManager(module_passes);
+        let mut func = LLVMGetFirstFunction(self.module);
+        while func != ptr::null_mut() {
+            LLVMRunFunctionPassManager(function_passes, func);
+            func = LLVMGetNextFunction(func);
         }
+
+        LLVMRunPassManager(module_passes, self.module);
+        LLVMRunPassManager(lto_passes, self.module);
+        LLVMDisposePassManager(function_passes);
+        LLVMDisposePassManager(module_passes);
+        LLVMDisposePassManager(lto_passes);
         Ok(())
     }
 

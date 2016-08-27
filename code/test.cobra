@@ -1,7 +1,12 @@
 type Vec2D = {x: int, y: int}
 
+dot(a: Vec2D, b: Vec2D) -> int =
+    a.x * b.x + a.y * b.y
+
 add(a: Vec2D, b: Vec2D) -> Vec2D =
     Vec2D{a.x + b.x, a.y + b.y}
 
 main() -> int =
-    let v = add(Vec2D{4, 5}, Vec2D{5, 6}) in v.x + v.y
+    let w = Vec2D{8, 8},
+        v = add(Vec2D{4, 5}, Vec2D{5, 6})
+    in dot(v, w)

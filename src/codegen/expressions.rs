@@ -454,6 +454,7 @@ unsafe fn gen_equals(
     {
         (&ValueRef::Const(lv), &ValueRef::Const(rv)) => Ok(gen_llvm_equals(ctx, lv, rv, on_equals_bb, on_not_equals_bb)),
         (&ValueRef::Ptr(_), &ValueRef::Ptr(_)) => Ok(gen_llvm_equals(ctx, left.load(ctx.builder), right.load(ctx.builder), on_equals_bb, on_not_equals_bb)),
+        (&ValueRef::Global(_), &ValueRef::Global(_)) => Ok(gen_llvm_equals(ctx, left.load(ctx.builder), right.load(ctx.builder), on_equals_bb, on_not_equals_bb)),
         (&ValueRef::Array(ref l), &ValueRef::Array(ref r)) => gen_equals_seq(ctx, l, r, on_equals_bb, on_not_equals_bb),
         (&ValueRef::Array(ref l), &ValueRef::Slice(ref r)) => gen_equals_seq(ctx, l, r, on_equals_bb, on_not_equals_bb),
         (&ValueRef::Slice(ref l), &ValueRef::Slice(ref r)) => gen_equals_seq(ctx, l, r, on_equals_bb, on_not_equals_bb),
