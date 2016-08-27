@@ -301,9 +301,9 @@ impl Context
                 LLVMStructType(llvm_member_types.as_mut_ptr(), llvm_member_types.len() as c_uint, 0)
             },
             Type::String => panic!("Not yet implemented"),
-            Type::Generic(_) => panic!("Internal Compiler Error: All generic types must have been resolved during code generation"),
-            Type::Unresolved(_) => panic!("Internal Compiler Error: All types must be resolved during code generation"),
-            Type::Unknown => panic!("Internal Compiler Error: all types must be known during code generation"),
+            Type::Generic(_) => panic!("Internal Compiler Error: All generic types must have been resolved before code generation"),
+            Type::Unresolved(_) => panic!("Internal Compiler Error: All types must be resolved before code generation"),
+            Type::Unknown => panic!("Internal Compiler Error: all types must be known before code generation"),
         }
     }
 

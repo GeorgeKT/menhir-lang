@@ -26,7 +26,7 @@ impl StructValue
     pub unsafe fn alloc(ctx: &Context, llvm_type: LLVMTypeRef, member_types: Vec<Type>) -> StructValue
     {
         StructValue{
-            value: ctx.alloc(llvm_type, "array"),
+            value: ctx.alloc(llvm_type, "struct"),
             member_types: member_types,
         }
     }

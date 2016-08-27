@@ -1,7 +1,7 @@
-type Point = {x: int, y: int}
+type Vec2D = {x: int, y: int}
 
-add(a: Point, b: Point) -> Point =
-    Point{a.x + b.x, a.y + b.y}
+add(a: Vec2D, b: Vec2D) -> Vec2D =
+    Vec2D{a.x + b.x, a.y + b.y}
 
 main() -> int =
-    let p = add(Point{4, 5}, Point{5, 6}) in p.x + p.y
+    let v = add(Vec2D{4, 5}, Vec2D{5, 6}) in v.x + v.y

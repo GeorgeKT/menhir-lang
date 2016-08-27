@@ -291,3 +291,17 @@ main() -> int = dot(Vec2D{4, 5}, Vec2D{5, 6})
     println!("r: {:?}", r);
     assert!(r == Ok(50));
 }
+
+#[test]
+fn test_complex_return_types() {
+    let r = run(r#"
+type Vec2D = {x: int, y: int}
+
+add(a: Vec2D, b: Vec2D) -> Vec2D = Vec2D{a.x + b.x,  a.y + b.y}
+
+main() -> int =
+    let v = add(Vec2D{4, 5}, Vec2D{5, 6}) in v.x + v.y
+    "#, true);
+    println!("r: {:?}", r);
+    assert!(r == Ok(20));
+}

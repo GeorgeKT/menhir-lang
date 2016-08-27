@@ -172,68 +172,52 @@ unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> CompileResult<Value
     v.map(|val| ValueRef::const_value(val))
 }
 
-
-pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature) -> CompileResult<FunctionInstance>
+unsafe fn make_function_instance(ctx: &mut Context, sig: &FunctionSignature) -> CompileResult<FunctionInstance>
 {
-    let ret_type = ctx.resolve_type(&sig.return_type);
-
-    let mut arg_types = Vec::new();
-    let mut arg_types_with_passing_mode = Vec::new();
-    for arg in &sig.args {
+    let mut ret_type = ctx.resolve_type(&sig.return_type);
+    let mut arg_types_with_passing_mode: Vec<_> = sig.args.iter().map(|arg| {
         let arg_type = ctx.resolve_type(&arg.typ);
         match arg.passing_mode
         {
             ArgumentPassingMode::ByValue => {
-                arg_types.push(arg_type);
-                arg_types_with_passing_mode.push((arg_type, arg.passing_mode));
+                (arg_type, arg.passing_mode)
             },
             ArgumentPassingMode::ByPtr => {
                 let arg_ptr_type = LLVMPointerType(arg_type, 0);
-                arg_types.push(arg_ptr_type);
-                arg_types_with_passing_mode.push((arg_ptr_type, arg.passing_mode));
+                (arg_ptr_type, arg.passing_mode)
             }
         }
-    }
+    }).collect();
 
-    let name = sig.name.clone();
-
-    let function_type = LLVMFunctionType(ret_type, arg_types.as_mut_ptr(), arg_types.len() as libc::c_uint, 0);
-    let function = LLVMAddFunction(ctx.module, cstr(&name), function_type);
-
-    Ok(FunctionInstance{
-        name: name,
-        args: arg_types_with_passing_mode,
-        return_type: ret_type,
-        function: function,
-        sig: sig.clone(),
-    })
-}
-
-pub unsafe fn gen_function_ptr(ctx: &mut Context, func_ptr: LLVMValueRef, sig: FunctionSignature) -> CompileResult<FunctionInstance>
-{
-    let ret_type = ctx.resolve_type(&sig.return_type);
-    let mut arg_types_with_passing_mode = Vec::new();
-    for arg in &sig.args {
-        let arg_type = ctx.resolve_type(&arg.typ);
-        match arg.passing_mode
-        {
-            ArgumentPassingMode::ByValue => {
-                arg_types_with_passing_mode.push((arg_type, arg.passing_mode));
-            },
-            ArgumentPassingMode::ByPtr => {
-                let arg_ptr_type = LLVMPointerType(arg_type, 0);
-                arg_types_with_passing_mode.push((arg_ptr_type, arg.passing_mode));
-            }
-        }
+    if sig.return_type.return_by_ptr() {
+        arg_types_with_passing_mode.push((LLVMPointerType(ret_type, 0), ArgumentPassingMode::ByPtr));
+        ret_type = LLVMVoidTypeInContext(ctx.context);
     }
 
     Ok(FunctionInstance{
         name: sig.name.clone(),
         args: arg_types_with_passing_mode,
         return_type: ret_type,
-        function: func_ptr,
-        sig: sig,
+        function: ptr::null_mut(),
+        sig: sig.clone(),
     })
+}
+
+
+pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature) -> CompileResult<FunctionInstance>
+{
+    let mut fi = try!(make_function_instance(ctx, sig));
+    let mut arg_types: Vec<LLVMTypeRef> = fi.args.iter().map(|&(typ, _)| typ).collect();
+    let function_type = LLVMFunctionType(fi.return_type, arg_types.as_mut_ptr(), arg_types.len() as libc::c_uint, 0);
+    fi.function = LLVMAddFunction(ctx.module, cstr(&sig.name), function_type);
+    Ok(fi)
+}
+
+pub unsafe fn gen_function_ptr(ctx: &mut Context, func_ptr: LLVMValueRef, sig: FunctionSignature) -> CompileResult<FunctionInstance>
+{
+    let mut fi = try!(make_function_instance(ctx, &sig));
+    fi.function = func_ptr;
+    Ok(fi)
 }
 
 pub unsafe fn gen_function(ctx: &mut Context, signature: &FunctionSignature, body: &Expression) -> CompileResult<ValueRef>
@@ -277,9 +261,35 @@ pub unsafe fn gen_function(ctx: &mut Context, signature: &FunctionSignature, bod
         }
     }
 
+    let ret = if signature.return_type.return_by_ptr()
+    {
+        let ret_arg = LLVMGetParam(fi.function, signature.args.len() as libc::c_uint);
+        let mut vr = match signature.return_type
+        {
+            Type::Array(ref element_type, _) => {
+                ValueRef::array(ret_arg, element_type.deref().clone())
+            },
+            Type::Slice(ref element_type) => {
+                ValueRef::slice(ret_arg, element_type.deref().clone())
+            },
+            Type::Struct(_) => {
+                ValueRef::struct_value(ret_arg, signature.return_type.get_member_types())
+            },
+            _ => {
+                return err(body.span().start, ErrorCode::CodegenError, format!("return by pointer is only for arrays, slices and structs"));
+            }
+        };
+        try!(gen_expression_store(ctx, body, &mut vr));
+        LLVMBuildRetVoid(ctx.builder);
+        vr
+    }
+    else
+    {
+        let ret = try!(gen_expression(ctx, body));
+        LLVMBuildRet(ctx.builder, ret.load(ctx.builder));
+        ret
+    };
 
-    let ret = try!(gen_expression(ctx, body));
-    LLVMBuildRet(ctx.builder, ret.load(ctx.builder));
     ctx.pop_stack();
 
     if current_bb != ptr::null_mut() {
@@ -287,6 +297,16 @@ pub unsafe fn gen_function(ctx: &mut Context, signature: &FunctionSignature, bod
     }
 
     Ok(ret)
+}
+
+unsafe fn gen_lambda_store(ctx: &mut Context, l: &Lambda, ptr: &mut ValueRef) -> CompileResult<()>
+{
+    let fi = try!(gen_function_sig(ctx, &l.sig));
+    let ret = fi.function;
+    ctx.add_function(Rc::new(fi));
+    try!(gen_function(ctx, &l.sig, &l.expr));
+    *ptr = ValueRef::Ptr(ret);
+    Ok(())
 }
 
 unsafe fn gen_lambda(ctx: &mut Context, l: &Lambda) -> CompileResult<ValueRef>
@@ -298,14 +318,9 @@ unsafe fn gen_lambda(ctx: &mut Context, l: &Lambda) -> CompileResult<ValueRef>
     Ok(ValueRef::Ptr(ret))
 }
 
-unsafe fn gen_call(ctx: &mut Context, c: &Call) -> CompileResult<ValueRef>
+unsafe fn gen_call_args(ctx: &mut Context, c: &Call, func: &FunctionInstance) -> CompileResult<Vec<LLVMValueRef>>
 {
-    let func = try!(
-        ctx.get_function(&c.callee.name).ok_or(
-            CompileError::new(c.span.start, ErrorCode::UnknownName, format!("Unknown function {}", c.callee.name)))
-    );
-
-    let mut arg_vals = Vec::with_capacity(c.args.len());
+    let mut arg_vals = Vec::with_capacity(func.args.len());
     for (ref arg, passing_mode) in c.args.iter().zip(func.args.iter().map(|&(_, passing_mode)| passing_mode.clone()))
     {
         let a = try!(gen_expression(ctx, &arg));
@@ -314,15 +329,56 @@ unsafe fn gen_call(ctx: &mut Context, c: &Call) -> CompileResult<ValueRef>
             ArgumentPassingMode::ByValue => arg_vals.push(a.load(ctx.builder)),
             ArgumentPassingMode::ByPtr => arg_vals.push(a.get()),
         }
-
     }
+    Ok(arg_vals)
+}
 
-    let call = LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr(""));
-    if c.tail_call {
-        LLVMSetTailCall(call, 1);
+unsafe fn gen_call_store(ctx: &mut Context, c: &Call, ptr: &ValueRef) -> CompileResult<()>
+{
+    let func = try!(
+        ctx.get_function(&c.callee.name).ok_or(
+            CompileError::new(c.span.start, ErrorCode::UnknownName, format!("Unknown function {}", c.callee.name)))
+    );
+
+    let mut arg_vals = try!(gen_call_args(ctx, c, &func));
+    if func.sig.return_type.return_by_ptr()
+    {
+        arg_vals.push(ptr.get());
+        LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr(""));
+        Ok(())
     }
+    else
+    {
+        let call_ret = LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr(""));
+        ptr.store(ctx, ValueRef::Const(call_ret), c.span.start)
+    }
+}
 
-    Ok(ValueRef::const_value(call))
+unsafe fn gen_call(ctx: &mut Context, c: &Call) -> CompileResult<ValueRef>
+{
+    let func = try!(
+        ctx.get_function(&c.callee.name).ok_or(
+            CompileError::new(c.span.start, ErrorCode::UnknownName, format!("Unknown function {}", c.callee.name)))
+    );
+
+    if func.sig.return_type.return_by_ptr()
+    {
+        let vr = ValueRef::alloc(ctx, func.return_type, &func.sig.return_type);
+        try!(gen_call_store(ctx, c, &vr));
+        Ok(vr)
+    }
+    else
+    {
+        let mut arg_vals = try!(gen_call_args(ctx, c, &func));
+        Ok(ValueRef::Const(LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr(""))))
+    }
+}
+
+unsafe fn gen_name_ref_store(ctx: &mut Context, nr: &NameRef, ptr: &mut ValueRef) -> CompileResult<()>
+{
+    let v = try!(gen_name_ref(ctx, nr));
+    *ptr = v;
+    Ok(())
 }
 
 unsafe fn gen_name_ref(ctx: &mut Context, nr: &NameRef) -> CompileResult<ValueRef>
@@ -398,9 +454,6 @@ unsafe fn gen_equals(
     {
         (&ValueRef::Const(lv), &ValueRef::Const(rv)) => Ok(gen_llvm_equals(ctx, lv, rv, on_equals_bb, on_not_equals_bb)),
         (&ValueRef::Ptr(_), &ValueRef::Ptr(_)) => Ok(gen_llvm_equals(ctx, left.load(ctx.builder), right.load(ctx.builder), on_equals_bb, on_not_equals_bb)),
-        (&ValueRef::Global(_), &ValueRef::Ptr(_)) => Ok(gen_llvm_equals(ctx, left.load(ctx.builder), right.load(ctx.builder), on_equals_bb, on_not_equals_bb)),
-        (&ValueRef::Global(_), &ValueRef::Global(_)) => Ok(gen_llvm_equals(ctx, left.load(ctx.builder), right.load(ctx.builder), on_equals_bb, on_not_equals_bb)),
-        (&ValueRef::Ptr(_), &ValueRef::Global(_)) => Ok(gen_llvm_equals(ctx, left.load(ctx.builder), right.load(ctx.builder), on_equals_bb, on_not_equals_bb)),
         (&ValueRef::Array(ref l), &ValueRef::Array(ref r)) => gen_equals_seq(ctx, l, r, on_equals_bb, on_not_equals_bb),
         (&ValueRef::Array(ref l), &ValueRef::Slice(ref r)) => gen_equals_seq(ctx, l, r, on_equals_bb, on_not_equals_bb),
         (&ValueRef::Slice(ref l), &ValueRef::Slice(ref r)) => gen_equals_seq(ctx, l, r, on_equals_bb, on_not_equals_bb),
@@ -509,15 +562,12 @@ unsafe fn gen_match_case(
     }
 }
 
-unsafe fn gen_match(ctx: &mut Context, m: &MatchExpression) -> CompileResult<ValueRef>
+unsafe fn gen_match_store(ctx: &mut Context, m: &MatchExpression, dst: &ValueRef) -> CompileResult<()>
 {
     let target = try!(gen_expression(ctx, &m.target));
     let func = ctx.get_current_function();
-
     let match_end_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("match_end_bb"));
 
-    let ret_type = ctx.resolve_type(&m.typ);
-    let dst = ValueRef::alloc(ctx, ret_type, &m.typ);
     for mc in &m.cases
     {
         try!(gen_match_case(ctx, mc, &target, func, match_end_bb, &dst));
@@ -525,13 +575,19 @@ unsafe fn gen_match(ctx: &mut Context, m: &MatchExpression) -> CompileResult<Val
 
     LLVMBuildBr(ctx.builder, match_end_bb);
     LLVMPositionBuilderAtEnd(ctx.builder, match_end_bb);
+    Ok(())
+}
+
+unsafe fn gen_match(ctx: &mut Context, m: &MatchExpression) -> CompileResult<ValueRef>
+{
+    let ret_type = ctx.resolve_type(&m.typ);
+    let dst = ValueRef::alloc(ctx, ret_type, &m.typ);
+    try!(gen_match_store(ctx, m, &dst));
     Ok(dst)
 }
 
-unsafe fn gen_let(ctx: &mut Context, l: &LetExpression) -> CompileResult<ValueRef>
+unsafe fn gen_let_bindings(ctx: &mut Context, l: &LetExpression) -> CompileResult<()>
 {
-    ctx.push_stack(ptr::null_mut());
-
     for b in &l.bindings
     {
         let b_type = ctx.resolve_type(&b.typ);
@@ -544,13 +600,28 @@ unsafe fn gen_let(ctx: &mut Context, l: &LetExpression) -> CompileResult<ValueRe
                 ctx.add_function(Rc::new(fi));
             },
             _ => {
-                let vr = ValueRef::alloc(ctx, b_type, &b.typ);
-                try!(gen_expression_store(ctx, &b.init, &vr));
+                let mut vr = ValueRef::alloc(ctx, b_type, &b.typ);
+                try!(gen_expression_store(ctx, &b.init, &mut vr));
                 ctx.add_variable(&b.name, vr);
             }
         }
     }
+    Ok(())
+}
 
+unsafe fn gen_let_store(ctx: &mut Context, l: &LetExpression, ptr: &mut ValueRef) -> CompileResult<()>
+{
+    ctx.push_stack(ptr::null_mut());
+    try!(gen_let_bindings(ctx, l));
+    try!(gen_expression_store(ctx, &l.expression, ptr));
+    ctx.pop_stack();
+    Ok(())
+}
+
+unsafe fn gen_let(ctx: &mut Context, l: &LetExpression) -> CompileResult<ValueRef>
+{
+    ctx.push_stack(ptr::null_mut());
+    try!(gen_let_bindings(ctx, l));
     let result = try!(gen_expression(ctx, &l.expression));
     ctx.pop_stack();
     Ok(result)
@@ -626,18 +697,7 @@ unsafe fn gen_const_expression(ctx: &mut Context, e: &Expression) -> CompileResu
 unsafe fn store(ctx: &mut Context, e: &Expression, ptr: &ValueRef) -> CompileResult<()>
 {
     let v = try!(gen_expression(ctx, e));
-    try!(ptr.store(ctx, v, e.span().start));
-    Ok(())
-}
-
-pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: &ValueRef) -> CompileResult<()>
-{
-    match *e
-    {
-        Expression::ArrayLiteral(ref a) => gen_array_literal_store(ctx, a, ptr),
-        Expression::StructInitializer(ref si) => gen_struct_initializer_store(ctx, si, ptr),
-        _ => store(ctx, e, &ptr),
-    }
+    ptr.store(ctx, v, e.span().start)
 }
 
 pub unsafe fn gen_array_to_slice_conversion(ctx: &mut Context, e: &Expression) -> CompileResult<ValueRef>
@@ -658,8 +718,8 @@ pub unsafe fn gen_array_to_slice_conversion(ctx: &mut Context, e: &Expression) -
 unsafe fn gen_struct_initializer_store(ctx: &mut Context, si: &StructInitializer, struct_var: &ValueRef) -> CompileResult<()>
 {
     for (idx, ref member_init) in si.member_initializers.iter().enumerate() {
-        let member_ptr = try!(struct_var.member(ctx, idx, si.span.start));
-        try!(gen_expression_store(ctx, member_init, &member_ptr));
+        let mut member_ptr = try!(struct_var.member(ctx, idx, si.span.start));
+        try!(gen_expression_store(ctx, member_init, &mut member_ptr));
     }
 
     Ok(())
@@ -682,6 +742,22 @@ unsafe fn gen_struct_member_access(ctx: &mut Context, sma: &StructMemberAccess) 
     }
 
     Ok(var)
+}
+
+pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: &mut ValueRef) -> CompileResult<()>
+{
+    match *e
+    {
+        Expression::ArrayLiteral(ref a) => gen_array_literal_store(ctx, a, ptr),
+        Expression::StructInitializer(ref si) => gen_struct_initializer_store(ctx, si, ptr),
+        Expression::Call(ref c) => gen_call_store(ctx, c, ptr),
+        Expression::NameRef(ref nr) => gen_name_ref_store(ctx, nr, ptr),
+        Expression::Match(ref m) => gen_match_store(ctx, m, ptr),
+        Expression::Lambda(ref l) => gen_lambda_store(ctx, l, ptr),
+        Expression::Let(ref l) => gen_let_store(ctx, l, ptr),
+        Expression::Enclosed(_, ref inner) => gen_expression_store(ctx, inner, ptr),
+        _ => store(ctx, e, &ptr),
+    }
 }
 
 pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueRef>

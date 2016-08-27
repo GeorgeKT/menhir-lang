@@ -134,7 +134,16 @@ impl Type
         }
     }
 
-
+    pub fn return_by_ptr(&self) -> bool
+    {
+        match *self
+        {
+            Type::Array(_, _) => true,
+            Type::Slice(_) => true,
+            Type::Struct(_) => true,
+            _ => false,
+        }
+    }
 }
 
 pub fn func_type(args: Vec<Type>, ret: Type) -> Type
