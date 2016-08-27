@@ -10,6 +10,7 @@ mod matchexpression;
 mod nameref;
 mod operations;
 mod structs;
+mod sumtype;
 mod types;
 
 pub use self::arrays::{ArrayLiteral, ArrayPattern, ArrayGenerator, array_lit, array_pattern, array_generator};
@@ -23,8 +24,10 @@ pub use self::nameref::NameRef;
 pub use self::operations::{BinaryOp, UnaryOp, unary_op, bin_op};
 pub use self::structs::{StructDeclaration, StructMember, StructInitializer, StructMemberAccess,
     struct_member, struct_declaration, struct_initializer, struct_member_access};
-pub use self::types::{Type, to_primitive, func_type, array_type, slice_type};
+pub use self::sumtype::{SumType, SumTypeCase, sum_type, sum_type_case};
+pub use self::types::{Type, TypeAlias, to_primitive, func_type, array_type, slice_type, type_alias};
 
+use compileerror::{Span};
 
 fn prefix(level: usize) -> String
 {
@@ -40,11 +43,56 @@ pub trait TreePrinter
     fn print(&self, level: usize);
 }
 
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum TypeDeclaration
+{
+    Struct(StructDeclaration),
+    Sum(SumType),
+    Alias(TypeAlias),
+}
+
+impl TypeDeclaration
+{
+    pub fn span(&self) -> Span
+    {
+        match *self
+        {
+            TypeDeclaration::Struct(ref sd) => sd.span,
+            TypeDeclaration::Sum(ref s) => s.span,
+            TypeDeclaration::Alias(ref t) => t.span,
+        }
+    }
+
+    pub fn name(&self) -> &str
+    {
+        match *self
+        {
+            TypeDeclaration::Struct(ref sd) => &sd.name,
+            TypeDeclaration::Sum(ref s) => &s.name,
+            TypeDeclaration::Alias(ref t) => &t.name,
+        }
+    }
+}
+
+impl TreePrinter for TypeDeclaration
+{
+    fn print(&self, level: usize)
+    {
+        match *self
+        {
+            TypeDeclaration::Struct(ref sd) => sd.print(level),
+            TypeDeclaration::Sum(ref s) => s.print(level),
+            TypeDeclaration::Alias(ref t) => t.print(level),
+        }
+    }
+}
+
 pub struct Module
 {
     pub name: String,
     pub functions: HashMap<String, Function>,
-    pub structs: HashMap<String, StructDeclaration>,
+    pub types: HashMap<String, TypeDeclaration>,
 }
 
 impl TreePrinter for Module
@@ -53,8 +101,8 @@ impl TreePrinter for Module
     {
         let p = prefix(level);
         println!("{}Module: {}", p, self.name);
-        for ref s in self.structs.values() {
-            s.print(level + 1);
+        for ref t in self.types.values() {
+            t.print(level + 1);
         }
 
         for ref func in self.functions.values() {

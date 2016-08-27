@@ -1,8 +1,8 @@
 use std::io::Cursor;
-use ast::{Expression, NameRef, TreePrinter, Function, Argument, Call, Type, Module,
+use ast::{Expression, NameRef, TreePrinter, Function, Argument, Call, Type, Module, TypeDeclaration,
     sig, unary_op, bin_op, array_lit, match_expression, match_case, array_pattern, array_generator,
     lambda, let_expression, let_binding, struct_member, struct_declaration, struct_initializer,
-    struct_member_access};
+    struct_member_access, sum_type, sum_type_case};
 use compileerror::{Span, span};
 use parser::{Lexer, Operator, parse_expression, parse_module};
 
@@ -467,14 +467,14 @@ fn test_struct()
     let md = th_mod(r#"
 type Point = {x: int, y: int}
 "#);
-    assert!(*md.structs.get("Point").unwrap() == struct_declaration(
+    assert!(*md.types.get("Point").unwrap() == TypeDeclaration::Struct(struct_declaration(
         "Point",
         vec![
             struct_member("x", Type::Int, span(2, 15, 2, 20)),
             struct_member("y", Type::Int, span(2, 23, 2, 28)),
         ],
         span(2, 1, 2, 29))
-    )
+    ))
 }
 
 #[test]
@@ -505,5 +505,63 @@ a.b.c.d
             vec!["b".into(), "c".into(), "d".into()],
             span(2, 1, 2, 7)
         )
+    ))
+}
+
+#[test]
+fn test_sum_types()
+{
+    let md = th_mod(r#"
+type Option = Some | None
+"#);
+    assert!(*md.types.get("Option").unwrap() == TypeDeclaration::Sum(sum_type(
+        "Option",
+        vec![
+            sum_type_case("Some", None, span(2, 15, 2, 18)),
+            sum_type_case("None", None, span(2, 22, 2, 25)),
+        ],
+        span(2, 1, 2, 25))
+    ))
+}
+
+#[test]
+fn test_sum_types_with_data()
+{
+    let md = th_mod(r#"
+type Foo = Bar{int, int} | Foo | Baz{bla: bool}
+"#);
+    assert!(*md.types.get("Foo").unwrap() == TypeDeclaration::Sum(sum_type(
+        "Foo",
+        vec![
+            sum_type_case(
+                "Bar",
+                Some(
+                    struct_declaration(
+                        "Bar",
+                        vec![
+                            struct_member("_0", Type::Int, span(2, 15, 2, 18)),
+                            struct_member("_1", Type::Int, span(2, 19, 2, 23)),
+                        ],
+                        span(2, 12, 2, 24)
+                    )
+                ),
+                span(2, 12, 2, 24)
+            ),
+            sum_type_case("Foo", None, span(2, 28, 2, 30)),
+            sum_type_case(
+                "Baz",
+                Some(
+                    struct_declaration(
+                        "Baz",
+                        vec![
+                            struct_member("bla", Type::Bool, span(2, 38, 2, 46)),
+                        ],
+                        span(2, 34, 2, 47)
+                    )
+                ),
+                span(2, 34, 2, 47)
+            ),
+        ],
+        span(2, 1, 2, 47))
     ))
 }

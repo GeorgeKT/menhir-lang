@@ -2,6 +2,7 @@ use std::fs;
 use std::io::Read;
 use std::collections::HashMap;
 use ast::{Expression, Function, Call, NameRef, Type, Argument, Module, StructDeclaration,
+    TypeDeclaration, SumType, sum_type, sum_type_case, type_alias,
     array_lit, array_pattern, array_generator, unary_op, bin_op, sig, to_primitive,
     match_expression, match_case, lambda, let_expression, let_binding, array_type, slice_type,
     struct_member, struct_declaration, struct_initializer, struct_member_access};
@@ -332,22 +333,87 @@ fn parse_let(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
     Ok(let_expression(bindings, e, Span::new(pos, tq.pos())))
 }
 
-fn parse_struct_type(tq: &mut TokenQueue, pos: Pos) -> CompileResult<StructDeclaration>
+fn parse_type_declaration(tq: &mut TokenQueue, pos: Pos) -> CompileResult<TypeDeclaration>
 {
     let (name, _) = try!(tq.expect_identifier());
     try!(tq.expect(TokenKind::Assign));
+    if tq.is_next(TokenKind::OpenCurly)
+    {
+        let sd = try!(parse_struct_type(tq, &name, pos));
+        Ok(TypeDeclaration::Struct(sd))
+    }
+    else if tq.is_next_at(1, TokenKind::Pipe) || tq.is_next_at(1, TokenKind::OpenCurly)
+    {
+        let st = try!(parse_sum_type(tq, &name, pos));
+        Ok(TypeDeclaration::Sum(st))
+    }
+    else
+    {
+        let typ = try!(parse_type(tq));
+        Ok(TypeDeclaration::Alias(type_alias(&name, typ, Span::new(pos, tq.pos()))))
+    }
+}
+
+
+fn parse_sum_type(tq: &mut TokenQueue, name: &str, pos: Pos) -> CompileResult<SumType>
+{
+    let mut cases = Vec::new();
+    loop
+    {
+        let (case_name, case_name_span) = try!(tq.expect_identifier());
+        if tq.is_next(TokenKind::Pipe)
+        {
+            cases.push(sum_type_case(&case_name, None, case_name_span));
+            try!(tq.pop());
+        }
+        else if tq.is_next(TokenKind::OpenCurly)
+        {
+            let sd = try!(parse_struct_type(tq, &case_name, case_name_span.start));
+            cases.push(sum_type_case(&case_name, Some(sd), Span::new(case_name_span.start, tq.pos())));
+            if tq.is_next(TokenKind::Pipe)
+            {
+                try!(tq.pop());
+            }
+            else
+            {
+                break;
+            }
+        }
+        else
+        {
+            cases.push(sum_type_case(&case_name, None, case_name_span));
+            break;
+        }
+    }
+
+    Ok(sum_type(name, cases, Span::new(pos, tq.pos())))
+}
+
+fn parse_struct_type(tq: &mut TokenQueue, name: &str, pos: Pos) -> CompileResult<StructDeclaration>
+{
     try!(tq.expect(TokenKind::OpenCurly));
     let mut members = Vec::new();
     while !tq.is_next(TokenKind::CloseCurly)
     {
-        let (member_name, member_name_span) = try!(tq.expect_identifier());
-        try!(tq.expect(TokenKind::Colon));
-        let typ = try!(parse_type(tq));
-        members.push(struct_member(&member_name, typ, Span::new(member_name_span.start, tq.pos())));
+        if tq.is_next_at(1, TokenKind::Colon) // Named struct member
+        {
+            let (member_name, member_name_span) = try!(tq.expect_identifier());
+            try!(tq.expect(TokenKind::Colon));
+            let typ = try!(parse_type(tq));
+            members.push(struct_member(&member_name, typ, Span::new(member_name_span.start, tq.pos())));
+        }
+        else // Anonymouse struct member
+        {
+            let start_pos = tq.pos();
+            let member_name = format!("_{}", members.len());
+            let typ = try!(parse_type(tq));
+            members.push(struct_member(&member_name, typ, Span::new(start_pos, tq.pos())));
+        }
+
         try!(eat_comma(tq));
     }
     try!(tq.expect(TokenKind::CloseCurly));
-    Ok(struct_declaration(&name, members, Span::new(pos, tq.pos())))
+    Ok(struct_declaration(name, members, Span::new(pos, tq.pos())))
 }
 
 fn parse_struct_initializer(tq: &mut TokenQueue, struct_name: NameRef) -> CompileResult<Expression>
@@ -496,19 +562,20 @@ pub fn parse_module<Input: Read>(input: &mut Input, name: &str) -> CompileResult
 {
     let mut tq = try!(Lexer::new().read(input));
     let mut funcs = HashMap::new();
-    let mut structs = HashMap::new();
+    let mut types = HashMap::new();
+
     while !tq.is_next(TokenKind::EOF)
     {
         let tok = try!(tq.pop());
         match tok.kind
         {
             TokenKind::Type => {
-                let sd = try!(parse_struct_type(&mut tq, tok.span.start));
-                let pos = sd.span.start;
-                if structs.contains_key(&sd.name) {
-                    return err(pos, ErrorCode::RedefinitionOfStruct, format!("Struct {} redefined", sd.name));
+                let sd = try!(parse_type_declaration(&mut tq, tok.span.start));
+                let pos = sd.span().start;
+                if types.contains_key(sd.name()) {
+                    return err(pos, ErrorCode::RedefinitionOfStruct, format!("Type {} redefined", sd.name()));
                 }
-                structs.insert(sd.name.clone(), sd);
+                types.insert(sd.name().into(), sd);
             },
             TokenKind::Identifier(ref id) => {
                 let func = try!(parse_function_definition(&mut tq, &id, tok.span.start));
@@ -527,6 +594,6 @@ pub fn parse_module<Input: Read>(input: &mut Input, name: &str) -> CompileResult
      Ok(Module{
         name: name.into(),
         functions: funcs,
-        structs: structs,
+        types: types,
     })
 }

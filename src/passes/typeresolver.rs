@@ -1,4 +1,4 @@
-use ast::{StructDeclaration, Function, Module, Type, func_type};
+use ast::{StructDeclaration, TypeDeclaration, Function, Module, Type, func_type};
 use passes::TypeCheckerContext;
 use compileerror::{CompileResult, unknown_name};
 
@@ -86,13 +86,24 @@ fn resolve_struct_member_types(ctx: &mut TypeCheckerContext, sd: &mut StructDecl
     Ok(TypeResolved::Yes)
 }
 
-fn resolve_all_structs(ctx: &mut TypeCheckerContext, module: &mut Module, mode: ResolveMode) -> CompileResult<usize>
+fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: ResolveMode) -> CompileResult<usize>
 {
     let mut num_resolved = 0;
-    for ref mut s in module.structs.values_mut()
+    for typ in module.types.values_mut()
     {
-        if try!(resolve_struct_member_types(ctx, s, mode)) == TypeResolved::Yes {
-            num_resolved += 1;
+        match *typ
+        {
+            TypeDeclaration::Struct(ref mut s) => {
+                if try!(resolve_struct_member_types(ctx, s, mode)) == TypeResolved::Yes {
+                    num_resolved += 1;
+                }
+            },
+            TypeDeclaration::Sum(ref mut _s) => {
+                panic!("NYI");
+            },
+            TypeDeclaration::Alias(ref mut _a) => {
+                panic!("NYI");
+            }
         }
     }
 
@@ -105,13 +116,13 @@ pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module) -> Compi
     loop
     {
         let already_resolved = num_resolved;
-        num_resolved += try!(resolve_all_structs(ctx, module, ResolveMode::Lazy));
+        num_resolved += try!(resolve_all_types(ctx, module, ResolveMode::Lazy));
 
-        if num_resolved == module.structs.len() {
+        if num_resolved == module.types.len() {
             break;
         } else if already_resolved == num_resolved {
             // We weren't able to resolve any in this pass, so something is missing
-            try!(resolve_all_structs(ctx, module, ResolveMode::Forced));
+            try!(resolve_all_types(ctx, module, ResolveMode::Forced));
             break;
         }
     }

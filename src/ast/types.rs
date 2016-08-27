@@ -3,6 +3,7 @@ use std::hash::{Hasher, Hash};
 use std::ops::Deref;
 use itertools::free::join;
 use ast::{Expression, TreePrinter, StructMember, prefix};
+use compileerror::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Type
@@ -19,6 +20,15 @@ pub enum Type
     Generic(String),
     Func(Vec<Type>, Box<Type>), // args and return type
     Struct(Vec<StructMember>),
+    Sum(Vec<Type>),
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct TypeAlias
+{
+    pub name: String,
+    pub original: Type,
+    pub span: Span,
 }
 
 impl Type
@@ -130,6 +140,7 @@ impl Type
             Type::Slice(_) => true,
             Type::Func(_, _) => true,
             Type::Struct(_) => true,
+            Type::Sum(_) => true,
             _ => false,
         }
     }
@@ -141,6 +152,7 @@ impl Type
             Type::Array(_, _) => true,
             Type::Slice(_) => true,
             Type::Struct(_) => true,
+            Type::Sum(_) => true,
             _ => false,
         }
     }
@@ -159,6 +171,15 @@ pub fn array_type(element_type: Type, len: usize) -> Type
 pub fn slice_type(element_type: Type) -> Type
 {
     Type::Slice(Box::new(element_type))
+}
+
+pub fn type_alias(name: &str, original: Type, span: Span) -> TypeAlias
+{
+    TypeAlias{
+        name: name.into(),
+        original: original,
+        span: span,
+    }
 }
 
 impl fmt::Display for Type
@@ -185,6 +206,8 @@ impl fmt::Display for Type
             Type::Func(ref args, ref ret) => write!(f, "({}) -> {}", join(args.iter(), ", "), ret),
             Type::Struct(ref members) =>
                 write!(f, "{{{}}}", join(members.iter().map(|m| &m.typ), ", ")),
+            Type::Sum(ref cases) =>
+                write!(f, "{}", join(cases.iter(), " | ")),
         }
     }
 }
@@ -194,6 +217,15 @@ impl TreePrinter for Type
     fn print(&self, level: usize)
     {
         println!("{}{}", prefix(level), self);
+    }
+}
+
+
+impl TreePrinter for TypeAlias
+{
+    fn print(&self, level: usize)
+    {
+        println!("{}{} = {} ({})", prefix(level), self.name, self.original, self.span);
     }
 }
 
