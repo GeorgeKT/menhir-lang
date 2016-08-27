@@ -1,4 +1,5 @@
 use std::ptr;
+use std::ops::Deref;
 use std::rc::Rc;
 
 use libc;
@@ -7,11 +8,11 @@ use llvm::prelude::*;
 use llvm::*;
 
 use ast::{Expression, UnaryOp, BinaryOp, FunctionSignature, Call, NameRef, MatchExpression, MatchCase, LetExpression,
-    ArrayLiteral, ArgumentPassingMode, ArrayPattern, Type, Lambda, StructInitializer, anon_sig};
+    ArrayLiteral, ArgumentPassingMode, ArrayPattern, Type, Lambda, StructInitializer, StructMemberAccess, anon_sig};
 use parser::Operator;
-use codegen::{cstr, Context, ValueRef, Slice, Sequence, Array};
+use codegen::{cstr, Context, ValueRef, Slice, Sequence};
 use codegen::symboltable::{FunctionInstance};
-use compileerror::{Span, CompileResult, CompileError, ErrorCode, Pos, err};
+use compileerror::{Span, CompileResult, CompileError, ErrorCode, Pos, err, unknown_name};
 
 
 unsafe fn is_floating_point(ctx: LLVMContextRef, tr: LLVMTypeRef) -> bool
@@ -172,19 +173,14 @@ unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> CompileResult<Value
 }
 
 
-pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, span: &Span) -> CompileResult<FunctionInstance>
+pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature) -> CompileResult<FunctionInstance>
 {
-    let ret_type = try!(ctx
-        .resolve_type(&sig.return_type)
-        .ok_or(CompileError::new(span.start, ErrorCode::TypeError, format!("Cannot resolve the return type of function '{}'", sig.name))));
+    let ret_type = ctx.resolve_type(&sig.return_type);
 
     let mut arg_types = Vec::new();
     let mut arg_types_with_passing_mode = Vec::new();
     for arg in &sig.args {
-        let arg_type = try!(ctx
-            .resolve_type(&arg.typ)
-            .ok_or(CompileError::new(arg.span.start, ErrorCode::TypeError, format!("Cannot resolve the type of argument '{}'", arg.name))));
-
+        let arg_type = ctx.resolve_type(&arg.typ);
         match arg.passing_mode
         {
             ArgumentPassingMode::ByValue => {
@@ -215,16 +211,10 @@ pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, span:
 
 pub unsafe fn gen_function_ptr(ctx: &mut Context, func_ptr: LLVMValueRef, sig: FunctionSignature) -> CompileResult<FunctionInstance>
 {
-    let ret_type = try!(ctx
-        .resolve_type(&sig.return_type)
-        .ok_or(CompileError::new(sig.span.start, ErrorCode::TypeError, format!("Cannot resolve the return type of function '{}'", sig.name))));
-
+    let ret_type = ctx.resolve_type(&sig.return_type);
     let mut arg_types_with_passing_mode = Vec::new();
     for arg in &sig.args {
-        let arg_type = try!(ctx
-            .resolve_type(&arg.typ)
-            .ok_or(CompileError::new(arg.span.start, ErrorCode::TypeError, format!("Cannot resolve the type of argument '{}'", arg.name))));
-
+        let arg_type = ctx.resolve_type(&arg.typ);
         match arg.passing_mode
         {
             ArgumentPassingMode::ByValue => {
@@ -258,16 +248,20 @@ pub unsafe fn gen_function(ctx: &mut Context, signature: &FunctionSignature, bod
 
     for (i, arg) in signature.args.iter().enumerate() {
         let var = LLVMGetParam(fi.function, i as libc::c_uint);
-        let (llvm_arg, mode) = fi.args[i];
+        let (_, mode) = fi.args[i];
         match mode
         {
             ArgumentPassingMode::ByPtr => {
                 match arg.typ
                 {
-                    Type::Array(_, _) => ctx.add_variable(&arg.name, ValueRef::Array(Array::new(var))),
-                    Type::Slice(_) => {
-                        let builder = ctx.builder;
-                        ctx.add_variable(&arg.name, ValueRef::Slice(Slice::new(builder, var)));
+                    Type::Array(ref element_type, _) => {
+                        ctx.add_variable(&arg.name, ValueRef::array(var, element_type.deref().clone()));
+                    },
+                    Type::Slice(ref element_type) => {
+                        ctx.add_variable(&arg.name, ValueRef::slice(var, element_type.deref().clone()));
+                    },
+                    Type::Struct(_) => {
+                        ctx.add_variable(&arg.name, ValueRef::struct_value(var, arg.typ.get_member_types()));
                     },
                     Type::Func(ref args, ref ret) => {
                         let func_sig = anon_sig(&arg.name, ret, args);
@@ -278,9 +272,7 @@ pub unsafe fn gen_function(ctx: &mut Context, signature: &FunctionSignature, bod
                 }
             },
             ArgumentPassingMode::ByValue => {
-                let alloc = ValueRef::alloc(ctx, llvm_arg);
-                LLVMBuildStore(ctx.builder, var, alloc.get());
-                ctx.add_variable(&arg.name, alloc);
+                ctx.add_variable(&arg.name, ValueRef::const_value(var));
             },
         }
     }
@@ -299,7 +291,7 @@ pub unsafe fn gen_function(ctx: &mut Context, signature: &FunctionSignature, bod
 
 unsafe fn gen_lambda(ctx: &mut Context, l: &Lambda) -> CompileResult<ValueRef>
 {
-    let fi = try!(gen_function_sig(ctx, &l.sig, &l.span));
+    let fi = try!(gen_function_sig(ctx, &l.sig));
     let ret = fi.function;
     ctx.add_function(Rc::new(fi));
     try!(gen_function(ctx, &l.sig, &l.expr));
@@ -436,7 +428,7 @@ unsafe fn gen_equals_seq<ASeq: Sequence, BSeq: Sequence>(
     LLVMPositionBuilderAtEnd(ctx.builder, after_equal_length_bb);
 
     // Then loop over each element and check equality
-    let counter = ValueRef::alloc(ctx, LLVMInt64TypeInContext(ctx.context));
+    let counter = ValueRef::alloc(ctx, LLVMInt64TypeInContext(ctx.context), &Type::Int);
     try!(counter.store_direct(ctx, const_int(ctx, 0), Pos::zero()));
     LLVMBuildBr(ctx.builder, for_cond_bb);
 
@@ -524,11 +516,8 @@ unsafe fn gen_match(ctx: &mut Context, m: &MatchExpression) -> CompileResult<Val
 
     let match_end_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("match_end_bb"));
 
-    let ret_type = try!(ctx
-        .resolve_type(&m.typ)
-        .ok_or(CompileError::new(m.span.start, ErrorCode::TypeError, format!("Cannot resolve the type '{}' of match statement", m.typ))));
-
-    let dst = ValueRef::alloc(ctx, ret_type);
+    let ret_type = ctx.resolve_type(&m.typ);
+    let dst = ValueRef::alloc(ctx, ret_type, &m.typ);
     for mc in &m.cases
     {
         try!(gen_match_case(ctx, mc, &target, func, match_end_bb, &dst));
@@ -545,10 +534,7 @@ unsafe fn gen_let(ctx: &mut Context, l: &LetExpression) -> CompileResult<ValueRe
 
     for b in &l.bindings
     {
-        let b_type = try!(ctx
-            .resolve_type(&b.typ)
-            .ok_or(CompileError::new(b.span.start, ErrorCode::TypeError, format!("Cannot resolve the type of the {} binding", b.name))));
-
+        let b_type = ctx.resolve_type(&b.typ);
         match b.typ
         {
             Type::Func(ref args, ref ret) => {
@@ -558,7 +544,7 @@ unsafe fn gen_let(ctx: &mut Context, l: &LetExpression) -> CompileResult<ValueRe
                 ctx.add_function(Rc::new(fi));
             },
             _ => {
-                let vr = ValueRef::alloc(ctx, b_type);
+                let vr = ValueRef::alloc(ctx, b_type, &b.typ);
                 try!(gen_expression_store(ctx, &b.init, &vr));
                 ctx.add_variable(&b.name, vr);
             }
@@ -573,9 +559,7 @@ unsafe fn gen_let(ctx: &mut Context, l: &LetExpression) -> CompileResult<ValueRe
 unsafe fn gen_const_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> CompileResult<ValueRef>
 {
     let element_type = a.array_type.get_element_type().expect("Invalid array type");
-    let llvm_type = try!(ctx.resolve_type(&element_type).ok_or(
-        CompileError::new(a.span.start, ErrorCode::TypeError, format!("Unknown type {}", element_type))
-    ));
+    let llvm_type = ctx.resolve_type(&element_type);
 
     let mut vals = Vec::new();
     for element in &a.elements
@@ -584,7 +568,10 @@ unsafe fn gen_const_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> Compil
         vals.push(element_val.load(ctx.builder));
     }
 
-    Ok(ValueRef::const_array(LLVMConstArray(llvm_type, vals.as_mut_ptr(), vals.len() as u32)))
+    Ok(ValueRef::array(
+        LLVMConstArray(llvm_type, vals.as_mut_ptr(), vals.len() as u32),
+        element_type,
+    ))
 }
 
 
@@ -617,9 +604,8 @@ unsafe fn gen_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> CompileResul
     }
 
     let element_type = a.array_type.get_element_type().expect("Invalid array type");
-    let llvm_type = try!(ctx.resolve_type(&element_type)
-        .ok_or(CompileError::new(a.span.start, ErrorCode::TypeError, format!("Unknown type '{}'", element_type))));
-    let var = ValueRef::alloc_array(ctx, llvm_type, a.elements.len());
+    let llvm_type = ctx.resolve_type(&element_type);
+    let var = ValueRef::alloc_array(ctx, llvm_type, element_type, a.elements.len());
     try!(gen_array_literal_store(ctx, a, &var));
     Ok(var)
 }
@@ -660,10 +646,10 @@ pub unsafe fn gen_array_to_slice_conversion(ctx: &mut Context, e: &Expression) -
     match v
     {
         ValueRef::Array(arr) => {
-            let element_type = arr.get_element_type();
+            let element_type = arr.get_llvm_element_type();
             let slice_type = ctx.get_slice_type(element_type);
             let slice = try!(Slice::from_array(ctx, slice_type, &arr, 0, e.span().start));
-            Ok(ValueRef::slice(slice))
+            Ok(ValueRef::Slice(slice))
         },
         _ => err(e.span().start, ErrorCode::TypeError, format!("Array to slice conversion, requires an array")),
     }
@@ -681,10 +667,20 @@ unsafe fn gen_struct_initializer_store(ctx: &mut Context, si: &StructInitializer
 
 unsafe fn gen_struct_initializer(ctx: &mut Context, si: &StructInitializer) -> CompileResult<ValueRef>
 {
-    let llvm_type = try!(ctx.resolve_type(&si.typ)
-        .ok_or(CompileError::new(si.span.start, ErrorCode::TypeError, format!("Unknown type '{}'", si.struct_name))));
-    let var = ValueRef::alloc_struct(ctx, llvm_type);
+    let llvm_type = ctx.resolve_type(&si.typ);
+    let var = ValueRef::alloc_struct(ctx, llvm_type, si.typ.get_member_types());
     try!(gen_struct_initializer_store(ctx, si, &var));
+    Ok(var)
+}
+
+unsafe fn gen_struct_member_access(ctx: &mut Context, sma: &StructMemberAccess) -> CompileResult<ValueRef>
+{
+    let mut var = try!(ctx.get_variable(&sma.name).ok_or(unknown_name(sma.span.start, &sma.name))).value.clone();
+    for idx in &sma.indices
+    {
+        var = try!(var.member(ctx, *idx, sma.span.start));
+    }
+
     Ok(var)
 }
 
@@ -711,7 +707,7 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::BoolLiteral(_, v) => gen_bool(ctx, v),
             Expression::ArrayToSliceConversion(ref e) => gen_array_to_slice_conversion(ctx, e),
             Expression::StructInitializer(ref si) => gen_struct_initializer(ctx, si),
-            Expression::StructMemberAccess(ref sma) =>  err(sma.span.start, ErrorCode::UnexpectedEOF, format!("NYI gen_expression StructMemberAccess")),
+            Expression::StructMemberAccess(ref sma) =>  gen_struct_member_access(ctx, sma),
         }
     }
 }

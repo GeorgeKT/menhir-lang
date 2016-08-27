@@ -1,7 +1,8 @@
+use std::ops::Deref;
 use llvm::prelude::*;
 use llvm::core::*;
-use llvm::*;
 
+use ast::Type;
 use codegen::{Context, Array, Slice, Sequence, StructValue, cstr};
 use compileerror::{Pos, CompileResult, ErrorCode, err};
 
@@ -18,11 +19,6 @@ pub enum ValueRef
     Struct(StructValue),
 }
 
-pub fn is_same_kind(a: LLVMTypeKind, b: LLVMTypeKind) -> bool
-{
-    (a as usize) == (b as usize)
-}
-
 impl ValueRef
 {
     pub fn const_value(v: LLVMValueRef) -> ValueRef
@@ -30,36 +26,49 @@ impl ValueRef
         ValueRef::Const(v)
     }
 
-    pub fn alloc(ctx: &Context, typ: LLVMTypeRef) -> ValueRef
+    pub unsafe fn alloc(ctx: &Context, llvm_type: LLVMTypeRef, typ: &Type) -> ValueRef
     {
-        unsafe {
-            let alloc = ctx.alloc(typ, "alloc");
-            if is_same_kind(LLVMGetTypeKind(typ), LLVMTypeKind::LLVMArrayTypeKind) {
-                ValueRef::Array(Array::new(alloc))
-            } else {
+        let alloc = ctx.alloc(llvm_type, "alloc");
+        match *typ
+        {
+            Type::Array(ref element_type, _) => {
+                ValueRef::array(alloc, element_type.deref().clone())
+            },
+            Type::Slice(ref element_type) => {
+                ValueRef::slice(alloc, element_type.deref().clone())
+            },
+            Type::Struct(ref members) => {
+                ValueRef::struct_value(alloc, members.iter().map(|m| m.typ.clone()).collect())
+            },
+            _ => {
                 ValueRef::Ptr(alloc)
-            }
+            },
         }
     }
 
-    pub unsafe fn const_array(arr: LLVMValueRef) -> ValueRef
+    pub unsafe fn array(arr: LLVMValueRef, element_type: Type) -> ValueRef
     {
-        ValueRef::Array(Array::new(arr))
+        ValueRef::Array(Array::new(arr, element_type))
     }
 
-    pub unsafe fn alloc_array(ctx: &Context, element_type: LLVMTypeRef, len: usize) -> ValueRef
+    pub unsafe fn alloc_array(ctx: &Context, llvm_element_type: LLVMTypeRef, element_type: Type, len: usize) -> ValueRef
     {
-        ValueRef::Array(Array::alloc(ctx, element_type, len))
+        ValueRef::Array(Array::alloc(ctx, llvm_element_type, element_type, len))
     }
 
-    pub unsafe fn alloc_struct(ctx: &Context, struct_type: LLVMTypeRef) -> ValueRef
+    pub unsafe fn alloc_struct(ctx: &Context, struct_type: LLVMTypeRef, member_types: Vec<Type>) -> ValueRef
     {
-        ValueRef::Struct(StructValue::alloc(ctx, struct_type))
+        ValueRef::Struct(StructValue::alloc(ctx, struct_type, member_types))
     }
 
-    pub fn slice(slice: Slice) -> ValueRef
+    pub unsafe fn struct_value(sv: LLVMValueRef, member_types: Vec<Type>) -> ValueRef
     {
-        ValueRef::Slice(slice)
+        ValueRef::Struct(StructValue::new(sv, member_types))
+    }
+
+    pub unsafe fn slice(slice: LLVMValueRef, element_type: Type) -> ValueRef
+    {
+        ValueRef::Slice(Slice::new(slice, element_type))
     }
 
     pub unsafe fn load(&self, builder: LLVMBuilderRef) -> LLVMValueRef

@@ -270,47 +270,40 @@ impl Context
         slice_type
     }
 
-    pub unsafe fn resolve_type(&mut self, typ: &Type) -> Option<LLVMTypeRef>
+    pub unsafe fn resolve_type(&mut self, typ: &Type) -> LLVMTypeRef
     {
         match *typ
         {
-            Type::Void => Some(LLVMVoidTypeInContext(self.context)),
-            Type::Int => Some(LLVMInt64TypeInContext(self.context)),
-            Type::Bool => Some(LLVMInt1TypeInContext(self.context)),
-            Type::Float => Some(LLVMDoubleTypeInContext(self.context)),
+            Type::Void => LLVMVoidTypeInContext(self.context),
+            Type::Int => LLVMInt64TypeInContext(self.context),
+            Type::Bool => LLVMInt1TypeInContext(self.context),
+            Type::Float => LLVMDoubleTypeInContext(self.context),
             Type::Array(ref et, len) => {
-                self.resolve_type(et).map(|et| LLVMArrayType(et, len as u32))
+                LLVMArrayType(self.resolve_type(et), len as u32)
             },
             Type::Slice(ref et) => {
-                self.resolve_type(et).map(|et| self.get_slice_type(et))
+                let e = self.resolve_type(et);
+                self.get_slice_type(e)
             },
             Type::Func(ref args, ref ret) => {
                 let mut llvm_arg_types = Vec::with_capacity(args.len());
                 for arg in args {
-                    let at = self.resolve_type(arg);
-                    match at
-                    {
-                        Some(arg_typ) => llvm_arg_types.push(arg_typ),
-                        None => return None,
-                    }
+                    llvm_arg_types.push(self.resolve_type(arg));
                 }
 
-                self.resolve_type(ret).map(|rt| LLVMFunctionType(rt, llvm_arg_types.as_mut_ptr(), args.len() as c_uint, 0))
+                LLVMFunctionType(self.resolve_type(ret), llvm_arg_types.as_mut_ptr(), args.len() as c_uint, 0)
             },
             Type::Struct(ref members) => {
                 let mut llvm_member_types = Vec::with_capacity(members.len());
-                for m in members
-                {
-                    let mt = self.resolve_type(&m.typ);
-                    match mt
-                    {
-                        Some(arg_typ) => llvm_member_types.push(arg_typ),
-                        None => return None,
-                    }
+                for m in members {
+                    llvm_member_types.push(self.resolve_type(&m.typ));
                 }
-                Some(LLVMStructType(llvm_member_types.as_mut_ptr(), llvm_member_types.len() as c_uint, 0))
+                LLVMStructType(llvm_member_types.as_mut_ptr(), llvm_member_types.len() as c_uint, 0)
             },
-            _ => None,
+            Type::String => panic!("Not yet implemented"),
+            Type::Generic(_) => panic!("Internal Compiler Error: All generic types must have been resolved during code generation"),
+            Type::Unresolved(_) => panic!("Internal Compiler Error: All types must be resolved during code generation"),
+            Type::Unknown => panic!("Internal Compiler Error: all types must be known during code generation"),
         }
     }
 

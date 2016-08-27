@@ -73,6 +73,17 @@ impl Type
         }
     }
 
+    pub fn get_member_types(&self) -> Vec<Type>
+    {
+        if let &Type::Struct(ref members) = self {
+            members.iter().map(|m| m.typ.clone()).collect()
+        }
+        else {
+            Vec::new()
+        }
+
+    }
+
     pub fn is_matchable(&self, other: &Type) -> bool
     {
         if (self.is_empty_array() && other.is_sequence()) || (other.is_empty_array() && self.is_sequence()) {
@@ -110,16 +121,6 @@ impl Type
             _ => false,
         }
     }
-/*
-    pub fn is_function(&self) -> bool
-    {
-        match *self
-        {
-            Type::Func(_, _) => true,
-            _ => false,
-        }
-    }
-    */
 
     pub fn pass_by_ptr(&self) -> bool
     {

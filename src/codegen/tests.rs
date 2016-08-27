@@ -287,7 +287,7 @@ type Vec2D = {x: int, y: int}
 dot(a: Vec2D, b: Vec2D) -> int = a.x * b.x + a.y * b.y
 
 main() -> int = dot(Vec2D{4, 5}, Vec2D{5, 6})
-    "#, false);
+    "#, true);
     println!("r: {:?}", r);
     assert!(r == Ok(50));
 }

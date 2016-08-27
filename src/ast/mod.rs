@@ -53,7 +53,11 @@ impl TreePrinter for Module
     {
         let p = prefix(level);
         println!("{}Module: {}", p, self.name);
-        for (_, ref func) in &self.functions {
+        for ref s in self.structs.values() {
+            s.print(level + 1);
+        }
+
+        for ref func in self.functions.values() {
             func.print(level + 1);
         }
     }

@@ -62,6 +62,7 @@ pub struct StructMemberAccess
 {
     pub name: String,
     pub members: Vec<String>,
+    pub indices: Vec<usize>, // Index of each member
     pub span: Span,
     pub typ: Type,
 }
@@ -70,6 +71,7 @@ pub fn struct_member_access(name: &str, members: Vec<String>, span: Span) -> Str
 {
     StructMemberAccess{
         name: name.into(),
+        indices: Vec::with_capacity(members.len()),
         members: members,
         span: span,
         typ: Type::Unknown,

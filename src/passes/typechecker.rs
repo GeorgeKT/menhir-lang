@@ -513,7 +513,8 @@ fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructIn
                 }
             }
 
-            Ok(Type::Struct(members))
+            si.typ = Type::Struct(members);
+            Ok(si.typ.clone())
         },
         _ => err(si.span.start, ErrorCode::TypeError, format!("{} is not a struct", si.struct_name)),
     }
@@ -521,23 +522,26 @@ fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructIn
 
 
 
-fn find_member_type(members: &Vec<StructMember>, member_name: &str, pos: Pos) -> CompileResult<Type>
+fn find_member_type(members: &Vec<StructMember>, member_name: &str, pos: Pos) -> CompileResult<(usize, Type)>
 {
     members.iter()
-        .find(|m| m.name == member_name)
-        .map(|m| m.typ.clone())
+        .enumerate()
+        .find(|&(_, m)| m.name == member_name)
+        .map(|(idx, m)| (idx, m.typ.clone()))
         .ok_or(CompileError::new(pos, ErrorCode::UnknownStructMember, format!("Unknown struct member {}", member_name)))
 }
 
 fn type_check_struct_member_access(ctx: &mut TypeCheckerContext, sma: &mut StructMemberAccess) -> CompileResult<Type>
 {
     let mut st = try!(ctx.resolve_type(&sma.name).ok_or(unknown_name(sma.span.start, &sma.name)));
-    for member_name in &sma.members
+    for ref member_name in &sma.members
     {
         st = match st
         {
             Type::Struct(ref members) => {
-                try!(find_member_type(members, member_name, sma.span.start))
+                let (member_idx, member_type) = try!(find_member_type(members, &member_name, sma.span.start));
+                sma.indices.push(member_idx);
+                member_type
             },
             _ => {
                 return err(sma.span.start, ErrorCode::TypeError, format!("Type '{}' is not a struct, so you cannot access it's members", st));

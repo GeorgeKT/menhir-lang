@@ -107,7 +107,7 @@ fn gen_module(ctx: &mut Context, module: &Module) -> CompileResult<()>
     for ref func in module.functions.values() {
         if !func.is_generic() {
             unsafe {
-                let fi = Rc::new(try!(gen_function_sig(ctx, &func.sig, &func.span)));
+                let fi = Rc::new(try!(gen_function_sig(ctx, &func.sig)));
                 ctx.add_function(fi);
             }
         }
