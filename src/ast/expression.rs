@@ -1,6 +1,6 @@
 use compileerror::{Span, CompileResult, ErrorCode, err};
-use ast::{Call, ArrayLiteral, ArrayPattern, ArrayGenerator, NameRef, BinaryOp, UnaryOp,
-    MatchExpression, TreePrinter, Lambda, LetExpression, StructInitializer, StructMemberAccess, prefix};
+use ast::{Call, ArrayLiteral, ArrayPattern, ArrayGenerator, NameRef, BinaryOp, UnaryOp, MatchExpression,
+    TreePrinter, Lambda, LetExpression, StructInitializer, StructMemberAccess, StructPattern, prefix};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
@@ -22,6 +22,7 @@ pub enum Expression
     Let(Box<LetExpression>),
     StructInitializer(StructInitializer),
     StructMemberAccess(StructMemberAccess),
+    StructPattern(StructPattern),
 
     // Internal expressions
     ArrayToSliceConversion(Box<Expression>),
@@ -79,6 +80,7 @@ impl Expression
             Expression::ArrayToSliceConversion(ref e) => e.span(),
             Expression::StructInitializer(ref si) => si.span,
             Expression::StructMemberAccess(ref sma) => sma.span,
+            Expression::StructPattern(ref p) => p.span,
         }
     }
 
@@ -88,6 +90,16 @@ impl Expression
         {
             Expression::NameRef(nr) => Ok(nr),
             _ => err(self.span().start, ErrorCode::TypeError, format!("Expected name reference")),
+        }
+    }
+
+
+    pub fn to_pattern(self) -> Expression
+    {
+        match self
+        {
+            Expression::StructInitializer(si) => si.to_struct_pattern(),
+            _ => self,
         }
     }
 }
@@ -143,10 +155,11 @@ impl TreePrinter for Expression
             Expression::Let(ref l) => l.print(level),
             Expression::StructInitializer(ref si) => si.print(level),
             Expression::StructMemberAccess(ref sma) => sma.print(level),
+            Expression::StructPattern(ref p) => p.print(level),
             Expression::ArrayToSliceConversion(ref e) => {
                 println!("{}array->slice", p);
                 e.print(level + 1);
-            }
+            },
         }
     }
 }

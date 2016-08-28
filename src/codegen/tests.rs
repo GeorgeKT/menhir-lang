@@ -305,3 +305,20 @@ main() -> int =
     println!("r: {:?}", r);
     assert!(r == Ok(20));
 }
+
+#[test]
+fn test_sum_types() {
+    let r = run(r#"
+type Option = Some{int} | None
+
+unwrap_or(opt: Option, default: int) -> int =
+    match opt
+        Some{i} => i,
+        None => default
+
+main() -> int =
+    unwrap_or(Some{5}, 1) + unwrap_or(None, 1)
+    "#, true);
+    println!("r: {:?}", r);
+    assert!(r == Ok(6));
+}

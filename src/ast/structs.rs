@@ -47,6 +47,32 @@ pub struct StructInitializer
     pub typ: Type,
 }
 
+impl StructInitializer
+{
+    pub fn to_struct_pattern(self) -> Expression
+    {
+        let mut bindings = Vec::with_capacity(self.member_initializers.len());
+        for e in &self.member_initializers {
+            if let Expression::NameRef(ref nr) = *e {
+                bindings.push(nr.name.clone());
+            } else {
+                break;
+            }
+        }
+
+        if bindings.len() != self.member_initializers.len() {
+            return Expression::StructInitializer(self); // Not an array pattern
+        }
+
+        Expression::StructPattern(StructPattern{
+            name: self.struct_name,
+            types: Vec::with_capacity(bindings.len()),
+            bindings: bindings,
+            span: self.span,
+        })
+    }
+}
+
 pub fn struct_initializer(struct_name: &str, member_initializers: Vec<Expression>, span: Span) -> StructInitializer
 {
     StructInitializer{
@@ -76,6 +102,15 @@ pub fn struct_member_access(name: &str, members: Vec<String>, span: Span) -> Str
         span: span,
         typ: Type::Unknown,
     }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct StructPattern
+{
+    pub name: String,
+    pub bindings: Vec<String>,
+    pub types: Vec<Type>,
+    pub span: Span,
 }
 
 impl TreePrinter for StructDeclaration
@@ -117,5 +152,15 @@ impl TreePrinter for StructMemberAccess
     {
         let p = prefix(level);
         println!("{}{}.{} ({})", p, self.name, join(self.members.iter(), "."), self.span);
+    }
+}
+
+
+impl TreePrinter for StructPattern
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        println!("{}struct pattern {}{{{}}} ({})", p, self.name, join(self.bindings.iter(), ","), self.span);
     }
 }

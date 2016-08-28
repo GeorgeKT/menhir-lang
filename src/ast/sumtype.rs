@@ -1,4 +1,4 @@
-use ast::{TreePrinter, StructDeclaration, prefix};
+use ast::{TreePrinter, StructDeclaration, Type, prefix};
 use compileerror::{Span};
 
 
@@ -8,6 +8,7 @@ pub struct SumTypeCase
     pub name: String,
     pub data: Option<StructDeclaration>,
     pub span: Span,
+    pub typ: Type,
 }
 
 pub fn sum_type_case(name: &str, data: Option<StructDeclaration>, span: Span) -> SumTypeCase
@@ -16,6 +17,7 @@ pub fn sum_type_case(name: &str, data: Option<StructDeclaration>, span: Span) ->
         name: name.into(),
         data: data,
         span: span,
+        typ: Type::Unknown,
     }
 }
 
@@ -25,6 +27,7 @@ pub struct SumType
     pub name: String,
     pub cases: Vec<SumTypeCase>,
     pub span: Span,
+    pub typ: Type,
 }
 
 pub fn sum_type(name: &str, cases: Vec<SumTypeCase>, span: Span) -> SumType
@@ -33,6 +36,7 @@ pub fn sum_type(name: &str, cases: Vec<SumTypeCase>, span: Span) -> SumType
         name: name.into(),
         cases: cases,
         span: span,
+        typ: Type::Unknown,
     }
 }
 

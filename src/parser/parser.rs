@@ -292,11 +292,11 @@ fn parse_match(tq: &mut TokenQueue, start: Pos) -> CompileResult<Expression>
     let mut cases = Vec::new();
     loop
     {
-        let c = try!(parse_expression(tq));
+        let pattern = try!(parse_expression(tq)).to_pattern();
         try!(tq.expect(TokenKind::FatArrow));
         let t = try!(parse_expression(tq));
-        let case_start = c.span().start;
-        cases.push(match_case(c, t, Span::new(case_start, tq.pos())));
+        let case_start = pattern.span().start;
+        cases.push(match_case(pattern, t, Span::new(case_start, tq.pos())));
         if tq.is_next(TokenKind::Comma) { // Continue, while we see a comman
             try!(tq.pop());
         } else {

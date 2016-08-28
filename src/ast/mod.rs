@@ -22,7 +22,7 @@ pub use self::letexpression::{LetExpression, Binding, let_expression, let_bindin
 pub use self::matchexpression::{MatchExpression, MatchCase, match_case, match_expression};
 pub use self::nameref::NameRef;
 pub use self::operations::{BinaryOp, UnaryOp, unary_op, bin_op};
-pub use self::structs::{StructDeclaration, StructMember, StructInitializer, StructMemberAccess,
+pub use self::structs::{StructDeclaration, StructMember, StructInitializer, StructMemberAccess, StructPattern,
     struct_member, struct_declaration, struct_initializer, struct_member_access};
 pub use self::sumtype::{SumType, SumTypeCase, sum_type, sum_type_case};
 pub use self::types::{Type, TypeAlias, to_primitive, func_type, array_type, slice_type, type_alias};

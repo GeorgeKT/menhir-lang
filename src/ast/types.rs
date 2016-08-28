@@ -1,11 +1,13 @@
+use std::cmp::{Eq, PartialEq};
 use std::fmt;
 use std::hash::{Hasher, Hash};
 use std::ops::Deref;
+use std::rc::Rc;
 use itertools::free::join;
 use ast::{Expression, TreePrinter, StructMember, prefix};
 use compileerror::Span;
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub enum Type
 {
     Void,
@@ -20,10 +22,10 @@ pub enum Type
     Generic(String),
     Func(Vec<Type>, Box<Type>), // args and return type
     Struct(Vec<StructMember>),
-    Sum(Vec<Type>),
+    Sum(Rc<Vec<Type>>, Option<usize>), // Option<usize> contains the index when we know the case
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug,  Eq, PartialEq, Clone)]
 pub struct TypeAlias
 {
     pub name: String,
@@ -140,7 +142,7 @@ impl Type
             Type::Slice(_) => true,
             Type::Func(_, _) => true,
             Type::Struct(_) => true,
-            Type::Sum(_) => true,
+            Type::Sum(_, _) => true,
             _ => false,
         }
     }
@@ -152,7 +154,7 @@ impl Type
             Type::Array(_, _) => true,
             Type::Slice(_) => true,
             Type::Struct(_) => true,
-            Type::Sum(_) => true,
+            Type::Sum(_,_) => true,
             _ => false,
         }
     }
@@ -206,7 +208,7 @@ impl fmt::Display for Type
             Type::Func(ref args, ref ret) => write!(f, "({}) -> {}", join(args.iter(), ", "), ret),
             Type::Struct(ref members) =>
                 write!(f, "{{{}}}", join(members.iter().map(|m| &m.typ), ", ")),
-            Type::Sum(ref cases) =>
+            Type::Sum(ref cases, _) =>
                 write!(f, "{}", join(cases.iter(), " | ")),
         }
     }
@@ -249,3 +251,29 @@ impl Hash for Type
         s.hash(state);
     }
 }
+
+impl PartialEq<Type> for Type
+{
+    fn eq(&self, other: &Type) -> bool
+    {
+        match (self, other)
+        {
+            (&Type::Void, &Type::Void) => true,
+            (&Type::Unknown, &Type::Unknown) => true,
+            (&Type::Int, &Type::Int) => true,
+            (&Type::Float, &Type::Float) => true,
+            (&Type::String, &Type::String) => true,
+            (&Type::Bool, &Type::Bool) => true,
+            (&Type::Unresolved(ref s), &Type::Unresolved(ref t)) => *s == *t,
+            (&Type::Array(ref at, alen), &Type::Array(ref bt, blen)) => alen == blen && *at == *bt,
+            (&Type::Slice(ref at), &Type::Slice(ref bt)) => *at == *bt,
+            (&Type::Generic(ref at), &Type::Generic(ref bt)) => *at == *bt,
+            (&Type::Func(ref a_args, ref a_ret), &Type::Func(ref b_args, ref b_ret)) => *a_ret == *b_ret && *a_args == *b_args,
+            (&Type::Struct(ref a_members), &Type::Struct(ref b_members)) => *a_members == *b_members,
+            (&Type::Sum(ref a_cases, _), &Type::Sum(ref b_cases, _)) => *a_cases == *b_cases,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Type {}

@@ -2,7 +2,7 @@ use std::collections::{HashMap};
 use std::ops::{DerefMut, Deref};
 use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral, ArrayGenerator,
     MatchExpression, Function, Lambda, Call, Type, LetExpression, ArgumentPassingMode,
-    StructInitializer, StructMemberAccess, StructMember, func_type, array_type, slice_type};
+    StructInitializer, StructMemberAccess, StructMember, StructPattern, func_type, array_type, slice_type};
 use compileerror::{CompileResult, CompileError, Pos, ErrorCode, err, unknown_name};
 use parser::{Operator};
 use passes::{instantiate_generics, fill_in_generics, substitute_types, resolve_types};
@@ -360,11 +360,23 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
             },
 
             Expression::NameRef(ref nr) => {
-                if nr.name != "_" {
+                if let Some(Type::Sum(cases, Some(idx))) = ctx.resolve_type(&nr.name)
+                {
+                    let ref e = cases[idx];
+                    if *e == Type::Int {
+                        try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
+                    } else {
+                        return err(c.match_expr.span().start, ErrorCode::TypeError, format!("Invalid pattern match, match should be with an empty sum case"));
+                    }
+                }
+                else if nr.name != "_"
+                {
                     return err(c.match_expr.span().start, ErrorCode::TypeError, format!("Invalid pattern match"));
                 }
-
-                try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
+                else
+                {
+                    try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
+                }
             },
 
             Expression::ArrayLiteral(_) |
@@ -379,6 +391,22 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
                 }
 
                 try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
+            },
+
+            Expression::StructPattern(ref mut p) => {
+                try!(type_check_struct_pattern(ctx, p));
+                ctx.push_stack();
+
+                for (binding, typ) in p.bindings.iter().zip(p.types.iter()) {
+                    if binding != "_" {
+                        println!("Add binding {} of {}", binding, typ);
+                        try!(ctx.add(binding, typ.clone(), p.span.start));
+                    }
+                }
+
+                let ct = try!(infer_case_type(ctx, &mut c.to_execute, &return_type));
+                ctx.pop_stack();
+                ct
             },
 
             _ => {
@@ -491,29 +519,49 @@ fn type_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> Compil
     Ok(l.typ.clone())
 }
 
+fn type_check_struct_members_in_initializer(ctx: &mut TypeCheckerContext, members: &Vec<StructMember>, si: &mut StructInitializer) -> CompileResult<()>
+{
+    if members.len() != si.member_initializers.len() {
+        return err(si.span.start, ErrorCode::WrongArgumentCount,
+            format!("Type {} has {} members, but attempting to initialize {} members", si.struct_name, members.len(), si.member_initializers.len()));
+    }
+
+    for (idx, (member, mi)) in members.iter().zip(si.member_initializers.iter_mut()).enumerate()
+    {
+        let t = try!(type_check_expression(ctx, mi, Some(member.typ.clone())));
+        if t != member.typ
+        {
+            return err(mi.span().start, ErrorCode::TypeError,
+                format!("Attempting to initialize member {} with type '{}', expecting an expression of type '{}'",
+                    idx, t, member.typ));
+        }
+    }
+
+    Ok(())
+}
+
 fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructInitializer) -> CompileResult<Type>
 {
     let st = try!(ctx.resolve_type(&si.struct_name).ok_or(unknown_name(si.span.start, &si.struct_name)));
     match st
     {
         Type::Struct(members) => {
-            if members.len() != si.member_initializers.len() {
-                return err(si.span.start, ErrorCode::WrongArgumentCount,
-                    format!("Struct {} has {} members, but attempting to initialize {} members", si.struct_name, members.len(), si.member_initializers.len()));
-            }
-
-            for (idx, (member, mi)) in members.iter().zip(si.member_initializers.iter_mut()).enumerate()
-            {
-                let t = try!(type_check_expression(ctx, mi, Some(member.typ.clone())));
-                if t != member.typ
-                {
-                    return err(mi.span().start, ErrorCode::TypeError,
-                        format!("Attempting to initialize member {} with type '{}', expecting an expression of type '{}'",
-                            idx, t, member.typ));
-                }
-            }
-
+            try!(type_check_struct_members_in_initializer(ctx, &members, si));
             si.typ = Type::Struct(members);
+            Ok(si.typ.clone())
+        },
+        Type::Sum(cases, opt_idx) => {
+            let idx = if let Some(idx) = opt_idx {idx} else {return err(si.span.start, ErrorCode::TypeError, format!("Cannot determine Sum type case"))};
+
+            let ref sd = cases[idx];
+            match *sd
+            {
+                Type::Struct(ref members) => try!(type_check_struct_members_in_initializer(ctx, members, si)),
+                Type::Int => {},
+                _ => return err(si.span.start, ErrorCode::TypeError, format!("Invalid sum type case")),
+            }
+
+            si.typ = Type::Sum(cases.clone(), Some(idx));
             Ok(si.typ.clone())
         },
         _ => err(si.span.start, ErrorCode::TypeError, format!("{} is not a struct", si.struct_name)),
@@ -552,6 +600,42 @@ fn type_check_struct_member_access(ctx: &mut TypeCheckerContext, sma: &mut Struc
     Ok(st)
 }
 
+fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern) -> CompileResult<Type>
+{
+    let typ = try!(ctx.resolve_type(&p.name).ok_or(unknown_name(p.span.start, &p.name)));
+    match typ
+    {
+        Type::Sum(cases, opt_idx) => {
+            if let Some(idx) = opt_idx
+            {
+                let ref sd = cases[idx];
+                match *sd
+                {
+                    Type::Struct(ref members) => {
+                        if members.len() != p.bindings.len() {
+                            err(p.span.start, ErrorCode::TypeError, format!("Not enough bindings in pattern match"))
+                        } else {
+                            p.types = members.iter().map(|sm| sm.typ.clone()).collect();
+                            Ok(Type::Unknown)
+                        }
+                    },
+                    _ => err(p.span.start, ErrorCode::TypeError, format!("Attempting to pattern match a normal sum type case with a struct")),
+                }
+            }
+            else
+            {
+                err(p.span.start, ErrorCode::TypeError, format!("Cannot determine the case of a sum type"))
+            }
+        },
+
+        Type::Struct(ref members) => {
+            p.types = members.iter().map(|sm| sm.typ.clone()).collect();
+            Ok(Type::Unknown)
+        },
+        _ => err(p.span.start, ErrorCode::TypeError, format!("Struct pattern is only allowed for structs and sum types containing structs"))
+    }
+}
+
 pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: Option<Type>) -> CompileResult<Type>
 {
     match *e
@@ -560,6 +644,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::BinaryOp(ref mut op) => type_check_binary_op(ctx, op),
         Expression::ArrayLiteral(ref mut a) => type_check_array_literal(ctx, a),
         Expression::ArrayPattern(_) => Ok(Type::Unknown), // Doesn't really have a type
+        Expression::StructPattern(ref mut p) => type_check_struct_pattern(ctx, p),
         Expression::ArrayGenerator(ref mut a) => type_check_array_generator(ctx, a),
         Expression::Call(ref mut c) => type_check_call(ctx, c),
         Expression::NameRef(ref mut nr) => type_check_name(ctx, nr, type_hint),

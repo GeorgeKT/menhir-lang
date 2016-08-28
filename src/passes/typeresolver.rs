@@ -1,4 +1,5 @@
-use ast::{StructDeclaration, TypeDeclaration, Function, Module, Type, func_type};
+use std::rc::Rc;
+use ast::{StructDeclaration, SumType, TypeDeclaration, Function, Module, Type, func_type};
 use passes::TypeCheckerContext;
 use compileerror::{CompileResult, unknown_name};
 
@@ -82,7 +83,44 @@ fn resolve_struct_member_types(ctx: &mut TypeCheckerContext, sd: &mut StructDecl
     }
 
     sd.typ = Type::Struct(member_types);
-    try!(ctx.add(&sd.name, sd.typ.clone(), sd.span.start));
+    Ok(TypeResolved::Yes)
+}
+
+fn resolve_sum_case_types(ctx: &mut TypeCheckerContext, st: &mut SumType, mode: ResolveMode) -> CompileResult<TypeResolved>
+{
+    if st.typ != Type::Unknown {
+        return Ok(TypeResolved::Yes);
+    }
+
+    let mut case_types = Vec::with_capacity(st.cases.len());
+    for c in st.cases.iter_mut()
+    {
+        if let Some(ref mut sd) = c.data
+        {
+            if try!(resolve_struct_member_types(ctx, sd, mode)) == TypeResolved::No
+            {
+                return Ok(TypeResolved::No);
+            }
+            else
+            {
+                case_types.push(sd.typ.clone());
+            }
+        }
+        else
+        {
+            case_types.push(Type::Int); // Use integer type for cases without structs
+        }
+    }
+
+    let case_types = Rc::new(case_types);
+    st.typ = Type::Sum(case_types.clone(), None);
+    try!(ctx.add(&st.name, st.typ.clone(), st.span.start));
+    for (idx, c) in st.cases.iter_mut().enumerate()
+    {
+        c.typ = Type::Sum(case_types.clone(), Some(idx));
+        try!(ctx.add(&c.name, c.typ.clone(), c.span.start));
+    }
+
     Ok(TypeResolved::Yes)
 }
 
@@ -94,12 +132,16 @@ fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: Re
         match *typ
         {
             TypeDeclaration::Struct(ref mut s) => {
-                if try!(resolve_struct_member_types(ctx, s, mode)) == TypeResolved::Yes {
+                if try!(resolve_struct_member_types(ctx, s, mode)) == TypeResolved::Yes
+                {
+                    try!(ctx.add(&s.name, s.typ.clone(), s.span.start));
                     num_resolved += 1;
                 }
             },
-            TypeDeclaration::Sum(ref mut _s) => {
-                panic!("NYI");
+            TypeDeclaration::Sum(ref mut s) => {
+                if try!(resolve_sum_case_types(ctx, s, mode)) == TypeResolved::Yes {
+                    num_resolved += 1;
+                }
             },
             TypeDeclaration::Alias(ref mut _a) => {
                 panic!("NYI");
