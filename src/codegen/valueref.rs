@@ -1,4 +1,3 @@
-use std::ops::Deref;
 use llvm::prelude::*;
 use llvm::core::*;
 
@@ -31,14 +30,14 @@ impl ValueRef
         let alloc = ctx.alloc(llvm_type, "alloc");
         match *typ
         {
-            Type::Array(ref element_type, _) => {
-                ValueRef::array(alloc, element_type.deref().clone())
+            Type::Array(ref at) => {
+                ValueRef::array(alloc, at.element_type.clone())
             },
-            Type::Slice(ref element_type) => {
-                ValueRef::slice(alloc, element_type.deref().clone())
+            Type::Slice(ref st) => {
+                ValueRef::slice(alloc, st.element_type.clone())
             },
-            Type::Struct(ref members) => {
-                ValueRef::struct_value(alloc, members.iter().map(|m| m.typ.clone()).collect())
+            Type::Struct(ref st) => {
+                ValueRef::struct_value(alloc, st.members.iter().map(|m| m.typ.clone()).collect())
             },
             _ => {
                 ValueRef::Ptr(alloc)

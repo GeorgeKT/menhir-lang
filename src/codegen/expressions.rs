@@ -1,5 +1,4 @@
 use std::ptr;
-use std::ops::Deref;
 use std::rc::Rc;
 
 use libc;
@@ -238,17 +237,17 @@ pub unsafe fn gen_function(ctx: &mut Context, signature: &FunctionSignature, bod
             ArgumentPassingMode::ByPtr => {
                 match arg.typ
                 {
-                    Type::Array(ref element_type, _) => {
-                        ctx.add_variable(&arg.name, ValueRef::array(var, element_type.deref().clone()));
+                    Type::Array(ref at) => {
+                        ctx.add_variable(&arg.name, ValueRef::array(var, at.element_type.clone()));
                     },
-                    Type::Slice(ref element_type) => {
-                        ctx.add_variable(&arg.name, ValueRef::slice(var, element_type.deref().clone()));
+                    Type::Slice(ref st) => {
+                        ctx.add_variable(&arg.name, ValueRef::slice(var, st.element_type.clone()));
                     },
                     Type::Struct(_) => {
                         ctx.add_variable(&arg.name, ValueRef::struct_value(var, arg.typ.get_member_types()));
                     },
-                    Type::Func(ref args, ref ret) => {
-                        let func_sig = anon_sig(&arg.name, ret, args);
+                    Type::Func(ref ft) => {
+                        let func_sig = anon_sig(&arg.name, &ft.return_type, &ft.args);
                         let fi = try!(gen_function_ptr(ctx, var, func_sig));
                         ctx.add_function(Rc::new(fi));
                     },
@@ -266,11 +265,11 @@ pub unsafe fn gen_function(ctx: &mut Context, signature: &FunctionSignature, bod
         let ret_arg = LLVMGetParam(fi.function, signature.args.len() as libc::c_uint);
         let mut vr = match signature.return_type
         {
-            Type::Array(ref element_type, _) => {
-                ValueRef::array(ret_arg, element_type.deref().clone())
+            Type::Array(ref at) => {
+                ValueRef::array(ret_arg, at.element_type.clone())
             },
-            Type::Slice(ref element_type) => {
-                ValueRef::slice(ret_arg, element_type.deref().clone())
+            Type::Slice(ref st) => {
+                ValueRef::slice(ret_arg, st.element_type.clone())
             },
             Type::Struct(_) => {
                 ValueRef::struct_value(ret_arg, signature.return_type.get_member_types())
@@ -594,9 +593,9 @@ unsafe fn gen_let_bindings(ctx: &mut Context, l: &LetExpression) -> CompileResul
         let b_type = ctx.resolve_type(&b.typ);
         match b.typ
         {
-            Type::Func(ref args, ref ret) => {
+            Type::Func(ref ft) => {
                 let func_ptr = try!(gen_expression(ctx, &b.init));
-                let func_sig = anon_sig(&b.name, ret, args);
+                let func_sig = anon_sig(&b.name, &ft.return_type, &ft.args);
                 let fi = try!(gen_function_ptr(ctx, func_ptr.get(), func_sig));
                 ctx.add_function(Rc::new(fi));
             },

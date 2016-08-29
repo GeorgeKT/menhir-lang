@@ -2,7 +2,7 @@ use std::io::Cursor;
 use ast::{Expression, NameRef, TreePrinter, Function, Argument, Call, Type, Module, TypeDeclaration,
     sig, unary_op, bin_op, array_lit, match_expression, match_case, array_pattern, array_generator,
     lambda, let_expression, let_binding, struct_member, struct_declaration, struct_initializer,
-    struct_member_access, sum_type, sum_type_case};
+    struct_member_access, sum_type_decl, sum_type_case_decl, func_type};
 use compileerror::{Span, span};
 use parser::{Lexer, Operator, parse_expression, parse_module};
 
@@ -387,12 +387,12 @@ fn test_function_with_func_type()
             vec![
                 Argument::new(
                     "a".into(),
-                    Type::Func(
+                    func_type(
                         vec![
                             Type::Int,
                             Type::Int,
                         ],
-                        Box::new(Type::Int),
+                        Type::Int,
                     ),
                     span(1, 5, 1, 24)
                 ),
@@ -514,11 +514,11 @@ fn test_sum_types()
     let md = th_mod(r#"
 type Option = Some | None
 "#);
-    assert!(*md.types.get("Option").unwrap() == TypeDeclaration::Sum(sum_type(
+    assert!(*md.types.get("Option").unwrap() == TypeDeclaration::Sum(sum_type_decl(
         "Option",
         vec![
-            sum_type_case("Some", None, span(2, 15, 2, 18)),
-            sum_type_case("None", None, span(2, 22, 2, 25)),
+            sum_type_case_decl("Some", None, span(2, 15, 2, 18)),
+            sum_type_case_decl("None", None, span(2, 22, 2, 25)),
         ],
         span(2, 1, 2, 25))
     ))
@@ -530,10 +530,10 @@ fn test_sum_types_with_data()
     let md = th_mod(r#"
 type Foo = Bar{int, int} | Foo | Baz{bla: bool}
 "#);
-    assert!(*md.types.get("Foo").unwrap() == TypeDeclaration::Sum(sum_type(
+    assert!(*md.types.get("Foo").unwrap() == TypeDeclaration::Sum(sum_type_decl(
         "Foo",
         vec![
-            sum_type_case(
+            sum_type_case_decl(
                 "Bar",
                 Some(
                     struct_declaration(
@@ -547,8 +547,8 @@ type Foo = Bar{int, int} | Foo | Baz{bla: bool}
                 ),
                 span(2, 12, 2, 24)
             ),
-            sum_type_case("Foo", None, span(2, 28, 2, 30)),
-            sum_type_case(
+            sum_type_case_decl("Foo", None, span(2, 28, 2, 30)),
+            sum_type_case_decl(
                 "Baz",
                 Some(
                     struct_declaration(

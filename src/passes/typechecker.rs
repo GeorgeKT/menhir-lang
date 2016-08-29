@@ -1,5 +1,5 @@
 use std::collections::{HashMap};
-use std::ops::{DerefMut, Deref};
+use std::ops::{DerefMut};
 use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral, ArrayGenerator,
     MatchExpression, Function, Lambda, Call, Type, LetExpression, ArgumentPassingMode,
     StructInitializer, StructMemberAccess, StructMember, StructPattern, func_type, array_type, slice_type};
@@ -251,9 +251,9 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileResult<
 {
     let func_type = try!(ctx.resolve_type(&c.callee.name).ok_or(unknown_name(c.span.start, &c.callee.name)));
 
-    if let Type::Func(arg_types, ret) = func_type
+    if let Type::Func(ref ft) = func_type
     {
-        for (idx, (arg, expected_arg_type)) in c.args.iter_mut().zip(arg_types).enumerate()
+        for (idx, (arg, expected_arg_type)) in c.args.iter_mut().zip(ft.args.iter()).enumerate()
         {
             let expected_arg_type = substitute_types(&expected_arg_type, &c.generic_args);
             let arg_type = try!(type_check_expression(ctx, arg, Some(expected_arg_type.clone())));
@@ -282,15 +282,15 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileResult<
             }
         }
 
-        if ret.is_generic() {
-            if let Some(resolved_ret) = c.generic_args.get(ret.deref()) {
+        if ft.return_type.is_generic() {
+            if let Some(resolved_ret) = c.generic_args.get(&ft.return_type) {
                 Ok(resolved_ret.clone())
             } else {
                 err(c.span.start, ErrorCode::GenericTypeSubstitutionError,
-                    format!("Cannot determine the type of the generic return type {}", ret))
+                    format!("Cannot determine the type of the generic return type {}", ft.return_type))
             }
         } else {
-            Ok(ret.deref().clone())
+            Ok(ft.return_type.clone())
         }
     }
     else
@@ -360,10 +360,10 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
             },
 
             Expression::NameRef(ref nr) => {
-                if let Some(Type::Sum(cases, Some(idx))) = ctx.resolve_type(&nr.name)
+                if let Some(Type::Sum(ref st)) = ctx.resolve_type(&nr.name)
                 {
-                    let ref e = cases[idx];
-                    if *e == Type::Int {
+                    let ref case = st.cases[st.index.expect("Sum type index must be known here")];
+                    if case.typ == Type::Int {
                         try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
                     } else {
                         return err(c.match_expr.span().start, ErrorCode::TypeError, format!("Invalid pattern match, match should be with an empty sum case"));
@@ -545,23 +545,26 @@ fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructIn
     let st = try!(ctx.resolve_type(&si.struct_name).ok_or(unknown_name(si.span.start, &si.struct_name)));
     match st
     {
-        Type::Struct(members) => {
-            try!(type_check_struct_members_in_initializer(ctx, &members, si));
-            si.typ = Type::Struct(members);
+        Type::Struct(st) => {
+            try!(type_check_struct_members_in_initializer(ctx, &st.members, si));
+            si.typ = Type::Struct(st);
             Ok(si.typ.clone())
         },
-        Type::Sum(cases, opt_idx) => {
-            let idx = if let Some(idx) = opt_idx {idx} else {return err(si.span.start, ErrorCode::TypeError, format!("Cannot determine Sum type case"))};
+        Type::Sum(st) => {
+            let idx = if let Some(idx) = st.index {
+                idx
+            } else {
+                return err(si.span.start, ErrorCode::TypeError, format!("Cannot determine Sum type case"))
+            };
 
-            let ref sd = cases[idx];
-            match *sd
+            match st.cases[idx].typ
             {
-                Type::Struct(ref members) => try!(type_check_struct_members_in_initializer(ctx, members, si)),
+                Type::Struct(ref s) => try!(type_check_struct_members_in_initializer(ctx, &s.members, si)),
                 Type::Int => {},
                 _ => return err(si.span.start, ErrorCode::TypeError, format!("Invalid sum type case")),
             }
 
-            si.typ = Type::Sum(cases.clone(), Some(idx));
+            si.typ = Type::Sum(st);
             Ok(si.typ.clone())
         },
         _ => err(si.span.start, ErrorCode::TypeError, format!("{} is not a struct", si.struct_name)),
@@ -586,8 +589,8 @@ fn type_check_struct_member_access(ctx: &mut TypeCheckerContext, sma: &mut Struc
     {
         st = match st
         {
-            Type::Struct(ref members) => {
-                let (member_idx, member_type) = try!(find_member_type(members, &member_name, sma.span.start));
+            Type::Struct(ref st) => {
+                let (member_idx, member_type) = try!(find_member_type(&st.members, &member_name, sma.span.start));
                 sma.indices.push(member_idx);
                 member_type
             },
@@ -605,17 +608,17 @@ fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern
     let typ = try!(ctx.resolve_type(&p.name).ok_or(unknown_name(p.span.start, &p.name)));
     match typ
     {
-        Type::Sum(cases, opt_idx) => {
-            if let Some(idx) = opt_idx
+        Type::Sum(ref st) => {
+            if let Some(idx) = st.index
             {
-                let ref sd = cases[idx];
-                match *sd
+                let ref case = st.cases[idx];
+                match case.typ
                 {
-                    Type::Struct(ref members) => {
-                        if members.len() != p.bindings.len() {
+                    Type::Struct(ref s) => {
+                        if s.members.len() != p.bindings.len() {
                             err(p.span.start, ErrorCode::TypeError, format!("Not enough bindings in pattern match"))
                         } else {
-                            p.types = members.iter().map(|sm| sm.typ.clone()).collect();
+                            p.types = s.members.iter().map(|sm| sm.typ.clone()).collect();
                             Ok(Type::Unknown)
                         }
                     },
@@ -628,8 +631,8 @@ fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern
             }
         },
 
-        Type::Struct(ref members) => {
-            p.types = members.iter().map(|sm| sm.typ.clone()).collect();
+        Type::Struct(ref st) => {
+            p.types = st.members.iter().map(|sm| sm.typ.clone()).collect();
             Ok(Type::Unknown)
         },
         _ => err(p.span.start, ErrorCode::TypeError, format!("Struct pattern is only allowed for structs and sum types containing structs"))

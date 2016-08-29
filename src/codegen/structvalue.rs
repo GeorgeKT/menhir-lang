@@ -1,5 +1,4 @@
 use std::os::raw::c_uint;
-use std::ops::Deref;
 use llvm::prelude::*;
 use llvm::core::*;
 
@@ -36,8 +35,8 @@ impl StructValue
         let member = LLVMBuildStructGEP(ctx.builder, self.value, idx as c_uint, cstr("member"));
         match self.member_types[idx]
         {
-            Type::Array(ref element_type, _) => ValueRef::array(member, element_type.deref().clone()),
-            Type::Slice(ref element_type) => ValueRef::slice(member, element_type.deref().clone()),
+            Type::Array(ref at) => ValueRef::array(member, at.element_type.clone()),
+            Type::Slice(ref st) => ValueRef::slice(member, st.element_type.clone()),
             Type::Struct(_) => ValueRef::struct_value(member, self.member_types[idx].get_member_types()),
             _ => ValueRef::Ptr(member),
         }

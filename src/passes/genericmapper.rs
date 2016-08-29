@@ -23,14 +23,16 @@ pub fn substitute_types(generic: &Type, known_types: &HashMap<Type, Type>) -> Ty
 
     match *generic
     {
-        Type::Array(ref el_type, len) => {
-            array_type(substitute_types(&el_type, known_types), len)
+        Type::Array(ref at) => {
+            array_type(substitute_types(&at.element_type, known_types), at.length)
         },
-        Type::Slice(ref el_type) => {
-            slice_type(substitute_types(&el_type, known_types))
+        Type::Slice(ref st) => {
+            slice_type(substitute_types(&st.element_type, known_types))
         },
-        Type::Func(ref args, ref ret) => {
-            func_type(args.iter().map(|t| substitute_types(t, known_types)).collect(), substitute_types(ret, known_types))
+        Type::Func(ref ft) => {
+            func_type(
+                ft.args.iter().map(|t| substitute_types(t, known_types)).collect(),
+                substitute_types(&ft.return_type, known_types))
         },
         _ => generic.clone(),
     }
@@ -57,46 +59,46 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut HashMap
             try!(add_generic_mapping(known_types, &new_generic, actual, pos));
             Ok(actual.clone())
         },
-        Type::Slice(ref generic_el_type) => {
+        Type::Slice(ref generic_st) => {
             match *actual
             {
-                Type::Slice(ref actual_el_type) => {
-                    try!(add_generic_mapping(known_types, generic_el_type, actual_el_type, pos));
-                    let new_el_type = try!(fill_in_generics(actual_el_type, generic_el_type, known_types, pos));
+                Type::Slice(ref actual_st) => {
+                    try!(add_generic_mapping(known_types, &generic_st.element_type, &actual_st.element_type, pos));
+                    let new_el_type = try!(fill_in_generics(&actual_st.element_type, &generic_st.element_type, known_types, pos));
                     Ok(slice_type(new_el_type))
                 },
                 _ => map_err,
             }
         },
-        Type::Array(ref generic_el_type, generic_len) => {
+        Type::Array(ref generic_at) => {
             match *actual
             {
-                Type::Array(ref actual_el_type, actual_len) => {
-                    if generic_len != actual_len {
+                Type::Array(ref actual_at) => {
+                    if generic_at.length != actual_at.length {
                         return map_err;
                     }
-                    try!(add_generic_mapping(known_types, generic_el_type, actual_el_type, pos));
-                    let new_el_type = try!(fill_in_generics(actual_el_type, generic_el_type, known_types, pos));
-                    Ok(array_type(new_el_type, generic_len))
+                    try!(add_generic_mapping(known_types, &generic_at.element_type, &actual_at.element_type, pos));
+                    let new_el_type = try!(fill_in_generics(&actual_at.element_type, &generic_at.element_type, known_types, pos));
+                    Ok(array_type(new_el_type, generic_at.length))
                 },
                 _ => map_err,
             }
         },
-        Type::Func(ref generic_args, ref generic_ret) => {
+        Type::Func(ref generic_ft) => {
             match *actual {
-                Type::Func(ref actual_args, ref actual_ret) => {
-                    if actual_args.len() != generic_args.len() {
+                Type::Func(ref actual_ft) => {
+                    if generic_ft.args.len() != actual_ft.args.len() {
                         return map_err;
                     }
 
-                    let mut new_args = Vec::with_capacity(generic_args.len());
-                    for (ga, aa) in generic_args.iter().zip(actual_args.iter()) {
+                    let mut new_args = Vec::with_capacity(generic_ft.args.len());
+                    for (ga, aa) in generic_ft.args.iter().zip(actual_ft.args.iter()) {
                         let na = try!(fill_in_generics(aa, ga, known_types, pos));
                         new_args.push(na);
                     }
 
-                    let nr = try!(fill_in_generics(actual_ret, generic_ret, known_types, pos));
-                    Ok(Type::Func(new_args, Box::new(nr)))
+                    let nr = try!(fill_in_generics(&actual_ft.return_type, &generic_ft.return_type, known_types, pos));
+                    Ok(func_type(new_args, nr))
                 },
                 _ => map_err,
             }

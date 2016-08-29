@@ -3,7 +3,7 @@ use compileerror::{Span};
 
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct SumTypeCase
+pub struct SumTypeCaseDeclaration
 {
     pub name: String,
     pub data: Option<StructDeclaration>,
@@ -11,9 +11,9 @@ pub struct SumTypeCase
     pub typ: Type,
 }
 
-pub fn sum_type_case(name: &str, data: Option<StructDeclaration>, span: Span) -> SumTypeCase
+pub fn sum_type_case_decl(name: &str, data: Option<StructDeclaration>, span: Span) -> SumTypeCaseDeclaration
 {
-    SumTypeCase{
+    SumTypeCaseDeclaration{
         name: name.into(),
         data: data,
         span: span,
@@ -22,17 +22,17 @@ pub fn sum_type_case(name: &str, data: Option<StructDeclaration>, span: Span) ->
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct SumType
+pub struct SumTypeDeclaration
 {
     pub name: String,
-    pub cases: Vec<SumTypeCase>,
+    pub cases: Vec<SumTypeCaseDeclaration>,
     pub span: Span,
     pub typ: Type,
 }
 
-pub fn sum_type(name: &str, cases: Vec<SumTypeCase>, span: Span) -> SumType
+pub fn sum_type_decl(name: &str, cases: Vec<SumTypeCaseDeclaration>, span: Span) -> SumTypeDeclaration
 {
-    SumType{
+    SumTypeDeclaration{
         name: name.into(),
         cases: cases,
         span: span,
@@ -40,7 +40,7 @@ pub fn sum_type(name: &str, cases: Vec<SumTypeCase>, span: Span) -> SumType
     }
 }
 
-impl TreePrinter for SumType
+impl TreePrinter for SumTypeDeclaration
 {
     fn print(&self, level: usize)
     {
@@ -52,7 +52,7 @@ impl TreePrinter for SumType
     }
 }
 
-impl TreePrinter for SumTypeCase
+impl TreePrinter for SumTypeCaseDeclaration
 {
     fn print(&self, level: usize)
     {

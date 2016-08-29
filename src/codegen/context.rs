@@ -279,30 +279,30 @@ impl Context
             Type::Int => LLVMInt64TypeInContext(self.context),
             Type::Bool => LLVMInt1TypeInContext(self.context),
             Type::Float => LLVMDoubleTypeInContext(self.context),
-            Type::Array(ref et, len) => {
-                LLVMArrayType(self.resolve_type(et), len as u32)
+            Type::Array(ref at) => {
+                LLVMArrayType(self.resolve_type(&at.element_type), at.length as u32)
             },
-            Type::Slice(ref et) => {
-                let e = self.resolve_type(et);
+            Type::Slice(ref st) => {
+                let e = self.resolve_type(&st.element_type);
                 self.get_slice_type(e)
             },
-            Type::Func(ref args, ref ret) => {
-                let mut llvm_arg_types = Vec::with_capacity(args.len());
-                for arg in args {
+            Type::Func(ref ft) => {
+                let mut llvm_arg_types = Vec::with_capacity(ft.args.len());
+                for arg in &ft.args {
                     llvm_arg_types.push(self.resolve_type(arg));
                 }
 
-                LLVMFunctionType(self.resolve_type(ret), llvm_arg_types.as_mut_ptr(), args.len() as c_uint, 0)
+                LLVMFunctionType(self.resolve_type(&ft.return_type), llvm_arg_types.as_mut_ptr(),ft.args.len() as c_uint, 0)
             },
-            Type::Struct(ref members) => {
-                let mut llvm_member_types = Vec::with_capacity(members.len());
-                for m in members {
+            Type::Struct(ref st) => {
+                let mut llvm_member_types = Vec::with_capacity(st.members.len());
+                for m in &st.members {
                     llvm_member_types.push(self.resolve_type(&m.typ));
                 }
                 LLVMStructType(llvm_member_types.as_mut_ptr(), llvm_member_types.len() as c_uint, 0)
             },
             Type::String => panic!("Not yet implemented"),
-            Type::Sum(_, _) => panic!("Not yet implemented"),
+            Type::Sum(_) => panic!("Not yet implemented"),
             Type::Generic(_) => panic!("Internal Compiler Error: All generic types must have been resolved before code generation"),
             Type::Unresolved(_) => panic!("Internal Compiler Error: All types must be resolved before code generation"),
             Type::Unknown => panic!("Internal Compiler Error: all types must be known before code generation"),

@@ -1,4 +1,3 @@
-use std::ops::Deref;
 use llvm::prelude::*;
 use llvm::core::*;
 
@@ -54,8 +53,8 @@ impl Sequence for Array
         let element = LLVMBuildGEP(ctx.builder, self.array, index_expr.as_mut_ptr(), 2, cstr("el"));
         match self.element_type
         {
-            Type::Slice(ref nested_element_type) => ValueRef::slice(element, nested_element_type.deref().clone()),
-            Type::Array(ref nested_element_type, _) => ValueRef::array(element, nested_element_type.deref().clone()),
+            Type::Slice(ref st) => ValueRef::slice(element, st.element_type.clone()),
+            Type::Array(ref at) => ValueRef::array(element, at.element_type.clone()),
             Type::Struct(_) => ValueRef::struct_value(element, self.element_type.get_member_types()),
             _ => ValueRef::Ptr(element),
         }

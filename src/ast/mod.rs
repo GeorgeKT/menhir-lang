@@ -24,8 +24,8 @@ pub use self::nameref::NameRef;
 pub use self::operations::{BinaryOp, UnaryOp, unary_op, bin_op};
 pub use self::structs::{StructDeclaration, StructMember, StructInitializer, StructMemberAccess, StructPattern,
     struct_member, struct_declaration, struct_initializer, struct_member_access};
-pub use self::sumtype::{SumType, SumTypeCase, sum_type, sum_type_case};
-pub use self::types::{Type, TypeAlias, to_primitive, func_type, array_type, slice_type, type_alias};
+pub use self::sumtype::{SumTypeDeclaration, SumTypeCaseDeclaration, sum_type_decl, sum_type_case_decl};
+pub use self::types::{Type, TypeAlias, to_primitive, func_type, array_type, slice_type, type_alias, sum_type, sum_type_case, struct_type};
 
 use compileerror::{Span};
 
@@ -48,7 +48,7 @@ pub trait TreePrinter
 pub enum TypeDeclaration
 {
     Struct(StructDeclaration),
-    Sum(SumType),
+    Sum(SumTypeDeclaration),
     Alias(TypeAlias),
 }
 

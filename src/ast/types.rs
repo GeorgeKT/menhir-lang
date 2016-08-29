@@ -1,11 +1,50 @@
 use std::cmp::{Eq, PartialEq};
 use std::fmt;
 use std::hash::{Hasher, Hash};
-use std::ops::Deref;
 use std::rc::Rc;
 use itertools::free::join;
 use ast::{Expression, TreePrinter, StructMember, prefix};
 use compileerror::Span;
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct SumTypeCase
+{
+    pub name: String,
+    pub typ: Type,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct SumType
+{
+    pub cases: Vec<SumTypeCase>,
+    pub index: Option<usize>,  // Option<usize> contains the index when we know the case
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct StructType
+{
+    pub members: Vec<StructMember>,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct FuncType
+{
+    pub args: Vec<Type>,
+    pub return_type: Type,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct ArrayType
+{
+    pub element_type: Type,
+    pub length: usize,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct SliceType
+{
+    pub element_type: Type,
+}
 
 #[derive(Debug, Clone)]
 pub enum Type
@@ -17,12 +56,12 @@ pub enum Type
     String,
     Bool,
     Unresolved(String),
-    Array(Box<Type>, usize),
-    Slice(Box<Type>),
+    Array(Rc<ArrayType>),
+    Slice(Rc<SliceType>),
     Generic(String),
-    Func(Vec<Type>, Box<Type>), // args and return type
-    Struct(Vec<StructMember>),
-    Sum(Rc<Vec<Type>>, Option<usize>), // Option<usize> contains the index when we know the case
+    Func(Rc<FuncType>), // args and return type
+    Struct(Rc<StructType>),
+    Sum(Rc<SumType>),
 }
 
 #[derive(Debug,  Eq, PartialEq, Clone)]
@@ -60,7 +99,7 @@ impl Type
     {
         match *self
         {
-            Type::Array(_, 0) => true,
+            Type::Array(ref at) => at.length == 0,
             _ => false,
         }
     }
@@ -69,7 +108,7 @@ impl Type
     {
         match *self
         {
-            Type::Array(_, _) => true,
+            Type::Array(_) => true,
             Type::Slice(_) => true,
             _ => false,
         }
@@ -79,16 +118,16 @@ impl Type
     {
         match *self
         {
-            Type::Array(ref et, _) => Some(et.deref().clone()),
-            Type::Slice(ref et) => Some(et.deref().clone()),
+            Type::Array(ref at) => Some(at.element_type.clone()),
+            Type::Slice(ref st) => Some(st.element_type.clone()),
             _ => None,
         }
     }
 
     pub fn get_member_types(&self) -> Vec<Type>
     {
-        if let &Type::Struct(ref members) = self {
-            members.iter().map(|m| m.typ.clone()).collect()
+        if let &Type::Struct(ref st) = self {
+            st.members.iter().map(|m| m.typ.clone()).collect()
         }
         else {
             Vec::new()
@@ -114,7 +153,7 @@ impl Type
     {
         match (self, other)
         {
-            (&Type::Slice(ref s), &Type::Array(ref t, _)) if s == t =>
+            (&Type::Slice(ref s), &Type::Array(ref t)) if s.element_type == t.element_type =>
                 // arrays can be converted to slices if the element type is the same
                 Some(Expression::ArrayToSliceConversion(Box::new(expr.clone())))
             ,
@@ -127,9 +166,9 @@ impl Type
         match *self
         {
             Type::Generic(_) => true,
-            Type::Array(ref inner, _) => inner.is_generic(),
-            Type::Slice(ref inner) => inner.is_generic(),
-            Type::Func(ref args, ref ret) => ret.is_generic() || args.iter().any(|a| a.is_generic()),
+            Type::Array(ref at) => at.element_type.is_generic(),
+            Type::Slice(ref st) => st.element_type.is_generic(),
+            Type::Func(ref ft) => ft.return_type.is_generic() || ft.args.iter().any(|a| a.is_generic()),
             _ => false,
         }
     }
@@ -138,11 +177,11 @@ impl Type
     {
         match *self
         {
-            Type::Array(_, _) => true,
+            Type::Array(_) => true,
             Type::Slice(_) => true,
-            Type::Func(_, _) => true,
+            Type::Func(_) => true,
             Type::Struct(_) => true,
-            Type::Sum(_, _) => true,
+            Type::Sum(_) => true,
             _ => false,
         }
     }
@@ -151,10 +190,10 @@ impl Type
     {
         match *self
         {
-            Type::Array(_, _) => true,
+            Type::Array(_) => true,
             Type::Slice(_) => true,
             Type::Struct(_) => true,
-            Type::Sum(_,_) => true,
+            Type::Sum(_) => true,
             _ => false,
         }
     }
@@ -162,17 +201,48 @@ impl Type
 
 pub fn func_type(args: Vec<Type>, ret: Type) -> Type
 {
-    Type::Func(args, Box::new(ret))
+    Type::Func(Rc::new(FuncType{
+        args: args,
+        return_type: ret,
+    }))
 }
 
 pub fn array_type(element_type: Type, len: usize) -> Type
 {
-    Type::Array(Box::new(element_type), len)
+    Type::Array(Rc::new(ArrayType{
+        element_type: element_type,
+        length: len,
+    }))
 }
 
 pub fn slice_type(element_type: Type) -> Type
 {
-    Type::Slice(Box::new(element_type))
+    Type::Slice(Rc::new(SliceType{
+        element_type: element_type,
+    }))
+}
+
+pub fn sum_type_case(name: &str, typ: Type) -> SumTypeCase
+{
+    SumTypeCase{
+        name: name.into(),
+        typ: typ,
+    }
+}
+
+pub fn sum_type(cases: Vec<SumTypeCase>, index: Option<usize>) -> Type
+{
+    Type::Sum(Rc::new(SumType{
+        cases: cases,
+        index: index,
+    }))
+}
+
+pub fn struct_type(members: Vec<StructMember>) -> Type
+{
+    Type::Struct(Rc::new(StructType{
+        members: members,
+    }))
 }
 
 pub fn type_alias(name: &str, original: Type, span: Span) -> TypeAlias
@@ -197,19 +267,19 @@ impl fmt::Display for Type
             Type::String => write!(f, "string"),
             Type::Bool => write!(f, "bool"),
             Type::Unresolved(ref s) => write!(f, "{}", s),
-            Type::Array(ref at, len) =>
-                if len == 0 {
+            Type::Array(ref at) =>
+                if at.length == 0 {
                     write!(f, "[]")
                 } else {
-                    write!(f, "[{}; {}]", at, len)
+                    write!(f, "[{}; {}]", at.element_type, at.length)
                 },
-            Type::Slice(ref at) => write!(f, "[{}]", at),
+            Type::Slice(ref at) => write!(f, "[{}]", at.element_type),
             Type::Generic(ref g) => write!(f, "${}", g),
-            Type::Func(ref args, ref ret) => write!(f, "({}) -> {}", join(args.iter(), ", "), ret),
-            Type::Struct(ref members) =>
-                write!(f, "{{{}}}", join(members.iter().map(|m| &m.typ), ", ")),
-            Type::Sum(ref cases, _) =>
-                write!(f, "{}", join(cases.iter(), " | ")),
+            Type::Func(ref ft) => write!(f, "({}) -> {}", join(ft.args.iter(), ", "), ft.return_type),
+            Type::Struct(ref st) =>
+                write!(f, "{{{}}}", join(st.members.iter().map(|m| &m.typ), ", ")),
+            Type::Sum(ref st) =>
+                write!(f, "{}", join(st.cases.iter().map(|m| &m.typ), " | ")),
         }
     }
 }
@@ -265,12 +335,12 @@ impl PartialEq<Type> for Type
             (&Type::String, &Type::String) => true,
             (&Type::Bool, &Type::Bool) => true,
             (&Type::Unresolved(ref s), &Type::Unresolved(ref t)) => *s == *t,
-            (&Type::Array(ref at, alen), &Type::Array(ref bt, blen)) => alen == blen && *at == *bt,
+            (&Type::Array(ref at), &Type::Array(ref bt)) => *at == *bt,
             (&Type::Slice(ref at), &Type::Slice(ref bt)) => *at == *bt,
             (&Type::Generic(ref at), &Type::Generic(ref bt)) => *at == *bt,
-            (&Type::Func(ref a_args, ref a_ret), &Type::Func(ref b_args, ref b_ret)) => *a_ret == *b_ret && *a_args == *b_args,
-            (&Type::Struct(ref a_members), &Type::Struct(ref b_members)) => *a_members == *b_members,
-            (&Type::Sum(ref a_cases, _), &Type::Sum(ref b_cases, _)) => *a_cases == *b_cases,
+            (&Type::Func(ref a_ft), &Type::Func(ref b_ft)) => *a_ft == *b_ft,
+            (&Type::Struct(ref a_st), &Type::Struct(ref b_st)) => *a_st == *b_st,
+            (&Type::Sum(ref a_st), &Type::Sum(ref b_st)) => *a_st == *b_st,
             _ => false,
         }
     }

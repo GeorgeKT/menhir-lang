@@ -2,10 +2,10 @@ use std::fs;
 use std::io::Read;
 use std::collections::HashMap;
 use ast::{Expression, Function, Call, NameRef, Type, Argument, Module, StructDeclaration,
-    TypeDeclaration, SumType, sum_type, sum_type_case, type_alias,
+    TypeDeclaration, SumTypeDeclaration, sum_type_decl, sum_type_case_decl, type_alias,
     array_lit, array_pattern, array_generator, unary_op, bin_op, sig, to_primitive,
     match_expression, match_case, lambda, let_expression, let_binding, array_type, slice_type,
-    struct_member, struct_declaration, struct_initializer, struct_member_access};
+    struct_member, struct_declaration, struct_initializer, struct_member_access, func_type};
 use compileerror::{CompileResult, ErrorCode, Span, Pos, err};
 use parser::{TokenQueue, Token, TokenKind, Operator, Lexer};
 
@@ -225,7 +225,7 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
         try!(tq.expect(TokenKind::CloseParen));
         try!(tq.expect(TokenKind::Arrow));
         let ret = try!(parse_type(tq));
-        Ok(Type::Func(args, Box::new(ret)))
+        Ok(func_type(args, ret))
     }
     else
     {
@@ -355,7 +355,7 @@ fn parse_type_declaration(tq: &mut TokenQueue, pos: Pos) -> CompileResult<TypeDe
 }
 
 
-fn parse_sum_type(tq: &mut TokenQueue, name: &str, pos: Pos) -> CompileResult<SumType>
+fn parse_sum_type(tq: &mut TokenQueue, name: &str, pos: Pos) -> CompileResult<SumTypeDeclaration>
 {
     let mut cases = Vec::new();
     loop
@@ -363,13 +363,13 @@ fn parse_sum_type(tq: &mut TokenQueue, name: &str, pos: Pos) -> CompileResult<Su
         let (case_name, case_name_span) = try!(tq.expect_identifier());
         if tq.is_next(TokenKind::Pipe)
         {
-            cases.push(sum_type_case(&case_name, None, case_name_span));
+            cases.push(sum_type_case_decl(&case_name, None, case_name_span));
             try!(tq.pop());
         }
         else if tq.is_next(TokenKind::OpenCurly)
         {
             let sd = try!(parse_struct_type(tq, &case_name, case_name_span.start));
-            cases.push(sum_type_case(&case_name, Some(sd), Span::new(case_name_span.start, tq.pos())));
+            cases.push(sum_type_case_decl(&case_name, Some(sd), Span::new(case_name_span.start, tq.pos())));
             if tq.is_next(TokenKind::Pipe)
             {
                 try!(tq.pop());
@@ -381,12 +381,12 @@ fn parse_sum_type(tq: &mut TokenQueue, name: &str, pos: Pos) -> CompileResult<Su
         }
         else
         {
-            cases.push(sum_type_case(&case_name, None, case_name_span));
+            cases.push(sum_type_case_decl(&case_name, None, case_name_span));
             break;
         }
     }
 
-    Ok(sum_type(name, cases, Span::new(pos, tq.pos())))
+    Ok(sum_type_decl(name, cases, Span::new(pos, tq.pos())))
 }
 
 fn parse_struct_type(tq: &mut TokenQueue, name: &str, pos: Pos) -> CompileResult<StructDeclaration>

@@ -1,5 +1,5 @@
-use std::rc::Rc;
-use ast::{StructDeclaration, SumType, TypeDeclaration, Function, Module, Type, func_type};
+use ast::{StructDeclaration, SumTypeDeclaration, TypeDeclaration, Function, Module, Type, func_type,
+    struct_type, sum_type, sum_type_case};
 use passes::TypeCheckerContext;
 use compileerror::{CompileResult, unknown_name};
 
@@ -82,11 +82,11 @@ fn resolve_struct_member_types(ctx: &mut TypeCheckerContext, sd: &mut StructDecl
         member_types.push(m.clone());
     }
 
-    sd.typ = Type::Struct(member_types);
+    sd.typ = struct_type(member_types);
     Ok(TypeResolved::Yes)
 }
 
-fn resolve_sum_case_types(ctx: &mut TypeCheckerContext, st: &mut SumType, mode: ResolveMode) -> CompileResult<TypeResolved>
+fn resolve_sum_case_types(ctx: &mut TypeCheckerContext, st: &mut SumTypeDeclaration, mode: ResolveMode) -> CompileResult<TypeResolved>
 {
     if st.typ != Type::Unknown {
         return Ok(TypeResolved::Yes);
@@ -103,21 +103,20 @@ fn resolve_sum_case_types(ctx: &mut TypeCheckerContext, st: &mut SumType, mode: 
             }
             else
             {
-                case_types.push(sd.typ.clone());
+                case_types.push(sum_type_case(&c.name, sd.typ.clone()));
             }
         }
         else
         {
-            case_types.push(Type::Int); // Use integer type for cases without structs
+            case_types.push(sum_type_case(&c.name, Type::Int)); // Use integer type for cases without structs
         }
     }
 
-    let case_types = Rc::new(case_types);
-    st.typ = Type::Sum(case_types.clone(), None);
+    st.typ = sum_type(case_types.clone(), None);
     try!(ctx.add(&st.name, st.typ.clone(), st.span.start));
     for (idx, c) in st.cases.iter_mut().enumerate()
     {
-        c.typ = Type::Sum(case_types.clone(), Some(idx));
+        c.typ = sum_type(case_types.clone(), Some(idx));
         try!(ctx.add(&c.name, c.typ.clone(), c.span.start));
     }
 

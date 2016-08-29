@@ -29,13 +29,13 @@ impl Lambda
     {
         match *typ
         {
-            Type::Func(ref args, ref ret) => {
-                if args.len() != self.sig.args.len() {
+            Type::Func(ref ft) => {
+                if ft.args.len() != self.sig.args.len() {
                     return err(self.span.start, ErrorCode::LambdaDoesNotMatch,
-                        format!("Lambda expression has {} arguments, not {} arguments", self.sig.args.len(), args.len()));
+                        format!("Lambda expression has {} arguments, not {} arguments", self.sig.args.len(), ft.args.len()));
                 }
 
-                for (arg_typ, ref mut arg) in args.iter().zip(self.sig.args.iter_mut())
+                for (arg_typ, ref mut arg) in ft.args.iter().zip(self.sig.args.iter_mut())
                 {
                     if arg.typ.is_generic() {
                         arg.typ = arg_typ.clone();
@@ -46,8 +46,7 @@ impl Lambda
                     }
                 }
 
-                use std::ops::Deref;
-                self.sig.return_type = ret.deref().clone();
+                self.sig.return_type = ft.return_type.clone();
                 self.sig.typ = typ.clone();
                 Ok(())
             },
