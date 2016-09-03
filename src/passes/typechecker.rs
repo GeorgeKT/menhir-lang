@@ -362,6 +362,12 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
 
             Expression::NameRef(ref mut nr) => {
                 try!(type_check_name(ctx, nr, None));
+                if nr.name != "_" && nr.typ != target_type {
+                    return err(match_pos, ErrorCode::TypeError,
+                        format!("Cannot pattern match an expression of type {} with an expression of type {}",
+                            target_type, nr.typ));
+                }
+
                 match nr.typ
                 {
                     Type::Sum(ref st) => {
@@ -404,6 +410,12 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
 
             Expression::StructPattern(ref mut p) => {
                 try!(type_check_struct_pattern(ctx, p));
+                if p.typ != target_type {
+                    return err(match_pos, ErrorCode::TypeError,
+                        format!("Cannot pattern match an expression of type {} with an expression of type {}",
+                            target_type, p.typ));
+                }
+
                 ctx.push_stack();
 
                 for (binding, typ) in p.bindings.iter().zip(p.types.iter()) {

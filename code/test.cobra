@@ -1,12 +1,13 @@
 type Animal = Dog | Cat | Bird | Fish
-type Option = Some{i} | None
+type Option = Some{int} | None
 
 number(a: Animal) -> int =
     match a
         Dog => 7,
         Cat => 8,
         Bird => 22,
-        Fish => 9
+        Fish => 9,
+        Some{i} => 10
 
 unwrap_or(opt: Option, def: int) -> int =
     match opt
