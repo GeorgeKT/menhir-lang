@@ -13,7 +13,7 @@ matrix:
 
 before_install:
         - sudo apt-get -qq update
-        - sudo apt-get install -y libllvm3.8 llvm-3.8 llvm-3.8-dev llvm-3.8-runtime libffi-dev libclang-3.8-dev clang-3.8
+        - sudo apt-get install -y libllvm3.8 llvm-3.8 llvm-3.8-dev llvm-3.8-runtime libffi-dev libclang-3.8-dev clang-3.8 texi2html
         - sudo rm -rf /usr/local/clang-*
         - ls -l /usr/bin/llvm-config*
         - sudo rm -f /usr/bin/llvm-config && sudo ln -s /usr/bin/llvm-config-3.8 /usr/bin/llvm-config
