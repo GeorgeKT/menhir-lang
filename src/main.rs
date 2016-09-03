@@ -90,8 +90,6 @@ fn main()
         optimize: args.flag_optimize.unwrap_or(false),
     };
 
-
-    //let output_file = args.flag_output.unwrap_or(default_output_file(&input_file));
     match parse_file(&input_file).and_then(|mut module| {
         //module.print(0);
         try!(type_check_module(&mut module));

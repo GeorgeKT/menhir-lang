@@ -3,14 +3,14 @@ use ast::{StructDeclaration, SumTypeDeclaration, TypeDeclaration, Function, Modu
 use passes::TypeCheckerContext;
 use compileerror::{CompileResult, unknown_name};
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 enum TypeResolved
 {
     Yes,
     No,
 }
 
-#[derive(Eq, PartialEq, Copy, Clone)]
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
 enum ResolveMode
 {
     Lazy,
@@ -171,7 +171,7 @@ pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module) -> Compi
     loop
     {
         let already_resolved = num_resolved;
-        num_resolved += try!(resolve_all_types(ctx, module, ResolveMode::Lazy));
+        num_resolved = try!(resolve_all_types(ctx, module, ResolveMode::Lazy));
 
         if num_resolved == module.types.len() {
             break;

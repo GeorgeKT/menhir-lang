@@ -342,3 +342,28 @@ main() -> int =
     println!("r: {:?}", r);
     assert!(r == Ok(34));
 }
+
+#[test]
+fn test_multiple_sum_types() {
+    let r = run(r#"
+type Animal = Dog | Cat | Bird | Fish
+type Option = Some{int} | None
+
+number(a: Animal) -> int =
+    match a
+        Dog => 7,
+        Cat => 8,
+        Bird => 22,
+        Fish => 9
+
+unwrap_or(opt: Option, def: int) -> int =
+    match opt
+        Some{i} => i,
+        None => def
+
+main() -> int =
+    number(Dog) + number(Fish) + number(Cat) + number(Bird) + unwrap_or(Some{7}, 9)
+    "#, true);
+    println!("r: {:?}", r);
+    assert!(r == Ok(53));
+}
