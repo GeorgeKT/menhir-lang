@@ -1,5 +1,5 @@
 use ast::{StructDeclaration, SumTypeDeclaration, TypeDeclaration, Function, Module, Type, func_type,
-    struct_type, sum_type, sum_type_case};
+    struct_type, sum_type, sum_type_case, enum_type};
 use passes::TypeCheckerContext;
 use compileerror::{CompileResult, unknown_name};
 
@@ -112,12 +112,26 @@ fn resolve_sum_case_types(ctx: &mut TypeCheckerContext, st: &mut SumTypeDeclarat
         }
     }
 
-    st.typ = sum_type(case_types.clone(), None);
-    try!(ctx.add(&st.name, st.typ.clone(), st.span.start));
-    for (idx, c) in st.cases.iter_mut().enumerate()
+    if case_types.iter().all(|ct| ct.typ == Type::Int)
     {
-        c.typ = sum_type(case_types.clone(), Some(idx));
-        try!(ctx.add(&c.name, c.typ.clone(), c.span.start));
+        let case_names: Vec<String> = st.cases.iter().map(|c| c.name.clone()).collect();
+        st.typ = enum_type(case_names.clone(), None);
+        try!(ctx.add(&st.name, st.typ.clone(), st.span.start));
+        for (idx, c) in st.cases.iter().enumerate()
+        {
+            let et = enum_type(case_names.clone(), Some(idx));
+            try!(ctx.add(&c.name, et, c.span.start));
+        }
+    }
+    else
+    {
+        st.typ = sum_type(case_types.clone(), None);
+        try!(ctx.add(&st.name, st.typ.clone(), st.span.start));
+        for (idx, c) in st.cases.iter_mut().enumerate()
+        {
+            c.typ = sum_type(case_types.clone(), Some(idx));
+            try!(ctx.add(&c.name, c.typ.clone(), c.span.start));
+        }
     }
 
     Ok(TypeResolved::Yes)

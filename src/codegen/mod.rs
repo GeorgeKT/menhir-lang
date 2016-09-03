@@ -5,6 +5,8 @@ mod linker;
 mod slice;
 mod symboltable;
 mod structvalue;
+mod sumtypevalue;
+mod target;
 mod valueref;
 #[cfg(test)]
 mod tests;
@@ -27,6 +29,8 @@ pub use codegen::valueref::ValueRef;
 pub use codegen::slice::Slice;
 pub use codegen::array::Array;
 pub use codegen::structvalue::StructValue;
+pub use codegen::sumtypevalue::SumTypeValue;
+pub use codegen::target::TargetMachine;
 
 pub trait Sequence
 {
@@ -128,7 +132,7 @@ pub fn codegen(m: &Module) -> CompileResult<Context>
 {
     unsafe {
         // Set up a context, module and builder in that context.
-        let mut ctx = Context::new(&m.name);
+        let mut ctx = try!(Context::new(&m.name));
         try!(gen_module(&mut ctx, m));
 
         match ctx.verify()

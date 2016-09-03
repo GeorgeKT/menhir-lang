@@ -7,14 +7,14 @@ use std::collections::HashMap;
 
 use llvm::prelude::*;
 use llvm::core::*;
-use llvm::target_machine::*;
 use llvm::target::*;
 
 use ast::{Type};
-use codegen::{cstr, cstr_mut, type_name, ValueRef, CodeGenOptions};
+use codegen::{cstr, type_name, ValueRef, CodeGenOptions, TargetMachine};
 use compileerror::{Pos, CompileResult, CompileError, ErrorCode, err};
 use codegen::symboltable::{VariableInstance, FunctionInstance, SymbolTable};
 use codegen::slice::{new_slice_type};
+
 
 pub struct StackFrame
 {
@@ -38,6 +38,7 @@ pub struct Context
     pub context: LLVMContextRef,
     pub module: LLVMModuleRef,
     pub builder: LLVMBuilderRef,
+    target_machine: TargetMachine,
     name: String,
     stack: Vec<StackFrame>,
     slice_type_cache: HashMap<String, LLVMTypeRef>,
@@ -45,19 +46,21 @@ pub struct Context
 
 impl Context
 {
-	pub fn new(module_name: &str) -> Context
+	pub fn new(module_name: &str) -> CompileResult<Context>
 	{
 		unsafe {
             let cname = CString::new(module_name).expect("Invalid module name");
             let context = LLVMContextCreate();
-            Context{
+            let target_machine = try!(TargetMachine::new());
+            Ok(Context{
                 context: context,
                 module: LLVMModuleCreateWithNameInContext(cname.as_ptr(), context),
                 builder: LLVMCreateBuilderInContext(context),
+                target_machine: target_machine,
                 name: module_name.into(),
                 stack: vec![StackFrame::new(ptr::null_mut())],
                 slice_type_cache: HashMap::new(),
-            }
+            })
         }
 	}
 
@@ -137,35 +140,8 @@ impl Context
 
     pub unsafe fn gen_object_file(&self, opts: &CodeGenOptions) -> CompileResult<String>
     {
-        let target_triple = CStr::from_ptr(LLVMGetDefaultTargetTriple());
-        let target_triple_str = target_triple.to_str().expect("Invalid target triple");
-        println!("Compiling for {}", target_triple_str);
-
-        let mut target: LLVMTargetRef = ptr::null_mut();
-        let mut error_message: *mut c_char = ptr::null_mut();
-        if LLVMGetTargetFromTriple(target_triple.as_ptr(), &mut target, &mut error_message) != 0 {
-            let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
-            let e = format!("Unable to get an LLVM target reference for {}: {}", target_triple_str, msg);
-            LLVMDisposeMessage(error_message);
-            return err(Pos::zero(), ErrorCode::CodegenError, e);
-        }
-
-        let target_machine = LLVMCreateTargetMachine(
-            target,
-            target_triple.as_ptr(),
-            cstr(""),
-            cstr(""),
-            LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault,
-            LLVMRelocMode::LLVMRelocDefault,
-            LLVMCodeModel::LLVMCodeModelDefault,
-        );
-        if target_machine == ptr::null_mut() {
-            let e = format!("Unable to get a LLVM target machine for {}", target_triple_str);
-            return err(Pos::zero(), ErrorCode::CodegenError, e);
-        }
-
         if opts.optimize {
-            try!(self.optimize(target_machine));
+            try!(self.optimize());
         }
 
         if opts.dump_ir {
@@ -186,22 +162,11 @@ impl Context
 
         let obj_file_name = format!("{}/{}.cobra.o", opts.build_dir, self.name);
         println!("  Building {}", obj_file_name);
-
-        let mut error_message: *mut c_char = ptr::null_mut();
-        if LLVMTargetMachineEmitToFile(target_machine, self.module, cstr_mut(&obj_file_name), LLVMCodeGenFileType::LLVMObjectFile, &mut error_message) != 0 {
-            let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
-            let e = format!("Unable to create object file: {}", msg);
-            LLVMDisposeMessage(error_message);
-            LLVMDisposeTargetMachine(target_machine);
-            return err(Pos::zero(), ErrorCode::CodegenError, e);
-        }
-
-
-        LLVMDisposeTargetMachine(target_machine);
+        try!(self.target_machine.emit_to_file(self.module, &obj_file_name));
         Ok(obj_file_name)
     }
 
-    pub unsafe fn optimize(&self, target_machine: LLVMTargetMachineRef) -> CompileResult<()>
+    pub unsafe fn optimize(&self) -> CompileResult<()>
     {
         use llvm::transforms::pass_manager_builder::*;
 
@@ -213,7 +178,7 @@ impl Context
         let module_passes = LLVMCreatePassManager();
         let lto_passes = LLVMCreatePassManager();
 
-        LLVMAddTargetData(LLVMGetTargetMachineData(target_machine), module_passes);
+        LLVMAddTargetData(self.target_machine.target_data, module_passes);
 
         LLVMPassManagerBuilderPopulateFunctionPassManager(pass_builder, function_passes);
         LLVMPassManagerBuilderPopulateModulePassManager(pass_builder, module_passes);
@@ -301,8 +266,26 @@ impl Context
                 }
                 LLVMStructType(llvm_member_types.as_mut_ptr(), llvm_member_types.len() as c_uint, 0)
             },
+            Type::Sum(ref st) => {
+                let mut member_types = vec![LLVMInt64TypeInContext(self.context)]; // first entry is the tag
+
+                // Calculate the biggest type
+                let mut largest_type = ptr::null_mut();
+                for c in &st.cases {
+                    let case_typ = self.resolve_type(&c.typ);
+                    if largest_type == ptr::null_mut() || self.target_machine.size_of_type(case_typ) > self.target_machine.size_of_type(largest_type) {
+                        largest_type = case_typ;
+                    }
+                }
+
+                // Use the largest type, we will cast to the other case types
+                member_types.push(largest_type);
+                LLVMStructType(member_types.as_mut_ptr(), member_types.len() as c_uint, 0)
+            },
+            Type::Enum(_) => {
+                LLVMInt64TypeInContext(self.context)
+            },
             Type::String => panic!("Not yet implemented"),
-            Type::Sum(_) => panic!("Not yet implemented"),
             Type::Generic(_) => panic!("Internal Compiler Error: All generic types must have been resolved before code generation"),
             Type::Unresolved(_) => panic!("Internal Compiler Error: All types must be resolved before code generation"),
             Type::Unknown => panic!("Internal Compiler Error: all types must be known before code generation"),

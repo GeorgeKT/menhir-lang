@@ -342,6 +342,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
             }
         };
 
+        let match_pos = c.match_expr.span().start;
         let case_type = match c.match_expr
         {
             Expression::ArrayPattern(ref ap) => {
@@ -359,23 +360,31 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
                 ct
             },
 
-            Expression::NameRef(ref nr) => {
-                if let Some(Type::Sum(ref st)) = ctx.resolve_type(&nr.name)
+            Expression::NameRef(ref mut nr) => {
+                try!(type_check_name(ctx, nr, None));
+                match nr.typ
                 {
-                    let ref case = st.cases[st.index.expect("Sum type index must be known here")];
-                    if case.typ == Type::Int {
+                    Type::Sum(ref st) => {
+                        let ref case = st.cases[st.index.expect("Sum type index must be known here")];
+                        if case.typ == Type::Int {
+                            try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
+                        } else {
+                            return err(match_pos, ErrorCode::TypeError, format!("Invalid pattern match, match should be with an empty sum case"));
+                        }
+                    },
+                    Type::Enum(_) => {
                         try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
-                    } else {
-                        return err(c.match_expr.span().start, ErrorCode::TypeError, format!("Invalid pattern match, match should be with an empty sum case"));
+                    },
+                    _ => {
+                        if nr.name != "_"
+                        {
+                            return err(match_pos, ErrorCode::TypeError, format!("Invalid pattern match"));
+                        }
+                        else
+                        {
+                            try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
+                        }
                     }
-                }
-                else if nr.name != "_"
-                {
-                    return err(c.match_expr.span().start, ErrorCode::TypeError, format!("Invalid pattern match"));
-                }
-                else
-                {
-                    try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
                 }
             },
 
@@ -399,7 +408,6 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
 
                 for (binding, typ) in p.bindings.iter().zip(p.types.iter()) {
                     if binding != "_" {
-                        println!("Add binding {} of {}", binding, typ);
                         try!(ctx.add(binding, typ.clone(), p.span.start));
                     }
                 }
@@ -468,6 +476,10 @@ fn type_check_lambda(ctx: &mut TypeCheckerContext, m: &mut Lambda, type_hint: Op
 
 fn type_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint: Option<Type>) -> CompileResult<Type>
 {
+    if nr.name == "_" {
+        return Ok(Type::Unknown);
+    }
+
     nr.typ = try!(ctx.resolve_type(&nr.name).ok_or(unknown_name(nr.span.start, &nr.name)));
     if nr.typ == Type::Unknown && type_hint.is_some() {
         err(nr.span.start, ErrorCode::UnknownType(nr.name.clone(), type_hint.unwrap()), format!("{} has unknown type", nr.name))
@@ -619,6 +631,7 @@ fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern
                             err(p.span.start, ErrorCode::TypeError, format!("Not enough bindings in pattern match"))
                         } else {
                             p.types = s.members.iter().map(|sm| sm.typ.clone()).collect();
+                            p.typ = Type::Sum(st.clone());
                             Ok(Type::Unknown)
                         }
                     },
@@ -633,6 +646,7 @@ fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern
 
         Type::Struct(ref st) => {
             p.types = st.members.iter().map(|sm| sm.typ.clone()).collect();
+            p.typ = Type::Struct(st.clone());
             Ok(Type::Unknown)
         },
         _ => err(p.span.start, ErrorCode::TypeError, format!("Struct pattern is only allowed for structs and sum types containing structs"))

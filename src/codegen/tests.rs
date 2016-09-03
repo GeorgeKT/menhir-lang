@@ -7,7 +7,7 @@ use llvm::core::*;
 use llvm::execution_engine::*;
 use compileerror::{ErrorCode, err, CompileResult, Pos};
 use parser::{parse_module};
-use codegen::{codegen, cstr};
+use codegen::{codegen, cstr, llvm_init};
 use passes::{type_check_module};
 use ast::{TreePrinter};
 
@@ -17,12 +17,13 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
 {
     let mut cursor = Cursor::new(prog);
     let mut md = try!(parse_module(&mut cursor, "test"));
+    try!(type_check_module(&mut md));
+
     if dump {
         md.print(0);
     }
 
-    try!(type_check_module(&mut md));
-
+    llvm_init();
     let mut ctx = try!(codegen(&md));
 
     unsafe {
@@ -287,7 +288,7 @@ type Vec2D = {x: int, y: int}
 dot(a: Vec2D, b: Vec2D) -> int = a.x * b.x + a.y * b.y
 
 main() -> int = dot(Vec2D{4, 5}, Vec2D{5, 6})
-    "#, true);
+    "#, false);
     println!("r: {:?}", r);
     assert!(r == Ok(50));
 }
@@ -297,11 +298,11 @@ fn test_complex_return_types() {
     let r = run(r#"
 type Vec2D = {x: int, y: int}
 
-add(a: Vec2D, b: Vec2D) -> Vec2D = Vec2D{a.x + b.x,  a.y + b.y}
+add(a: Vec2D, b: Vec2D) -> Vec2D = Vec2D{a.x + b.x, a.y + b.y}
 
 main() -> int =
     let v = add(Vec2D{4, 5}, Vec2D{5, 6}) in v.x + v.y
-    "#, true);
+    "#, false);
     println!("r: {:?}", r);
     assert!(r == Ok(20));
 }
@@ -318,7 +319,26 @@ unwrap_or(opt: Option, default: int) -> int =
 
 main() -> int =
     unwrap_or(Some{5}, 1) + unwrap_or(None, 1)
-    "#, true);
+    "#, false);
     println!("r: {:?}", r);
     assert!(r == Ok(6));
+}
+
+#[test]
+fn test_enum_types() {
+    let r = run(r#"
+type Animal = Dog | Cat | Bird | Fish
+
+number(a: Animal) -> int =
+    match a
+        Dog => 7,
+        Cat => 8,
+        Fish => 9,
+        _ => 10
+
+main() -> int =
+    number(Dog) + number(Fish) + number(Cat) + number(Bird)
+    "#, true);
+    println!("r: {:?}", r);
+    assert!(r == Ok(34));
 }

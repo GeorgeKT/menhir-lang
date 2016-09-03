@@ -27,6 +27,6 @@ impl TreePrinter for NameRef
     fn print(&self, level: usize)
     {
         let p = prefix(level);
-        println!("{}name {} ({})", p, self.name, self.span);
+        println!("{}name {} (span: {}, type: {})", p, self.name, self.span, self.typ);
     }
 }

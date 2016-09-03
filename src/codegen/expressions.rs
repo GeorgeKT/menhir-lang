@@ -7,7 +7,8 @@ use llvm::prelude::*;
 use llvm::*;
 
 use ast::{Expression, UnaryOp, BinaryOp, FunctionSignature, Call, NameRef, MatchExpression, MatchCase, LetExpression,
-    ArrayLiteral, ArgumentPassingMode, ArrayPattern, Type, Lambda, StructInitializer, StructMemberAccess, anon_sig};
+    ArrayLiteral, ArgumentPassingMode, ArrayPattern, Type, Lambda, StructInitializer, StructMemberAccess, StructPattern,
+    anon_sig};
 use parser::Operator;
 use codegen::{cstr, Context, ValueRef, Slice, Sequence};
 use codegen::symboltable::{FunctionInstance};
@@ -26,26 +27,26 @@ pub unsafe fn const_int(ctx: &Context, v: u64) -> LLVMValueRef
 
 unsafe fn gen_integer(ctx: &mut Context, v: u64) -> CompileResult<ValueRef>
 {
-    Ok(ValueRef::const_value(const_int(ctx, v)))
+    Ok(ValueRef::Const(const_int(ctx, v)))
 }
 
 unsafe fn gen_bool(ctx: &mut Context, v: bool) -> CompileResult<ValueRef>
 {
-    Ok(ValueRef::const_value(LLVMConstInt(LLVMInt1TypeInContext(ctx.context), if v {1} else {0}, 0)))
+    Ok(ValueRef::Const(LLVMConstInt(LLVMInt1TypeInContext(ctx.context), if v {1} else {0}, 0)))
 }
 
 unsafe fn gen_float(ctx: &Context, num: &str, span: &Span) -> CompileResult<ValueRef>
 {
     match num.parse::<f64>()
     {
-        Ok(f) => Ok(ValueRef::const_value(LLVMConstReal(LLVMDoubleTypeInContext(ctx.context), f))),
+        Ok(f) => Ok(ValueRef::Const(LLVMConstReal(LLVMDoubleTypeInContext(ctx.context), f))),
         Err(_) => err(span.start, ErrorCode::InvalidFloatingPoint, format!("{} is not a valid floating point number", num))
     }
 }
 
 unsafe fn gen_const_string_literal(ctx: &Context, s: &str) -> CompileResult<ValueRef>
 {
-    Ok(ValueRef::const_value(LLVMConstStringInContext(ctx.context, s.as_ptr() as *const i8, s.len() as u32, 1)))
+    Ok(ValueRef::Const(LLVMConstStringInContext(ctx.context, s.as_ptr() as *const i8, s.len() as u32, 1)))
 }
 
 unsafe fn gen_string_literal(ctx: &Context, s: &str, _span: &Span) -> CompileResult<ValueRef>
@@ -66,10 +67,10 @@ unsafe fn gen_unary_op(ctx: &mut Context, op: &UnaryOp) -> CompileResult<ValueRe
     match op.operator
     {
         Operator::Sub => {
-            Ok(ValueRef::const_value(LLVMBuildNeg(ctx.builder, e_val.load(ctx.builder), cstr("neg"))))
+            Ok(ValueRef::Const(LLVMBuildNeg(ctx.builder, e_val.load(ctx.builder), cstr("neg"))))
         },
         Operator::Not => {
-            Ok(ValueRef::const_value(LLVMBuildNot(ctx.builder, e_val.load(ctx.builder), cstr("not"))))
+            Ok(ValueRef::Const(LLVMBuildNot(ctx.builder, e_val.load(ctx.builder), cstr("not"))))
         },
         _ => err(op.span.start, ErrorCode::InvalidUnaryOperator, format!("Operator {} is not a unary operator", op.operator)),
     }
@@ -168,7 +169,7 @@ unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> CompileResult<Value
         _ => err(op.span.start, ErrorCode::InvalidBinaryOperator, format!("Operator {} is not a binary operator", op.operator)),
     };
 
-    v.map(|val| ValueRef::const_value(val))
+    v.map(|val| ValueRef::Const(val))
 }
 
 unsafe fn make_function_instance(ctx: &mut Context, sig: &FunctionSignature) -> CompileResult<FunctionInstance>
@@ -237,25 +238,16 @@ pub unsafe fn gen_function(ctx: &mut Context, signature: &FunctionSignature, bod
             ArgumentPassingMode::ByPtr => {
                 match arg.typ
                 {
-                    Type::Array(ref at) => {
-                        ctx.add_variable(&arg.name, ValueRef::array(var, at.element_type.clone()));
-                    },
-                    Type::Slice(ref st) => {
-                        ctx.add_variable(&arg.name, ValueRef::slice(var, st.element_type.clone()));
-                    },
-                    Type::Struct(_) => {
-                        ctx.add_variable(&arg.name, ValueRef::struct_value(var, arg.typ.get_member_types()));
-                    },
                     Type::Func(ref ft) => {
                         let func_sig = anon_sig(&arg.name, &ft.return_type, &ft.args);
                         let fi = try!(gen_function_ptr(ctx, var, func_sig));
                         ctx.add_function(Rc::new(fi));
                     },
-                    _ => ctx.add_variable(&arg.name, ValueRef::Ptr(var)),
+                    _ => ctx.add_variable(&arg.name, ValueRef::new(var, &arg.typ)),
                 }
             },
             ArgumentPassingMode::ByValue => {
-                ctx.add_variable(&arg.name, ValueRef::const_value(var));
+                ctx.add_variable(&arg.name, ValueRef::Const(var));
             },
         }
     }
@@ -263,21 +255,7 @@ pub unsafe fn gen_function(ctx: &mut Context, signature: &FunctionSignature, bod
     let ret = if signature.return_type.return_by_ptr()
     {
         let ret_arg = LLVMGetParam(fi.function, signature.args.len() as libc::c_uint);
-        let mut vr = match signature.return_type
-        {
-            Type::Array(ref at) => {
-                ValueRef::array(ret_arg, at.element_type.clone())
-            },
-            Type::Slice(ref st) => {
-                ValueRef::slice(ret_arg, st.element_type.clone())
-            },
-            Type::Struct(_) => {
-                ValueRef::struct_value(ret_arg, signature.return_type.get_member_types())
-            },
-            _ => {
-                return err(body.span().start, ErrorCode::CodegenError, format!("return by pointer is only for arrays, slices and structs"));
-            }
-        };
+        let mut vr = ValueRef::new(ret_arg, &signature.return_type);
         try!(gen_expression_store(ctx, body, &mut vr));
         LLVMBuildRetVoid(ctx.builder);
         vr
@@ -362,7 +340,7 @@ unsafe fn gen_call(ctx: &mut Context, c: &Call) -> CompileResult<ValueRef>
 
     if func.sig.return_type.return_by_ptr()
     {
-        let vr = ValueRef::alloc(ctx, func.return_type, &func.sig.return_type);
+        let vr = ValueRef::alloc(ctx, &func.sig.return_type);
         try!(gen_call_store(ctx, c, &vr));
         Ok(vr)
     }
@@ -385,9 +363,23 @@ unsafe fn gen_name_ref(ctx: &mut Context, nr: &NameRef) -> CompileResult<ValueRe
     if let Some(vi) = ctx.get_variable(&nr.name) {
         Ok(vi.value.clone())
     } else if let Some(fi) = ctx.get_function(&nr.name) {
-        Ok(ValueRef::const_value(fi.function))
+        Ok(ValueRef::Const(fi.function))
     } else {
-        err(nr.span.start, ErrorCode::UnknownName, format!("Unknown name {}", nr.name))
+        match nr.typ
+        {
+            Type::Sum(ref st) => {
+                let sv = ValueRef::alloc(ctx, &nr.typ);
+                let case_type_ptr = try!(sv.case_type(ctx, nr.span.start));
+                try!(case_type_ptr.store_direct(ctx, const_int(ctx, st.index() as u64), nr.span.start));
+                Ok(sv)
+            },
+            Type::Enum(ref et) => {
+                Ok(ValueRef::Const(const_int(ctx, et.index() as u64)))
+            },
+            _ => {
+                err(nr.span.start, ErrorCode::UnknownName, format!("Unknown name {}", nr.name))
+            }
+        }
     }
 }
 
@@ -443,7 +435,7 @@ unsafe fn gen_llvm_equals(
 }
 
 unsafe fn gen_equals(
-    ctx: &Context,
+    ctx: &mut Context,
     left: &ValueRef,
     right: &ValueRef,
     on_equals_bb: LLVMBasicBlockRef,
@@ -463,7 +455,7 @@ unsafe fn gen_equals(
 }
 
 unsafe fn gen_equals_seq<ASeq: Sequence, BSeq: Sequence>(
-    ctx: &Context,
+    ctx: &mut Context,
     a: &ASeq,
     b: &BSeq,
     on_equals_bb: LLVMBasicBlockRef,
@@ -481,7 +473,7 @@ unsafe fn gen_equals_seq<ASeq: Sequence, BSeq: Sequence>(
     LLVMPositionBuilderAtEnd(ctx.builder, after_equal_length_bb);
 
     // Then loop over each element and check equality
-    let counter = ValueRef::alloc(ctx, LLVMInt64TypeInContext(ctx.context), &Type::Int);
+    let counter = ValueRef::alloc(ctx, &Type::Int);
     try!(counter.store_direct(ctx, const_int(ctx, 0), Pos::zero()));
     LLVMBuildBr(ctx.builder, for_cond_bb);
 
@@ -501,6 +493,88 @@ unsafe fn gen_equals_seq<ASeq: Sequence, BSeq: Sequence>(
     let index = LLVMBuildAdd(ctx.builder, index, const_int(ctx, 1), cstr("inc_index"));
     try!(counter.store_direct(ctx, index, Pos::zero()));
     LLVMBuildBr(ctx.builder, for_cond_bb);
+    Ok(())
+}
+
+
+unsafe fn gen_name_ref_match(
+    ctx: &mut Context,
+    mc: &MatchCase,
+    target: &ValueRef,
+    match_end_bb: LLVMBasicBlockRef,
+    match_case_bb: LLVMBasicBlockRef,
+    next_bb: LLVMBasicBlockRef,
+    dst: &ValueRef,
+    nr: &NameRef) -> CompileResult<()>
+{
+    match nr.typ
+    {
+        Type::Enum(ref et) => {
+            let cv = const_int(ctx, et.index() as u64);
+            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(ctx.builder), cv, cstr("cmp"));
+            LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
+        },
+        Type::Sum(ref st) => {
+            let case_type_ptr = try!(target.case_type(ctx, nr.span.start));
+            let cv = const_int(ctx, st.index() as u64);
+            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, case_type_ptr.load(ctx.builder), cv, cstr("cmp"));
+            LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
+        },
+        _ => {
+            if nr.name == "_" {
+                LLVMBuildBr(ctx.builder, match_case_bb);
+            } else {
+                return err(mc.span.start, ErrorCode::TypeError, format!("Expression is not a valid match pattern"));
+            }
+        }
+    }
+
+    gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
+}
+
+unsafe fn gen_struct_pattern_match(
+    ctx: &mut Context,
+    mc: &MatchCase,
+    target: &ValueRef,
+    match_end_bb: LLVMBasicBlockRef,
+    match_case_bb: LLVMBasicBlockRef,
+    next_bb: LLVMBasicBlockRef,
+    dst: &ValueRef,
+    p: &StructPattern) -> CompileResult<()>
+{
+    ctx.push_stack(ptr::null_mut());
+
+    let add_bindings = |var: &ValueRef, ctx: &mut Context| -> CompileResult<()> {
+        for (idx, b) in p.bindings.iter().enumerate() {
+            if b != "_" {
+                let member_ptr = try!(var.member(ctx, idx, p.span.start));
+                ctx.add_variable(&b, member_ptr);
+            }
+        }
+        Ok(())
+    };
+
+    match p.typ
+    {
+        Type::Struct(_) => {
+            LLVMBuildBr(ctx.builder, match_case_bb);
+            LLVMPositionBuilderAtEnd(ctx.builder, match_case_bb);
+            try!(add_bindings(target, ctx));
+        },
+        Type::Sum(ref st) => {
+            let case_type_ptr = try!(target.case_type(ctx, p.span.start));
+            let idx = st.index();
+            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, case_type_ptr.load(ctx.builder), const_int(ctx, idx as u64), cstr("cmp"));
+            LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
+            LLVMPositionBuilderAtEnd(ctx.builder, match_case_bb);
+            let struct_ptr = try!(target.case_struct(ctx, idx, p.span.start));
+            try!(add_bindings(&struct_ptr, ctx));
+        },
+        _ => return err(mc.span.start, ErrorCode::TypeError, format!("Expression is not a valid match pattern")),
+    }
+
+    try!(gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb));
+    ctx.pop_stack();
     Ok(())
 }
 
@@ -535,9 +609,8 @@ unsafe fn gen_match_case(
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
             gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
         },
-        Expression::NameRef(ref nr) if nr.name == "_"  => {
-            LLVMBuildBr(ctx.builder, match_case_bb);
-            gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
+        Expression::NameRef(ref nr) => {
+            gen_name_ref_match(ctx, mc, target, match_end_bb, match_case_bb, next_bb, dst, nr)
         },
         Expression::ArrayPattern(ref ap) => {
             ctx.push_stack(ptr::null_mut());
@@ -557,6 +630,10 @@ unsafe fn gen_match_case(
             try!(gen_equals(ctx, target, &arr, match_case_bb, next_bb));
             gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
         },
+
+        Expression::StructPattern(ref p) => {
+            gen_struct_pattern_match(ctx, mc, target, match_end_bb, match_case_bb, next_bb, dst, p)
+        }
         _ => err(mc.span.start, ErrorCode::TypeError, format!("Expression is not a valid match pattern")),
 
     }
@@ -580,8 +657,7 @@ unsafe fn gen_match_store(ctx: &mut Context, m: &MatchExpression, dst: &ValueRef
 
 unsafe fn gen_match(ctx: &mut Context, m: &MatchExpression) -> CompileResult<ValueRef>
 {
-    let ret_type = ctx.resolve_type(&m.typ);
-    let dst = ValueRef::alloc(ctx, ret_type, &m.typ);
+    let dst = ValueRef::alloc(ctx, &m.typ);
     try!(gen_match_store(ctx, m, &dst));
     Ok(dst)
 }
@@ -590,7 +666,6 @@ unsafe fn gen_let_bindings(ctx: &mut Context, l: &LetExpression) -> CompileResul
 {
     for b in &l.bindings
     {
-        let b_type = ctx.resolve_type(&b.typ);
         match b.typ
         {
             Type::Func(ref ft) => {
@@ -600,7 +675,7 @@ unsafe fn gen_let_bindings(ctx: &mut Context, l: &LetExpression) -> CompileResul
                 ctx.add_function(Rc::new(fi));
             },
             _ => {
-                let mut vr = ValueRef::alloc(ctx, b_type, &b.typ);
+                let mut vr = ValueRef::alloc(ctx, &b.typ);
                 try!(gen_expression_store(ctx, &b.init, &mut vr));
                 ctx.add_variable(&b.name, vr);
             }
@@ -639,9 +714,9 @@ unsafe fn gen_const_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> Compil
         vals.push(element_val.load(ctx.builder));
     }
 
-    Ok(ValueRef::array(
+    Ok(ValueRef::new(
         LLVMConstArray(llvm_type, vals.as_mut_ptr(), vals.len() as u32),
-        element_type,
+        &a.array_type,
     ))
 }
 
@@ -674,9 +749,7 @@ unsafe fn gen_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> CompileResul
         return Ok(ValueRef::Slice(slice));
     }
 
-    let element_type = a.array_type.get_element_type().expect("Invalid array type");
-    let llvm_type = ctx.resolve_type(&element_type);
-    let var = ValueRef::alloc_array(ctx, llvm_type, element_type, a.elements.len());
+    let var = ValueRef::alloc(ctx, &a.array_type);
     try!(gen_array_literal_store(ctx, a, &var));
     Ok(var)
 }
@@ -715,20 +788,34 @@ pub unsafe fn gen_array_to_slice_conversion(ctx: &mut Context, e: &Expression) -
     }
 }
 
-unsafe fn gen_struct_initializer_store(ctx: &mut Context, si: &StructInitializer, struct_var: &ValueRef) -> CompileResult<()>
+unsafe fn gen_struct_initializer_store(ctx: &mut Context, si: &StructInitializer, var: &ValueRef) -> CompileResult<()>
 {
-    for (idx, ref member_init) in si.member_initializers.iter().enumerate() {
-        let mut member_ptr = try!(struct_var.member(ctx, idx, si.span.start));
-        try!(gen_expression_store(ctx, member_init, &mut member_ptr));
+    let store_members = |var: &ValueRef, ctx: &mut Context| {
+        for (idx, ref member_init) in si.member_initializers.iter().enumerate() {
+            let mut member_ptr = try!(var.member(ctx, idx, si.span.start));
+            try!(gen_expression_store(ctx, member_init, &mut member_ptr));
+        }
+        Ok(())
+    };
+    match si.typ
+    {
+        Type::Struct(_) => {
+            store_members(var, ctx)
+        }
+        Type::Sum(ref st) => {
+            let index = st.index();
+            let type_ptr = try!(var.case_type(ctx, si.span.start));
+            try!(type_ptr.store_direct(ctx, const_int(ctx, index as u64), si.span.start));
+            let data_struct_ptr = try!(var.case_struct(ctx, index, si.span.start));
+            store_members(&data_struct_ptr, ctx)
+        }
+        _ => panic!("Invalid type {} for struct intializer", si.typ)
     }
-
-    Ok(())
 }
 
 unsafe fn gen_struct_initializer(ctx: &mut Context, si: &StructInitializer) -> CompileResult<ValueRef>
 {
-    let llvm_type = ctx.resolve_type(&si.typ);
-    let var = ValueRef::alloc_struct(ctx, llvm_type, si.typ.get_member_types());
+    let var = ValueRef::alloc(ctx, &si.typ);
     try!(gen_struct_initializer_store(ctx, si, &var));
     Ok(var)
 }

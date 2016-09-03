@@ -1,12 +1,11 @@
-type Vec2D = {x: int, y: int}
+type Animal = Dog | Cat | Bird | Fish
 
-dot(a: Vec2D, b: Vec2D) -> int =
-    a.x * b.x + a.y * b.y
-
-add(a: Vec2D, b: Vec2D) -> Vec2D =
-    Vec2D{a.x + b.x, a.y + b.y}
+number(a: Animal) -> int =
+    match a
+        Dog => 7,
+        Cat => 8,
+        Fish => 9,
+        _ => 10
 
 main() -> int =
-    let w = Vec2D{8, 8},
-        v = add(Vec2D{4, 5}, Vec2D{5, 6})
-    in dot(v, w)
+    number(Dog) + number(Fish) + number(Cat) + number(Bird)

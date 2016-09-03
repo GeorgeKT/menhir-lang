@@ -69,6 +69,7 @@ impl StructInitializer
             types: Vec::with_capacity(bindings.len()),
             bindings: bindings,
             span: self.span,
+            typ: Type::Unknown,
         })
     }
 }
@@ -111,6 +112,7 @@ pub struct StructPattern
     pub bindings: Vec<String>,
     pub types: Vec<Type>,
     pub span: Span,
+    pub typ: Type,
 }
 
 impl TreePrinter for StructDeclaration

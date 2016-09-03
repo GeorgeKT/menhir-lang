@@ -2,7 +2,7 @@ use llvm::prelude::*;
 use llvm::core::*;
 
 use ast::Type;
-use codegen::{Context, Array, Slice, Sequence, StructValue, cstr};
+use codegen::{Context, Array, Slice, Sequence, StructValue, SumTypeValue, cstr};
 use compileerror::{Pos, CompileResult, ErrorCode, err};
 
 
@@ -16,58 +16,38 @@ pub enum ValueRef
     Array(Array),
     Slice(Slice),
     Struct(StructValue),
+    Sum(SumTypeValue)
 }
 
 impl ValueRef
 {
-    pub fn const_value(v: LLVMValueRef) -> ValueRef
+    pub unsafe fn alloc(ctx: &mut Context, typ: &Type) -> ValueRef
     {
-        ValueRef::Const(v)
+        let llvm_type = ctx.resolve_type(typ);
+        let alloc = ctx.alloc(llvm_type, "alloc");
+        ValueRef::new(alloc, typ)
     }
 
-    pub unsafe fn alloc(ctx: &Context, llvm_type: LLVMTypeRef, typ: &Type) -> ValueRef
+    pub unsafe fn new(value: LLVMValueRef, typ: &Type) -> ValueRef
     {
-        let alloc = ctx.alloc(llvm_type, "alloc");
         match *typ
         {
             Type::Array(ref at) => {
-                ValueRef::array(alloc, at.element_type.clone())
+                ValueRef::Array(Array::new(value, at.element_type.clone()))
             },
             Type::Slice(ref st) => {
-                ValueRef::slice(alloc, st.element_type.clone())
+                ValueRef::Slice(Slice::new(value, st.element_type.clone()))
             },
             Type::Struct(ref st) => {
-                ValueRef::struct_value(alloc, st.members.iter().map(|m| m.typ.clone()).collect())
+                ValueRef::Struct(StructValue::new(value, st.members.iter().map(|m| m.typ.clone()).collect()))
+            },
+            Type::Sum(ref st) => {
+                ValueRef::Sum(SumTypeValue::new(value, st.clone()))
             },
             _ => {
-                ValueRef::Ptr(alloc)
+                ValueRef::Ptr(value)
             },
         }
-    }
-
-    pub unsafe fn array(arr: LLVMValueRef, element_type: Type) -> ValueRef
-    {
-        ValueRef::Array(Array::new(arr, element_type))
-    }
-
-    pub unsafe fn alloc_array(ctx: &Context, llvm_element_type: LLVMTypeRef, element_type: Type, len: usize) -> ValueRef
-    {
-        ValueRef::Array(Array::alloc(ctx, llvm_element_type, element_type, len))
-    }
-
-    pub unsafe fn alloc_struct(ctx: &Context, struct_type: LLVMTypeRef, member_types: Vec<Type>) -> ValueRef
-    {
-        ValueRef::Struct(StructValue::alloc(ctx, struct_type, member_types))
-    }
-
-    pub unsafe fn struct_value(sv: LLVMValueRef, member_types: Vec<Type>) -> ValueRef
-    {
-        ValueRef::Struct(StructValue::new(sv, member_types))
-    }
-
-    pub unsafe fn slice(slice: LLVMValueRef, element_type: Type) -> ValueRef
-    {
-        ValueRef::Slice(Slice::new(slice, element_type))
     }
 
     pub unsafe fn load(&self, builder: LLVMBuilderRef) -> LLVMValueRef
@@ -80,6 +60,7 @@ impl ValueRef
             ValueRef::Array(ref arr) => arr.get(),
             ValueRef::Slice(ref slice) => slice.get(),
             ValueRef::Struct(ref sv) => sv.get(),
+            ValueRef::Sum(ref s) => s.get(),
         }
     }
 
@@ -93,6 +74,7 @@ impl ValueRef
             ValueRef::Array(ref arr) => arr.get(),
             ValueRef::Slice(ref slice) => slice.get(),
             ValueRef::Struct(ref sv) => sv.get(),
+            ValueRef::Sum(ref s) => s.get(),
         }
     }
 
@@ -119,6 +101,9 @@ impl ValueRef
             },
             ValueRef::Struct(_) => {
                 err(pos, ErrorCode::CodegenError, format!("Cannot store a struct"))
+            },
+            ValueRef::Sum(_) => {
+                err(pos, ErrorCode::CodegenError, format!("Cannot store a sum"))
             },
         }
     }
@@ -147,6 +132,9 @@ impl ValueRef
             ValueRef::Struct(_) => {
                 err(pos, ErrorCode::CodegenError, format!("Cannot store a struct"))
             },
+            ValueRef::Sum(_) => {
+                err(pos, ErrorCode::CodegenError, format!("Cannot store a sum"))
+            },
         }
     }
 
@@ -166,6 +154,24 @@ impl ValueRef
         {
             ValueRef::Struct(ref vr) => Ok(vr.get_member_ptr(ctx, idx)),
             _ => err(pos, ErrorCode::CodegenError, format!("Attempting to get a struct member from a none struct")),
+        }
+    }
+
+    pub unsafe fn case_struct(&self, ctx: &mut Context, idx: usize, pos: Pos) -> CompileResult<ValueRef>
+    {
+        match *self
+        {
+            ValueRef::Sum(ref st) => Ok(st.get_data_ptr(ctx, idx)),
+            _ => err(pos, ErrorCode::CodegenError, format!("Attempting to get a sum type case member from a none sum type")),
+        }
+    }
+
+    pub unsafe fn case_type(&self, ctx: &Context, pos: Pos) -> CompileResult<ValueRef>
+    {
+        match *self
+        {
+            ValueRef::Sum(ref st) => Ok(st.get_type_ptr(ctx)),
+            _ => err(pos, ErrorCode::CodegenError, format!("Attempting to get a sum type case member from a none sum type")),
         }
     }
 }

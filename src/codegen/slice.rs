@@ -134,17 +134,11 @@ impl Sequence for Slice
         let elptr = data_ptr.load(ctx.builder);
         let mut index_expr = vec![pos];
         let element = LLVMBuildGEP(ctx.builder, elptr, index_expr.as_mut_ptr(), 1, cstr("el"));
-        match self.element_type
-        {
-            Type::Slice(ref st) => ValueRef::slice(element, st.element_type.clone()),
-            Type::Array(ref at) => ValueRef::array(element, at.element_type.clone()),
-            Type::Struct(_) => ValueRef::struct_value(element, self.element_type.get_member_types()),
-            _ => ValueRef::Ptr(element),
-        }
+        ValueRef::new(element, &self.element_type)
     }
 
     unsafe fn gen_length(&self, ctx: &Context) -> ValueRef
     {
-        ValueRef::const_value(self.get_length_ptr(ctx).load(ctx.builder))
+        ValueRef::Const(self.get_length_ptr(ctx).load(ctx.builder))
     }
 }

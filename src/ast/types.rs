@@ -13,11 +13,44 @@ pub struct SumTypeCase
     pub typ: Type,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub struct SumType
 {
     pub cases: Vec<SumTypeCase>,
     pub index: Option<usize>,  // Option<usize> contains the index when we know the case
+}
+
+impl SumType
+{
+    // Get the index or panic
+    pub fn index(&self) -> usize
+    {
+        if let Some(idx) = self.index {
+            idx
+        } else {
+            panic!("Index of SumType not known")
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct EnumType
+{
+    pub cases: Vec<String>,
+    pub index: Option<usize>,  // Option<usize> contains the index when we know the case
+}
+
+impl EnumType
+{
+    // Get the index or panic
+    pub fn index(&self) -> usize
+    {
+        if let Some(idx) = self.index {
+            idx
+        } else {
+            panic!("Index of EnumType not known")
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -46,7 +79,7 @@ pub struct SliceType
     pub element_type: Type,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Type
 {
     Void,
@@ -59,9 +92,10 @@ pub enum Type
     Array(Rc<ArrayType>),
     Slice(Rc<SliceType>),
     Generic(String),
-    Func(Rc<FuncType>), // args and return type
+    Func(Rc<FuncType>),
     Struct(Rc<StructType>),
     Sum(Rc<SumType>),
+    Enum(Rc<EnumType>),
 }
 
 #[derive(Debug,  Eq, PartialEq, Clone)]
@@ -122,17 +156,6 @@ impl Type
             Type::Slice(ref st) => Some(st.element_type.clone()),
             _ => None,
         }
-    }
-
-    pub fn get_member_types(&self) -> Vec<Type>
-    {
-        if let &Type::Struct(ref st) = self {
-            st.members.iter().map(|m| m.typ.clone()).collect()
-        }
-        else {
-            Vec::new()
-        }
-
     }
 
     pub fn is_matchable(&self, other: &Type) -> bool
@@ -238,6 +261,14 @@ pub fn sum_type(cases: Vec<SumTypeCase>, index: Option<usize>) -> Type
     }))
 }
 
+pub fn enum_type(cases: Vec<String>, index: Option<usize>) -> Type
+{
+    Type::Enum(Rc::new(EnumType{
+        cases: cases,
+        index: index,
+    }))
+}
+
 pub fn struct_type(members: Vec<StructMember>) -> Type
 {
     Type::Struct(Rc::new(StructType{
@@ -276,10 +307,9 @@ impl fmt::Display for Type
             Type::Slice(ref at) => write!(f, "[{}]", at.element_type),
             Type::Generic(ref g) => write!(f, "${}", g),
             Type::Func(ref ft) => write!(f, "({}) -> {}", join(ft.args.iter(), ", "), ft.return_type),
-            Type::Struct(ref st) =>
-                write!(f, "{{{}}}", join(st.members.iter().map(|m| &m.typ), ", ")),
-            Type::Sum(ref st) =>
-                write!(f, "{}", join(st.cases.iter().map(|m| &m.typ), " | ")),
+            Type::Struct(ref st) => write!(f, "{{{}}}", join(st.members.iter().map(|m| &m.typ), ", ")),
+            Type::Sum(ref st) => write!(f, "{} ({:?})", join(st.cases.iter().map(|m| &m.typ), " | "), st.index),
+            Type::Enum(ref st) => write!(f, "{} ({:?})", join(st.cases.iter(), " | "), st.index),
         }
     }
 }
@@ -322,28 +352,22 @@ impl Hash for Type
     }
 }
 
-impl PartialEq<Type> for Type
+impl PartialEq<SumType> for SumType
 {
-    fn eq(&self, other: &Type) -> bool
+    fn eq(&self, other: &SumType) -> bool
     {
-        match (self, other)
-        {
-            (&Type::Void, &Type::Void) => true,
-            (&Type::Unknown, &Type::Unknown) => true,
-            (&Type::Int, &Type::Int) => true,
-            (&Type::Float, &Type::Float) => true,
-            (&Type::String, &Type::String) => true,
-            (&Type::Bool, &Type::Bool) => true,
-            (&Type::Unresolved(ref s), &Type::Unresolved(ref t)) => *s == *t,
-            (&Type::Array(ref at), &Type::Array(ref bt)) => *at == *bt,
-            (&Type::Slice(ref at), &Type::Slice(ref bt)) => *at == *bt,
-            (&Type::Generic(ref at), &Type::Generic(ref bt)) => *at == *bt,
-            (&Type::Func(ref a_ft), &Type::Func(ref b_ft)) => *a_ft == *b_ft,
-            (&Type::Struct(ref a_st), &Type::Struct(ref b_st)) => *a_st == *b_st,
-            (&Type::Sum(ref a_st), &Type::Sum(ref b_st)) => *a_st == *b_st,
-            _ => false,
-        }
+        self.cases.eq(&other.cases)
     }
 }
 
-impl Eq for Type {}
+impl Eq for SumType {}
+
+impl PartialEq<EnumType> for EnumType
+{
+    fn eq(&self, other: &EnumType) -> bool
+    {
+        self.cases.eq(&other.cases)
+    }
+}
+
+impl Eq for EnumType {}

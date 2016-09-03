@@ -22,24 +22,10 @@ impl StructValue
         }
     }
 
-    pub unsafe fn alloc(ctx: &Context, llvm_type: LLVMTypeRef, member_types: Vec<Type>) -> StructValue
-    {
-        StructValue{
-            value: ctx.alloc(llvm_type, "struct"),
-            member_types: member_types,
-        }
-    }
-
     pub unsafe fn get_member_ptr(&self, ctx: &Context, idx: usize) -> ValueRef
     {
         let member = LLVMBuildStructGEP(ctx.builder, self.value, idx as c_uint, cstr("member"));
-        match self.member_types[idx]
-        {
-            Type::Array(ref at) => ValueRef::array(member, at.element_type.clone()),
-            Type::Slice(ref st) => ValueRef::slice(member, st.element_type.clone()),
-            Type::Struct(_) => ValueRef::struct_value(member, self.member_types[idx].get_member_types()),
-            _ => ValueRef::Ptr(member),
-        }
+        ValueRef::new(member, &self.member_types[idx])
     }
 
     pub fn get(&self) -> LLVMValueRef

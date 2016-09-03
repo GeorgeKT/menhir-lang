@@ -24,16 +24,6 @@ impl Array
         }
     }
 
-    pub unsafe fn alloc(ctx: &Context, llvm_element_type: LLVMTypeRef, element_type: Type, len: usize) -> Array
-    {
-        let typ = LLVMArrayType(llvm_element_type, len as u32);
-        Array{
-            array: ctx.alloc(typ, "array"),
-            element_type: element_type,
-            len: len,
-        }
-    }
-
     pub fn get(&self) -> LLVMValueRef {self.array}
     pub fn get_length(&self) -> usize {self.len}
     pub fn get_element_type(&self) -> Type {self.element_type.clone()}
@@ -44,20 +34,14 @@ impl Sequence for Array
 {
     unsafe fn gen_length(&self, ctx: &Context) -> ValueRef
     {
-        ValueRef::const_value(const_int(ctx, self.len as u64))
+        ValueRef::Const(const_int(ctx, self.len as u64))
     }
 
     unsafe fn get_element(&self, ctx: &Context, index: LLVMValueRef) -> ValueRef
     {
         let mut index_expr = vec![const_int(ctx, 0), index];
         let element = LLVMBuildGEP(ctx.builder, self.array, index_expr.as_mut_ptr(), 2, cstr("el"));
-        match self.element_type
-        {
-            Type::Slice(ref st) => ValueRef::slice(element, st.element_type.clone()),
-            Type::Array(ref at) => ValueRef::array(element, at.element_type.clone()),
-            Type::Struct(_) => ValueRef::struct_value(element, self.element_type.get_member_types()),
-            _ => ValueRef::Ptr(element),
-        }
+        ValueRef::new(element, &self.element_type)
     }
 
     unsafe fn subslice(&self, ctx: &mut Context, offset: u64, pos: Pos) -> CompileResult<ValueRef>
