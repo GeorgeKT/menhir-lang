@@ -566,8 +566,12 @@ fn type_check_struct_members_in_initializer(ctx: &mut TypeCheckerContext, member
 
 fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructInitializer) -> CompileResult<Type>
 {
-    let st = try!(ctx.resolve_type(&si.struct_name).ok_or(unknown_name(si.span.start, &si.struct_name)));
-    match st
+    let typ = try!(ctx.resolve_type(&si.struct_name).ok_or(unknown_name(si.span.start, &si.struct_name)));
+    if typ.is_generic() {
+        panic!("NYI");
+    }
+
+    match typ
     {
         Type::Struct(st) => {
             try!(type_check_struct_members_in_initializer(ctx, &st.members, si));

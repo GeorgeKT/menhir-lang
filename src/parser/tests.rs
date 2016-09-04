@@ -1,8 +1,5 @@
 use std::io::Cursor;
-use ast::{Expression, NameRef, TreePrinter, Function, Argument, Call, Type, Module, TypeDeclaration,
-    sig, unary_op, bin_op, array_lit, match_expression, match_case, array_pattern, array_generator,
-    lambda, let_expression, let_binding, struct_member, struct_declaration, struct_initializer,
-    struct_member_access, sum_type_decl, sum_type_case_decl, func_type};
+use ast::*;
 use compileerror::{Span, span};
 use parser::{Lexer, Operator, parse_expression, parse_module};
 
@@ -580,4 +577,36 @@ type Foo = Bar{int, int} | Foo | Baz{bla: bool}
         ],
         span(2, 1, 2, 47))
     ))
+}
+
+#[test]
+fn test_generic_type_declaration()
+{
+    let md = th_mod(r#"
+type Point = {x: $a, y: $b}
+
+foo(p: Point<int>) -> int = 7
+"#);
+    assert!(*md.types.get("Point").unwrap() == TypeDeclaration::Struct(struct_declaration(
+        "Point",
+        vec![
+            struct_member("x", Type::Generic("a".into()), span(2, 15, 2, 19)),
+            struct_member("y", Type::Generic("b".into()), span(2, 22, 2, 26)),
+        ],
+        span(2, 1, 2, 27))
+    ));
+
+    assert!(*md.functions.get("foo").unwrap() == Function::new(
+        sig(
+            "foo",
+            Type::Int,
+            vec![
+                arg("p", unresolved_type("Point", vec![Type::Int]), span(4, 5, 4, 17)),
+            ],
+            span(4, 1, 4, 25)
+        ),
+        true,
+        number(7, span(4, 29, 4, 29)),
+        span(4, 1, 4, 29))
+    )
 }

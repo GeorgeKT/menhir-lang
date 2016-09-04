@@ -25,8 +25,8 @@ pub use self::operations::{BinaryOp, UnaryOp, unary_op, bin_op};
 pub use self::structs::{StructDeclaration, StructMember, StructInitializer, StructMemberAccess, StructPattern,
     struct_member, struct_declaration, struct_initializer, struct_member_access};
 pub use self::sumtype::{SumTypeDeclaration, SumTypeCaseDeclaration, sum_type_decl, sum_type_case_decl};
-pub use self::types::{Type, TypeAlias, SumType, to_primitive, func_type, array_type, slice_type, type_alias,
-    sum_type, sum_type_case, enum_type, struct_type};
+pub use self::types::{Type, TypeAlias, SumType, UnresolvedType, to_primitive, func_type, array_type, slice_type,
+    type_alias, sum_type, sum_type_case, enum_type, struct_type, unresolved_type};
 
 use compileerror::{Span};
 

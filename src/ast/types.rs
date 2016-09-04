@@ -80,6 +80,13 @@ pub struct SliceType
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
+pub struct UnresolvedType
+{
+    pub name: String,
+    pub generic_args: Vec<Type>,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Type
 {
     Void,
@@ -88,7 +95,7 @@ pub enum Type
     Float,
     String,
     Bool,
-    Unresolved(String),
+    Unresolved(Rc<UnresolvedType>),
     Array(Rc<ArrayType>),
     Slice(Rc<SliceType>),
     Generic(String),
@@ -287,6 +294,14 @@ pub fn type_alias(name: &str, original: Type, span: Span) -> TypeAlias
     }
 }
 
+pub fn unresolved_type(name: &str, generic_args: Vec<Type>) -> Type
+{
+    Type::Unresolved(Rc::new(UnresolvedType{
+        name: name.into(),
+        generic_args: generic_args,
+    }))
+}
+
 impl fmt::Display for Type
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
@@ -299,7 +314,12 @@ impl fmt::Display for Type
             Type::Float => write!(f, "float"),
             Type::String => write!(f, "string"),
             Type::Bool => write!(f, "bool"),
-            Type::Unresolved(ref s) => write!(f, "{}", s),
+            Type::Unresolved(ref s) =>
+                if s.generic_args.is_empty() {
+                    write!(f, "{}", s.name)
+                } else {
+                    write!(f, "{}<{}>", s.name, join(s.generic_args.iter(), ","))
+                },
             Type::Array(ref at) =>
                 if at.length == 0 {
                     write!(f, "[]")

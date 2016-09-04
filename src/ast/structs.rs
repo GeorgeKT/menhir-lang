@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use itertools::free::join;
 use ast::{Expression, TreePrinter, Type, prefix};
 use compileerror::{Span};
@@ -45,6 +46,7 @@ pub struct StructInitializer
     pub member_initializers: Vec<Expression>,
     pub span: Span,
     pub typ: Type,
+    pub generic_args: HashMap<Type, Type>,
 }
 
 impl StructInitializer
@@ -81,6 +83,7 @@ pub fn struct_initializer(struct_name: &str, member_initializers: Vec<Expression
         member_initializers: member_initializers,
         span: span,
         typ: Type::Unknown,
+        generic_args: HashMap::new(),
     }
 }
 

@@ -19,8 +19,8 @@ enum ResolveMode
 
 fn resolve_type(ctx: &TypeCheckerContext, typ: &mut Type) -> TypeResolved
 {
-    let rt = if let Type::Unresolved(ref name) = *typ {
-        ctx.resolve_type(name)
+    let rt = if let Type::Unresolved(ref ut) = *typ {
+        ctx.resolve_type(&ut.name)
     } else {
         return TypeResolved::Yes;
     };

@@ -1,11 +1,7 @@
 use std::fs;
 use std::io::Read;
 use std::collections::HashMap;
-use ast::{Expression, Function, Call, NameRef, Type, Argument, Module, StructDeclaration,
-    TypeDeclaration, SumTypeDeclaration, sum_type_decl, sum_type_case_decl, type_alias,
-    array_lit, array_pattern, array_generator, unary_op, bin_op, sig, to_primitive,
-    match_expression, match_case, lambda, let_expression, let_binding, array_type, slice_type,
-    struct_member, struct_declaration, struct_initializer, struct_member_access, func_type};
+use ast::*;
 use compileerror::{CompileResult, ErrorCode, Span, Pos, err};
 use parser::{TokenQueue, Token, TokenKind, Operator, Lexer};
 
@@ -170,22 +166,36 @@ fn parse_binary_op_rhs(tq: &mut TokenQueue, mut lhs: Expression) -> CompileResul
     }
 }
 
-fn parse_function_call(tq: &mut TokenQueue, name: NameRef) -> CompileResult<Call>
+fn parse_comma_separated_list<T, P>(tq: &mut TokenQueue, end_token: TokenKind, parse_element: P) -> CompileResult<Vec<T>>
+    where P: Fn(&mut TokenQueue) -> CompileResult<T>
 {
-    let mut args = Vec::new();
-    while !tq.is_next(TokenKind::CloseParen)
+    let mut elements = Vec::new();
+    while !tq.is_next(end_token.clone())
     {
-        let expr = try!(parse_expression(tq));
-        args.push(expr);
+        let e = try!(parse_element(tq));
+        elements.push(e);
         try!(eat_comma(tq));
     }
 
     try!(tq.pop());
+    Ok(elements)
+}
+
+fn parse_function_call(tq: &mut TokenQueue, name: NameRef) -> CompileResult<Call>
+{
+    let args = try!(parse_comma_separated_list(tq, TokenKind::CloseParen, parse_expression));
     let pos = name.span.start;
     Ok(Call::new(name, args, Span::new(pos, tq.pos())))
 }
 
-
+fn parse_generic_arg_list(tq: &mut TokenQueue) -> CompileResult<Vec<Type>>
+{
+    if !tq.is_next(TokenKind::Operator(Operator::LessThan)) {
+        return Ok(Vec::new());
+    }
+    try!(tq.pop());
+    parse_comma_separated_list(tq, TokenKind::Operator(Operator::GreaterThan), parse_type)
+}
 
 fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
 {
@@ -230,7 +240,14 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
     else
     {
         let (name, _pos) = try!(tq.expect_identifier());
-        Ok(to_primitive(&name).unwrap_or(Type::Unresolved(name)))
+        match to_primitive(&name)
+        {
+            Some(t) => Ok(t),
+            None => {
+                let generic_args = try!(parse_generic_arg_list(tq));
+                Ok(unresolved_type(&name, generic_args))
+            },
+        }
     }
 }
 
