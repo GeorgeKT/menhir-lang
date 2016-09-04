@@ -1,5 +1,5 @@
 type Animal = Dog | Cat | Bird | Fish
-type Option = Some{int} | None
+type Option $a = Some{$a} | None
 
 number(a: Animal) -> int =
     match a
@@ -9,7 +9,7 @@ number(a: Animal) -> int =
         Fish => 9,
         Some{i} => 10
 
-unwrap_or(opt: Option, def: int) -> int =
+unwrap_or(opt: Option $a, def: $a) -> $a =
     match opt
         Some{i} => i,
         None => def

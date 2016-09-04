@@ -17,10 +17,18 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
 {
     let mut cursor = Cursor::new(prog);
     let mut md = try!(parse_module(&mut cursor, "test"));
+    if dump {
+        println!("Before type check");
+        md.print(0);
+        println!("-----------------");
+    }
+
     try!(type_check_module(&mut md));
 
     if dump {
+        println!("After type check");
         md.print(0);
+        println!("-----------------");
     }
 
     llvm_init();
@@ -363,7 +371,42 @@ unwrap_or(opt: Option, def: int) -> int =
 
 main() -> int =
     number(Dog) + number(Fish) + number(Cat) + number(Bird) + unwrap_or(Some{7}, 9)
-    "#, true);
+    "#, false);
     println!("r: {:?}", r);
     assert!(r == Ok(53));
 }
+
+/*
+#[test]
+fn test_generic_sum_types() {
+    let r = run(r#"
+type Option{$a} = Some{$a} | None
+
+unwrap_or(opt: Option{$a}, def: $a) -> $a =
+    match opt
+        Some{i} => i,
+        None => def
+
+main() -> int =
+    unwrap_or(Some{7}, 9) + unwrap_or(None, 9)
+    "#, true);
+    println!("r: {:?}", r);
+    assert!(r == Ok(16));
+}
+
+
+#[test]
+fn test_generic_struct_types() {
+    let r = run(r#"
+type Pair{$a, $b} = {first: $a, second: $b}
+
+add(p: Pair{$a, $b}, q: Pair{$a, $b}) -> Pair{$a, $b} =
+    Pair{p.first + q.first, p.second + q.second}
+
+main() -> int =
+    let p = add(Pair{5, 7}, Pair{4, 2}) in p.first + p.second
+    "#, true);
+    println!("r: {:?}", r);
+    assert!(r == Ok(18));
+}
+*/

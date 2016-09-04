@@ -478,6 +478,22 @@ type Point = {x: int, y: int}
 }
 
 #[test]
+fn test_generic_struct()
+{
+    let md = th_mod(r#"
+type Point = {x: $a, y: $b}
+"#);
+    assert!(*md.types.get("Point").unwrap() == TypeDeclaration::Struct(struct_declaration(
+        "Point",
+        vec![
+            struct_member("x", Type::Generic("a".into()), span(2, 15, 2, 19)),
+            struct_member("y", Type::Generic("b".into()), span(2, 22, 2, 26)),
+        ],
+        span(2, 1, 2, 27))
+    ))
+}
+
+#[test]
 fn test_struct_initializer()
 {
     let e = th_expr(r#"

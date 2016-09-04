@@ -192,6 +192,8 @@ impl Type
             Type::Array(ref at) => at.element_type.is_generic(),
             Type::Slice(ref st) => st.element_type.is_generic(),
             Type::Func(ref ft) => ft.return_type.is_generic() || ft.args.iter().any(|a| a.is_generic()),
+            Type::Struct(ref st) => st.members.iter().any(|m| m.typ.is_generic()),
+            Type::Sum(ref st) => st.cases.iter().any(|c| c.typ.is_generic()),
             _ => false,
         }
     }

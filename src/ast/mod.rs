@@ -96,6 +96,32 @@ pub struct Module
     pub types: HashMap<String, TypeDeclaration>,
 }
 
+impl Module
+{
+    pub fn find_declaration(&self, name: &str) -> Option<TypeDeclaration>
+    {
+        if let Some(t) = self.types.get(name) {
+            return Some(t.clone());
+        }
+
+        for decl in self.types.values() {
+            match *decl
+            {
+                TypeDeclaration::Sum(ref s) => {
+                    for c in s.cases.iter() {
+                        if c.name == name {
+                            return Some(decl.clone());
+                        }
+                    }
+                },
+                _ => continue,
+            }
+        }
+
+        None
+    }
+}
+
 impl TreePrinter for Module
 {
     fn print(&self, level: usize)
