@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use itertools::free::join;
-use ast::{Module, Expression, Function, FunctionSignature, Argument, Type, Call, unary_op, bin_op, array_lit,
-    array_generator, match_case, match_expression, let_expression, let_binding, sig, lambda, func_type};
+use ast::*;
 use compileerror::{CompileResult, ErrorCode, err};
 use passes::substitute_types;
 
@@ -87,9 +86,17 @@ fn substitute_expr(generic_args: &HashMap<Type, Type>, e: &Expression) -> Compil
         Expression::StringLiteral(span, ref v) => Ok(Expression::StringLiteral(span, v.clone())),
         Expression::ArrayPattern(ref ap) => Ok(Expression::ArrayPattern(ap.clone())),
         Expression::NameRef(ref nr) => Ok(Expression::NameRef(nr.clone())),
-        Expression::StructInitializer(ref _si) => panic!("NYI"),
-        Expression::StructMemberAccess(ref _sma) => panic!("NYI"),
-        Expression::StructPattern(ref _p) => panic!("NYI"),
+        Expression::StructInitializer(ref si) => {
+            let mut nmi = Vec::with_capacity(si.member_initializers.len());
+            for e in si.member_initializers.iter() {
+                let new_e = try!(substitute_expr(generic_args, e));
+                nmi.push(new_e);
+            }
+
+            Ok(Expression::StructInitializer(struct_initializer(&si.struct_name, nmi, si.span)))
+        },
+        Expression::StructMemberAccess(ref sma) => Ok(Expression::StructMemberAccess(sma.clone())),
+        Expression::StructPattern(ref p) => Ok(Expression::StructPattern(p.clone())),
     }
 }
 

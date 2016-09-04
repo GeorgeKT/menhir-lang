@@ -1,93 +1,9 @@
-use std::collections::{HashMap};
 use std::ops::{DerefMut};
-use ast::{Module, Expression, NameRef, UnaryOp, BinaryOp, ArrayLiteral, ArrayGenerator,
-    MatchExpression, Function, Lambda, Call, Type, LetExpression, ArgumentPassingMode,
-    StructInitializer, StructMemberAccess, StructMember, StructPattern, func_type, array_type, slice_type};
+use ast::*;
 use compileerror::{CompileResult, CompileError, Pos, ErrorCode, err, unknown_name};
 use parser::{Operator};
-use passes::{instantiate_generics, fill_in_generics, substitute_types, resolve_types};
+use passes::{TypeCheckerContext, instantiate_generics, fill_in_generics, substitute_types, resolve_types};
 
-
-pub struct StackFrame
-{
-    symbols: HashMap<String, Type>,
-}
-
-impl StackFrame
-{
-    pub fn new() -> StackFrame
-    {
-        StackFrame{
-            symbols: HashMap::new(),
-        }
-    }
-
-    pub fn resolve_type(&self, name: &str) -> Option<Type>
-    {
-        self.symbols.get(name).map(|t| t.clone())
-    }
-
-    pub fn add(&mut self, name: &str, t: Type, pos: Pos) -> CompileResult<()>
-    {
-        if self.symbols.insert(name.into(), t).is_some() {
-            err(pos, ErrorCode::RedefinitionOfVariable, format!("Symbol {} has already been defined", name))
-        } else {
-            Ok(())
-        }
-    }
-
-    pub fn update(&mut self, name: &str, t: Type)
-    {
-        self.symbols.insert(name.into(), t);
-    }
-}
-
-pub struct TypeCheckerContext
-{
-    stack: Vec<StackFrame>,
-}
-
-impl TypeCheckerContext
-{
-    pub fn new() -> TypeCheckerContext
-    {
-        TypeCheckerContext{
-            stack: vec![StackFrame::new()],
-        }
-    }
-
-    pub fn resolve_type(&self, name: &str) -> Option<Type>
-    {
-        for sf in self.stack.iter().rev() {
-            let t = sf.resolve_type(name);
-            if t.is_some() {
-                return t;
-            }
-        }
-
-        None
-    }
-
-    pub fn add(&mut self, name: &str, t: Type, pos: Pos) -> CompileResult<()>
-    {
-        self.stack.last_mut().expect("Empty stack").add(name, t, pos)
-    }
-
-    pub fn update(&mut self, name: &str, t: Type)
-    {
-        self.stack.last_mut().expect("Empty stack").update(name, t)
-    }
-
-    pub fn push_stack(&mut self)
-    {
-        self.stack.push(StackFrame::new());
-    }
-
-    pub fn pop_stack(&mut self)
-    {
-        self.stack.pop();
-    }
-}
 
 fn invalid_unary_operator<T>(pos: Pos, op: Operator) -> CompileResult<T>
 {
@@ -543,39 +459,44 @@ fn type_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> Compil
     Ok(l.typ.clone())
 }
 
-fn type_check_struct_members_in_initializer(ctx: &mut TypeCheckerContext, members: &Vec<StructMember>, si: &mut StructInitializer) -> CompileResult<()>
+fn type_check_struct_members_in_initializer(ctx: &mut TypeCheckerContext, members: &Vec<StructMember>, si: &mut StructInitializer) -> CompileResult<Type>
 {
     if members.len() != si.member_initializers.len() {
         return err(si.span.start, ErrorCode::WrongArgumentCount,
             format!("Type {} has {} members, but attempting to initialize {} members", si.struct_name, members.len(), si.member_initializers.len()));
     }
 
+    let mut new_members: Vec<StructMember> = Vec::with_capacity(members.len());
+
     for (idx, (member, mi)) in members.iter().zip(si.member_initializers.iter_mut()).enumerate()
     {
         let t = try!(type_check_expression(ctx, mi, Some(member.typ.clone())));
-        if t != member.typ
+        let expected_type = if member.typ.is_generic() {
+            try!(fill_in_generics(&t, &member.typ, &mut si.generic_args, mi.span().start))
+        } else {
+            member.typ.clone()
+        };
+
+        if t != expected_type
         {
             return err(mi.span().start, ErrorCode::TypeError,
                 format!("Attempting to initialize member {} with type '{}', expecting an expression of type '{}'",
-                    idx, t, member.typ));
+                    idx, t, expected_type));
         }
+
+        new_members.push(struct_member(&member.name, t, member.span));
     }
 
-    Ok(())
+    Ok(struct_type(new_members))
 }
 
 fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructInitializer) -> CompileResult<Type>
 {
     let typ = try!(ctx.resolve_type(&si.struct_name).ok_or(unknown_name(si.span.start, &si.struct_name)));
-    if typ.is_generic() {
-        panic!("NYI");
-    }
-
     match typ
     {
         Type::Struct(st) => {
-            try!(type_check_struct_members_in_initializer(ctx, &st.members, si));
-            si.typ = Type::Struct(st);
+            si.typ = try!(type_check_struct_members_in_initializer(ctx, &st.members, si));
             Ok(si.typ.clone())
         },
         Type::Sum(st) => {
@@ -585,14 +506,24 @@ fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructIn
                 return err(si.span.start, ErrorCode::TypeError, format!("Cannot determine Sum type case"))
             };
 
-            match st.cases[idx].typ
+            let mut sum_type_cases = Vec::with_capacity(st.cases.len());
+            for (i, case) in st.cases.iter().enumerate()
             {
-                Type::Struct(ref s) => try!(type_check_struct_members_in_initializer(ctx, &s.members, si)),
-                Type::Int => {},
-                _ => return err(si.span.start, ErrorCode::TypeError, format!("Invalid sum type case")),
+                let typ = if i == idx
+                {
+                    match case.typ
+                    {
+                        Type::Struct(ref s) => try!(type_check_struct_members_in_initializer(ctx, &s.members, si)),
+                        Type::Int => Type::Int,
+                        _ => return err(si.span.start, ErrorCode::TypeError, format!("Invalid sum type case")),
+                    }
+                } else {
+                    case.typ.clone()
+                };
+                sum_type_cases.push(sum_type_case(&case.name, typ))
             }
 
-            si.typ = Type::Sum(st);
+            si.typ = sum_type(sum_type_cases, Some(idx));
             Ok(si.typ.clone())
         },
         _ => err(si.span.start, ErrorCode::TypeError, format!("{} is not a struct", si.struct_name)),
@@ -704,13 +635,6 @@ pub fn type_check_module(module: &mut Module) -> CompileResult<()>
     loop {
         let mut ctx = TypeCheckerContext::new();
         try!(resolve_types(&mut ctx, module));
-
-        // Register all the generic functions
-        for f in module.functions.values() {
-            if f.is_generic() {
-                try!(ctx.add(&f.sig.name, f.sig.get_type(), f.span.start));
-            }
-        }
 
         for ref mut f in module.functions.values_mut() {
             if !f.type_checked {

@@ -1,5 +1,6 @@
 use parser::{th_expr, th_mod};
-use passes::typechecker::{TypeCheckerContext, type_check_expression, type_check_module};
+use passes::typechecker::{type_check_expression, type_check_module};
+use passes::TypeCheckerContext;
 use ast::Type;
 use compileerror::{CompileResult, ErrorCode};
 

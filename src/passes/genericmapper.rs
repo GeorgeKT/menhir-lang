@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use ast::{slice_type, func_type, array_type, Type};
+use ast::{slice_type, func_type, array_type, struct_type, struct_member, sum_type, sum_type_case, Type};
 use compileerror::{Pos, CompileResult, ErrorCode, err};
 
 
@@ -34,6 +34,21 @@ pub fn substitute_types(generic: &Type, known_types: &HashMap<Type, Type>) -> Ty
                 ft.args.iter().map(|t| substitute_types(t, known_types)).collect(),
                 substitute_types(&ft.return_type, known_types))
         },
+        Type::Struct(ref st) => {
+            struct_type(
+                st.members.iter()
+                    .map(|m| struct_member(&m.name, substitute_types(&m.typ, known_types), m.span))
+                    .collect()
+            )
+        },
+        Type::Sum(ref st) => {
+            sum_type(
+                st.cases.iter()
+                    .map(|c| sum_type_case(&c.name, substitute_types(&c.typ, known_types)))
+                    .collect(),
+                st.index
+            )
+        },
         _ => generic.clone(),
     }
 }
@@ -49,7 +64,9 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut HashMap
         return Ok(new_generic);
     }
 
-    let map_err = err(pos, ErrorCode::GenericTypeSubstitutionError, format!("Cannot map argument type {} on type {}", actual, new_generic));
+    let map_err = || {
+        err(pos, ErrorCode::GenericTypeSubstitutionError, format!("Cannot map argument type {} on type {}", actual, new_generic))
+    };
     match new_generic
     {
         Type::Unknown => {
@@ -67,7 +84,7 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut HashMap
                     let new_el_type = try!(fill_in_generics(&actual_st.element_type, &generic_st.element_type, known_types, pos));
                     Ok(slice_type(new_el_type))
                 },
-                _ => map_err,
+                _ =>  map_err(),
             }
         },
         Type::Array(ref generic_at) => {
@@ -75,20 +92,20 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut HashMap
             {
                 Type::Array(ref actual_at) => {
                     if generic_at.length != actual_at.length {
-                        return map_err;
+                        return map_err();
                     }
                     try!(add_generic_mapping(known_types, &generic_at.element_type, &actual_at.element_type, pos));
                     let new_el_type = try!(fill_in_generics(&actual_at.element_type, &generic_at.element_type, known_types, pos));
                     Ok(array_type(new_el_type, generic_at.length))
                 },
-                _ => map_err,
+                _ => map_err(),
             }
         },
         Type::Func(ref generic_ft) => {
             match *actual {
                 Type::Func(ref actual_ft) => {
                     if generic_ft.args.len() != actual_ft.args.len() {
-                        return map_err;
+                        return map_err();
                     }
 
                     let mut new_args = Vec::with_capacity(generic_ft.args.len());
@@ -100,10 +117,35 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut HashMap
                     let nr = try!(fill_in_generics(&actual_ft.return_type, &generic_ft.return_type, known_types, pos));
                     Ok(func_type(new_args, nr))
                 },
-                _ => map_err,
+                _ => map_err(),
             }
         },
-        _ => map_err,
+        Type::Struct(ref generic_st) => {
+            match *actual {
+                Type::Struct(ref actual_st) => {
+                    if generic_st.members.len() != actual_st.members.len() {
+                        return map_err();
+                    }
+
+                    let mut new_members = Vec::with_capacity(generic_st.members.len());
+                    for (ga, aa) in generic_st.members.iter().zip(actual_st.members.iter()) {
+                        if aa.name != ga.name {
+                            return map_err();
+                        }
+
+                        let nt = try!(fill_in_generics(&aa.typ, &ga.typ, known_types, pos));
+                        new_members.push(struct_member(&aa.name, nt, aa.span));
+                    }
+
+                    Ok(struct_type(new_members))
+                },
+                _ => map_err(),
+            }
+        },
+        Type::Sum(ref _st) => {
+            panic!("NYI")
+        },
+        _ => map_err(),
     }
 }
 

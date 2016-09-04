@@ -1,18 +1,7 @@
-type Animal = Dog | Cat | Bird | Fish
-type Option $a = Some{$a} | None
+type Pair = {first: $a, second: $b}
 
-number(a: Animal) -> int =
-    match a
-        Dog => 7,
-        Cat => 8,
-        Bird => 22,
-        Fish => 9,
-        Some{i} => 10
-
-unwrap_or(opt: Option $a, def: $a) -> $a =
-    match opt
-        Some{i} => i,
-        None => def
+add(p: Pair<$a, $a>) -> $a  =
+    p.first + p.second
 
 main() -> int =
-    number(Dog) + number(Fish) + number(Cat) + number(Bird) + unwrap_or(Some{7}, 9)
+    add(Pair{4, 14})

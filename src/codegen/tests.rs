@@ -380,9 +380,9 @@ main() -> int =
 #[test]
 fn test_generic_sum_types() {
     let r = run(r#"
-type Option{$a} = Some{$a} | None
+type Option = Some{$a} | None
 
-unwrap_or(opt: Option{$a}, def: $a) -> $a =
+unwrap_or(opt: Option<$a>, def: $a) -> $a =
     match opt
         Some{i} => i,
         None => def
@@ -393,20 +393,18 @@ main() -> int =
     println!("r: {:?}", r);
     assert!(r == Ok(16));
 }
-
+*/
 
 #[test]
 fn test_generic_struct_types() {
     let r = run(r#"
-type Pair{$a, $b} = {first: $a, second: $b}
+type Pair = {first: $a, second: $b}
 
-add(p: Pair{$a, $b}, q: Pair{$a, $b}) -> Pair{$a, $b} =
-    Pair{p.first + q.first, p.second + q.second}
+add(p: Pair<$a, $a>) -> $a  =
+    p.first + p.second
 
-main() -> int =
-    let p = add(Pair{5, 7}, Pair{4, 2}) in p.first + p.second
+main() -> int = add(Pair{4, 14})
     "#, true);
     println!("r: {:?}", r);
     assert!(r == Ok(18));
 }
-*/

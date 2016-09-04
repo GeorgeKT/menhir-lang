@@ -37,10 +37,10 @@ fn resolve_type(ctx: &TypeCheckerContext, typ: &mut Type) -> TypeResolved
     }
 }
 
-pub fn resolve_function_args_and_ret_type(ctx: &mut TypeCheckerContext, fun: &mut Function) -> CompileResult<()>
+fn resolve_function_args_and_ret_type(ctx: &mut TypeCheckerContext, fun: &mut Function) -> CompileResult<()>
 {
-    // We cannot resolve generics, until we instantiate them, so threat them as resolved
-    if fun.is_generic() || fun.sig.typ != Type::Unknown {
+    if fun.sig.typ != Type::Unknown {
+
         return Ok(());
     }
 
@@ -58,7 +58,6 @@ pub fn resolve_function_args_and_ret_type(ctx: &mut TypeCheckerContext, fun: &mu
     }
 
     fun.sig.typ = func_type(args, fun.sig.return_type.clone());
-    try!(ctx.add(&fun.sig.name, fun.sig.typ.clone(), fun.sig.span.start));
     Ok(())
 }
 
@@ -115,23 +114,11 @@ fn resolve_sum_case_types(ctx: &mut TypeCheckerContext, st: &mut SumTypeDeclarat
     if case_types.iter().all(|ct| ct.typ == Type::Int)
     {
         let case_names: Vec<String> = st.cases.iter().map(|c| c.name.clone()).collect();
-        st.typ = enum_type(case_names.clone(), None);
-        try!(ctx.add(&st.name, st.typ.clone(), st.span.start));
-        for (idx, c) in st.cases.iter().enumerate()
-        {
-            let et = enum_type(case_names.clone(), Some(idx));
-            try!(ctx.add(&c.name, et, c.span.start));
-        }
+        st.typ = enum_type(case_names, None);
     }
     else
     {
-        st.typ = sum_type(case_types.clone(), None);
-        try!(ctx.add(&st.name, st.typ.clone(), st.span.start));
-        for (idx, c) in st.cases.iter_mut().enumerate()
-        {
-            c.typ = sum_type(case_types.clone(), Some(idx));
-            try!(ctx.add(&c.name, c.typ.clone(), c.span.start));
-        }
+        st.typ = sum_type(case_types, None);
     }
 
     Ok(TypeResolved::Yes)
@@ -152,7 +139,26 @@ fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: Re
                 }
             },
             TypeDeclaration::Sum(ref mut s) => {
-                if try!(resolve_sum_case_types(ctx, s, mode)) == TypeResolved::Yes {
+                if try!(resolve_sum_case_types(ctx, s, mode)) == TypeResolved::Yes
+                {
+                    try!(ctx.add(&s.name, s.typ.clone(), s.span.start));
+                    match s.typ
+                    {
+                        Type::Enum(ref et) => {
+                            for (idx, c) in et.cases.iter().enumerate()
+                            {
+                                try!(ctx.add(c, enum_type(et.cases.clone(), Some(idx)), s.span.start));
+                            }
+                        },
+                        Type::Sum(ref st) => {
+                            for (idx, c) in st.cases.iter().enumerate()
+                            {
+                                try!(ctx.add(&c.name, sum_type(st.cases.clone(), Some(idx)), s.span.start));
+                            }
+                        },
+                        _ => {},
+                    }
+
                     num_resolved += 1;
                 }
             },
@@ -185,6 +191,7 @@ pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module) -> Compi
 
     for ref mut f in module.functions.values_mut() {
         try!(resolve_function_args_and_ret_type(ctx, f));
+        try!(ctx.add(&f.sig.name, f.sig.typ.clone(), f.sig.span.start));
     }
 
     Ok(())
