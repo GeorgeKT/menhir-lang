@@ -206,7 +206,6 @@ unsafe fn make_function_instance(ctx: &mut Context, sig: &FunctionSignature) -> 
 
 pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature) -> CompileResult<FunctionInstance>
 {
-    println!("sig.type = {}", sig.typ);
     let mut fi = try!(make_function_instance(ctx, sig));
     let mut arg_types: Vec<LLVMTypeRef> = fi.args.iter().map(|&(typ, _)| typ).collect();
     let function_type = LLVMFunctionType(fi.return_type, arg_types.as_mut_ptr(), arg_types.len() as libc::c_uint, 0);
@@ -371,11 +370,13 @@ unsafe fn gen_name_ref(ctx: &mut Context, nr: &NameRef) -> CompileResult<ValueRe
             Type::Sum(ref st) => {
                 let sv = ValueRef::alloc(ctx, &nr.typ);
                 let case_type_ptr = try!(sv.case_type(ctx, nr.span.start));
-                try!(case_type_ptr.store_direct(ctx, const_int(ctx, st.index() as u64), nr.span.start));
+                let idx = st.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
+                try!(case_type_ptr.store_direct(ctx, const_int(ctx, idx as u64), nr.span.start));
                 Ok(sv)
             },
             Type::Enum(ref et) => {
-                Ok(ValueRef::Const(const_int(ctx, et.index() as u64)))
+                let idx = et.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
+                Ok(ValueRef::Const(const_int(ctx, idx as u64)))
             },
             _ => {
                 err(nr.span.start, ErrorCode::UnknownName, format!("Unknown name {}", nr.name))
@@ -511,13 +512,15 @@ unsafe fn gen_name_ref_match(
     match nr.typ
     {
         Type::Enum(ref et) => {
-            let cv = const_int(ctx, et.index() as u64);
+            let idx = et.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
+            let cv = const_int(ctx, idx as u64);
             let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(ctx.builder), cv, cstr("cmp"));
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
         },
         Type::Sum(ref st) => {
+            let idx = st.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
             let case_type_ptr = try!(target.case_type(ctx, nr.span.start));
-            let cv = const_int(ctx, st.index() as u64);
+            let cv = const_int(ctx, idx as u64);
             let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, case_type_ptr.load(ctx.builder), cv, cstr("cmp"));
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
         },
@@ -564,7 +567,7 @@ unsafe fn gen_struct_pattern_match(
         },
         Type::Sum(ref st) => {
             let case_type_ptr = try!(target.case_type(ctx, p.span.start));
-            let idx = st.index();
+            let idx = st.index_of(&p.name).expect("Internal Compiler Error: cannot determine index of sum type case");
             let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, case_type_ptr.load(ctx.builder), const_int(ctx, idx as u64), cstr("cmp"));
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
             LLVMPositionBuilderAtEnd(ctx.builder, match_case_bb);
@@ -804,7 +807,7 @@ unsafe fn gen_struct_initializer_store(ctx: &mut Context, si: &StructInitializer
             store_members(var, ctx)
         }
         Type::Sum(ref st) => {
-            let index = st.index();
+            let index = st.index_of(&si.struct_name).expect("Internal Compiler Error: cannot determine index of sum type case");
             let type_ptr = try!(var.case_type(ctx, si.span.start));
             try!(type_ptr.store_direct(ctx, const_int(ctx, index as u64), si.span.start));
             let data_struct_ptr = try!(var.case_struct(ctx, index, si.span.start));

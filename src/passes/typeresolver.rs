@@ -114,11 +114,11 @@ fn resolve_sum_case_types(ctx: &mut TypeCheckerContext, st: &mut SumTypeDeclarat
     if case_types.iter().all(|ct| ct.typ == Type::Int)
     {
         let case_names: Vec<String> = st.cases.iter().map(|c| c.name.clone()).collect();
-        st.typ = enum_type(case_names, None);
+        st.typ = enum_type(case_names);
     }
     else
     {
-        st.typ = sum_type(case_types, None);
+        st.typ = sum_type(case_types);
     }
 
     Ok(TypeResolved::Yes)
@@ -145,15 +145,15 @@ fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: Re
                     match s.typ
                     {
                         Type::Enum(ref et) => {
-                            for (idx, c) in et.cases.iter().enumerate()
+                            for c in et.cases.iter()
                             {
-                                try!(ctx.add(c, enum_type(et.cases.clone(), Some(idx)), s.span.start));
+                                try!(ctx.add(c, s.typ.clone(), s.span.start));
                             }
                         },
                         Type::Sum(ref st) => {
-                            for (idx, c) in st.cases.iter().enumerate()
+                            for c in st.cases.iter()
                             {
-                                try!(ctx.add(&c.name, sum_type(st.cases.clone(), Some(idx)), s.span.start));
+                                try!(ctx.add(&c.name, s.typ.clone(), s.span.start));
                             }
                         },
                         _ => {},

@@ -19,6 +19,7 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
     let mut md = try!(parse_module(&mut cursor, "test"));
     if dump {
         println!("Before type check");
+        println!("-----------------");
         md.print(0);
         println!("-----------------");
     }
@@ -27,6 +28,7 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
 
     if dump {
         println!("After type check");
+        println!("-----------------");
         md.print(0);
         println!("-----------------");
     }
@@ -387,7 +389,7 @@ unwrap_or(opt: Option<$a>, def: $a) -> $a =
         None => def
 
 main() -> int =
-    unwrap_or(None, 9)
+    unwrap_or(None, 9) + unwrap_or(Some{7}, 9)
     "#, true);
     println!("r: {:?}", r);
     assert!(r == Ok(16));

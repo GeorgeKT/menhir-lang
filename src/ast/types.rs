@@ -17,19 +17,13 @@ pub struct SumTypeCase
 pub struct SumType
 {
     pub cases: Vec<SumTypeCase>,
-    pub index: Option<usize>,  // Option<usize> contains the index when we know the case
 }
 
 impl SumType
 {
-    // Get the index or panic
-    pub fn index(&self) -> usize
+    pub fn index_of(&self, case_name: &str) -> Option<usize>
     {
-        if let Some(idx) = self.index {
-            idx
-        } else {
-            panic!("Index of SumType not known")
-        }
+        self.cases.iter().position(|cn| cn.name == case_name)
     }
 }
 
@@ -37,19 +31,13 @@ impl SumType
 pub struct EnumType
 {
     pub cases: Vec<String>,
-    pub index: Option<usize>,  // Option<usize> contains the index when we know the case
 }
 
 impl EnumType
 {
-    // Get the index or panic
-    pub fn index(&self) -> usize
+    pub fn index_of(&self, case_name: &str) -> Option<usize>
     {
-        if let Some(idx) = self.index {
-            idx
-        } else {
-            panic!("Index of EnumType not known")
-        }
+        self.cases.iter().position(|cn| cn == case_name)
     }
 }
 
@@ -308,19 +296,17 @@ pub fn sum_type_case(name: &str, typ: Type) -> SumTypeCase
     }
 }
 
-pub fn sum_type(cases: Vec<SumTypeCase>, index: Option<usize>) -> Type
+pub fn sum_type(cases: Vec<SumTypeCase>) -> Type
 {
     Type::Sum(Rc::new(SumType{
         cases: cases,
-        index: index,
     }))
 }
 
-pub fn enum_type(cases: Vec<String>, index: Option<usize>) -> Type
+pub fn enum_type(cases: Vec<String>) -> Type
 {
     Type::Enum(Rc::new(EnumType{
         cases: cases,
-        index: index,
     }))
 }
 
@@ -376,8 +362,8 @@ impl fmt::Display for Type
             Type::Generic(ref g) => write!(f, "${}", g),
             Type::Func(ref ft) => write!(f, "({}) -> {}", join(ft.args.iter(), ", "), ft.return_type),
             Type::Struct(ref st) => write!(f, "{{{}}}", join(st.members.iter().map(|m| &m.typ), ", ")),
-            Type::Sum(ref st) => write!(f, "{} ({:?})", join(st.cases.iter().map(|m| &m.typ), " | "), st.index),
-            Type::Enum(ref st) => write!(f, "{} ({:?})", join(st.cases.iter(), " | "), st.index),
+            Type::Sum(ref st) => write!(f, "{}", join(st.cases.iter().map(|m| &m.typ), " | ")),
+            Type::Enum(ref st) => write!(f, "{}", join(st.cases.iter(), " | ")),
         }
     }
 }

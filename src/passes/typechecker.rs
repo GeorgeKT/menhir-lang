@@ -190,7 +190,6 @@ fn resolve_generic_args_in_call(ctx: &mut TypeCheckerContext, ft: &FuncType, c: 
 fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileResult<Type>
 {
     let func_type = try!(ctx.resolve_type(&c.callee.name).ok_or(unknown_name(c.span.start, &c.callee.name)));
-    println!("type_check_call {}: {}", c.callee.name, func_type);
     if let Type::Func(ref ft) = func_type
     {
         if ft.args.len() != c.args.len() {
@@ -199,16 +198,10 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileResult<
         }
 
         let arg_types = try!(resolve_generic_args_in_call(ctx, ft, c));
-        use itertools::free::join;
-        println!("arg_types {}", join(arg_types.iter(), " ; "));
-
         for idx in 0..c.args.len()
         {
             let expected_arg_type = c.generic_args.substitute(&ft.args[idx]);
             let arg_type = &arg_types[idx];
-
-            println!("call {} idx {} expected {} arg_type {}", c.callee.name, idx, expected_arg_type, arg_type);
-            println!("call generic_args {:?}", c.generic_args);
             if *arg_type == expected_arg_type
             {
                 continue
@@ -307,7 +300,8 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
                 match nr.typ
                 {
                     Type::Sum(ref st) => {
-                        let ref case = st.cases[st.index.expect("Sum type index must be known here")];
+                        let idx = st.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
+                        let ref case = st.cases[idx];
                         if case.typ == Type::Int {
                             try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
                         } else {
@@ -468,7 +462,6 @@ fn type_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint: Op
     let resolved_type = try!(ctx.resolve_type(&nr.name).ok_or(unknown_name(nr.span.start, &nr.name)));
 
     if let Some(typ) = type_hint {
-        println!("type_check_name {} / {} / {}", nr.name, resolved_type, typ);
         if resolved_type == Type::Unknown {
             return err(nr.span.start, ErrorCode::UnknownType(nr.name.clone(), typ), format!("{} has unknown type", nr.name))
         }
@@ -505,7 +498,6 @@ fn type_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> Compil
     for b in &mut l.bindings
     {
         b.typ = try!(type_check_expression(ctx, &mut b.init, None));
-        println!("Add binding {} = {}", b.name, b.typ);
         try!(ctx.add(&b.name, b.typ.clone(), b.span.start));
     }
 
@@ -584,12 +576,7 @@ fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructIn
             Ok(si.typ.clone())
         },
         Type::Sum(st) => {
-            let idx = if let Some(idx) = st.index {
-                idx
-            } else {
-                return err(si.span.start, ErrorCode::TypeError, format!("Cannot determine Sum type case"))
-            };
-
+            let idx = st.index_of(&si.struct_name).expect("Internal Compiler Error: cannot determine index of sum type case");
             let mut sum_type_cases = Vec::with_capacity(st.cases.len());
             for (i, case) in st.cases.iter().enumerate()
             {
@@ -607,7 +594,7 @@ fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructIn
                 sum_type_cases.push(sum_type_case(&case.name, typ))
             }
 
-            si.typ = sum_type(sum_type_cases, Some(idx));
+            si.typ = sum_type(sum_type_cases);
             Ok(si.typ.clone())
         },
         _ => err(si.span.start, ErrorCode::TypeError, format!("{} is not a struct", si.struct_name)),
@@ -658,26 +645,20 @@ fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern
     match typ
     {
         Type::Sum(ref st) => {
-            if let Some(idx) = st.index
+            let idx = st.index_of(&p.name).expect("Internal Compiler Error: cannot determine index of sum type case");
+            let ref case = st.cases[idx];
+            match case.typ
             {
-                let ref case = st.cases[idx];
-                match case.typ
-                {
-                    Type::Struct(ref s) => {
-                        if s.members.len() != p.bindings.len() {
-                            err(p.span.start, ErrorCode::TypeError, format!("Not enough bindings in pattern match"))
-                        } else {
-                            p.types = s.members.iter().map(|sm| sm.typ.clone()).collect();
-                            p.typ = Type::Sum(st.clone());
-                            Ok(Type::Unknown)
-                        }
-                    },
-                    _ => err(p.span.start, ErrorCode::TypeError, format!("Attempting to pattern match a normal sum type case with a struct")),
-                }
-            }
-            else
-            {
-                err(p.span.start, ErrorCode::TypeError, format!("Cannot determine the case of a sum type"))
+                Type::Struct(ref s) => {
+                    if s.members.len() != p.bindings.len() {
+                        err(p.span.start, ErrorCode::TypeError, format!("Not enough bindings in pattern match"))
+                    } else {
+                        p.types = s.members.iter().map(|sm| sm.typ.clone()).collect();
+                        p.typ = Type::Sum(st.clone());
+                        Ok(Type::Unknown)
+                    }
+                },
+                _ => err(p.span.start, ErrorCode::TypeError, format!("Attempting to pattern match a normal sum type case with a struct")),
             }
         },
 
@@ -728,9 +709,7 @@ pub fn type_check_module(module: &mut Module) -> CompileResult<()>
 
         for ref mut f in module.functions.values_mut() {
             if !f.type_checked {
-                println!("type_check function {}", f.sig.name);
                 try!(type_check_function(&mut ctx, f));
-                f.print(0);
             }
         }
 

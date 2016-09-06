@@ -35,7 +35,7 @@ impl GenericMapper
         if !generic.is_generic() {
             return generic.clone();
         }
-        
+
         if let Some(t) = self.mapping.get(generic) {
             return t.clone();
         }
@@ -64,8 +64,7 @@ impl GenericMapper
                 sum_type(
                     st.cases.iter()
                         .map(|c| sum_type_case(&c.name, self.substitute(&c.typ)))
-                        .collect(),
-                    st.index
+                        .collect()
                 )
             },
             _ => generic.clone(),
@@ -188,7 +187,7 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
                         new_cases.push(sum_type_case(&aa.name, nt));
                     }
 
-                    Ok(sum_type(new_cases, actual_st.index.clone()))
+                    Ok(sum_type(new_cases))
                 },
                 _ => map_err(),
             }

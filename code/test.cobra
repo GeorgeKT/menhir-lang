@@ -1,7 +1,9 @@
-type Pair = {first: $a, second: $b}
+type Option = Some{$a} | None
 
-add(p: Pair<$a, $a>) -> $a  =
-    p.first + p.second
+unwrap_or(opt: Option<$a>, def: $a) -> $a =
+    match opt
+        Some{i} => i,
+        None => def
 
 main() -> int =
-    add(Pair{4, 14})
+    unwrap_or(None, 9) + unwrap_or(Some{7}, 9)

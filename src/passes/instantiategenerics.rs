@@ -155,10 +155,6 @@ fn resolve_generic_call(new_functions: &mut FunctionMap, module: &Module, call: 
             let name = new_func_name(&func.sig.name, &call.generic_args);
             if !new_functions.contains_key(&name) && !module.functions.contains_key(&name) {
                 let new_func = try!(instantiate(func, &call.generic_args));
-
-                println!("Instatiated {}", name);
-                use ast::TreePrinter;
-                new_func.print(0);
                 new_functions.insert(name, new_func);
             }
 
