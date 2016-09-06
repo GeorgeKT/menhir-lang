@@ -286,7 +286,10 @@ impl Context
                 LLVMInt64TypeInContext(self.context)
             },
             Type::String => panic!("Not yet implemented"),
-            Type::Generic(_) => panic!("Internal Compiler Error: All generic types must have been resolved before code generation"),
+            Type::Generic(_) => {
+                let x = 5;
+                panic!("Internal Compiler Error: All generic types must have been resolved before code generation {}", x)
+            },
             Type::Unresolved(_) => panic!("Internal Compiler Error: All types must be resolved before code generation"),
             Type::Unknown => panic!("Internal Compiler Error: all types must be known before code generation"),
         }

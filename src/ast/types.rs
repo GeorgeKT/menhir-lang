@@ -179,15 +179,24 @@ impl Type
     }
 
     // If possible generate a conversion expression
-    pub fn convert(&self, other: &Type, expr: &Expression) -> Option<Expression>
+    pub fn convert(&self, from_type: &Type, expr: &Expression) -> Option<Expression>
     {
-        match (self, other)
+        match (self, from_type)
         {
             (&Type::Slice(ref s), &Type::Array(ref t)) if s.element_type == t.element_type =>
                 // arrays can be converted to slices if the element type is the same
                 Some(Expression::ArrayToSliceConversion(Box::new(expr.clone())))
             ,
             _ => None,
+        }
+    }
+
+    pub fn is_convertible(&self, dst_type: &Type) -> bool
+    {
+        match (self, dst_type)
+        {
+            (&Type::Array(ref s), &Type::Slice(ref t)) if s.element_type == t.element_type => true,
+            _ => false,
         }
     }
 
@@ -227,6 +236,42 @@ impl Type
             Type::Slice(_) => true,
             Type::Struct(_) => true,
             Type::Sum(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_numeric(&self) -> bool
+    {
+        match *self
+        {
+            Type::Int | Type::Float => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_integer(&self) -> bool
+    {
+        match *self
+        {
+            Type::Int => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_bool(&self) -> bool
+    {
+        match *self
+        {
+            Type::Bool => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_unknown(&self) -> bool
+    {
+        match *self
+        {
+            Type::Unknown => true,
             _ => false,
         }
     }

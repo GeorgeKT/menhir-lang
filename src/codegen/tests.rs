@@ -376,7 +376,6 @@ main() -> int =
     assert!(r == Ok(53));
 }
 
-/*
 #[test]
 fn test_generic_sum_types() {
     let r = run(r#"
@@ -388,12 +387,11 @@ unwrap_or(opt: Option<$a>, def: $a) -> $a =
         None => def
 
 main() -> int =
-    unwrap_or(Some{7}, 9) + unwrap_or(None, 9)
+    unwrap_or(None, 9)
     "#, true);
     println!("r: {:?}", r);
     assert!(r == Ok(16));
 }
-*/
 
 #[test]
 fn test_generic_struct_types() {
@@ -404,7 +402,7 @@ add(p: Pair<$a, $a>) -> $a  =
     p.first + p.second
 
 main() -> int = add(Pair{4, 14})
-    "#, true);
+    "#, false);
     println!("r: {:?}", r);
     assert!(r == Ok(18));
 }

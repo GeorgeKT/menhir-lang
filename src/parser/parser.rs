@@ -268,16 +268,7 @@ fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool) -> Compi
 
 fn parse_function_arguments(tq: &mut TokenQueue, type_is_optional: bool) -> CompileResult<Vec<Argument>>
 {
-    let mut args = Vec::new();
-    while !tq.is_next(TokenKind::CloseParen)
-    {
-        let arg = try!(parse_function_argument(tq, type_is_optional));
-        args.push(arg);
-        try!(eat_comma(tq));
-    }
-
-    try!(tq.expect(TokenKind::CloseParen));
-    Ok(args)
+    parse_comma_separated_list(tq, TokenKind::CloseParen, |tq| parse_function_argument(tq, type_is_optional))
 }
 
 fn parse_function_definition(tq: &mut TokenQueue, name: &str, start_pos: Pos) -> CompileResult<Function>

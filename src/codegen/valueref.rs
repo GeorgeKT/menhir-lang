@@ -144,7 +144,7 @@ impl ValueRef
         {
             ValueRef::Array(ref arr) => Ok(arr.get_element(ctx, index)),
             ValueRef::Slice(ref slice) => Ok(slice.get_element(ctx, index)),
-            _ => err(pos, ErrorCode::CodegenError, format!("Attempting to get an array element from a none array")),
+            _ => err(pos, ErrorCode::CodegenError, format!("Attempting to get an array element from a non array")),
         }
     }
 
@@ -153,7 +153,7 @@ impl ValueRef
         match *self
         {
             ValueRef::Struct(ref vr) => Ok(vr.get_member_ptr(ctx, idx)),
-            _ => err(pos, ErrorCode::CodegenError, format!("Attempting to get a struct member from a none struct")),
+            _ => err(pos, ErrorCode::CodegenError, format!("Attempting to get a struct member from a non struct")),
         }
     }
 
@@ -162,7 +162,7 @@ impl ValueRef
         match *self
         {
             ValueRef::Sum(ref st) => Ok(st.get_data_ptr(ctx, idx)),
-            _ => err(pos, ErrorCode::CodegenError, format!("Attempting to get a sum type case member from a none sum type")),
+            _ => err(pos, ErrorCode::CodegenError, format!("Attempting to get a sum type case member from a non sum type")),
         }
     }
 
@@ -171,7 +171,7 @@ impl ValueRef
         match *self
         {
             ValueRef::Sum(ref st) => Ok(st.get_type_ptr(ctx)),
-            _ => err(pos, ErrorCode::CodegenError, format!("Attempting to get a sum type case member from a none sum type")),
+            _ => err(pos, ErrorCode::CodegenError, format!("Attempting to get a sum type case member from a non sum type")),
         }
     }
 }

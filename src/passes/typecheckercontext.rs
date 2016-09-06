@@ -3,6 +3,7 @@ use ast::*;
 use compileerror::*;
 
 
+#[derive(Debug)]
 pub struct StackFrame
 {
     symbols: HashMap<String, Type>,
@@ -37,6 +38,7 @@ impl StackFrame
     }
 }
 
+#[derive(Debug)]
 pub struct TypeCheckerContext
 {
     stack: Vec<StackFrame>,

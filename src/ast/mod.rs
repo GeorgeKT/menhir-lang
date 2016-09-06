@@ -23,9 +23,9 @@ pub use self::matchexpression::{MatchExpression, MatchCase, match_case, match_ex
 pub use self::nameref::NameRef;
 pub use self::operations::{BinaryOp, UnaryOp, unary_op, bin_op};
 pub use self::structs::{StructDeclaration, StructMember, StructInitializer, StructMemberAccess, StructPattern,
-    struct_member, struct_declaration, struct_initializer, struct_member_access};
+    struct_member, struct_declaration, struct_initializer, struct_member_access, struct_pattern};
 pub use self::sumtype::{SumTypeDeclaration, SumTypeCaseDeclaration, sum_type_decl, sum_type_case_decl};
-pub use self::types::{Type, TypeAlias, SumType, UnresolvedType, to_primitive, func_type, array_type, slice_type,
+pub use self::types::{Type, TypeAlias, SumType, StructType, UnresolvedType, FuncType, to_primitive, func_type, array_type, slice_type,
     type_alias, sum_type, sum_type_case, enum_type, struct_type, unresolved_type};
 
 use compileerror::{Span};

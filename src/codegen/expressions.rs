@@ -206,6 +206,7 @@ unsafe fn make_function_instance(ctx: &mut Context, sig: &FunctionSignature) -> 
 
 pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature) -> CompileResult<FunctionInstance>
 {
+    println!("sig.type = {}", sig.typ);
     let mut fi = try!(make_function_instance(ctx, sig));
     let mut arg_types: Vec<LLVMTypeRef> = fi.args.iter().map(|&(typ, _)| typ).collect();
     let function_type = LLVMFunctionType(fi.return_type, arg_types.as_mut_ptr(), arg_types.len() as libc::c_uint, 0);

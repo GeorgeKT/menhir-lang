@@ -2,7 +2,7 @@ use std::ops::{DerefMut};
 use ast::*;
 use compileerror::{CompileResult, CompileError, Pos, ErrorCode, err, unknown_name};
 use parser::{Operator};
-use passes::{TypeCheckerContext, instantiate_generics, fill_in_generics, substitute_types, resolve_types};
+use passes::{TypeCheckerContext, instantiate_generics, fill_in_generics, resolve_types};
 
 
 fn invalid_unary_operator<T>(pos: Pos, op: Operator) -> CompileResult<T>
@@ -15,28 +15,17 @@ fn expected_numeric_operands<T>(pos: Pos, op: Operator) -> CompileResult<T>
     err(pos, ErrorCode::TypeError, format!("Operator {} expects two numeric expression as operands", op))
 }
 
-fn is_numeric(t: &Type) -> bool
-{
-    *t == Type::Int || *t == Type::Float
-}
-
-fn is_integer(t: &Type) -> bool
-{
-    *t == Type::Int
-}
-
-fn is_bool(t: &Type) -> bool
-{
-    *t == Type::Bool
-}
-
 fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> CompileResult<Type>
 {
     let e_type = try!(type_check_expression(ctx, &mut u.expression, None));
+    if e_type.is_generic() {
+        return Ok(e_type)
+    }
+
     match u.operator
     {
         Operator::Sub => {
-            if !is_numeric(&e_type) {
+            if !e_type.is_numeric() {
                 err(u.span.start, ErrorCode::TypeError, format!("Unary operator {} expects a numeric expression", u.operator))
             } else {
                 Ok(e_type)
@@ -44,7 +33,7 @@ fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> Compile
         },
 
         Operator::Not => {
-            if !is_bool(&e_type) {
+            if !e_type.is_bool() {
                 err(u.span.start, ErrorCode::TypeError, format!("Unary operator {} expects a boolean expression", u.operator))
             } else {
                 Ok(Type::Bool)
@@ -58,13 +47,18 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> Compi
 {
     let left_type = try!(type_check_expression(ctx, &mut b.left, None));
     let right_type = try!(type_check_expression(ctx, &mut b.right, None));
+
+    if left_type.is_generic() || right_type.is_generic() {
+        return Ok(left_type);
+    }
+
     match b.operator
     {
         Operator::Add |
         Operator::Sub |
         Operator::Mul |
         Operator::Div =>
-            if !is_numeric(&left_type) || !is_numeric(&right_type) {
+            if !left_type.is_numeric() || !right_type.is_numeric() {
                 expected_numeric_operands(b.span.start, b.operator)
             } else if left_type != right_type {
                 err(b.span.start, ErrorCode::TypeError, format!("Operator {} expects operands of the same type", b.operator))
@@ -76,7 +70,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> Compi
         Operator::GreaterThan |
         Operator::LessThanEquals |
         Operator::GreaterThanEquals =>
-            if !is_numeric(&left_type) || !is_numeric(&right_type) {
+            if !left_type.is_numeric() || !right_type.is_numeric() {
                 expected_numeric_operands(b.span.start, b.operator)
             } else if left_type != right_type {
                 err(b.span.start, ErrorCode::TypeError, format!("Operator {} expects operands of the same type", b.operator))
@@ -85,7 +79,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> Compi
             },
 
         Operator::Mod =>
-            if !is_integer(&left_type) || !is_integer(&right_type) {
+            if !left_type.is_integer() || !right_type.is_integer() {
                 err(b.span.start, ErrorCode::TypeError, format!("Operator {} expects two integer expressions as operands", b.operator))
             } else {
                 Ok(Type::Int)
@@ -98,7 +92,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> Compi
             },
 
         Operator::And | Operator::Or =>
-            if !is_bool(&left_type) || !is_bool(&right_type) {
+            if !left_type.is_bool() || !right_type.is_bool() {
                 err(b.span.start, ErrorCode::TypeError, format!("Operator {} expects two boolean expressions as operands", b.operator))
             } else {
                 Ok(Type::Bool)
@@ -163,51 +157,81 @@ fn type_check_array_generator(ctx: &mut TypeCheckerContext, a: &mut ArrayGenerat
     Ok(a.array_type.clone())
 }
 
+
+fn resolve_generic_args_in_call(ctx: &mut TypeCheckerContext, ft: &FuncType, c: &mut Call) -> CompileResult<Vec<Type>>
+{
+    let mut arg_types = Vec::with_capacity(c.args.len());
+    let mut count = c.generic_args.len();
+    loop
+    {
+        arg_types.clear();
+        for (arg, expected_arg_type) in c.args.iter_mut().zip(ft.args.iter())
+        {
+            let expected_arg_type = c.generic_args.substitute(&expected_arg_type);
+            let arg_type = try!(type_check_expression(ctx, arg, Some(expected_arg_type.clone())));
+            let arg_type = c.generic_args.substitute(&arg_type);
+
+            if expected_arg_type.is_generic() {
+                try!(fill_in_generics(&arg_type, &expected_arg_type, &mut c.generic_args, arg.span().start));
+            }
+            arg_types.push(arg_type);
+        }
+
+        if c.generic_args.len() == count {
+            break;
+        }
+        count = c.generic_args.len();
+    }
+
+    Ok(arg_types)
+}
+
+
 fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileResult<Type>
 {
     let func_type = try!(ctx.resolve_type(&c.callee.name).ok_or(unknown_name(c.span.start, &c.callee.name)));
-
+    println!("type_check_call {}: {}", c.callee.name, func_type);
     if let Type::Func(ref ft) = func_type
     {
-        for (idx, (arg, expected_arg_type)) in c.args.iter_mut().zip(ft.args.iter()).enumerate()
-        {
-            let expected_arg_type = substitute_types(&expected_arg_type, &c.generic_args);
-            let arg_type = try!(type_check_expression(ctx, arg, Some(expected_arg_type.clone())));
-            let real_expected_arg_type = if expected_arg_type.is_generic() {
-                try!(fill_in_generics(&arg_type, &expected_arg_type, &mut c.generic_args, arg.span().start))
-            } else {
-                expected_arg_type
-            };
+        if ft.args.len() != c.args.len() {
+            return err(c.span.start, ErrorCode::TypeError,
+                format!("Attempting to call {} with {} arguments, but it needs {}", c.callee.name, c.args.len(), ft.args.len()));
+        }
 
-            if arg_type == real_expected_arg_type
+        let arg_types = try!(resolve_generic_args_in_call(ctx, ft, c));
+        use itertools::free::join;
+        println!("arg_types {}", join(arg_types.iter(), " ; "));
+
+        for idx in 0..c.args.len()
+        {
+            let expected_arg_type = c.generic_args.substitute(&ft.args[idx]);
+            let arg_type = &arg_types[idx];
+
+            println!("call {} idx {} expected {} arg_type {}", c.callee.name, idx, expected_arg_type, arg_type);
+            println!("call generic_args {:?}", c.generic_args);
+            if *arg_type == expected_arg_type
             {
                 continue
             }
             else
             {
-                if let Some(conversion_expr) = real_expected_arg_type.convert(&arg_type, &arg)
+                if let Some(conversion_expr) = expected_arg_type.convert(&arg_type, &c.args[idx])
                 {
-                    *arg = conversion_expr;
+                    c.args[idx] = conversion_expr;
                 }
                 else
                 {
-                    return err(arg.span().start, ErrorCode::TypeError,
+                    return err(c.args[idx].span().start, ErrorCode::TypeError,
                         format!("Argument {} has the wrong type, function {} expects the type {}, argument provided has type {}",
-                            idx, c.callee.name, real_expected_arg_type, arg_type))
+                            idx, c.callee.name, expected_arg_type, arg_type))
                 }
             }
         }
 
         if ft.return_type.is_generic() {
-            if let Some(resolved_ret) = c.generic_args.get(&ft.return_type) {
-                Ok(resolved_ret.clone())
-            } else {
-                err(c.span.start, ErrorCode::GenericTypeSubstitutionError,
-                    format!("Cannot determine the type of the generic return type {}", ft.return_type))
-            }
-        } else {
-            Ok(ft.return_type.clone())
+            return Ok(c.generic_args.substitute(&ft.return_type));
         }
+        Ok(ft.return_type.clone())
     }
     else
     {
@@ -218,10 +242,6 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileResult<
 
 fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> CompileResult<Type>
 {
-    if fun.is_generic() { // Generics have to be instantiated at call time
-        return Ok(Type::Unknown);
-    }
-
     ctx.push_stack();
     for arg in fun.sig.args.iter_mut()
     {
@@ -277,7 +297,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
             },
 
             Expression::NameRef(ref mut nr) => {
-                try!(type_check_name(ctx, nr, None));
+                try!(type_check_name(ctx, nr, Some(target_type.clone())));
                 if nr.name != "_" && nr.typ != target_type {
                     return err(match_pos, ErrorCode::TypeError,
                         format!("Cannot pattern match an expression of type {} with an expression of type {}",
@@ -396,9 +416,42 @@ fn type_check_lambda(ctx: &mut TypeCheckerContext, m: &mut Lambda, type_hint: Op
             if m.is_generic() {
                 return Ok(Type::Unknown);
             }
-
             type_check_lambda_body(ctx, m)
         },
+    }
+}
+
+fn is_instantiation_of(concrete_type: &Type, generic_type: &Type) -> bool
+{
+    if !generic_type.is_generic() {
+        return *concrete_type == *generic_type;
+    }
+
+    match (concrete_type, generic_type)
+    {
+        (&Type::Array(ref a), &Type::Array(ref b)) =>
+            a.length == b.length && is_instantiation_of(&a.element_type, &b.element_type),
+        (&Type::Slice(ref a), &Type::Slice(ref b)) =>
+            is_instantiation_of(&a.element_type, &b.element_type),
+        (_, &Type::Generic(_)) => true,
+        (&Type::Struct(ref a), &Type::Struct(ref b)) => {
+            a.members.len() == b.members.len() &&
+            a.members.iter()
+                .zip(b.members.iter())
+                .all(|(ma, mb)| is_instantiation_of(&ma.typ, &mb.typ))
+        },
+        (&Type::Func(ref a), &Type::Func(ref b)) => {
+            is_instantiation_of(&a.return_type, &b.return_type) &&
+            a.args.iter()
+                .zip(b.args.iter())
+                .all(|(ma, mb)| is_instantiation_of(ma, mb))
+        }
+        (&Type::Sum(ref a), &Type::Sum(ref b)) => {
+            a.cases.iter()
+                .zip(b.cases.iter())
+                .all(|(ma, mb)| is_instantiation_of(&ma.typ, &mb.typ))
+        }
+        _ => false,
     }
 }
 
@@ -408,10 +461,40 @@ fn type_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint: Op
         return Ok(Type::Unknown);
     }
 
-    nr.typ = try!(ctx.resolve_type(&nr.name).ok_or(unknown_name(nr.span.start, &nr.name)));
-    if nr.typ == Type::Unknown && type_hint.is_some() {
-        err(nr.span.start, ErrorCode::UnknownType(nr.name.clone(), type_hint.unwrap()), format!("{} has unknown type", nr.name))
+    if !nr.typ.is_unknown() && !nr.typ.is_generic() {
+        return Ok(nr.typ.clone()); // We have already determined the type
+    }
+
+    let resolved_type = try!(ctx.resolve_type(&nr.name).ok_or(unknown_name(nr.span.start, &nr.name)));
+
+    if let Some(typ) = type_hint {
+        println!("type_check_name {} / {} / {}", nr.name, resolved_type, typ);
+        if resolved_type == Type::Unknown {
+            return err(nr.span.start, ErrorCode::UnknownType(nr.name.clone(), typ), format!("{} has unknown type", nr.name))
+        }
+
+        if resolved_type == typ {
+            nr.typ = resolved_type;
+            return Ok(nr.typ.clone());
+        }
+
+        if !resolved_type.is_generic() && !typ.is_generic() && !resolved_type.is_convertible(&typ) {
+            return err(nr.span.start, ErrorCode::TypeError, format!("Type mismatch: expecting {}, but {} has type {}", typ, nr.name, resolved_type));
+        }
+
+        if resolved_type.is_generic() && !typ.is_generic() {
+            if !is_instantiation_of(&typ, &resolved_type) {
+                err(nr.span.start, ErrorCode::TypeError, format!("Type mismatch: {} is not a valid instantiation of {}", typ, resolved_type))
+            } else {
+                nr.typ = typ;
+                Ok(nr.typ.clone())
+            }
+        } else {
+            nr.typ = resolved_type;
+            Ok(nr.typ.clone())
+        }
     } else {
+        nr.typ = resolved_type;
         Ok(nr.typ.clone())
     }
 }
@@ -422,6 +505,7 @@ fn type_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> Compil
     for b in &mut l.bindings
     {
         b.typ = try!(type_check_expression(ctx, &mut b.init, None));
+        println!("Add binding {} = {}", b.name, b.typ);
         try!(ctx.add(&b.name, b.typ.clone(), b.span.start));
     }
 
@@ -544,6 +628,7 @@ fn find_member_type(members: &Vec<StructMember>, member_name: &str, pos: Pos) ->
 fn type_check_struct_member_access(ctx: &mut TypeCheckerContext, sma: &mut StructMemberAccess) -> CompileResult<Type>
 {
     let mut st = try!(ctx.resolve_type(&sma.name).ok_or(unknown_name(sma.span.start, &sma.name)));
+    sma.indices.clear();
     for ref member_name in &sma.members
     {
         st = match st
@@ -559,11 +644,16 @@ fn type_check_struct_member_access(ctx: &mut TypeCheckerContext, sma: &mut Struc
         };
     }
 
+    sma.typ = st.clone();
     Ok(st)
 }
 
 fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern) -> CompileResult<Type>
 {
+    if !p.typ.is_unknown() {
+        return Ok(p.typ.clone());
+    }
+
     let typ = try!(ctx.resolve_type(&p.name).ok_or(unknown_name(p.span.start, &p.name)));
     match typ
     {
@@ -638,7 +728,9 @@ pub fn type_check_module(module: &mut Module) -> CompileResult<()>
 
         for ref mut f in module.functions.values_mut() {
             if !f.type_checked {
+                println!("type_check function {}", f.sig.name);
                 try!(type_check_function(&mut ctx, f));
+                f.print(0);
             }
         }
 

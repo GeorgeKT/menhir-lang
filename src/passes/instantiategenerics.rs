@@ -1,11 +1,10 @@
 use std::collections::HashMap;
-use itertools::free::join;
 use ast::*;
 use compileerror::{CompileResult, ErrorCode, err};
-use passes::substitute_types;
+use passes::GenericMapper;
 
 
-fn substitute_expr(generic_args: &HashMap<Type, Type>, e: &Expression) -> CompileResult<Expression>
+fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResult<Expression>
 {
     match *e
     {
@@ -44,7 +43,7 @@ fn substitute_expr(generic_args: &HashMap<Type, Type>, e: &Expression) -> Compil
         },
 
         Expression::Lambda(ref l) => {
-            let args: Vec<Argument> = l.sig.args.iter().map(|a| Argument::new(a.name.clone(), substitute_types(&a.typ, generic_args), a.span)).collect();
+            let args: Vec<Argument> = l.sig.args.iter().map(|a| Argument::new(a.name.clone(), generic_args.substitute(&a.typ), a.span)).collect();
             let expr = try!(substitute_expr(generic_args, &l.expr));
             Ok(Expression::Lambda(lambda(args, expr, l.span)))
         },
@@ -85,7 +84,14 @@ fn substitute_expr(generic_args: &HashMap<Type, Type>, e: &Expression) -> Compil
         Expression::FloatLiteral(span, ref v) => Ok(Expression::FloatLiteral(span, v.clone())),
         Expression::StringLiteral(span, ref v) => Ok(Expression::StringLiteral(span, v.clone())),
         Expression::ArrayPattern(ref ap) => Ok(Expression::ArrayPattern(ap.clone())),
-        Expression::NameRef(ref nr) => Ok(Expression::NameRef(nr.clone())),
+        Expression::NameRef(ref nr) => {
+            let new_nr = NameRef{
+                name: nr.name.clone(),
+                span: nr.span,
+                typ: generic_args.substitute(&nr.typ),
+            };
+            Ok(Expression::NameRef(new_nr))
+        },
         Expression::StructInitializer(ref si) => {
             let mut nmi = Vec::with_capacity(si.member_initializers.len());
             for e in si.member_initializers.iter() {
@@ -95,21 +101,35 @@ fn substitute_expr(generic_args: &HashMap<Type, Type>, e: &Expression) -> Compil
 
             Ok(Expression::StructInitializer(struct_initializer(&si.struct_name, nmi, si.span)))
         },
-        Expression::StructMemberAccess(ref sma) => Ok(Expression::StructMemberAccess(sma.clone())),
-        Expression::StructPattern(ref p) => Ok(Expression::StructPattern(p.clone())),
+        Expression::StructMemberAccess(ref sma) => {
+            Ok(Expression::StructMemberAccess(sma.clone()))
+        },
+        Expression::StructPattern(ref p) => {
+            Ok(Expression::StructPattern(struct_pattern(
+                &p.name,
+                p.bindings.clone(),
+                p.types.iter().map(|t| generic_args.substitute(t)).collect(),
+                generic_args.substitute(&p.typ),
+                p.span))
+            )
+        },
     }
 }
 
-fn new_func_name(func_name: &str, generic_args: &HashMap<Type, Type>) -> String
+fn new_func_name(func_name: &str, generic_args: &GenericMapper) -> String
 {
-    format!("{}<{}>", func_name, join(generic_args.values(), ","))
+    format!("{}{}", func_name, generic_args.to_string())
 }
 
-fn instantiate(func: &Function, generic_args: &HashMap<Type, Type>) -> CompileResult<Function>
+fn instantiate(func: &Function, generic_args: &GenericMapper) -> CompileResult<Function>
 {
-    let arg_types = func.sig.args.iter().map(|arg| substitute_types(&arg.typ, generic_args)).collect();
-    let args = func.sig.args.iter().map(|arg| Argument::new(arg.name.clone(), substitute_types(&arg.typ, generic_args), arg.span)).collect();
-    let return_type = substitute_types(&func.sig.return_type, generic_args);
+    let arg_types = func.sig.args.iter()
+        .map(|arg| generic_args.substitute(&arg.typ))
+        .collect();
+    let args = func.sig.args.iter()
+        .map(|arg| Argument::new(arg.name.clone(), generic_args.substitute(&arg.typ), arg.span))
+        .collect();
+    let return_type = generic_args.substitute(&func.sig.return_type);
     let sig = FunctionSignature{
         name: new_func_name(&func.sig.name, generic_args),
         return_type: return_type.clone(),
@@ -119,7 +139,6 @@ fn instantiate(func: &Function, generic_args: &HashMap<Type, Type>) -> CompileRe
     };
 
     let body = try!(substitute_expr(generic_args, &func.expression));
-
     Ok(Function::new(sig, func.public, body, func.span))
 }
 
@@ -136,6 +155,10 @@ fn resolve_generic_call(new_functions: &mut FunctionMap, module: &Module, call: 
             let name = new_func_name(&func.sig.name, &call.generic_args);
             if !new_functions.contains_key(&name) && !module.functions.contains_key(&name) {
                 let new_func = try!(instantiate(func, &call.generic_args));
+
+                println!("Instatiated {}", name);
+                use ast::TreePrinter;
+                new_func.print(0);
                 new_functions.insert(name, new_func);
             }
 
@@ -198,6 +221,13 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
 
             resolve_generics(new_functions, module, &l.expression)
         },
+
+        Expression::StructInitializer(ref si) => {
+            for mi in si.member_initializers.iter() {
+                try!(resolve_generics(new_functions, module, mi));
+            }
+            Ok(())
+        }
 
         Expression::Enclosed(_, ref inner) => resolve_generics(new_functions, module, inner),
         Expression::ArrayToSliceConversion(ref inner) => resolve_generics(new_functions, module, inner),

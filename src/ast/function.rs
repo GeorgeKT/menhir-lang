@@ -35,7 +35,7 @@ impl TreePrinter for Argument
     fn print(&self, level: usize)
     {
         let p = prefix(level);
-        println!("{}{}: {} (span; {})", p, self.name, self.typ, self.span);
+        println!("{}{}: {} (span: {})", p, self.name, self.typ, self.span);
     }
 }
 

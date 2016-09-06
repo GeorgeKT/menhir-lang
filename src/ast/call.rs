@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use ast::{Expression, NameRef, TreePrinter, Type, prefix};
+use ast::{Expression, NameRef, TreePrinter, prefix};
 use compileerror::{Span};
+use passes::GenericMapper;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Call
@@ -8,7 +8,7 @@ pub struct Call
     pub callee: NameRef,
     pub args: Vec<Expression>,
     pub span: Span,
-    pub generic_args: HashMap<Type, Type>,
+    pub generic_args: GenericMapper,
 }
 
 impl Call
@@ -19,7 +19,7 @@ impl Call
             callee: callee,
             args: args,
             span: span,
-            generic_args: HashMap::new(),
+            generic_args: GenericMapper::new(),
         }
     }
 }

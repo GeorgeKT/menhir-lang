@@ -1,7 +1,7 @@
-use std::collections::HashMap;
 use itertools::free::join;
 use ast::{Expression, TreePrinter, Type, prefix};
 use compileerror::{Span};
+use passes::GenericMapper;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct StructMember
@@ -46,7 +46,7 @@ pub struct StructInitializer
     pub member_initializers: Vec<Expression>,
     pub span: Span,
     pub typ: Type,
-    pub generic_args: HashMap<Type, Type>,
+    pub generic_args: GenericMapper,
 }
 
 impl StructInitializer
@@ -83,7 +83,7 @@ pub fn struct_initializer(struct_name: &str, member_initializers: Vec<Expression
         member_initializers: member_initializers,
         span: span,
         typ: Type::Unknown,
-        generic_args: HashMap::new(),
+        generic_args: GenericMapper::new(),
     }
 }
 
@@ -114,8 +114,19 @@ pub struct StructPattern
     pub name: String,
     pub bindings: Vec<String>,
     pub types: Vec<Type>,
-    pub span: Span,
     pub typ: Type,
+    pub span: Span,
+}
+
+pub fn struct_pattern(name: &str, bindings: Vec<String>, types: Vec<Type>, typ: Type, span: Span) -> StructPattern
+{
+    StructPattern{
+        name: name.into(),
+        bindings: bindings,
+        types: types,
+        typ: typ,
+        span: span,
+    }
 }
 
 impl TreePrinter for StructDeclaration
@@ -166,6 +177,6 @@ impl TreePrinter for StructPattern
     fn print(&self, level: usize)
     {
         let p = prefix(level);
-        println!("{}struct pattern {}{{{}}} ({})", p, self.name, join(self.bindings.iter(), ","), self.span);
+        println!("{}struct pattern {}{{{}}} (span: {}, type: {})", p, self.name, join(self.bindings.iter(), ","), self.span, self.typ);
     }
 }

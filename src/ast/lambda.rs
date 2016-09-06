@@ -12,7 +12,7 @@ pub struct Lambda
 pub fn lambda(args: Vec<Argument>, expr: Expression, span: Span) -> Lambda
 {
     Lambda{
-        sig: sig("lambda", Type::Unknown, args, span),
+        sig: sig("lambda", Type::Generic("$ret$".into()), args, span),
         expr: Box::new(expr),
         span: span,
     }
