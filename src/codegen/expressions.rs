@@ -860,7 +860,6 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::UnaryOp(ref u) => gen_unary_op(ctx, u),
             Expression::BinaryOp(ref op) => gen_binary_op(ctx, op),
             Expression::ArrayLiteral(ref a) => gen_array_literal(ctx, a),
-            Expression::ArrayPattern(ref _a) => panic!("NYI"),
             Expression::ArrayGenerator(ref _a) => panic!("NYI"),
             Expression::Call(ref c) => gen_call(ctx, c),
             Expression::NameRef(ref nr) => gen_name_ref(ctx, nr),
@@ -875,7 +874,10 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::ArrayToSliceConversion(ref e) => gen_array_to_slice_conversion(ctx, e),
             Expression::StructInitializer(ref si) => gen_struct_initializer(ctx, si),
             Expression::StructMemberAccess(ref sma) => gen_struct_member_access(ctx, sma),
-            Expression::StructPattern(ref _p) => panic!("NYI"),
+
+            // We should never get here
+            Expression::ArrayPattern(ref _a) => panic!("Internal Compiler Error: should never get here (gen_expression ArrayPattern)"),
+            Expression::StructPattern(ref _p) => panic!("Internal Compiler Error: should never get here (gen_expression ArrayPattern)"),
         }
     }
 }
