@@ -151,26 +151,13 @@ fn test_array()
     let r = run(r#"
 main() -> int =
     let x = [2, 3, 4] in 5
-    "#, false);
+    "#, true);
     println!("r: {:?}", r);
     assert!(r == Ok(5));
 }
 
 #[test]
 fn test_array_argument()
-{
-    let r = run(r#"
-foo(v: [int; 3]) -> int = 5
-
-main() -> int =
-    let x = [2, 3, 4] in foo(x)
-    "#, false);
-    println!("r: {:?}", r);
-    assert!(r == Ok(5));
-}
-
-#[test]
-fn test_slice_argument()
 {
     let r = run(r#"
 foo(v: [int]) -> int = 5
@@ -272,7 +259,7 @@ main() -> int =
 }
 
 #[test]
-fn test_generic_slice_arguments()
+fn test_generic_array_arguments()
 {
     let r = run(r#"
 fold(v: [$a], accu: $b, fn: ($b, $a) -> $b) -> $b =
@@ -390,7 +377,7 @@ unwrap_or(opt: Option<$a>, def: $a) -> $a =
 
 main() -> int =
     unwrap_or(None, 9) + unwrap_or(Some{7}, 9)
-    "#, true);
+    "#, false);
     println!("r: {:?}", r);
     assert!(r == Ok(16));
 }
@@ -408,3 +395,21 @@ main() -> int = add(Pair{4, 14})
     println!("r: {:?}", r);
     assert!(r == Ok(18));
 }
+
+
+/*
+#[test]
+fn test_strings() {
+    let r = run(r#"
+
+len(a: string) -> int = a.len
+
+concat(a: string, b: string) -> string = a + b
+
+main() -> int =
+    let x = concat("Hello", " World") in len(x)
+    "#, false);
+    println!("r: {:?}", r);
+    assert!(r == Ok(11));
+}
+*/

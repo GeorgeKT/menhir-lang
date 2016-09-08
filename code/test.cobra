@@ -1,9 +1,2 @@
-type Option = Some{$a} | None
-
-unwrap_or(opt: Option<$a>, def: $a) -> $a =
-    match opt
-        Some{i} => i,
-        None => def
-
 main() -> int =
-    unwrap_or(None, 9) + unwrap_or(Some{7}, 9)
+    let x = [2, 3, 4] in 5

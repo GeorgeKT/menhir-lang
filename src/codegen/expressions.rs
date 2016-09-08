@@ -1,16 +1,15 @@
 use std::ptr;
 use std::rc::Rc;
+use std::os::raw::c_uint;
 
 use libc;
 use llvm::core::*;
 use llvm::prelude::*;
 use llvm::*;
 
-use ast::{Expression, UnaryOp, BinaryOp, FunctionSignature, Call, NameRef, MatchExpression, MatchCase, LetExpression,
-    ArrayLiteral, ArgumentPassingMode, ArrayPattern, Type, Lambda, StructInitializer, StructMemberAccess, StructPattern,
-    anon_sig};
+use ast::*;
 use parser::Operator;
-use codegen::{cstr, Context, ValueRef, Slice, Sequence};
+use codegen::{cstr, Context, ValueRef, Array};
 use codegen::symboltable::{FunctionInstance};
 use compileerror::{Span, CompileResult, CompileError, ErrorCode, Pos, err, unknown_name};
 
@@ -25,12 +24,12 @@ pub unsafe fn const_int(ctx: &Context, v: u64) -> LLVMValueRef
     LLVMConstInt(LLVMInt64TypeInContext(ctx.context), v, 0)
 }
 
-unsafe fn gen_integer(ctx: &mut Context, v: u64) -> CompileResult<ValueRef>
+unsafe fn gen_integer(ctx: &Context, v: u64) -> CompileResult<ValueRef>
 {
     Ok(ValueRef::Const(const_int(ctx, v)))
 }
 
-unsafe fn gen_bool(ctx: &mut Context, v: bool) -> CompileResult<ValueRef>
+unsafe fn gen_bool(ctx: &Context, v: bool) -> CompileResult<ValueRef>
 {
     Ok(ValueRef::Const(LLVMConstInt(LLVMInt1TypeInContext(ctx.context), if v {1} else {0}, 0)))
 }
@@ -51,14 +50,20 @@ unsafe fn gen_const_string_literal(ctx: &Context, s: &str) -> CompileResult<Valu
 
 unsafe fn gen_string_literal(ctx: &Context, s: &str, _span: &Span) -> CompileResult<ValueRef>
 {
-    let glob = LLVMAddGlobal(ctx.module, LLVMArrayType(LLVMInt8TypeInContext(ctx.context), s.len() as u32), cstr("string"));
+    let typ = string_type();
+    let glob = LLVMAddGlobal(ctx.module, ctx.resolve_type(&typ), cstr("string"));
 
     LLVMSetLinkage(glob, LLVMLinkage::LLVMInternalLinkage);
     LLVMSetGlobalConstant(glob, 1);
 
-    // Initialize with string:
-    LLVMSetInitializer(glob, try!(gen_const_string_literal(ctx, s)).load(ctx.builder));
-    Ok(ValueRef::Global(glob))
+    let mut const_vals = vec![
+        try!(gen_const_string_literal(ctx, s)).get(),
+        LLVMConstInt(LLVMInt64TypeInContext(ctx.context), s.len() as u64, 0),
+        LLVMConstInt(LLVMInt64TypeInContext(ctx.context), s.len() as u64, 0),
+    ];
+
+    LLVMSetInitializer(glob, LLVMConstStruct(const_vals.as_mut_ptr(), const_vals.len() as c_uint, 0));
+    Ok(ValueRef::new(glob, &typ))
 }
 
 unsafe fn gen_unary_op(ctx: &mut Context, op: &UnaryOp) -> CompileResult<ValueRef>
@@ -76,103 +81,123 @@ unsafe fn gen_unary_op(ctx: &mut Context, op: &UnaryOp) -> CompileResult<ValueRe
     }
 }
 
+
+
 unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> CompileResult<ValueRef>
 {
-    let left_val = try!(gen_expression(ctx, &op.left)).load(ctx.builder);
-    let right_val = try!(gen_expression(ctx, &op.right)).load(ctx.builder);
-    let left_type = LLVMTypeOf(left_val);
+    let left_val = try!(gen_expression(ctx, &op.left));
+    let right_val = try!(gen_expression(ctx, &op.right));
 
-    let v = match op.operator {
-        Operator::Add => {
-            if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFAdd(ctx.builder, left_val, right_val, cstr("add")))
-            } else {
-                Ok(LLVMBuildAdd(ctx.builder, left_val, right_val, cstr("add")))
+    match (op.left.get_type(), op.right.get_type())
+    {
+        (Type::Int, Type::Int) => {
+            let l = left_val.load(ctx.builder);
+            let r = right_val.load(ctx.builder);
+
+            Ok(ValueRef::Const(match op.operator
+            {
+                Operator::Add => LLVMBuildAdd(ctx.builder, l, r, cstr("add")),
+                Operator::Sub => LLVMBuildSub(ctx.builder, l, r, cstr("sub")),
+                Operator::Mul => LLVMBuildMul(ctx.builder, l, r, cstr("mul")),
+                Operator::Div => LLVMBuildUDiv(ctx.builder, l, r, cstr("div")),
+                Operator::Mod => LLVMBuildURem(ctx.builder, l, r, cstr("mod")),
+                Operator::LessThan => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, l, r, cstr("cmp")),
+                Operator::LessThanEquals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLE, l, r, cstr("cmp")),
+                Operator::GreaterThan => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, l, r, cstr("cmp")),
+                Operator::GreaterThanEquals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGE, l, r, cstr("cmp")),
+                Operator::Equals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, l, r, cstr("cmp")),
+                Operator::NotEquals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, l, r, cstr("cmp")),
+                _ => return err(op.span.start, ErrorCode::InvalidBinaryOperator, format!("Operator {} is not supported on integers", op.operator)),
+            }))
+        }
+
+        (Type::Float, Type::Float) => {
+            let l = left_val.load(ctx.builder);
+            let r = right_val.load(ctx.builder);
+
+            Ok(ValueRef::Const(match op.operator
+            {
+                Operator::Add => LLVMBuildFAdd(ctx.builder, l, r, cstr("add")),
+                Operator::Sub => LLVMBuildFSub(ctx.builder, l, r, cstr("sub")),
+                Operator::Mul => LLVMBuildFMul(ctx.builder, l, r, cstr("mul")),
+                Operator::Div => LLVMBuildFDiv(ctx.builder, l, r, cstr("div")),
+                Operator::Mod => LLVMBuildFRem(ctx.builder, l, r, cstr("mod")),
+                Operator::LessThan => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLT, l, r, cstr("cmp")),
+                Operator::LessThanEquals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLE, l, r, cstr("cmp")),
+                Operator::GreaterThan => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGT, l, r, cstr("cmp")),
+                Operator::GreaterThanEquals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGE, l, r, cstr("cmp")),
+                Operator::Equals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, l, r, cstr("cmp")),
+                Operator::NotEquals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealONE, l, r, cstr("cmp")),
+                _ => return err(op.span.start, ErrorCode::InvalidBinaryOperator, format!("Operator {} is not supported on floats", op.operator)),
+            }))
+        },
+
+        (Type::Bool, Type::Bool) => {
+            let l = left_val.load(ctx.builder);
+            let r = right_val.load(ctx.builder);
+
+            Ok(ValueRef::Const(match op.operator
+            {
+                Operator::And => LLVMBuildAnd(ctx.builder, l, r, cstr("and")),
+                Operator::Or => LLVMBuildOr(ctx.builder, left_val.load(ctx.builder), right_val.load(ctx.builder), cstr("or")),
+                _ => return err(op.span.start, ErrorCode::InvalidBinaryOperator, format!("Operator {} is not supported on bools", op.operator)),
+            }))
+        },
+
+        (Type::Array(_), Type::Array(_)) => {
+
+            if let (ValueRef::Array(ref ar), ValueRef::Array(ref br)) = (left_val, right_val)
+            {
+                match op.operator
+                {
+                    Operator::Add => {
+                        /*let a_length = ar.get_length_ptr(ctx).load(ctx.builder);
+                        let b_length = br.get_length_ptr(ctx).load(ctx.builder);
+                        let new_size = LLVMBuildAdd(ctx.builder, a_length, b_length, cstr("new_size"));
+
+                        let array = Array::new()
+                        */
+                        panic!("NYI");
+                    },
+
+                    Operator::Equals | Operator::NotEquals => {
+                        let dst = ctx.alloc(ctx.resolve_type(&Type::Bool), "dst");
+                        let func = ctx.get_current_function();
+                        let on_eq = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("on_eq"));
+                        let on_not_eq = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("on_not_eq"));
+                        let after_eq = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("after_eq"));
+                        try!(gen_equals_seq(ctx, ar, br, on_eq, on_not_eq));
+
+                        LLVMPositionBuilderAtEnd(ctx.builder, on_eq);
+                        LLVMBuildStore(ctx.builder, const_int(ctx, 1), dst);
+                        LLVMBuildBr(ctx.builder, after_eq);
+
+                        LLVMPositionBuilderAtEnd(ctx.builder, on_not_eq);
+                        LLVMBuildStore(ctx.builder, const_int(ctx, 0), dst);
+                        LLVMBuildBr(ctx.builder, after_eq);
+
+                        LLVMPositionBuilderAtEnd(ctx.builder, after_eq);
+                        Ok(ValueRef::Const(
+                            if op.operator == Operator::Equals {dst} else {LLVMBuildNot(ctx.builder, dst, cstr("not"))}
+                        ))
+                    }
+
+                    _ => err(op.span.start, ErrorCode::InvalidBinaryOperator, format!("Operator {} is not supported on arrays", op.operator)),
+                }
             }
-        },
-        Operator::Sub => {
-            if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFSub(ctx.builder, left_val, right_val, cstr("sub")))
-            } else {
-                Ok(LLVMBuildSub(ctx.builder, left_val, right_val, cstr("sub")))
+            else
+            {
+                panic!("Internal Compiler Error: Expecting array ValueRef's here");
             }
-        },
-        Operator::Div => {
-            if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFDiv(ctx.builder, left_val, right_val, cstr("div")))
-            } else {
-                Ok(LLVMBuildUDiv(ctx.builder, left_val, right_val, cstr("div")))
-            }
-        },
-        Operator::Mod => {
-            if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFRem(ctx.builder, left_val, right_val, cstr("mod")))
-            } else {
-                Ok(LLVMBuildURem(ctx.builder, left_val, right_val, cstr("mod")))
-            }
-        },
-        Operator::Mul => {
-            if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFMul(ctx.builder, left_val, right_val, cstr("mul")))
-            } else {
-                Ok(LLVMBuildMul(ctx.builder, left_val, right_val, cstr("mul")))
-            }
-        },
-        Operator::And => {
-            Ok(LLVMBuildAnd(ctx.builder, left_val, right_val, cstr("and")))
-        },
-        Operator::Or => {
-            Ok(LLVMBuildOr(ctx.builder, left_val, right_val, cstr("or")))
-        },
-        Operator::LessThan => {
-            if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLT, left_val, right_val, cstr("cmp")))
-            } else {
-                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, left_val, right_val, cstr("cmp")))
-            }
-        },
-        Operator::LessThanEquals => {
-            if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLE, left_val, right_val, cstr("cmp")))
-            } else {
-                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLE, left_val, right_val, cstr("cmp")))
-            }
-        },
-        Operator::GreaterThan => {
-            if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGT, left_val, right_val, cstr("cmp")))
-            } else {
-                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, left_val, right_val, cstr("cmp")))
-            }
-        },
-        Operator::GreaterThanEquals => {
-            if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGE, left_val, right_val, cstr("cmp")))
-            } else {
-                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGE, left_val, right_val, cstr("cmp")))
-            }
-        },
-        Operator::Equals => {
-            if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, left_val, right_val, cstr("cmp")))
-            } else {
-                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left_val, right_val, cstr("cmp")))
-            }
-        },
-        Operator::NotEquals => {
-            if is_floating_point(ctx.context, left_type) {
-                Ok(LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealONE, left_val, right_val, cstr("cmp")))
-            } else {
-                Ok(LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left_val, right_val, cstr("cmp")))
-            }
-        },
+
+        }
+
         _ => err(op.span.start, ErrorCode::InvalidBinaryOperator, format!("Operator {} is not a binary operator", op.operator)),
-    };
+    }
 
-    v.map(|val| ValueRef::Const(val))
 }
 
-unsafe fn make_function_instance(ctx: &mut Context, sig: &FunctionSignature) -> CompileResult<FunctionInstance>
+unsafe fn make_function_instance(ctx: &Context, sig: &FunctionSignature) -> CompileResult<FunctionInstance>
 {
     let mut ret_type = ctx.resolve_type(&sig.return_type);
     let mut arg_types_with_passing_mode: Vec<_> = sig.args.iter().map(|arg| {
@@ -204,7 +229,7 @@ unsafe fn make_function_instance(ctx: &mut Context, sig: &FunctionSignature) -> 
 }
 
 
-pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature) -> CompileResult<FunctionInstance>
+pub unsafe fn gen_function_sig(ctx: &Context, sig: &FunctionSignature) -> CompileResult<FunctionInstance>
 {
     let mut fi = try!(make_function_instance(ctx, sig));
     let mut arg_types: Vec<LLVMTypeRef> = fi.args.iter().map(|&(typ, _)| typ).collect();
@@ -213,7 +238,7 @@ pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature) -> Co
     Ok(fi)
 }
 
-pub unsafe fn gen_function_ptr(ctx: &mut Context, func_ptr: LLVMValueRef, sig: FunctionSignature) -> CompileResult<FunctionInstance>
+pub unsafe fn gen_function_ptr(ctx: &Context, func_ptr: LLVMValueRef, sig: FunctionSignature) -> CompileResult<FunctionInstance>
 {
     let mut fi = try!(make_function_instance(ctx, &sig));
     fi.function = func_ptr;
@@ -351,14 +376,14 @@ unsafe fn gen_call(ctx: &mut Context, c: &Call) -> CompileResult<ValueRef>
     }
 }
 
-unsafe fn gen_name_ref_store(ctx: &mut Context, nr: &NameRef, ptr: &mut ValueRef) -> CompileResult<()>
+unsafe fn gen_name_ref_store(ctx: &Context, nr: &NameRef, ptr: &mut ValueRef) -> CompileResult<()>
 {
     let v = try!(gen_name_ref(ctx, nr));
     *ptr = v;
     Ok(())
 }
 
-unsafe fn gen_name_ref(ctx: &mut Context, nr: &NameRef) -> CompileResult<ValueRef>
+unsafe fn gen_name_ref(ctx: &Context, nr: &NameRef) -> CompileResult<ValueRef>
 {
     if let Some(vi) = ctx.get_variable(&nr.name) {
         Ok(vi.value.clone())
@@ -401,10 +426,10 @@ unsafe fn gen_match_case_to_execute(
     Ok(())
 }
 
-unsafe fn gen_sequence_match<Seq: Sequence>(
+unsafe fn gen_sequence_match(
     ctx: &mut Context,
     ap: &ArrayPattern,
-    seq: &Seq,
+    seq: &Array,
     pos: Pos,
     match_case_bb: LLVMBasicBlockRef,
     next_bb: LLVMBasicBlockRef) -> CompileResult<()>
@@ -436,32 +461,18 @@ unsafe fn gen_llvm_equals(
     LLVMBuildCondBr(ctx.builder, cmp, on_equals_bb, on_not_equals_bb);
 }
 
-unsafe fn gen_equals(
-    ctx: &mut Context,
-    left: &ValueRef,
-    right: &ValueRef,
-    on_equals_bb: LLVMBasicBlockRef,
-    on_not_equals_bb: LLVMBasicBlockRef) -> CompileResult<()>
+unsafe fn gen_equals(ctx: &Context,left: &ValueRef, right: &ValueRef, on_equals_bb: LLVMBasicBlockRef, on_not_equals_bb: LLVMBasicBlockRef) -> CompileResult<()>
 {
     match (left, right)
     {
         (&ValueRef::Const(lv), &ValueRef::Const(rv)) => Ok(gen_llvm_equals(ctx, lv, rv, on_equals_bb, on_not_equals_bb)),
         (&ValueRef::Ptr(_), &ValueRef::Ptr(_)) => Ok(gen_llvm_equals(ctx, left.load(ctx.builder), right.load(ctx.builder), on_equals_bb, on_not_equals_bb)),
-        (&ValueRef::Global(_), &ValueRef::Global(_)) => Ok(gen_llvm_equals(ctx, left.load(ctx.builder), right.load(ctx.builder), on_equals_bb, on_not_equals_bb)),
         (&ValueRef::Array(ref l), &ValueRef::Array(ref r)) => gen_equals_seq(ctx, l, r, on_equals_bb, on_not_equals_bb),
-        (&ValueRef::Array(ref l), &ValueRef::Slice(ref r)) => gen_equals_seq(ctx, l, r, on_equals_bb, on_not_equals_bb),
-        (&ValueRef::Slice(ref l), &ValueRef::Slice(ref r)) => gen_equals_seq(ctx, l, r, on_equals_bb, on_not_equals_bb),
-        (&ValueRef::Slice(ref l), &ValueRef::Array(ref r)) => gen_equals_seq(ctx, l, r, on_equals_bb, on_not_equals_bb),
         _ => err(Pos::zero(), ErrorCode::TypeError, format!("Unsupported comparison"))
     }
 }
 
-unsafe fn gen_equals_seq<ASeq: Sequence, BSeq: Sequence>(
-    ctx: &mut Context,
-    a: &ASeq,
-    b: &BSeq,
-    on_equals_bb: LLVMBasicBlockRef,
-    on_not_equals_bb: LLVMBasicBlockRef) -> CompileResult<()>
+unsafe fn gen_equals_seq(ctx: &Context, a: &Array, b: &Array, on_equals_bb: LLVMBasicBlockRef, on_not_equals_bb: LLVMBasicBlockRef) -> CompileResult<()>
 {
     let func = ctx.get_current_function();
     let after_equal_length_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("after_equal_length_bb"));
@@ -616,12 +627,23 @@ unsafe fn gen_match_case(
         Expression::NameRef(ref nr) => {
             gen_name_ref_match(ctx, mc, target, match_end_bb, match_case_bb, next_bb, dst, nr)
         },
+        Expression::EmptyArrayPattern(_) => {
+            match target
+            {
+                &ValueRef::Array(ref arr) => {
+                    let length_ptr = arr.get_length_ptr(ctx);
+                    let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, length_ptr.load(ctx.builder), const_int(ctx, 0), cstr("cmp"));
+                    LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
+                    gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
+                },
+                _ => err(mc.span.start, ErrorCode::TypeError, format!("Match expression cannot be matched with an array pattern")),
+            }
+        },
         Expression::ArrayPattern(ref ap) => {
             ctx.push_stack(ptr::null_mut());
             match target
             {
                 &ValueRef::Array(ref arr) => try!(gen_sequence_match(ctx, ap, arr, mc.span.start, match_case_bb, next_bb)),
-                &ValueRef::Slice(ref slice) => try!(gen_sequence_match(ctx, ap, slice, mc.span.start, match_case_bb, next_bb)),
                 _ => return err(mc.span.start, ErrorCode::TypeError, format!("Match expression cannot be matched with an array pattern")),
             }
 
@@ -706,41 +728,15 @@ unsafe fn gen_let(ctx: &mut Context, l: &LetExpression) -> CompileResult<ValueRe
     Ok(result)
 }
 
-unsafe fn gen_const_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> CompileResult<ValueRef>
+unsafe fn gen_array_literal_store(ctx: &mut Context, a: &ArrayLiteral, array: &mut Array) -> CompileResult<()>
 {
-    let element_type = a.array_type.get_element_type().expect("Invalid array type");
-    let llvm_type = ctx.resolve_type(&element_type);
-
-    let mut vals = Vec::new();
-    for element in &a.elements
+    try!(array.init(ctx, a.elements.len(), a.span.start));
+    for (idx, element) in a.elements.iter().enumerate()
     {
-        let element_val = try!(gen_const_expression(ctx, element));
-        vals.push(element_val.load(ctx.builder));
-    }
-
-    Ok(ValueRef::new(
-        LLVMConstArray(llvm_type, vals.as_mut_ptr(), vals.len() as u32),
-        &a.array_type,
-    ))
-}
-
-
-unsafe fn gen_array_literal_store(ctx: &mut Context, a: &ArrayLiteral, ptr: &ValueRef) -> CompileResult<()>
-{
-    if ctx.in_global_context()
-    {
-        let v = try!(gen_const_array_literal(ctx, a));
-        try!(ptr.store(ctx, v, a.span.start));
-    }
-    else
-    {
-        for (idx, element) in a.elements.iter().enumerate()
-        {
-            let index = const_int(ctx, idx as u64);
-            let el_ptr = try!(ptr.index(ctx, index, a.span.start));
-            let e_val = try!(gen_expression(ctx, element));
-            try!(el_ptr.store(ctx, e_val, a.span.start));
-        }
+        let index = const_int(ctx, idx as u64);
+        let el_ptr = array.get_element(ctx, index);
+        let e_val = try!(gen_expression(ctx, element));
+        try!(el_ptr.store(ctx, e_val, a.span.start));
     }
 
     Ok(())
@@ -749,47 +745,28 @@ unsafe fn gen_array_literal_store(ctx: &mut Context, a: &ArrayLiteral, ptr: &Val
 unsafe fn gen_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> CompileResult<ValueRef>
 {
     if a.elements.len() == 0 {
-        let slice = try!(Slice::empty(ctx, a.span.start));
-        return Ok(ValueRef::Slice(slice));
+        let slice = try!(Array::empty(ctx, a.span.start));
+        return Ok(ValueRef::Array(slice));
     }
 
-    let var = ValueRef::alloc(ctx, &a.array_type);
-    try!(gen_array_literal_store(ctx, a, &var));
-    Ok(var)
-}
-
-unsafe fn gen_const_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueRef>
-{
-    match *e
+    match a.array_type
     {
-        Expression::IntLiteral(_, integer) => gen_integer(ctx, integer),
-        Expression::FloatLiteral(ref span, ref s) => gen_float(ctx, s, span),
-        Expression::StringLiteral(_, ref s) => gen_const_string_literal(ctx, s),
-        Expression::ArrayLiteral(ref a) => gen_const_array_literal(ctx, a),
-        _ => err(e.span().start, ErrorCode::ExpectedConstExpr, format!("Expected a constant expression")),
+        Type::Array(ref at) => {
+            let mut array = try!(Array::alloc(ctx, at.element_type.clone(), a.elements.len(), a.span.start));
+            try!(gen_array_literal_store(ctx, a, &mut array));
+            let var = ValueRef::Array(array);
+            Ok(var)
+        },
+        _ => panic!("Array literal has the type {}", a.array_type),
     }
-}
 
+
+}
 
 unsafe fn store(ctx: &mut Context, e: &Expression, ptr: &ValueRef) -> CompileResult<()>
 {
     let v = try!(gen_expression(ctx, e));
     ptr.store(ctx, v, e.span().start)
-}
-
-pub unsafe fn gen_array_to_slice_conversion(ctx: &mut Context, e: &Expression) -> CompileResult<ValueRef>
-{
-    let v = try!(gen_expression(ctx, e));
-    match v
-    {
-        ValueRef::Array(arr) => {
-            let element_type = arr.get_llvm_element_type();
-            let slice_type = ctx.get_slice_type(element_type);
-            let slice = try!(Slice::from_array(ctx, slice_type, &arr, 0, e.span().start));
-            Ok(ValueRef::Slice(slice))
-        },
-        _ => err(e.span().start, ErrorCode::TypeError, format!("Array to slice conversion, requires an array")),
-    }
 }
 
 unsafe fn gen_struct_initializer_store(ctx: &mut Context, si: &StructInitializer, var: &ValueRef) -> CompileResult<()>
@@ -824,7 +801,7 @@ unsafe fn gen_struct_initializer(ctx: &mut Context, si: &StructInitializer) -> C
     Ok(var)
 }
 
-unsafe fn gen_struct_member_access(ctx: &mut Context, sma: &StructMemberAccess) -> CompileResult<ValueRef>
+unsafe fn gen_struct_member_access(ctx: &Context, sma: &StructMemberAccess) -> CompileResult<ValueRef>
 {
     let mut var = try!(ctx.get_variable(&sma.name).ok_or(unknown_name(sma.span.start, &sma.name))).value.clone();
     for idx in &sma.indices
@@ -839,7 +816,13 @@ pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: &mut 
 {
     match *e
     {
-        Expression::ArrayLiteral(ref a) => gen_array_literal_store(ctx, a, ptr),
+        Expression::ArrayLiteral(ref a) => {
+            match *ptr
+            {
+                ValueRef::Array(ref mut array) => gen_array_literal_store(ctx, a, array),
+                _ => panic!("Expecting array value here"),
+            }
+        },
         Expression::StructInitializer(ref si) => gen_struct_initializer_store(ctx, si, ptr),
         Expression::Call(ref c) => gen_call_store(ctx, c, ptr),
         Expression::NameRef(ref nr) => gen_name_ref_store(ctx, nr, ptr),
@@ -871,12 +854,12 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::FloatLiteral(ref span, ref v_str) => gen_float(ctx, &v_str, span),
             Expression::StringLiteral(ref span, ref s)  => gen_string_literal(ctx, s, span),
             Expression::BoolLiteral(_, v) => gen_bool(ctx, v),
-            Expression::ArrayToSliceConversion(ref e) => gen_array_to_slice_conversion(ctx, e),
             Expression::StructInitializer(ref si) => gen_struct_initializer(ctx, si),
             Expression::StructMemberAccess(ref sma) => gen_struct_member_access(ctx, sma),
 
             // We should never get here
             Expression::ArrayPattern(ref _a) => panic!("Internal Compiler Error: should never get here (gen_expression ArrayPattern)"),
+            Expression::EmptyArrayPattern(ref _a) => panic!("Internal Compiler Error: should never get here (gen_expression EmptyArrayPattern)"),
             Expression::StructPattern(ref _p) => panic!("Internal Compiler Error: should never get here (gen_expression ArrayPattern)"),
         }
     }

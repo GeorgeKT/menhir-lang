@@ -18,7 +18,6 @@ pub enum Operator
     Not,
     And,
     Or,
-    Concat,
     Extract, // <-
     Dot,
 }
@@ -33,7 +32,7 @@ impl Operator
         {
             Operator::Not | Operator::Dot => TOP_PRECEDENCE,
             Operator::Mul | Operator::Div | Operator::Mod => TOP_PRECEDENCE - 100,
-            Operator::Add | Operator::Sub | Operator::Concat => TOP_PRECEDENCE - 200,
+            Operator::Add | Operator::Sub => TOP_PRECEDENCE - 200,
             Operator::LessThan | Operator::GreaterThan | Operator::LessThanEquals |
             Operator::GreaterThanEquals | Operator::Equals | Operator::NotEquals => TOP_PRECEDENCE - 300,
             Operator::And => TOP_PRECEDENCE - 400,
@@ -72,7 +71,6 @@ impl Display for Operator
             Operator::Not => write!(fmt, "!"),
             Operator::And => write!(fmt, "&&"),
             Operator::Or => write!(fmt, "||"),
-            Operator::Concat => write!(fmt, "++"),
             Operator::Extract => write!(fmt, "<-"),
             Operator::Dot => write!(fmt, "."),
         }

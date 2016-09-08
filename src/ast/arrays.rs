@@ -31,6 +31,12 @@ pub struct IndexOperation
 */
 
 #[derive(Debug, Eq, PartialEq, Clone)]
+pub struct EmptyArrayPattern
+{
+    pub span: Span,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ArrayPattern
 {
     pub head: String,
@@ -67,6 +73,11 @@ pub fn array_pattern(head: &str, tail: &str, span: Span) -> Expression
         tail: tail.into(),
         span: span,
     })
+}
+
+pub fn empty_array_pattern(span: Span) -> Expression
+{
+    Expression::EmptyArrayPattern(EmptyArrayPattern{span: span})
 }
 
 pub fn array_generator(left: Expression, var: &str, iterable: Expression, span: Span) -> Expression

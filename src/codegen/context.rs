@@ -3,17 +3,15 @@ use std::rc::Rc;
 use std::os::raw::{c_char, c_uint};
 use std::ffi::{CStr, CString};
 use std::fs::DirBuilder;
-use std::collections::HashMap;
 
 use llvm::prelude::*;
 use llvm::core::*;
 use llvm::target::*;
 
-use ast::{Type};
-use codegen::{cstr, type_name, ValueRef, CodeGenOptions, TargetMachine};
+use ast::{Type, array_type};
+use codegen::{cstr, ValueRef, CodeGenOptions, TargetMachine};
 use compileerror::{Pos, CompileResult, CompileError, ErrorCode, err};
 use codegen::symboltable::{VariableInstance, FunctionInstance, SymbolTable};
-use codegen::slice::{new_slice_type};
 
 
 pub struct StackFrame
@@ -41,7 +39,6 @@ pub struct Context
     target_machine: TargetMachine,
     name: String,
     stack: Vec<StackFrame>,
-    slice_type_cache: HashMap<String, LLVMTypeRef>,
 }
 
 impl Context
@@ -59,7 +56,6 @@ impl Context
                 target_machine: target_machine,
                 name: module_name.into(),
                 stack: vec![StackFrame::new(ptr::null_mut())],
-                slice_type_cache: HashMap::new(),
             })
         }
 	}
@@ -224,19 +220,7 @@ impl Context
         mem::replace(&mut self.module, ptr::null_mut())
     }
 
-    pub unsafe fn get_slice_type(&mut self, element_type: LLVMTypeRef) -> LLVMTypeRef
-    {
-        let name = format!("slice-{}", type_name(element_type));
-        if let Some(t) = self.slice_type_cache.get(&name) {
-            return *t;
-        }
-
-        let slice_type = new_slice_type(self.context, element_type);
-        self.slice_type_cache.insert(name, slice_type);
-        slice_type
-    }
-
-    pub unsafe fn resolve_type(&mut self, typ: &Type) -> LLVMTypeRef
+    pub unsafe fn resolve_type(&self, typ: &Type) -> LLVMTypeRef
     {
         match *typ
         {
@@ -244,12 +228,16 @@ impl Context
             Type::Int => LLVMInt64TypeInContext(self.context),
             Type::Bool => LLVMInt1TypeInContext(self.context),
             Type::Float => LLVMDoubleTypeInContext(self.context),
+            Type::Char => LLVMInt8TypeInContext(self.context),
+            Type::EmptyArray => self.resolve_type(&array_type(Type::Int)),
             Type::Array(ref at) => {
-                LLVMArrayType(self.resolve_type(&at.element_type), at.length as u32)
-            },
-            Type::Slice(ref st) => {
-                let e = self.resolve_type(&st.element_type);
-                self.get_slice_type(e)
+                let element_type = self.resolve_type(&at.element_type);
+                let mut member_types = vec![
+                    LLVMPointerType(element_type, 0),      // Pointer to data
+                    LLVMInt64TypeInContext(self.context),  // Length of string
+                    LLVMInt64TypeInContext(self.context),  // Offset in data pointer
+                ];
+                LLVMStructType(member_types.as_mut_ptr(), member_types.len() as c_uint, 0)
             },
             Type::Func(ref ft) => {
                 let mut llvm_arg_types = Vec::with_capacity(ft.args.len());
@@ -285,21 +273,13 @@ impl Context
             Type::Enum(_) => {
                 LLVMInt64TypeInContext(self.context)
             },
-            Type::String => panic!("Not yet implemented"),
             Type::Generic(_) => {
-                let x = 5;
-                panic!("Internal Compiler Error: All generic types must have been resolved before code generation {}", x)
+                panic!("Internal Compiler Error: All generic types must have been resolved before code generation")
             },
             Type::Unresolved(_) => panic!("Internal Compiler Error: All types must be resolved before code generation"),
             Type::Unknown => panic!("Internal Compiler Error: all types must be known before code generation"),
         }
     }
-
-    pub fn in_global_context(&self) -> bool
-    {
-        self.stack.len() == 1
-    }
-
 }
 
 

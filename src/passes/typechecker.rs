@@ -19,6 +19,7 @@ fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> Compile
 {
     let e_type = try!(type_check_expression(ctx, &mut u.expression, None));
     if e_type.is_generic() {
+        u.typ = e_type.clone();
         return Ok(e_type)
     }
 
@@ -28,6 +29,7 @@ fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> Compile
             if !e_type.is_numeric() {
                 err(u.span.start, ErrorCode::TypeError, format!("Unary operator {} expects a numeric expression", u.operator))
             } else {
+                u.typ = e_type.clone();
                 Ok(e_type)
             }
         },
@@ -36,6 +38,7 @@ fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> Compile
             if !e_type.is_bool() {
                 err(u.span.start, ErrorCode::TypeError, format!("Unary operator {} expects a boolean expression", u.operator))
             } else {
+                u.typ = Type::Bool;
                 Ok(Type::Bool)
             }
         }
@@ -54,7 +57,18 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> Compi
 
     match b.operator
     {
-        Operator::Add |
+        Operator::Add => {
+            match addition_type(&left_type, &right_type)
+            {
+                Some(t) => {
+                    b.typ = t.clone();
+                    Ok(t)
+                },
+                None => err(b.span.start, ErrorCode::TypeError,
+                    format!("Addition is not supported on operands of type {} and {}", left_type, right_type))
+            }
+        },
+
         Operator::Sub |
         Operator::Mul |
         Operator::Div =>
@@ -63,6 +77,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> Compi
             } else if left_type != right_type {
                 err(b.span.start, ErrorCode::TypeError, format!("Operator {} expects operands of the same type", b.operator))
             } else {
+                b.typ = right_type;
                 Ok(left_type)
             },
 
@@ -75,6 +90,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> Compi
             } else if left_type != right_type {
                 err(b.span.start, ErrorCode::TypeError, format!("Operator {} expects operands of the same type", b.operator))
             } else {
+                b.typ = Type::Bool;
                 Ok(Type::Bool)
             },
 
@@ -82,6 +98,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> Compi
             if !left_type.is_integer() || !right_type.is_integer() {
                 err(b.span.start, ErrorCode::TypeError, format!("Operator {} expects two integer expressions as operands", b.operator))
             } else {
+                b.typ = Type::Int;
                 Ok(Type::Int)
             },
         Operator::Equals | Operator::NotEquals =>
@@ -95,16 +112,9 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> Compi
             if !left_type.is_bool() || !right_type.is_bool() {
                 err(b.span.start, ErrorCode::TypeError, format!("Operator {} expects two boolean expressions as operands", b.operator))
             } else {
+                b.typ = Type::Bool;
                 Ok(Type::Bool)
             },
-        Operator::Concat => {
-            if left_type.concat_allowed(&right_type) {
-                Ok(right_type)
-            } else {
-                err(b.span.start, ErrorCode::TypeError,
-                    format!("Operator {} expects two arrays with the same element type, or an expression and an array, where the expression has the same element type as the array", b.operator))
-            }
-        },
         _ => err(b.span.start, ErrorCode::InvalidBinaryOperator, format!("Operator {} is not a binary operator", b.operator))
     }
 }
@@ -112,7 +122,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> Compi
 fn type_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLiteral) -> CompileResult<Type>
 {
     if a.elements.is_empty() {
-        a.array_type = array_type(Type::Unknown, 0);
+        a.array_type = Type::EmptyArray;
         return Ok(a.array_type.clone());
     }
 
@@ -126,7 +136,7 @@ fn type_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLiteral) 
         }
     }
 
-    let array_type = array_type(array_element_type, a.elements.len());
+    let array_type = array_type(array_element_type);
     if a.array_type == Type::Unknown {
         a.array_type = array_type;
     } else if a.array_type != array_type {
@@ -152,7 +162,7 @@ fn type_check_array_generator(ctx: &mut TypeCheckerContext, a: &mut ArrayGenerat
     try!(ctx.add(&a.var, it_element_type, a.span.start));
 
     let element_type = try!(type_check_expression(ctx, &mut a.left, None));
-    a.array_type = slice_type(element_type);
+    a.array_type = array_type(element_type);
     ctx.pop_stack();
     Ok(a.array_type.clone())
 }
@@ -222,8 +232,10 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileResult<
         }
 
         if ft.return_type.is_generic() {
-            return Ok(c.generic_args.substitute(&ft.return_type));
+            c.return_type = c.generic_args.substitute(&ft.return_type);
+            return Ok(c.return_type.clone());
         }
+        c.return_type = ft.return_type.clone();
         Ok(ft.return_type.clone())
     }
     else
@@ -274,6 +286,13 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
         let match_pos = c.match_expr.span().start;
         let case_type = match c.match_expr
         {
+            Expression::EmptyArrayPattern(ref ap) => {
+                if !target_type.is_sequence() {
+                    return err(ap.span.start, ErrorCode::TypeError, format!("Attempting to pattern match an expression of type {}, with an empty array", target_type));
+                }
+                try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
+            },
+
             Expression::ArrayPattern(ref ap) => {
                 if !target_type.is_sequence() {
                     return err(ap.span.start, ErrorCode::TypeError, format!("Attempting to pattern match an expression of type {}, with an array", target_type));
@@ -283,7 +302,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
 
                 ctx.push_stack();
                 try!(ctx.add(&ap.head, element_type.clone(), ap.span.start));
-                try!(ctx.add(&ap.tail, slice_type(element_type.clone()), ap.span.start));
+                try!(ctx.add(&ap.tail, array_type(element_type.clone()), ap.span.start));
                 let ct = try!(infer_case_type(ctx, &mut c.to_execute, &return_type));
                 ctx.pop_stack();
                 ct
@@ -423,10 +442,7 @@ fn is_instantiation_of(concrete_type: &Type, generic_type: &Type) -> bool
 
     match (concrete_type, generic_type)
     {
-        (&Type::Array(ref a), &Type::Array(ref b)) =>
-            a.length == b.length && is_instantiation_of(&a.element_type, &b.element_type),
-        (&Type::Slice(ref a), &Type::Slice(ref b)) =>
-            is_instantiation_of(&a.element_type, &b.element_type),
+        (&Type::Array(ref a), &Type::Array(ref b)) => is_instantiation_of(&a.element_type, &b.element_type),
         (_, &Type::Generic(_)) => true,
         (&Type::Struct(ref a), &Type::Struct(ref b)) => {
             a.members.len() == b.members.len() &&
@@ -626,7 +642,11 @@ fn type_check_struct_member_access(ctx: &mut TypeCheckerContext, sma: &mut Struc
                 member_type
             },
             _ => {
-                return err(sma.span.start, ErrorCode::TypeError, format!("Type '{}' is not a struct, so you cannot access it's members", st));
+                if let Some(prop_type) = st.get_property_type(member_name) {
+                    prop_type
+                } else {
+                    return err(sma.span.start, ErrorCode::TypeError, format!("Type '{}' has no property named '{}'", st, member_name));
+                }
             },
         };
     }
@@ -679,6 +699,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::BinaryOp(ref mut op) => type_check_binary_op(ctx, op),
         Expression::ArrayLiteral(ref mut a) => type_check_array_literal(ctx, a),
         Expression::ArrayPattern(_) => Ok(Type::Unknown), // Doesn't really have a type
+        Expression::EmptyArrayPattern(_) => Ok(Type::Unknown), // Doesn't really have a type
         Expression::StructPattern(ref mut p) => type_check_struct_pattern(ctx, p),
         Expression::ArrayGenerator(ref mut a) => type_check_array_generator(ctx, a),
         Expression::Call(ref mut c) => type_check_call(ctx, c),
@@ -689,9 +710,8 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::Enclosed(_, ref mut inner) => type_check_expression(ctx, inner, type_hint),
         Expression::IntLiteral(_, _) => Ok(Type::Int),
         Expression::FloatLiteral(_, _) => Ok(Type::Float),
-        Expression::StringLiteral(_, _)  => Ok(Type::String),
+        Expression::StringLiteral(_, _)  => Ok(string_type()),
         Expression::BoolLiteral(_, _) => Ok(Type::Bool),
-        Expression::ArrayToSliceConversion(ref mut inner) => type_check_expression(ctx, inner, type_hint),
         Expression::StructInitializer(ref mut si) => type_check_struct_initializer(ctx, si),
         Expression::StructMemberAccess(ref mut sma) => type_check_struct_member_access(ctx, sma),
     }

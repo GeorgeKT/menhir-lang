@@ -1,6 +1,5 @@
 use compileerror::{Span, CompileResult, ErrorCode, err};
-use ast::{Call, ArrayLiteral, ArrayPattern, ArrayGenerator, NameRef, BinaryOp, UnaryOp, MatchExpression,
-    TreePrinter, Lambda, LetExpression, StructInitializer, StructMemberAccess, StructPattern, prefix};
+use ast::*;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
@@ -11,6 +10,7 @@ pub enum Expression
     StringLiteral(Span, String),
     ArrayLiteral(ArrayLiteral),
     ArrayPattern(ArrayPattern), // [hd | tail]
+    EmptyArrayPattern(EmptyArrayPattern),
     ArrayGenerator(Box<ArrayGenerator>),
     UnaryOp(UnaryOp),
     BinaryOp(BinaryOp),
@@ -23,9 +23,6 @@ pub enum Expression
     StructInitializer(StructInitializer),
     StructMemberAccess(StructMemberAccess),
     StructPattern(StructPattern),
-
-    // Internal expressions
-    ArrayToSliceConversion(Box<Expression>),
 }
 
 
@@ -69,6 +66,7 @@ impl Expression
             Expression::ArrayLiteral(ref a) => a.span,
             Expression::ArrayGenerator(ref a) => a.span,
             Expression::ArrayPattern(ref a) => a.span,
+            Expression::EmptyArrayPattern(ref a) => a.span,
             Expression::UnaryOp(ref op) => op.span,
             Expression::BinaryOp(ref op) => op.span,
             Expression::Enclosed(span, _) => span,
@@ -77,10 +75,35 @@ impl Expression
             Expression::Match(ref m) => m.span,
             Expression::Lambda(ref l) => l.span,
             Expression::Let(ref l) => l.span,
-            Expression::ArrayToSliceConversion(ref e) => e.span(),
             Expression::StructInitializer(ref si) => si.span,
             Expression::StructMemberAccess(ref sma) => sma.span,
             Expression::StructPattern(ref p) => p.span,
+        }
+    }
+
+    pub fn get_type(&self) -> Type
+    {
+        match *self
+        {
+            Expression::IntLiteral(_, _) => Type::Int,
+            Expression::FloatLiteral(_, _) => Type::Float,
+            Expression::BoolLiteral(_, _) => Type::Bool,
+            Expression::StringLiteral(_, _) => array_type(Type::Char),
+            Expression::ArrayLiteral(ref a) => a.array_type.clone(),
+            Expression::ArrayGenerator(ref a) => a.array_type.clone(),
+            Expression::ArrayPattern(_) => Type::Unknown,
+            Expression::EmptyArrayPattern(_) => Type::Unknown,
+            Expression::UnaryOp(ref op) => op.typ.clone(),
+            Expression::BinaryOp(ref op) => op.typ.clone(),
+            Expression::Enclosed(_, ref e) => e.get_type(),
+            Expression::Call(ref c) => c.return_type.clone(),
+            Expression::NameRef(ref nr) => nr.typ.clone(),
+            Expression::Match(ref m) => m.typ.clone(),
+            Expression::Lambda(ref l) => l.sig.return_type.clone(),
+            Expression::Let(ref l) => l.typ.clone(),
+            Expression::StructInitializer(ref si) => si.typ.clone(),
+            Expression::StructMemberAccess(ref sma) => sma.typ.clone(),
+            Expression::StructPattern(_) => Type::Unknown,
         }
     }
 
@@ -99,6 +122,13 @@ impl Expression
         match self
         {
             Expression::StructInitializer(si) => si.to_struct_pattern(),
+            Expression::ArrayLiteral(al) => {
+                if al.elements.is_empty() {
+                    empty_array_pattern(al.span)
+                } else {
+                    Expression::ArrayLiteral(al)
+                }
+            }
             _ => self,
         }
     }
@@ -134,6 +164,9 @@ impl TreePrinter for Expression
             Expression::ArrayPattern(ref a) => {
                 println!("{}array pattern [{} | {}] ({})", p, a.head, a.tail, a.span);
             },
+            Expression::EmptyArrayPattern(ref a) => {
+                println!("{}empty array pattern [] ({})", p, a.span);
+            },
             Expression::ArrayGenerator(ref a) => a.print(level),
             Expression::UnaryOp(ref op) => {
                 println!("{}unary {} ({})", p, op.operator, op.span);
@@ -156,10 +189,6 @@ impl TreePrinter for Expression
             Expression::StructInitializer(ref si) => si.print(level),
             Expression::StructMemberAccess(ref sma) => sma.print(level),
             Expression::StructPattern(ref p) => p.print(level),
-            Expression::ArrayToSliceConversion(ref e) => {
-                println!("{}array->slice", p);
-                e.print(level + 1);
-            },
         }
     }
 }

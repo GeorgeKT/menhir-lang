@@ -298,18 +298,18 @@ fn test_array_pattern()
 #[test]
 fn test_array_concat()
 {
-    let e = th_expr("a ++ [1, 2]");
+    let e = th_expr("a + [1, 2]");
     assert!(e == bin_op(
-        Operator::Concat,
+        Operator::Add,
         name_ref("a", span(1, 1, 1, 1)),
         array_lit(
             vec![
-                number(1, span(1, 7, 1, 7)),
-                number(2, span(1, 10, 1, 10)),
+                number(1, span(1, 6, 1, 6)),
+                number(2, span(1, 9, 1, 9)),
             ],
-            span(1, 6, 1, 11)
+            span(1, 5, 1, 10)
         ),
-        span(1, 1, 1, 11))
+        span(1, 1, 1, 10))
     );
 }
 

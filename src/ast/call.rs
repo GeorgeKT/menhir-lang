@@ -1,4 +1,4 @@
-use ast::{Expression, NameRef, TreePrinter, prefix};
+use ast::{Expression, Type, NameRef, TreePrinter, prefix};
 use compileerror::{Span};
 use passes::GenericMapper;
 
@@ -9,6 +9,7 @@ pub struct Call
     pub args: Vec<Expression>,
     pub span: Span,
     pub generic_args: GenericMapper,
+    pub return_type: Type,
 }
 
 impl Call
@@ -20,6 +21,7 @@ impl Call
             args: args,
             span: span,
             generic_args: GenericMapper::new(),
+            return_type: Type::Unknown,
         }
     }
 }

@@ -1,4 +1,3 @@
-use std::cmp::{Eq, PartialEq};
 use std::fmt;
 use std::hash::{Hasher, Hash};
 use std::rc::Rc;
@@ -13,7 +12,7 @@ pub struct SumTypeCase
     pub typ: Type,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct SumType
 {
     pub cases: Vec<SumTypeCase>,
@@ -27,7 +26,7 @@ impl SumType
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct EnumType
 {
     pub cases: Vec<String>,
@@ -58,13 +57,6 @@ pub struct FuncType
 pub struct ArrayType
 {
     pub element_type: Type,
-    pub length: usize,
-}
-
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct SliceType
-{
-    pub element_type: Type,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -81,11 +73,11 @@ pub enum Type
     Unknown,
     Int,
     Float,
-    String,
+    Char,
     Bool,
     Unresolved(Rc<UnresolvedType>),
     Array(Rc<ArrayType>),
-    Slice(Rc<SliceType>),
+    EmptyArray,
     Generic(String),
     Func(Rc<FuncType>),
     Struct(Rc<StructType>),
@@ -103,42 +95,12 @@ pub struct TypeAlias
 
 impl Type
 {
-    pub fn concat_allowed(&self, other: &Type) -> bool
-    {
-        if self.is_empty_array() || other.is_empty_array() {
-            return true;
-        }
-
-        if self.is_sequence() && other.is_sequence() {
-            return self.get_element_type() == other.get_element_type();
-        }
-
-        if self.is_sequence() && !other.is_sequence() {
-            return self.get_element_type().map(|et| et == *other).unwrap_or(false);
-        }
-
-        if other.is_sequence() && !self.is_sequence() {
-            return other.get_element_type().map(|et| et == *self).unwrap_or(false);
-        }
-
-        false
-    }
-
-    pub fn is_empty_array(&self) -> bool
-    {
-        match *self
-        {
-            Type::Array(ref at) => at.length == 0,
-            _ => false,
-        }
-    }
-
     pub fn is_sequence(&self) -> bool
     {
         match *self
         {
+            Type::EmptyArray => true,
             Type::Array(_) => true,
-            Type::Slice(_) => true,
             _ => false,
         }
     }
@@ -148,33 +110,26 @@ impl Type
         match *self
         {
             Type::Array(ref at) => Some(at.element_type.clone()),
-            Type::Slice(ref st) => Some(st.element_type.clone()),
             _ => None,
         }
     }
 
     pub fn is_matchable(&self, other: &Type) -> bool
     {
-        if (self.is_empty_array() && other.is_sequence()) || (other.is_empty_array() && self.is_sequence()) {
-            return true;
+        match (self, other)
+        {
+            (&Type::Array(ref a), &Type::Array(ref b)) => a.element_type == b.element_type,
+            (&Type::EmptyArray, &Type::Array(_)) => true,
+            (&Type::Array(_), &Type::EmptyArray) => true,
+            _ => *self == *other,
         }
-
-        if self.is_sequence() && other.is_sequence() {
-            return self.get_element_type() == other.get_element_type();
-        }
-
-        *self == *other
     }
 
     // If possible generate a conversion expression
-    pub fn convert(&self, from_type: &Type, expr: &Expression) -> Option<Expression>
+    pub fn convert(&self, from_type: &Type, _expr: &Expression) -> Option<Expression>
     {
         match (self, from_type)
         {
-            (&Type::Slice(ref s), &Type::Array(ref t)) if s.element_type == t.element_type =>
-                // arrays can be converted to slices if the element type is the same
-                Some(Expression::ArrayToSliceConversion(Box::new(expr.clone())))
-            ,
             _ => None,
         }
     }
@@ -183,7 +138,6 @@ impl Type
     {
         match (self, dst_type)
         {
-            (&Type::Array(ref s), &Type::Slice(ref t)) if s.element_type == t.element_type => true,
             _ => false,
         }
     }
@@ -194,7 +148,6 @@ impl Type
         {
             Type::Generic(_) => true,
             Type::Array(ref at) => at.element_type.is_generic(),
-            Type::Slice(ref st) => st.element_type.is_generic(),
             Type::Func(ref ft) => ft.return_type.is_generic() || ft.args.iter().any(|a| a.is_generic()),
             Type::Struct(ref st) => st.members.iter().any(|m| m.typ.is_generic()),
             Type::Sum(ref st) => st.cases.iter().any(|c| c.typ.is_generic()),
@@ -208,7 +161,6 @@ impl Type
         match *self
         {
             Type::Array(_) => true,
-            Type::Slice(_) => true,
             Type::Func(_) => true,
             Type::Struct(_) => true,
             Type::Sum(_) => true,
@@ -221,7 +173,6 @@ impl Type
         match *self
         {
             Type::Array(_) => true,
-            Type::Slice(_) => true,
             Type::Struct(_) => true,
             Type::Sum(_) => true,
             _ => false,
@@ -263,6 +214,16 @@ impl Type
             _ => false,
         }
     }
+
+    pub fn get_property_type(&self, name: &str) -> Option<Type>
+    {
+        match *self
+        {
+            Type::Array(_) =>
+                if name == "len" {Some(Type::Int)} else {None},
+            _ => None,
+        }
+    }
 }
 
 pub fn func_type(args: Vec<Type>, ret: Type) -> Type
@@ -273,19 +234,16 @@ pub fn func_type(args: Vec<Type>, ret: Type) -> Type
     }))
 }
 
-pub fn array_type(element_type: Type, len: usize) -> Type
+pub fn array_type(element_type: Type) -> Type
 {
     Type::Array(Rc::new(ArrayType{
         element_type: element_type,
-        length: len,
     }))
 }
 
-pub fn slice_type(element_type: Type) -> Type
+pub fn string_type() -> Type
 {
-    Type::Slice(Rc::new(SliceType{
-        element_type: element_type,
-    }))
+    array_type(Type::Char)
 }
 
 pub fn sum_type_case(name: &str, typ: Type) -> SumTypeCase
@@ -334,6 +292,47 @@ pub fn unresolved_type(name: &str, generic_args: Vec<Type>) -> Type
     }))
 }
 
+pub fn addition_type(at: &Type, bt: &Type) -> Option<Type>
+{
+    match (at, bt)
+    {
+        (&Type::EmptyArray, &Type::Array(_)) => Some(bt.clone()),
+        (&Type::Array(_), &Type::EmptyArray) => Some(at.clone()),
+
+        (&Type::EmptyArray, _) => Some(array_type(bt.clone())),
+        (_, &Type::EmptyArray) => Some(array_type(at.clone())),
+
+        (&Type::Array(ref a), &Type::Array(ref b)) => {
+            if a.element_type != b.element_type {
+                None
+            } else {
+                Some(array_type(a.element_type.clone()))
+            }
+        },
+
+        (&Type::Int, &Type::Int) => Some(Type::Int),
+        (&Type::Float, &Type::Float) => Some(Type::Float),
+        (&Type::Char, &Type::Char) => Some(Type::Char),
+
+        (&Type::Array(ref a), _) => {
+            if a.element_type == *bt {
+                Some(array_type(a.element_type.clone()))
+            } else {
+                None
+            }
+        },
+        (_, &Type::Array(ref b)) => {
+            if b.element_type == *at {
+                Some(array_type(b.element_type.clone()))
+            } else {
+                None
+            }
+        },
+        _ => None,
+    }
+
+}
+
 impl fmt::Display for Type
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
@@ -344,7 +343,7 @@ impl fmt::Display for Type
             Type::Unknown => write!(f, "unknown"),
             Type::Int => write!(f, "int"),
             Type::Float => write!(f, "float"),
-            Type::String => write!(f, "string"),
+            Type::Char => write!(f, "char"),
             Type::Bool => write!(f, "bool"),
             Type::Unresolved(ref s) =>
                 if s.generic_args.is_empty() {
@@ -352,13 +351,13 @@ impl fmt::Display for Type
                 } else {
                     write!(f, "{}<{}>", s.name, join(s.generic_args.iter(), ","))
                 },
+            Type::EmptyArray => write!(f, "[]"),
             Type::Array(ref at) =>
-                if at.length == 0 {
-                    write!(f, "[]")
+                if at.element_type == Type::Char {
+                    write!(f, "string")
                 } else {
-                    write!(f, "[{}; {}]", at.element_type, at.length)
+                    write!(f, "[{}]", at.element_type)
                 },
-            Type::Slice(ref at) => write!(f, "[{}]", at.element_type),
             Type::Generic(ref g) => write!(f, "${}", g),
             Type::Func(ref ft) => write!(f, "({}) -> {}", join(ft.args.iter(), ", "), ft.return_type),
             Type::Struct(ref st) => write!(f, "{{{}}}", join(st.members.iter().map(|m| &m.typ), ", ")),
@@ -391,7 +390,7 @@ pub fn to_primitive(name: &str) -> Option<Type>
     {
         "int" => Some(Type::Int),
         "float" => Some(Type::Float),
-        "string" => Some(Type::String),
+        "string" => Some(array_type(Type::Char)),
         "bool" => Some(Type::Bool),
         _ => None,
     }
@@ -405,23 +404,3 @@ impl Hash for Type
         s.hash(state);
     }
 }
-
-impl PartialEq<SumType> for SumType
-{
-    fn eq(&self, other: &SumType) -> bool
-    {
-        self.cases.eq(&other.cases)
-    }
-}
-
-impl Eq for SumType {}
-
-impl PartialEq<EnumType> for EnumType
-{
-    fn eq(&self, other: &EnumType) -> bool
-    {
-        self.cases.eq(&other.cases)
-    }
-}
-
-impl Eq for EnumType {}

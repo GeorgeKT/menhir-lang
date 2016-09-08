@@ -23,7 +23,7 @@ impl SumTypeValue
         }
     }
 
-    pub unsafe fn get_data_ptr(&self, ctx: &mut Context, idx: usize) -> ValueRef
+    pub unsafe fn get_data_ptr(&self, ctx: &Context, idx: usize) -> ValueRef
     {
         let data_ptr = LLVMBuildStructGEP(ctx.builder, self.value, 1, cstr("data_ptr"));
         let case_type = &self.typ.cases[idx];

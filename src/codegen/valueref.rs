@@ -2,7 +2,7 @@ use llvm::prelude::*;
 use llvm::core::*;
 
 use ast::Type;
-use codegen::{Context, Array, Slice, Sequence, StructValue, SumTypeValue, cstr};
+use codegen::{Context, Array, StructValue, SumTypeValue, cstr};
 use compileerror::{Pos, CompileResult, ErrorCode, err};
 
 
@@ -12,16 +12,14 @@ pub enum ValueRef
 {
     Const(LLVMValueRef),
     Ptr(LLVMValueRef),
-    Global(LLVMValueRef),
     Array(Array),
-    Slice(Slice),
     Struct(StructValue),
-    Sum(SumTypeValue)
+    Sum(SumTypeValue),
 }
 
 impl ValueRef
 {
-    pub unsafe fn alloc(ctx: &mut Context, typ: &Type) -> ValueRef
+    pub unsafe fn alloc(ctx: &Context, typ: &Type) -> ValueRef
     {
         let llvm_type = ctx.resolve_type(typ);
         let alloc = ctx.alloc(llvm_type, "alloc");
@@ -34,9 +32,6 @@ impl ValueRef
         {
             Type::Array(ref at) => {
                 ValueRef::Array(Array::new(value, at.element_type.clone()))
-            },
-            Type::Slice(ref st) => {
-                ValueRef::Slice(Slice::new(value, st.element_type.clone()))
             },
             Type::Struct(ref st) => {
                 ValueRef::Struct(StructValue::new(value, st.members.iter().map(|m| m.typ.clone()).collect()))
@@ -56,9 +51,7 @@ impl ValueRef
         {
             ValueRef::Const(cv) => cv,
             ValueRef::Ptr(av) => LLVMBuildLoad(builder, av, cstr("load")),
-            ValueRef::Global(ptr) => LLVMBuildLoad(builder, ptr, cstr("load")),
             ValueRef::Array(ref arr) => arr.get(),
-            ValueRef::Slice(ref slice) => slice.get(),
             ValueRef::Struct(ref sv) => sv.get(),
             ValueRef::Sum(ref s) => s.get(),
         }
@@ -70,9 +63,7 @@ impl ValueRef
         {
             ValueRef::Const(cv) => cv,
             ValueRef::Ptr(av) => av,
-            ValueRef::Global(ptr) => ptr,
             ValueRef::Array(ref arr) => arr.get(),
-            ValueRef::Slice(ref slice) => slice.get(),
             ValueRef::Struct(ref sv) => sv.get(),
             ValueRef::Sum(ref s) => s.get(),
         }
@@ -82,28 +73,12 @@ impl ValueRef
     {
         match *self
         {
-            ValueRef::Const(_) => {
-                err(pos, ErrorCode::CodegenError, format!("Store cannot be called on a const value"))
-            },
-            ValueRef::Array(_) => {
-                err(pos, ErrorCode::CodegenError, format!("Cannot store an array"))
-            },
             ValueRef::Ptr(av) => {
                 LLVMBuildStore(ctx.builder, val, av);
                 Ok(())
             },
-            ValueRef::Global(ptr) => {
-                LLVMSetInitializer(ptr, val);
-                Ok(())
-            },
-            ValueRef::Slice(_) => {
-                err(pos, ErrorCode::CodegenError, format!("Cannot store a slice"))
-            },
-            ValueRef::Struct(_) => {
-                err(pos, ErrorCode::CodegenError, format!("Cannot store a struct"))
-            },
-            ValueRef::Sum(_) => {
-                err(pos, ErrorCode::CodegenError, format!("Cannot store a sum"))
+            _ => {
+                err(pos, ErrorCode::CodegenError, format!("Store not allowed"))
             },
         }
     }
@@ -112,39 +87,13 @@ impl ValueRef
     {
         match *self
         {
-            ValueRef::Const(_) => {
-                err(pos, ErrorCode::CodegenError, format!("Store cannot be called on a const value"))
-            },
-            ValueRef::Array(_) => {
-                err(pos, ErrorCode::CodegenError, format!("Cannot store an array"))
-            },
             ValueRef::Ptr(av) => {
                 LLVMBuildStore(ctx.builder, val.load(ctx.builder), av);
                 Ok(())
             },
-            ValueRef::Global(ptr) => {
-                LLVMSetInitializer(ptr, val.get());
-                Ok(())
+            _ => {
+                err(pos, ErrorCode::CodegenError, format!("Store not allowed"))
             },
-            ValueRef::Slice(_) => {
-                err(pos, ErrorCode::CodegenError, format!("Cannot store a slice"))
-            },
-            ValueRef::Struct(_) => {
-                err(pos, ErrorCode::CodegenError, format!("Cannot store a struct"))
-            },
-            ValueRef::Sum(_) => {
-                err(pos, ErrorCode::CodegenError, format!("Cannot store a sum"))
-            },
-        }
-    }
-
-    pub unsafe fn index(&self, ctx: &Context, index: LLVMValueRef, pos: Pos) -> CompileResult<ValueRef>
-    {
-        match *self
-        {
-            ValueRef::Array(ref arr) => Ok(arr.get_element(ctx, index)),
-            ValueRef::Slice(ref slice) => Ok(slice.get_element(ctx, index)),
-            _ => err(pos, ErrorCode::CodegenError, format!("Attempting to get an array element from a non array")),
         }
     }
 
@@ -157,7 +106,7 @@ impl ValueRef
         }
     }
 
-    pub unsafe fn case_struct(&self, ctx: &mut Context, idx: usize, pos: Pos) -> CompileResult<ValueRef>
+    pub unsafe fn case_struct(&self, ctx: &Context, idx: usize, pos: Pos) -> CompileResult<ValueRef>
     {
         match *self
         {

@@ -13,24 +13,22 @@ mod structs;
 mod sumtype;
 mod types;
 
-pub use self::arrays::{ArrayLiteral, ArrayPattern, ArrayGenerator, array_lit, array_pattern, array_generator};
-pub use self::call::{Call};
-pub use self::expression::Expression;
-pub use self::function::{Function, FunctionSignature, Argument, ArgumentPassingMode, sig, anon_sig};
-pub use self::lambda::{Lambda, lambda};
-pub use self::letexpression::{LetExpression, Binding, let_expression, let_binding};
-pub use self::matchexpression::{MatchExpression, MatchCase, match_case, match_expression};
+pub use self::arrays::*;
+pub use self::call::*;
+pub use self::expression::*;
+pub use self::function::*;
+pub use self::lambda::*;
+pub use self::letexpression::*;
+pub use self::matchexpression::*;
 pub use self::nameref::NameRef;
-pub use self::operations::{BinaryOp, UnaryOp, unary_op, bin_op};
-pub use self::structs::{StructDeclaration, StructMember, StructInitializer, StructMemberAccess, StructPattern,
-    struct_member, struct_declaration, struct_initializer, struct_member_access, struct_pattern};
-pub use self::sumtype::{SumTypeDeclaration, SumTypeCaseDeclaration, sum_type_decl, sum_type_case_decl};
-pub use self::types::{Type, TypeAlias, SumType, StructType, UnresolvedType, FuncType, to_primitive, func_type, array_type, slice_type,
-    type_alias, sum_type, sum_type_case, enum_type, struct_type, unresolved_type};
+pub use self::operations::*;
+pub use self::structs::*;
+pub use self::sumtype::*;
+pub use self::types::*;
 
 use compileerror::{Span};
 
-fn prefix(level: usize) -> String
+pub fn prefix(level: usize) -> String
 {
     let mut s = String::with_capacity(level);
     for _ in 0..level {

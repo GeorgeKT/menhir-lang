@@ -138,7 +138,6 @@ pub enum ErrorCode
     RedefinitionOfVariable,
     RedefinitionOfFunction,
     RedefinitionOfStruct,
-    ExpectedConstExpr,
     GenericTypeSubstitutionError,
     ExpressionNotAllowedAtTopLevel,
     LambdaDoesNotMatch,

@@ -2,7 +2,6 @@ mod array;
 mod context;
 mod expressions;
 mod linker;
-mod slice;
 mod symboltable;
 mod structvalue;
 mod sumtypevalue;
@@ -19,36 +18,18 @@ use llvm::prelude::*;
 use llvm::core::*;
 
 use ast::Module;
-use compileerror::{Pos, CompileResult};
+use compileerror::{CompileResult};
 use codegen::expressions::{gen_function, gen_function_sig};
 
 pub use codegen::expressions::const_int;
 pub use codegen::context::{Context};
 pub use codegen::linker::link;
 pub use codegen::valueref::ValueRef;
-pub use codegen::slice::Slice;
 pub use codegen::array::Array;
 pub use codegen::structvalue::StructValue;
 pub use codegen::sumtypevalue::SumTypeValue;
 pub use codegen::target::TargetMachine;
 
-pub trait Sequence
-{
-    unsafe fn gen_length(&self, ctx: &Context) -> ValueRef;
-
-    unsafe fn get_element(&self, ctx: &Context, idx: LLVMValueRef) -> ValueRef;
-    unsafe fn subslice(&self, ctx: &mut Context, offset: u64, pos: Pos) -> CompileResult<ValueRef>;
-
-    unsafe fn head(&self, ctx: &Context) -> ValueRef
-    {
-        self.get_element(ctx, const_int(ctx, 0))
-    }
-
-    unsafe fn tail(&self, ctx: &mut Context, pos: Pos) -> CompileResult<ValueRef>
-    {
-       self.subslice(ctx, 1, pos)
-    }
-}
 
 pub fn cstr(s: &str) -> *const c_char
 {
@@ -60,6 +41,7 @@ pub fn cstr_mut(s: &str) -> *mut c_char
     CString::new(s).expect("Valid C string").into_raw()
 }
 
+#[allow(unused)]
 pub fn type_name(tr: LLVMTypeRef) -> String
 {
     unsafe {

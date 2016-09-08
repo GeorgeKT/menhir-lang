@@ -209,18 +209,8 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
     {
         try!(tq.pop());
         let at = try!(parse_type(tq));
-        if tq.is_next(TokenKind::SemiColon)
-        {
-            try!(tq.pop());
-            let (len, _) = try!(tq.expect_int());
-            try!(tq.expect(TokenKind::CloseBracket));
-            Ok(array_type(at, len as usize))
-        }
-        else
-        {
-            try!(tq.expect(TokenKind::CloseBracket));
-            Ok(slice_type(at))
-        }
+        try!(tq.expect(TokenKind::CloseBracket));
+        Ok(array_type(at))
     }
     else if tq.is_next(TokenKind::OpenParen)
     {

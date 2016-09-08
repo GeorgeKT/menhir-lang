@@ -75,15 +75,12 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             let new_inner = try!(substitute_expr(generic_args, inner));
             Ok(Expression::Enclosed(span, Box::new(new_inner)))
         },
-        Expression::ArrayToSliceConversion(ref inner) => {
-            let new_inner = try!(substitute_expr(generic_args, inner));
-            Ok(Expression::ArrayToSliceConversion(Box::new(new_inner)))
-        },
         Expression::IntLiteral(span, v) => Ok(Expression::IntLiteral(span, v)),
         Expression::BoolLiteral(span, v) => Ok(Expression::BoolLiteral(span, v)),
         Expression::FloatLiteral(span, ref v) => Ok(Expression::FloatLiteral(span, v.clone())),
         Expression::StringLiteral(span, ref v) => Ok(Expression::StringLiteral(span, v.clone())),
         Expression::ArrayPattern(ref ap) => Ok(Expression::ArrayPattern(ap.clone())),
+        Expression::EmptyArrayPattern(ref ap) => Ok(Expression::EmptyArrayPattern(ap.clone())),
         Expression::NameRef(ref nr) => {
             let new_nr = NameRef{
                 name: nr.name.clone(),
@@ -226,7 +223,6 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
         }
 
         Expression::Enclosed(_, ref inner) => resolve_generics(new_functions, module, inner),
-        Expression::ArrayToSliceConversion(ref inner) => resolve_generics(new_functions, module, inner),
         _ => Ok(()),
     }
 }
@@ -288,7 +284,6 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
         },
 
         Expression::Enclosed(_, ref mut inner) => replace_generic_calls(new_functions, inner),
-        Expression::ArrayToSliceConversion(ref mut inner) => replace_generic_calls(new_functions, inner),
         _ => Ok(()),
     }
 }

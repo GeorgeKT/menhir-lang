@@ -53,13 +53,13 @@ fn test_wrong_type_bin_op()
 #[test]
 fn test_arrays()
 {
-	assert!(type_check("[4] ++ [5]").is_ok());
-	assert!(type_check("4 ++ [5]").is_ok());
-	assert!(type_check("[4] ++ 5").is_ok());
-	assert!(type_check("4 ++ [5.7]").unwrap_err().error == ErrorCode::TypeError);
-	assert!(type_check("[4] ++ [5.7]").unwrap_err().error == ErrorCode::TypeError);
-	assert!(type_check("4 ++ []").is_ok());
-	assert!(type_check("[4] ++ []").is_ok());
+	assert!(type_check("[4] + [5]").is_ok());
+	assert!(type_check("4 + [5]").is_ok());
+	assert!(type_check("[4] + 5").is_ok());
+	assert!(type_check("4 + [5.7]").unwrap_err().error == ErrorCode::TypeError);
+	assert!(type_check("[4] + [5.7]").unwrap_err().error == ErrorCode::TypeError);
+	assert!(type_check("4 + []").is_ok());
+	assert!(type_check("[4] + []").is_ok());
 	assert!(type_check("[4, 5.7]").unwrap_err().error == ErrorCode::TypeError);
 	assert!(type_check("[4, 5, 7]").is_ok());
 	assert!(type_check("[4; 10]").is_ok());
@@ -113,5 +113,5 @@ let x = 6 in x + y
 
 	assert!(type_check(r#"
 let x = [6, 7] in x + x
-"#).unwrap_err().error == ErrorCode::TypeError);
+"#).is_ok());
 }
