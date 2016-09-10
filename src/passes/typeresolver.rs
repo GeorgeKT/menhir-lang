@@ -1,5 +1,4 @@
-use ast::{StructDeclaration, SumTypeDeclaration, TypeDeclaration, Function, Module, Type, func_type,
-    struct_type, sum_type, sum_type_case, enum_type};
+use ast::*;
 use passes::TypeCheckerContext;
 use compileerror::{CompileResult, unknown_name};
 
@@ -37,19 +36,18 @@ fn resolve_type(ctx: &TypeCheckerContext, typ: &mut Type) -> TypeResolved
     }
 }
 
-fn resolve_function_args_and_ret_type(ctx: &mut TypeCheckerContext, fun: &mut Function) -> CompileResult<()>
+fn resolve_function_args_and_ret_type(ctx: &mut TypeCheckerContext, sig: &mut FunctionSignature) -> CompileResult<()>
 {
-    if fun.sig.typ != Type::Unknown {
-
+    if sig.typ != Type::Unknown {
         return Ok(());
     }
 
-    if resolve_type(ctx, &mut fun.sig.return_type) == TypeResolved::No {
-        return Err(unknown_name(fun.sig.span.start, &format!("{}", fun.sig.return_type)));
+    if resolve_type(ctx, &mut sig.return_type) == TypeResolved::No {
+        return Err(unknown_name(sig.span.start, &format!("{}", sig.return_type)));
     }
 
-    let mut args = Vec::with_capacity(fun.sig.args.len());
-    for ref mut arg in &mut fun.sig.args {
+    let mut args = Vec::with_capacity(sig.args.len());
+    for ref mut arg in &mut sig.args {
         if resolve_type(ctx, &mut arg.typ) == TypeResolved::No {
             return Err(unknown_name(arg.span.start, &format!("{}", arg.typ)));
         }
@@ -57,7 +55,7 @@ fn resolve_function_args_and_ret_type(ctx: &mut TypeCheckerContext, fun: &mut Fu
         args.push(arg.typ.clone());
     }
 
-    fun.sig.typ = func_type(args, fun.sig.return_type.clone());
+    sig.typ = func_type(args, sig.return_type.clone());
     Ok(())
 }
 
@@ -190,7 +188,12 @@ pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module) -> Compi
 
 
     for ref mut f in module.functions.values_mut() {
-        try!(resolve_function_args_and_ret_type(ctx, f));
+        try!(resolve_function_args_and_ret_type(ctx, &mut f.sig));
+        try!(ctx.add(&f.sig.name, f.sig.typ.clone(), f.sig.span.start));
+    }
+
+    for ref mut f in module.externals.values_mut() {
+        try!(resolve_function_args_and_ret_type(ctx, &mut f.sig));
         try!(ctx.add(&f.sig.name, f.sig.typ.clone(), f.sig.span.start));
     }
 

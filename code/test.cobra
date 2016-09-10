@@ -1,5 +1,6 @@
 
 extern print(s: string) -> int
+extern println(s: string) -> int
 
 main() -> int =
-    print("Hello World")
+    println("Hello World !")

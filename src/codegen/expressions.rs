@@ -48,22 +48,31 @@ unsafe fn gen_const_string_literal(ctx: &Context, s: &str) -> CompileResult<Valu
     Ok(ValueRef::Const(LLVMConstStringInContext(ctx.context, s.as_ptr() as *const i8, s.len() as u32, 1)))
 }
 
-unsafe fn gen_string_literal(ctx: &Context, s: &str, _span: &Span) -> CompileResult<ValueRef>
+unsafe fn gen_string_literal(ctx: &Context, s: &str, span: &Span) -> CompileResult<ValueRef>
 {
-    let typ = string_type();
-    let glob = LLVMAddGlobal(ctx.module, ctx.resolve_type(&typ), cstr("string"));
+    let glob = LLVMAddGlobal(ctx.module, LLVMArrayType(LLVMInt8TypeInContext(ctx.context), s.len() as c_uint),  cstr("string"));
 
     LLVMSetLinkage(glob, LLVMLinkage::LLVMInternalLinkage);
     LLVMSetGlobalConstant(glob, 1);
+    let string_data = try!(gen_const_string_literal(ctx, s));
+    LLVMSetInitializer(glob, string_data.get());
 
-    let mut const_vals = vec![
-        try!(gen_const_string_literal(ctx, s)).get(),
-        LLVMConstInt(LLVMInt64TypeInContext(ctx.context), s.len() as u64, 0),
-        LLVMConstInt(LLVMInt64TypeInContext(ctx.context), s.len() as u64, 0),
-    ];
+    let typ = ctx.resolve_type(&string_type());
+    let array = Array::new(ctx.alloc(typ, "string"), Type::Char);
 
-    LLVMSetInitializer(glob, LLVMConstStruct(const_vals.as_mut_ptr(), const_vals.len() as c_uint, 0));
-    Ok(ValueRef::new(glob, &typ))
+    let length_ptr = array.get_length_ptr(ctx);
+    try!(length_ptr.store_direct(ctx, const_int(ctx, s.len() as u64), span.start));
+
+    let offset_ptr = array.get_offset_ptr(ctx);
+    try!(offset_ptr.store_direct(ctx, const_int(ctx, 0), span.start));
+
+    let data_ptr = array.get_data_ptr(ctx);
+
+    let mut index_expr = vec![const_int(ctx, 0), const_int(ctx, 0)];
+    let first_element = LLVMBuildGEP(ctx.builder, glob, index_expr.as_mut_ptr(), 2, cstr("first_element"));
+    try!(data_ptr.store_direct(ctx, first_element, span.start));
+
+    Ok(ValueRef::Array(array))
 }
 
 unsafe fn gen_unary_op(ctx: &mut Context, op: &UnaryOp) -> CompileResult<ValueRef>

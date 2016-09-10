@@ -99,6 +99,13 @@ fn gen_module(ctx: &mut Context, module: &Module) -> CompileResult<()>
         }
     }
 
+    for ref func in module.externals.values() {
+        unsafe {
+            let fi = try!(gen_function_sig(ctx, &func.sig));
+            ctx.add_function(Rc::new(fi));
+        }
+    }
+
     for ref func in module.functions.values() {
         if !func.is_generic() {
             unsafe{
