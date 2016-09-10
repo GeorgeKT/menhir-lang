@@ -49,9 +49,6 @@ fn find_runtime_library() -> Option<String>
     let paths = [
         "/usr/lib/libcobraruntime.a",
         "/usr/local/lib/libcobraruntime.a",
-        "../librt/libcobraruntime.a",
-        "./librt/libcobraruntime.a",
-        "./libcobraruntime.a",
     ];
 
     for p in &paths {

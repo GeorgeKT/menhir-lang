@@ -127,7 +127,6 @@ pub fn anon_sig(name: &str, ret: &Type, args: &Vec<Type>) -> FunctionSignature
     }
 }
 
-/*
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ExternalFunction
@@ -153,11 +152,7 @@ impl TreePrinter for ExternalFunction
     {
         let p = prefix(level);
         println!("{}external function {} (span: {})", p, self.sig.name, self.span);
-        println!("{} return_type: {}", p, self.sig.return_type);
-        println!("{} args:", p);
-        for a in &self.sig.args {
-            a.print(level + 2);
-        }
+        self.sig.print(level + 1);
     }
 }
-*/
+

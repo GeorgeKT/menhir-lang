@@ -402,6 +402,20 @@ fn test_function_with_func_type()
     )
 }
 
+#[test]
+fn test_external_function()
+{
+    let md = th_mod("extern foo() -> int");
+    assert!(*md.externals.get("foo").unwrap() == ExternalFunction::new(
+        sig(
+            "foo",
+            Type::Int,
+            Vec::new(),
+            span(1, 8, 1, 19)
+        ),
+        span(1, 1, 1, 19))
+    )
+}
 
 #[test]
 fn test_lambda()

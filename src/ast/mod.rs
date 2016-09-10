@@ -93,6 +93,7 @@ pub struct Module
 {
     pub name: String,
     pub functions: HashMap<String, Function>,
+    pub externals: HashMap<String, ExternalFunction>,
     pub types: HashMap<String, TypeDeclaration>,
 }
 
@@ -104,6 +105,10 @@ impl TreePrinter for Module
         println!("{}Module: {}", p, self.name);
         for ref t in self.types.values() {
             t.print(level + 1);
+        }
+
+        for ref func in self.externals.values() {
+            func.print(level + 1);
         }
 
         for ref func in self.functions.values() {

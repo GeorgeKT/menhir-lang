@@ -261,6 +261,26 @@ fn parse_function_arguments(tq: &mut TokenQueue, type_is_optional: bool) -> Comp
     parse_comma_separated_list(tq, TokenKind::CloseParen, |tq| parse_function_argument(tq, type_is_optional))
 }
 
+fn parse_external_function(tq: &mut TokenQueue, start_pos: Pos) -> CompileResult<ExternalFunction>
+{
+    let (name, name_span) = try!(tq.expect_identifier());
+    
+    try!(tq.expect(TokenKind::OpenParen));
+    let args = try!(parse_function_arguments(tq, false));
+    let ret_type = if tq.is_next(TokenKind::Arrow) {
+        try!(tq.pop());
+        try!(parse_type(tq))
+    } else {
+        Type::Void
+    };
+
+    let sig_span_end = tq.pos();
+    Ok(ExternalFunction::new(
+        sig(&name, ret_type, args, Span::new(name_span.start, sig_span_end)),
+        Span::new(start_pos, tq.pos()),
+    ))
+}
+
 fn parse_function_definition(tq: &mut TokenQueue, name: &str, start_pos: Pos) -> CompileResult<Function>
 {
     try!(tq.expect(TokenKind::OpenParen));
@@ -574,6 +594,7 @@ pub fn parse_module<Input: Read>(input: &mut Input, name: &str) -> CompileResult
 {
     let mut tq = try!(Lexer::new().read(input));
     let mut funcs = HashMap::new();
+    let mut external_funcs = HashMap::new();
     let mut types = HashMap::new();
 
     while !tq.is_next(TokenKind::EOF)
@@ -589,6 +610,16 @@ pub fn parse_module<Input: Read>(input: &mut Input, name: &str) -> CompileResult
                 }
                 types.insert(sd.name().into(), sd);
             },
+
+            TokenKind::Extern => {
+                let ext_func = try!(parse_external_function(&mut tq, tok.span.start));
+                if external_funcs.contains_key(&ext_func.sig.name) {
+                    let pos = ext_func.span.start;
+                    return err(pos, ErrorCode::RedefinitionOfFunction, format!("External function {} redefined", ext_func.sig.name));
+                }
+                external_funcs.insert(ext_func.sig.name.clone(), ext_func);
+            },
+
             TokenKind::Identifier(ref id) => {
                 let func = try!(parse_function_definition(&mut tq, &id, tok.span.start));
                 let pos = func.span.start;
@@ -606,6 +637,7 @@ pub fn parse_module<Input: Read>(input: &mut Input, name: &str) -> CompileResult
      Ok(Module{
         name: name.into(),
         functions: funcs,
+        externals: external_funcs,
         types: types,
     })
 }

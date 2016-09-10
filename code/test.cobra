@@ -1,2 +1,5 @@
+
+extern print(s: string) -> int
+
 main() -> int =
-    let x = [2, 3, 4] in 5
+    print("Hello World")

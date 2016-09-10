@@ -13,11 +13,10 @@ pub fn link(ctx: &Context, opts: &CodeGenOptions) -> CompileResult<()>
 
     let program_path = format!("{}/{}", opts.build_dir, opts.program_name);
 
-    let mut cmd = Command::new("ld");
-    cmd.arg("--gc-sections").arg("-o").arg(&program_path).arg(obj_file);
+    let mut cmd = Command::new("gcc");
+    cmd.arg("-o").arg(&program_path).arg(obj_file).arg(&opts.runtime_library);
 
     println!("  Linking {}", program_path);
-    cmd.arg(&opts.runtime_library);
     let output: Output = try!(cmd
         .output()
         .map_err(|e| CompileError::new(
