@@ -610,3 +610,16 @@ foo(p: Point<int>) -> int = 7
         span(4, 1, 4, 29))
     )
 }
+
+#[test]
+fn test_if()
+{
+    let e = th_expr(r#"
+if true then 5 else 10"#);
+    assert!(e == if_expression(
+        Expression::BoolLiteral(span(2, 4, 2, 7), true),
+        number(5, span(2, 14, 2, 14)),
+        number(10, span(2, 21, 2, 22)),
+        span(2, 1, 2, 22)
+    ))
+}

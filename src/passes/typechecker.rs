@@ -551,6 +551,25 @@ fn type_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> Compil
     Ok(l.typ.clone())
 }
 
+fn type_check_if(ctx: &mut TypeCheckerContext, i: &mut IfExpression) -> CompileResult<Type>
+{
+    let cond_type = try!(type_check_expression(ctx, &mut i.condition, Some(Type::Bool)));
+    if cond_type != Type::Bool {
+        return err(i.condition.span().start, ErrorCode::TypeError, format!("Condition of an if expression needs to be a boolean expression"));
+    }
+
+    let on_true_type = try!(type_check_expression(ctx, &mut i.on_true, None));
+    let on_false_type = try!(type_check_expression(ctx, &mut i.on_false, None));
+    if on_true_type != on_false_type {
+        return err(i.condition.span().start, ErrorCode::TypeError, 
+            format!("then and else expression of an if expression need to be of the same type, then has type {}, else has type {}", on_true_type, on_false_type)
+        );
+    }
+
+    i.typ = on_true_type;
+    Ok(on_false_type)
+}
+
 fn type_check_struct_members_in_initializer(ctx: &mut TypeCheckerContext, members: &Vec<StructMember>, si: &mut StructInitializer) -> CompileResult<Type>
 {
     if members.len() != si.member_initializers.len() {
@@ -707,6 +726,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::Match(ref mut m) => type_check_match(ctx, m),
         Expression::Lambda(ref mut l) => type_check_lambda(ctx, l, type_hint),
         Expression::Let(ref mut l) => type_check_let(ctx, l),
+        Expression::If(ref mut i) => type_check_if(ctx, i),
         Expression::Enclosed(_, ref mut inner) => type_check_expression(ctx, inner, type_hint),
         Expression::IntLiteral(_, _) => Ok(Type::Int),
         Expression::FloatLiteral(_, _) => Ok(Type::Float),

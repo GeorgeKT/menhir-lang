@@ -849,6 +849,10 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::Match(ref m) => gen_match(ctx, m),
             Expression::Lambda(ref l) => gen_lambda(ctx, l),
             Expression::Let(ref l) => gen_let(ctx, l),
+            Expression::If(ref i) => {
+                let match_expr = i.to_match();
+                gen_match(ctx, &match_expr) 
+            },
             Expression::Enclosed(_, ref inner) => gen_expression(ctx, inner),
             Expression::IntLiteral(_, v) => gen_integer(ctx, v),
             Expression::FloatLiteral(ref span, ref v_str) => gen_float(ctx, &v_str, span),

@@ -71,6 +71,15 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             Ok(let_expression(bindings, expr, l.span))
         },
 
+        Expression::If(ref i) => {
+            Ok(if_expression(
+                 try!(substitute_expr(generic_args, &i.condition)),
+                 try!(substitute_expr(generic_args, &i.on_true)),
+                 try!(substitute_expr(generic_args, &i.on_true)),
+                 i.span,
+            ))
+        },
+
         Expression::Enclosed(span, ref inner) => {
             let new_inner = try!(substitute_expr(generic_args, inner));
             Ok(Expression::Enclosed(span, Box::new(new_inner)))

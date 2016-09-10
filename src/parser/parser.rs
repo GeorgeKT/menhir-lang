@@ -331,6 +331,16 @@ fn parse_let(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
     Ok(let_expression(bindings, e, Span::new(pos, tq.pos())))
 }
 
+fn parse_if(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
+{
+    let cond = try!(parse_expression(tq));
+    try!(tq.expect(TokenKind::Then));
+    let on_true = try!(parse_expression(tq));
+    try!(tq.expect(TokenKind::Else));
+    let on_false = try!(parse_expression(tq));
+    Ok(if_expression(cond, on_true, on_false, Span::new(pos, tq.pos())))
+}
+
 fn parse_type_declaration(tq: &mut TokenQueue, pos: Pos) -> CompileResult<TypeDeclaration>
 {
     let (name, _) = try!(tq.expect_identifier());
@@ -469,6 +479,10 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
 
         TokenKind::Let => {
             parse_let(tq, tok.span.start)
+        },
+
+        TokenKind::If => {
+            parse_if(tq, tok.span.start)
         },
 
         TokenKind::OpenParen => {

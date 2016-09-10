@@ -413,3 +413,19 @@ main() -> int =
     assert!(r == Ok(11));
 }
 */
+
+#[test]
+fn test_if() {
+    let r = run(r#"
+
+max(a: int, b: int) -> int = 
+    if a > b 
+    then a
+    else b 
+
+main() -> int =
+    max(100, 10)
+    "#, true);
+    println!("r: {:?}", r);
+    assert!(r == Ok(100));
+}

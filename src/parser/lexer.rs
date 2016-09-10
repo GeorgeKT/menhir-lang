@@ -106,6 +106,9 @@ impl Lexer
             "true" => TokenKind::True,
             "false" => TokenKind::False,
             "type" => TokenKind::Type,
+            "if" => TokenKind::If,
+            "then" => TokenKind::Then,
+            "else" => TokenKind::Else,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
         };
 
