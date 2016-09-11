@@ -507,13 +507,18 @@ fn type_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint: Op
     }
 }
 
+fn type_check_let_binding(ctx: &mut TypeCheckerContext, b: &mut LetBinding) -> CompileResult<Type>
+{
+    b.typ = try!(type_check_expression(ctx, &mut b.init, None));
+    try!(ctx.add(&b.name, b.typ.clone(), b.span.start));
+    Ok(b.typ.clone())
+}
+
 fn type_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> CompileResult<Type>
 {
     ctx.push_stack();
-    for b in &mut l.bindings
-    {
-        b.typ = try!(type_check_expression(ctx, &mut b.init, None));
-        try!(ctx.add(&b.name, b.typ.clone(), b.span.start));
+    for b in &mut l.bindings {
+        try!(type_check_let_binding(ctx, b));
     }
 
     match type_check_expression(ctx, &mut l.expression, None)
@@ -741,6 +746,13 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::Match(ref mut m) => type_check_match(ctx, m),
         Expression::Lambda(ref mut l) => type_check_lambda(ctx, l, type_hint),
         Expression::Let(ref mut l) => type_check_let(ctx, l),
+        Expression::LetBindings(ref mut l) => {
+            let mut typ = Type::Unknown;
+            for b in &mut l.bindings {
+                typ = try!(type_check_let_binding(ctx, b));
+            }
+            Ok(typ)
+        },
         Expression::If(ref mut i) => type_check_if(ctx, i),
         Expression::Block(ref mut b) => type_check_block(ctx, b, type_hint),
         Expression::IntLiteral(_, _) => Ok(Type::Int),

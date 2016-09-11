@@ -3,6 +3,15 @@ use ast::*;
 use compileerror::{CompileResult, ErrorCode, err};
 use passes::GenericMapper;
 
+fn subsitute_let_bindings(generic_args: &GenericMapper, lb: &Vec<LetBinding>) -> CompileResult<Vec<LetBinding>>
+{
+    let mut bindings = Vec::with_capacity(lb.len());
+    for b in lb.iter() {
+        let binding_expr = try!(substitute_expr(generic_args, &b.init));
+        bindings.push(let_binding(b.name.clone(), binding_expr, b.span));
+    }
+    Ok(bindings)
+}
 
 fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResult<Expression>
 {
@@ -61,14 +70,14 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
         },
 
         Expression::Let(ref l) => {
-            let mut bindings = Vec::with_capacity(l.bindings.len());
-            for b in l.bindings.iter() {
-                let binding_expr = try!(substitute_expr(generic_args, &b.init));
-                bindings.push(let_binding(b.name.clone(), binding_expr, b.span));
-            }
-
+            let bindings = try!(subsitute_let_bindings(generic_args, &l.bindings));
             let expr = try!(substitute_expr(generic_args, &l.expression));
             Ok(let_expression(bindings, expr, l.span))
+        },
+
+        Expression::LetBindings(ref l) => {
+            let bindings = try!(subsitute_let_bindings(generic_args, &l.bindings));
+            Ok(let_bindings(bindings, l.span))
         },
 
         Expression::If(ref i) => {

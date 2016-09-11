@@ -697,24 +697,31 @@ unsafe fn gen_match(ctx: &mut Context, m: &MatchExpression) -> CompileResult<Val
     Ok(dst)
 }
 
+unsafe fn gen_let_binding(ctx: &mut Context, b: &LetBinding) -> CompileResult<ValueRef>
+{
+    match b.typ
+    {
+        Type::Func(ref ft) => {
+            let func_ptr = try!(gen_expression(ctx, &b.init));
+            let func_sig = anon_sig(&b.name, &ft.return_type, &ft.args);
+            let fi = try!(gen_function_ptr(ctx, func_ptr.get(), func_sig));
+            let ptr = fi.function;
+            ctx.add_function(Rc::new(fi));
+            Ok(ValueRef::Ptr(ptr))
+        },
+        _ => {
+            let mut vr = ValueRef::alloc(ctx, &b.typ);
+            try!(gen_expression_store(ctx, &b.init, &mut vr));
+            ctx.add_variable(&b.name, vr.clone());
+            Ok(vr)
+        }
+    }
+}
+
 unsafe fn gen_let_bindings(ctx: &mut Context, l: &LetExpression) -> CompileResult<()>
 {
-    for b in &l.bindings
-    {
-        match b.typ
-        {
-            Type::Func(ref ft) => {
-                let func_ptr = try!(gen_expression(ctx, &b.init));
-                let func_sig = anon_sig(&b.name, &ft.return_type, &ft.args);
-                let fi = try!(gen_function_ptr(ctx, func_ptr.get(), func_sig));
-                ctx.add_function(Rc::new(fi));
-            },
-            _ => {
-                let mut vr = ValueRef::alloc(ctx, &b.typ);
-                try!(gen_expression_store(ctx, &b.init, &mut vr));
-                ctx.add_variable(&b.name, vr);
-            }
-        }
+    for b in &l.bindings{
+        try!(gen_let_binding(ctx, b));
     }
     Ok(())
 }
@@ -883,6 +890,13 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::Match(ref m) => gen_match(ctx, m),
             Expression::Lambda(ref l) => gen_lambda(ctx, l),
             Expression::Let(ref l) => gen_let(ctx, l),
+            Expression::LetBindings(ref l) => {
+                let mut v = None;
+                for b in &l.bindings {
+                    v = Some(try!(gen_let_binding(ctx, b)));
+                }
+                Ok(v.expect("Empting binding list"))
+            },
             Expression::If(ref i) => {
                 let match_expr = i.to_match();
                 gen_match(ctx, &match_expr)

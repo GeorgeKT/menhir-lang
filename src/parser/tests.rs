@@ -642,7 +642,7 @@ if true then 5 else 10"#);
 fn test_block()
 {
     let e = th_expr(r#"
-(a, b, c, 7)"#);
+(a; b; c; 7)"#);
     assert!(e == block(
         vec![
             name_ref("a", span(2, 2, 2, 2)),

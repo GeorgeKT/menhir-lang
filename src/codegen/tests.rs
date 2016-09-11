@@ -440,7 +440,7 @@ max(a: int, b: int) -> int =
     then a
     else b
 
-main() -> int = (let x = max(10, 11),  7 * x)
+main() -> int = (let x = max(10, 11);  7 * x)
     "#, true);
     println!("r: {:?}", r);
     assert!(r == Ok(77));

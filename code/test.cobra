@@ -3,11 +3,10 @@ extern print(s: string) -> int
 extern println(s: string) -> int
 
 
-main() -> int =
-(
-    let x = 5,
-    println("Hello World !"),
-    println("Shit"),
-    if x > 5 then println("Yay") else println("Nay"),
+main() -> int = (
+    let x = 5;
+    println("Hello World !");
+    println("Shit");
+    if x > 5 then println("Yay") else println("Nay");
     x
 )

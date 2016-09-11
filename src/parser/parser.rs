@@ -165,7 +165,7 @@ fn parse_binary_op_rhs(tq: &mut TokenQueue, mut lhs: Expression) -> CompileResul
     }
 }
 
-fn parse_comma_separated_list<T, P>(tq: &mut TokenQueue, end_token: TokenKind, parse_element: P) -> CompileResult<Vec<T>>
+fn parse_list<T, P>(tq: &mut TokenQueue, separator: TokenKind, end_token: TokenKind, parse_element: P) -> CompileResult<Vec<T>>
     where P: Fn(&mut TokenQueue) -> CompileResult<T>
 {
     let mut elements = Vec::new();
@@ -173,11 +173,21 @@ fn parse_comma_separated_list<T, P>(tq: &mut TokenQueue, end_token: TokenKind, p
     {
         let e = try!(parse_element(tq));
         elements.push(e);
-        try!(eat_comma(tq));
+        if !tq.is_next(separator.clone()) {
+            break;
+        } else {
+            try!(tq.pop());
+        }
     }
 
-    try!(tq.pop());
+    try!(tq.expect(end_token));
     Ok(elements)
+}
+
+fn parse_comma_separated_list<T, P>(tq: &mut TokenQueue, end_token: TokenKind, parse_element: P) -> CompileResult<Vec<T>>
+    where P: Fn(&mut TokenQueue) -> CompileResult<T>
+{
+    parse_list(tq, TokenKind::Comma, end_token, parse_element)
 }
 
 fn parse_function_call(tq: &mut TokenQueue, name: NameRef) -> CompileResult<Call>
@@ -335,7 +345,7 @@ fn parse_lambda(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
 fn parse_let(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
 {
     let mut bindings = Vec::new();
-    while !tq.is_next(TokenKind::In)
+    while !tq.is_next(TokenKind::In) && !tq.is_next(TokenKind::SemiColon) && !tq.is_next(TokenKind::CloseParen)
     {
         let (name, span) = try!(tq.expect_identifier());
         try!(tq.expect(TokenKind::Assign));
@@ -344,10 +354,17 @@ fn parse_let(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
         try!(eat_comma(tq));
     }
 
-    try!(tq.expect(TokenKind::In));
-    let e = try!(parse_expression(tq));
+    if tq.is_next(TokenKind::In)
+    {
+        try!(tq.expect(TokenKind::In));
+        let e = try!(parse_expression(tq));
+        Ok(let_expression(bindings, e, Span::new(pos, tq.pos())))
+    }
+    else
+    {
+        Ok(let_bindings(bindings, Span::new(pos, tq.pos())))
+    }
 
-    Ok(let_expression(bindings, e, Span::new(pos, tq.pos())))
 }
 
 fn parse_if(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
@@ -478,7 +495,7 @@ fn parse_struct_member_access(tq: &mut TokenQueue, name: NameRef) -> CompileResu
 
 fn parse_block(tq: &mut TokenQueue, start: Pos) -> CompileResult<Expression>
 {
-    let expressions = try!(parse_comma_separated_list(tq, TokenKind::CloseParen, parse_expression));
+    let expressions = try!(parse_list(tq, TokenKind::SemiColon, TokenKind::CloseParen, parse_expression));
     Ok(block(expressions, Span::new(start, tq.pos())))
 }
 
