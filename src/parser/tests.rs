@@ -31,7 +31,7 @@ pub fn number(v: u64, span: Span) -> Expression
 
 fn enclosed(span: Span, left: Expression) -> Expression
 {
-    Expression::Enclosed(span, Box::new(left))
+    block(vec![left], span)
 }
 
 pub fn name_ref(name: &str, span: Span) -> Expression
@@ -635,5 +635,21 @@ if true then 5 else 10"#);
         number(5, span(2, 14, 2, 14)),
         number(10, span(2, 21, 2, 22)),
         span(2, 1, 2, 22)
+    ))
+}
+
+#[test]
+fn test_block()
+{
+    let e = th_expr(r#"
+(a, b, c, 7)"#);
+    assert!(e == block(
+        vec![
+            name_ref("a", span(2, 2, 2, 2)),
+            name_ref("b", span(2, 5, 2, 5)),
+            name_ref("c", span(2, 8, 2, 8)),
+            number(7, span(2, 11, 2, 11)),
+        ],
+        span(2, 1, 2, 12)
     ))
 }

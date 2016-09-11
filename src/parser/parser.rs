@@ -476,6 +476,12 @@ fn parse_struct_member_access(tq: &mut TokenQueue, name: NameRef) -> CompileResu
     Ok(Expression::StructMemberAccess(struct_member_access(&name.name, members, Span::new(name.span.start, tq.pos()))))
 }
 
+fn parse_block(tq: &mut TokenQueue, start: Pos) -> CompileResult<Expression>
+{
+    let expressions = try!(parse_comma_separated_list(tq, TokenKind::CloseParen, parse_expression));
+    Ok(block(expressions, Span::new(start, tq.pos())))
+}
+
 fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expression>
 {
     match tok.kind
@@ -505,9 +511,7 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
         },
 
         TokenKind::OpenParen => {
-            let expr = try!(parse_expression(tq));
-            try!(tq.expect(TokenKind::CloseParen));
-            Ok(Expression::Enclosed(Span::new(tok.span.start, tq.pos()), Box::new(expr)))
+            parse_block(tq, tok.span.start)
         },
 
         TokenKind::OpenBracket => {

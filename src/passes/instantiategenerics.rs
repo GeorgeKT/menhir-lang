@@ -80,9 +80,12 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             ))
         },
 
-        Expression::Enclosed(span, ref inner) => {
-            let new_inner = try!(substitute_expr(generic_args, inner));
-            Ok(Expression::Enclosed(span, Box::new(new_inner)))
+        Expression::Block(ref b) => {
+            let mut new_expressions = Vec::with_capacity(b.expressions.len());
+            for e in &b.expressions {
+                new_expressions.push(try!(substitute_expr(generic_args, e)));
+            }
+            Ok(block(new_expressions, b.span))
         },
         Expression::IntLiteral(span, v) => Ok(Expression::IntLiteral(span, v)),
         Expression::BoolLiteral(span, v) => Ok(Expression::BoolLiteral(span, v)),
@@ -231,7 +234,12 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
             Ok(())
         }
 
-        Expression::Enclosed(_, ref inner) => resolve_generics(new_functions, module, inner),
+        Expression::Block(ref b) => {
+            for e in &b.expressions {
+                try!(resolve_generics(new_functions, module, e));
+            }
+            Ok(())
+        },
         _ => Ok(()),
     }
 }
@@ -292,7 +300,12 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
             replace_generic_calls(new_functions, &mut l.expression)
         },
 
-        Expression::Enclosed(_, ref mut inner) => replace_generic_calls(new_functions, inner),
+        Expression::Block(ref mut b) => {
+            for e in &mut b.expressions {
+                try!(replace_generic_calls(new_functions, e));
+            }
+            Ok(())
+        },
         _ => Ok(()),
     }
 }

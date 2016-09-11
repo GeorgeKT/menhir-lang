@@ -821,6 +821,31 @@ unsafe fn gen_struct_member_access(ctx: &Context, sma: &StructMemberAccess) -> C
     Ok(var)
 }
 
+unsafe fn gen_block(ctx: &mut Context, block: &Block) -> CompileResult<ValueRef>
+{
+    ctx.push_stack(ptr::null_mut());
+    let mut ret = None;
+    for e in &block.expressions {
+        ret = Some(try!(gen_expression(ctx, e)));
+    }
+    ctx.pop_stack();
+    Ok(ret.expect("Block has no expressions")) // Type checker should make this impossible
+}
+
+unsafe fn gen_block_store(ctx: &mut Context, block: &Block, ptr: &mut ValueRef) -> CompileResult<()>
+{
+    ctx.push_stack(ptr::null_mut());
+    for (idx, e) in block.expressions.iter().enumerate() {
+        if idx == block.expressions.len() - 1 {
+            try!(gen_expression_store(ctx, e, ptr))
+        } else {
+            try!(gen_expression(ctx, e));
+        }
+    }
+    ctx.pop_stack();
+    Ok(())
+}
+
 pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: &mut ValueRef) -> CompileResult<()>
 {
     match *e
@@ -838,7 +863,7 @@ pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: &mut 
         Expression::Match(ref m) => gen_match_store(ctx, m, ptr),
         Expression::Lambda(ref l) => gen_lambda_store(ctx, l, ptr),
         Expression::Let(ref l) => gen_let_store(ctx, l, ptr),
-        Expression::Enclosed(_, ref inner) => gen_expression_store(ctx, inner, ptr),
+        Expression::Block(ref b) => gen_block_store(ctx, b, ptr),
         _ => store(ctx, e, &ptr),
     }
 }
@@ -860,9 +885,9 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
             Expression::Let(ref l) => gen_let(ctx, l),
             Expression::If(ref i) => {
                 let match_expr = i.to_match();
-                gen_match(ctx, &match_expr) 
+                gen_match(ctx, &match_expr)
             },
-            Expression::Enclosed(_, ref inner) => gen_expression(ctx, inner),
+            Expression::Block(ref b) => gen_block(ctx, b),
             Expression::IntLiteral(_, v) => gen_integer(ctx, v),
             Expression::FloatLiteral(ref span, ref v_str) => gen_float(ctx, &v_str, span),
             Expression::StringLiteral(ref span, ref s)  => gen_string_literal(ctx, s, span),

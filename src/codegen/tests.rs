@@ -430,9 +430,9 @@ main() -> int =
     assert!(r == Ok(100));
 }
 
-/*
+
 #[test]
-fn test_enclosed() {
+fn test_block() {
     let r = run(r#"
 
 max(a: int, b: int) -> int =
@@ -445,4 +445,3 @@ main() -> int = (let x = max(10, 11),  7 * x)
     println!("r: {:?}", r);
     assert!(r == Ok(77));
 }
-*/

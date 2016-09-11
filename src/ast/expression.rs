@@ -14,7 +14,7 @@ pub enum Expression
     ArrayGenerator(Box<ArrayGenerator>),
     UnaryOp(Box<UnaryOp>),
     BinaryOp(Box<BinaryOp>),
-    Enclosed(Span, Box<Expression>), // Expression enclosed between parens
+    Block(Box<Block>),
     Call(Call),
     NameRef(NameRef),
     Match(Box<MatchExpression>),
@@ -70,7 +70,7 @@ impl Expression
             Expression::EmptyArrayPattern(ref a) => a.span,
             Expression::UnaryOp(ref op) => op.span,
             Expression::BinaryOp(ref op) => op.span,
-            Expression::Enclosed(span, _) => span,
+            Expression::Block(ref b) => b.span,
             Expression::Call(ref c) => c.span,
             Expression::NameRef(ref nr) => nr.span,
             Expression::Match(ref m) => m.span,
@@ -97,7 +97,7 @@ impl Expression
             Expression::EmptyArrayPattern(_) => Type::Unknown,
             Expression::UnaryOp(ref op) => op.typ.clone(),
             Expression::BinaryOp(ref op) => op.typ.clone(),
-            Expression::Enclosed(_, ref e) => e.get_type(),
+            Expression::Block(ref b) => b.typ.clone(),
             Expression::Call(ref c) => c.return_type.clone(),
             Expression::NameRef(ref nr) => nr.typ.clone(),
             Expression::Match(ref m) => m.typ.clone(),
@@ -180,9 +180,11 @@ impl TreePrinter for Expression
                 op.left.print(level + 1);
                 op.right.print(level + 1)
             },
-            Expression::Enclosed(ref span, ref e) => {
-                println!("{}enclosed ({})", p, span);
-                e.print(level + 1);
+            Expression::Block(ref b) => {
+                println!("{}block ({})", p, b.span);
+                for e in &b.expressions {
+                    e.print(level + 1);
+                }
             },
             Expression::Call(ref c) => c.print(level),
             Expression::NameRef(ref nr) => nr.print(level),

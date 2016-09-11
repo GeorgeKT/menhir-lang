@@ -709,6 +709,20 @@ fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern
     }
 }
 
+fn type_check_block(ctx: &mut TypeCheckerContext, b: &mut Block, type_hint: Option<Type>) -> CompileResult<Type>
+{
+    let num =  b.expressions.len();
+    for (idx, e) in b.expressions.iter_mut().enumerate()
+    {
+        let typ = try!(type_check_expression(ctx, e, type_hint.clone()));
+        if idx == num - 1 {
+            b.typ = typ;
+        }
+    }
+
+    Ok(b.typ.clone())
+}
+
 pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: Option<Type>) -> CompileResult<Type>
 {
     match *e
@@ -726,7 +740,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::Lambda(ref mut l) => type_check_lambda(ctx, l, type_hint),
         Expression::Let(ref mut l) => type_check_let(ctx, l),
         Expression::If(ref mut i) => type_check_if(ctx, i),
-        Expression::Enclosed(_, ref mut inner) => type_check_expression(ctx, inner, type_hint),
+        Expression::Block(ref mut b) => type_check_block(ctx, b, type_hint),
         Expression::IntLiteral(_, _) => Ok(Type::Int),
         Expression::FloatLiteral(_, _) => Ok(Type::Float),
         Expression::StringLiteral(_, _)  => Ok(string_type()),
