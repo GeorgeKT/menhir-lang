@@ -1,0 +1,17 @@
+type Result = Ok{$a} | Err{$b}
+
+unwrap_result_or(r: Result<$a, $b>, default: $a) -> $a =
+    match r
+        Ok{v} => v,
+        _ => default
+
+
+is_ok(r: Result<$a, $b>) -> bool =
+    match r
+        Ok{_} => true,
+        _ => false
+
+is_err(r: Result<$a, $b>) -> bool =
+    match r
+        Ok{_} => false,
+        _ => true

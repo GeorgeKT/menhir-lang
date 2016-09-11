@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use ast::*;
 use compileerror::{Span, span};
-use parser::{Lexer, Operator, parse_expression, parse_module};
+use parser::*;
 
 pub fn th_expr(data: &str) -> Expression
 {
@@ -16,7 +16,8 @@ pub fn th_expr(data: &str) -> Expression
 pub fn th_mod(data: &str) -> Module
 {
     let mut cursor = Cursor::new(data);
-    let md = parse_module(&mut cursor, "test").expect("Parsing failed");
+    let parser_options = ParserOptions::default();
+    let md = parse_module(&parser_options, &mut cursor, "test").expect("Parsing failed");
     println!("AST dump:");
     md.print(0);
     md

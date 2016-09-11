@@ -6,7 +6,7 @@ use llvm::prelude::*;
 use llvm::core::*;
 use llvm::execution_engine::*;
 use compileerror::{ErrorCode, err, CompileResult, Pos};
-use parser::{parse_module};
+use parser::{ParserOptions, parse_module};
 use codegen::{codegen, cstr, llvm_init};
 use passes::{type_check_module};
 use ast::{TreePrinter};
@@ -16,7 +16,8 @@ use ast::{TreePrinter};
 fn run(prog: &str, dump: bool) -> CompileResult<i64>
 {
     let mut cursor = Cursor::new(prog);
-    let mut md = try!(parse_module(&mut cursor, "test"));
+    let parser_options = ParserOptions::default();
+    let mut md = try!(parse_module(&parser_options, &mut cursor, "test"));
     if dump {
         println!("Before type check");
         println!("-----------------");

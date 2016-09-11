@@ -97,6 +97,21 @@ pub struct Module
     pub functions: HashMap<String, Function>,
     pub externals: HashMap<String, ExternalFunction>,
     pub types: HashMap<String, TypeDeclaration>,
+    pub imports: HashMap<String, Module>,
+}
+
+impl Module
+{
+    pub fn new(name: &str) -> Module
+    {
+        Module{
+            name: name.into(),
+            functions: HashMap::new(),
+            externals: HashMap::new(),
+            types: HashMap::new(),
+            imports: HashMap::new(),
+        }
+    }
 }
 
 impl TreePrinter for Module

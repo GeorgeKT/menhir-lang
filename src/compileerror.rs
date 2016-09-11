@@ -144,6 +144,7 @@ pub enum ErrorCode
     WrongArgumentCount,
     UnknownType(String, Type), // Name and expected type
     UnknownStructMember,
+    FileNotFound,
 }
 
 

@@ -1,7 +1,4 @@
-
-extern print(s: string) -> int
-extern println(s: string) -> int
-
+import stdlib 
 
 main() -> int = (
     let x = 5;

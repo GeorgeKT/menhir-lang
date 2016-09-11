@@ -1,9 +1,8 @@
 use std::fs;
 use std::io::Read;
-use std::collections::HashMap;
 use ast::*;
 use compileerror::{CompileResult, ErrorCode, Span, Pos, err};
-use parser::{TokenQueue, Token, TokenKind, Operator, Lexer};
+use parser::{TokenQueue, Token, TokenKind, Operator, Lexer, ParserOptions};
 
 fn is_end_of_expression(tok: &Token) -> bool
 {
@@ -599,7 +598,7 @@ pub fn parse_expression(tq: &mut TokenQueue) -> CompileResult<Expression>
     parse_expression_continued(tq, lhs)
 }
 
-pub fn parse_file(file_path: &str) -> CompileResult<Module>
+pub fn parse_file(options: &ParserOptions, file_path: &str) -> CompileResult<Module>
 {
     use std::path::Path;
     use std::ffi::OsStr;
@@ -607,15 +606,27 @@ pub fn parse_file(file_path: &str) -> CompileResult<Module>
     let mut file = try!(fs::File::open(file_path));
     let path = Path::new(file_path);
     let module_name: &OsStr = path.file_stem().expect("Invalid filename");
-    parse_module(&mut file, module_name.to_str().expect("Invalid UTF8 filename"))
+    parse_module(options, &mut file, module_name.to_str().expect("Invalid UTF8 filename"))
 }
 
-pub fn parse_module<Input: Read>(input: &mut Input, name: &str) -> CompileResult<Module>
+fn parse_import(options: &ParserOptions, import_name: &str) -> CompileResult<Module>
+{
+    let file_name = format!("{}.cobra", import_name);
+    for dir in &options.import_dirs {
+        let dwf = dir.join(&file_name);
+        if let Ok(mut file) = fs::File::open(dwf) {
+            return parse_module(options, &mut file, import_name);
+        }
+    }
+
+    err(Pos::zero(), ErrorCode::FileNotFound, format!("Unable to find file for import {}", import_name))
+}
+
+pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, name: &str) -> CompileResult<Module>
 {
     let mut tq = try!(Lexer::new().read(input));
-    let mut funcs = HashMap::new();
-    let mut external_funcs = HashMap::new();
-    let mut types = HashMap::new();
+    let mut module = Module::new(name);
+    println!("Parsing module {}", name);
 
     while !tq.is_next(TokenKind::EOF)
     {
@@ -625,39 +636,49 @@ pub fn parse_module<Input: Read>(input: &mut Input, name: &str) -> CompileResult
             TokenKind::Type => {
                 let sd = try!(parse_type_declaration(&mut tq, tok.span.start));
                 let pos = sd.span().start;
-                if types.contains_key(sd.name()) {
+                if module.types.contains_key(sd.name()) {
                     return err(pos, ErrorCode::RedefinitionOfStruct, format!("Type {} redefined", sd.name()));
                 }
-                types.insert(sd.name().into(), sd);
+                module.types.insert(sd.name().into(), sd);
             },
 
             TokenKind::Extern => {
                 let ext_func = try!(parse_external_function(&mut tq, tok.span.start));
-                if external_funcs.contains_key(&ext_func.sig.name) {
+                if module.externals.contains_key(&ext_func.sig.name) {
                     let pos = ext_func.span.start;
                     return err(pos, ErrorCode::RedefinitionOfFunction, format!("External function {} redefined", ext_func.sig.name));
                 }
-                external_funcs.insert(ext_func.sig.name.clone(), ext_func);
+                module.externals.insert(ext_func.sig.name.clone(), ext_func);
+            },
+
+            TokenKind::Import => {
+                loop
+                {
+                    let (name, _) = try!(tq.expect_identifier());
+                    let m = try!(parse_import(options, &name));
+                    module.imports.insert(name, m);
+                    if tq.is_next(TokenKind::Comma) {
+                        try!(tq.pop());
+                    } else {
+                        break;
+                    }
+                }
             },
 
             TokenKind::Identifier(ref id) => {
                 let func = try!(parse_function_definition(&mut tq, &id, tok.span.start));
                 let pos = func.span.start;
-                if funcs.contains_key(&func.sig.name) {
+                if module.functions.contains_key(&func.sig.name) {
                     return err(pos, ErrorCode::RedefinitionOfFunction, format!("Function {} redefined", func.sig.name));
                 }
-                funcs.insert(func.sig.name.clone(), func);
+                module.functions.insert(func.sig.name.clone(), func);
             }
             _ => {
+                println!("tok: {:?}", tok);
                 return err(tok.span.start, ErrorCode::ExpressionNotAllowedAtTopLevel, format!("Expression is not allowed at toplevel"));
             }
         }
     }
 
-     Ok(Module{
-        name: name.into(),
-        functions: funcs,
-        externals: external_funcs,
-        types: types,
-    })
+    Ok(module)
 }
