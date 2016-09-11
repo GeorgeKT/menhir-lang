@@ -5,17 +5,17 @@ use compileerror::{CompileResult, ErrorCode, Span, err};
 pub struct Lambda
 {
     pub sig: FunctionSignature,
-    pub expr: Box<Expression>,
+    pub expr: Expression,
     pub span: Span,
 }
 
-pub fn lambda(args: Vec<Argument>, expr: Expression, span: Span) -> Lambda
+pub fn lambda(args: Vec<Argument>, expr: Expression, span: Span) -> Expression
 {
-    Lambda{
+    Expression::Lambda(Box::new(Lambda{
         sig: sig("lambda", Type::Generic("$ret$".into()), args, span),
-        expr: Box::new(expr),
+        expr: expr,
         span: span,
-    }
+    }))
 }
 
 impl Lambda

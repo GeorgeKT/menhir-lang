@@ -45,7 +45,7 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
         Expression::Lambda(ref l) => {
             let args: Vec<Argument> = l.sig.args.iter().map(|a| Argument::new(a.name.clone(), generic_args.substitute(&a.typ), a.span)).collect();
             let expr = try!(substitute_expr(generic_args, &l.expr));
-            Ok(Expression::Lambda(lambda(args, expr, l.span)))
+            Ok(lambda(args, expr, l.span))
         },
 
         Expression::Match(ref m) => {
@@ -57,7 +57,7 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
                 let to_execute = try!(substitute_expr(generic_args, &c.to_execute));
                 cases.push(match_case(match_expr, to_execute, c.span));
             }
-            Ok(Expression::Match(match_expression(target, cases, m.span)))
+            Ok(match_expression(target, cases, m.span))
         },
 
         Expression::Let(ref l) => {

@@ -21,20 +21,20 @@ pub fn match_case(e: Expression, to_execute: Expression, span: Span) -> MatchCas
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct MatchExpression
 {
-    pub target: Box<Expression>,
+    pub target: Expression,
     pub cases: Vec<MatchCase>,
     pub typ: Type,
     pub span: Span,
 }
 
-pub fn match_expression(target: Expression, cases: Vec<MatchCase>, span: Span) -> MatchExpression
+pub fn match_expression(target: Expression, cases: Vec<MatchCase>, span: Span) -> Expression
 {
-    MatchExpression{
-        target: Box::new(target),
+    Expression::Match(Box::new(MatchExpression{
+        target: target,
         cases: cases,
         typ: Type::Unknown,
         span: span,
-    }
+    }))
 }
 
 impl TreePrinter for MatchExpression

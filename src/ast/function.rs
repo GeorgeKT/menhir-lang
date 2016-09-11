@@ -68,7 +68,7 @@ pub struct Function
 {
     pub sig: FunctionSignature,
     pub public: bool,
-    pub expression: Box<Expression>,
+    pub expression: Expression,
     pub span: Span,
     pub type_checked: bool,
     pub generics_resolved: bool,
@@ -81,7 +81,7 @@ impl Function
         Function{
             sig: sig,
             public: public,
-            expression: Box::new(expr),
+            expression: expr,
             span: span,
             type_checked: false,
             generics_resolved: false,
@@ -155,4 +155,3 @@ impl TreePrinter for ExternalFunction
         self.sig.print(level + 1);
     }
 }
-

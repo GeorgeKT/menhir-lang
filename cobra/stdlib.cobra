@@ -1,0 +1,5 @@
+extern print(s: string) -> int
+extern println(s: string) -> int
+
+type Option = Some{$a} | None
+type Result = Ok($a) | Err($b)

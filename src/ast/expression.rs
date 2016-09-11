@@ -12,14 +12,14 @@ pub enum Expression
     ArrayPattern(ArrayPattern), // [hd | tail]
     EmptyArrayPattern(EmptyArrayPattern),
     ArrayGenerator(Box<ArrayGenerator>),
-    UnaryOp(UnaryOp),
-    BinaryOp(BinaryOp),
+    UnaryOp(Box<UnaryOp>),
+    BinaryOp(Box<BinaryOp>),
     Enclosed(Span, Box<Expression>), // Expression enclosed between parens
     Call(Call),
     NameRef(NameRef),
-    Match(MatchExpression),
+    Match(Box<MatchExpression>),
     If(Box<IfExpression>),
-    Lambda(Lambda),
+    Lambda(Box<Lambda>),
     Let(Box<LetExpression>),
     StructInitializer(StructInitializer),
     StructMemberAccess(StructMemberAccess),
@@ -47,7 +47,7 @@ impl Expression
         }
     }
 
-    pub fn to_binary_op(self) -> Option<BinaryOp>
+    pub fn to_binary_op(self) -> Option<Box<BinaryOp>>
     {
         match self
         {

@@ -116,13 +116,12 @@ fn parse_unary_expression(tq: &mut TokenQueue, op: Operator, op_pos: Pos) -> Com
 
 fn combine_binary_op(op: Operator, lhs: Expression, rhs: Expression) -> Expression
 {
-    use std::ops::Deref;
     if lhs.is_binary_op() && lhs.precedence() < op.precedence()
     {
         let bop = lhs.to_binary_op().expect("Not a binary op");
-        let nrhs = combine_binary_op(op, bop.right.deref().clone(), rhs);
+        let nrhs = combine_binary_op(op, bop.right.clone(), rhs);
         let span = Span::merge(&bop.left.span(), &nrhs.span());
-        bin_op(bop.operator, bop.left.deref().clone(), nrhs, span)
+        bin_op(bop.operator, bop.left.clone(), nrhs, span)
     }
     else
     {
@@ -264,7 +263,7 @@ fn parse_function_arguments(tq: &mut TokenQueue, type_is_optional: bool) -> Comp
 fn parse_external_function(tq: &mut TokenQueue, start_pos: Pos) -> CompileResult<ExternalFunction>
 {
     let (name, name_span) = try!(tq.expect_identifier());
-    
+
     try!(tq.expect(TokenKind::OpenParen));
     let args = try!(parse_function_arguments(tq, false));
     let ret_type = if tq.is_next(TokenKind::Arrow) {
@@ -321,7 +320,7 @@ fn parse_match(tq: &mut TokenQueue, start: Pos) -> CompileResult<Expression>
             break;
         }
     }
-    Ok(Expression::Match(match_expression(target, cases, Span::new(start, tq.pos()))))
+    Ok(match_expression(target, cases, Span::new(start, tq.pos())))
 }
 
 fn parse_lambda(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
@@ -330,7 +329,7 @@ fn parse_lambda(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
     let args = try!(parse_function_arguments(tq, true));
     try!(tq.expect(TokenKind::Arrow));
     let expr = try!(parse_expression(tq));
-    Ok(Expression::Lambda(lambda(args, expr, Span::new(pos, tq.pos()))))
+    Ok(lambda(args, expr, Span::new(pos, tq.pos())))
 }
 
 fn parse_let(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>

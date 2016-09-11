@@ -6,7 +6,7 @@ use parser::{Operator};
 pub struct UnaryOp
 {
     pub operator: Operator,
-    pub expression: Box<Expression>,
+    pub expression: Expression,
     pub span: Span,
     pub typ: Type,
 }
@@ -15,8 +15,8 @@ pub struct UnaryOp
 pub struct BinaryOp
 {
     pub operator: Operator,
-    pub left: Box<Expression>,
-    pub right: Box<Expression>,
+    pub left: Expression,
+    pub right: Expression,
     pub span: Span,
     pub typ: Type,
 }
@@ -24,21 +24,21 @@ pub struct BinaryOp
 
 pub fn bin_op(op: Operator, left: Expression, right: Expression, span: Span) -> Expression
 {
-    Expression::BinaryOp(BinaryOp{
+    Expression::BinaryOp(Box::new(BinaryOp{
         operator: op,
-        left: Box::new(left),
-        right: Box::new(right),
+        left: left,
+        right: right,
         span: span,
         typ: Type::Unknown,
-    })
+    }))
 }
 
 pub fn unary_op(operator: Operator, expression: Expression, span: Span) -> Expression
 {
-    Expression::UnaryOp(UnaryOp{
+    Expression::UnaryOp(Box::new(UnaryOp{
         operator: operator,
-        expression: Box::new(expression),
+        expression: expression,
         span: span,
         typ: Type::Unknown,
-    })
+    }))
 }

@@ -421,7 +421,7 @@ fn test_external_function()
 fn test_lambda()
 {
     let e = th_expr("@(a, b) -> a + b");
-    assert!(e == Expression::Lambda(lambda(
+    assert!(e == lambda(
         vec![
             Argument::new("a".into(), Type::Generic("a".into()), span(1, 3, 1, 3)),
             Argument::new("b".into(), Type::Generic("b".into()), span(1, 6, 1, 6)),
@@ -433,7 +433,7 @@ fn test_lambda()
             span(1, 12, 1, 16)
         ),
         span(1, 1, 1, 16)
-    )))
+    ))
 }
 
 #[test]
@@ -445,7 +445,7 @@ match a
     1 => 2,
     2 => 3
 "#);
-    assert!(e == Expression::Match(match_expression(
+    assert!(e == match_expression(
         name_ref("a", span(2, 7, 2, 7)),
         vec![
             match_case(number(0, span(3, 5, 3, 5)), number(1, span(3, 10, 3, 10)), span(3, 5, 3, 10)),
@@ -453,7 +453,7 @@ match a
             match_case(number(2, span(5, 5, 5, 5)), number(3, span(5, 10, 5, 10)), span(5, 5, 5, 10)),
         ],
         span(2, 1, 5, 10))
-    ))
+    )
 }
 
 #[test]

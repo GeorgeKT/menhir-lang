@@ -1,4 +1,3 @@
-use std::ops::{DerefMut};
 use ast::*;
 use compileerror::{CompileResult, CompileError, Pos, ErrorCode, err, unknown_name};
 use parser::{Operator};
@@ -404,7 +403,7 @@ fn type_check_lambda_body(ctx: &mut TypeCheckerContext, m: &mut Lambda) -> Compi
         try!(ctx.add(&arg.name, arg.typ.clone(), arg.span.start));
     }
 
-    let return_type = try!(type_check_expression(ctx, m.expr.deref_mut(), None));
+    let return_type = try!(type_check_expression(ctx, &mut m.expr, None));
     ctx.pop_stack();
     m.set_return_type(return_type);
     Ok(m.sig.typ.clone())
@@ -561,7 +560,7 @@ fn type_check_if(ctx: &mut TypeCheckerContext, i: &mut IfExpression) -> CompileR
     let on_true_type = try!(type_check_expression(ctx, &mut i.on_true, None));
     let on_false_type = try!(type_check_expression(ctx, &mut i.on_false, None));
     if on_true_type != on_false_type {
-        return err(i.condition.span().start, ErrorCode::TypeError, 
+        return err(i.condition.span().start, ErrorCode::TypeError,
             format!("then and else expression of an if expression need to be of the same type, then has type {}, else has type {}", on_true_type, on_false_type)
         );
     }

@@ -11,12 +11,12 @@ pub struct IfExpression
     pub typ: Type,
 }
 
-impl IfExpression 
+impl IfExpression
 {
     pub fn to_match(&self) -> MatchExpression
     {
         MatchExpression{
-            target: Box::new(self.condition.clone()),
+            target: self.condition.clone(),
             cases: vec![
                 MatchCase{
                     match_expr: Expression::BoolLiteral(Span::default(), true),

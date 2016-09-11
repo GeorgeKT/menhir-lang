@@ -418,10 +418,10 @@ main() -> int =
 fn test_if() {
     let r = run(r#"
 
-max(a: int, b: int) -> int = 
-    if a > b 
+max(a: int, b: int) -> int =
+    if a > b
     then a
-    else b 
+    else b
 
 main() -> int =
     max(100, 10)
@@ -429,3 +429,20 @@ main() -> int =
     println!("r: {:?}", r);
     assert!(r == Ok(100));
 }
+
+/*
+#[test]
+fn test_enclosed() {
+    let r = run(r#"
+
+max(a: int, b: int) -> int =
+    if a > b
+    then a
+    else b
+
+main() -> int = (let x = max(10, 11),  7 * x)
+    "#, true);
+    println!("r: {:?}", r);
+    assert!(r == Ok(77));
+}
+*/
