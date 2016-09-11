@@ -711,7 +711,8 @@ fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern
 
 fn type_check_block(ctx: &mut TypeCheckerContext, b: &mut Block, type_hint: Option<Type>) -> CompileResult<Type>
 {
-    let num =  b.expressions.len();
+    ctx.push_stack();
+    let num = b.expressions.len();
     for (idx, e) in b.expressions.iter_mut().enumerate()
     {
         let typ = try!(type_check_expression(ctx, e, type_hint.clone()));
@@ -720,6 +721,7 @@ fn type_check_block(ctx: &mut TypeCheckerContext, b: &mut Block, type_hint: Opti
         }
     }
 
+    ctx.pop_stack();
     Ok(b.typ.clone())
 }
 
