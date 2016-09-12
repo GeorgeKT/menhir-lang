@@ -1,5 +1,5 @@
 use ast::{TreePrinter, StructDeclaration, Type, prefix};
-use compileerror::{Span};
+use span::{Span};
 
 
 #[derive(Debug, Eq, PartialEq, Clone)]

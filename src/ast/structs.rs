@@ -1,6 +1,6 @@
 use itertools::free::join;
 use ast::{Expression, TreePrinter, Type, prefix};
-use compileerror::{Span};
+use span::{Span};
 use passes::GenericMapper;
 
 #[derive(Debug, Eq, PartialEq, Clone)]

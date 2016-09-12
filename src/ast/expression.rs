@@ -1,4 +1,5 @@
-use compileerror::{Span, CompileResult, ErrorCode, err};
+use compileerror::{CompileResult, ErrorCode, err};
+use span::Span;
 use ast::*;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -61,27 +62,27 @@ impl Expression
     {
         match *self
         {
-            Expression::IntLiteral(span, _) => span,
-            Expression::FloatLiteral(span, _) => span,
-            Expression::BoolLiteral(span, _) => span,
-            Expression::StringLiteral(span, _) => span,
-            Expression::ArrayLiteral(ref a) => a.span,
-            Expression::ArrayGenerator(ref a) => a.span,
-            Expression::ArrayPattern(ref a) => a.span,
-            Expression::EmptyArrayPattern(ref a) => a.span,
-            Expression::UnaryOp(ref op) => op.span,
-            Expression::BinaryOp(ref op) => op.span,
-            Expression::Block(ref b) => b.span,
-            Expression::Call(ref c) => c.span,
-            Expression::NameRef(ref nr) => nr.span,
-            Expression::Match(ref m) => m.span,
-            Expression::Lambda(ref l) => l.span,
-            Expression::Let(ref l) => l.span,
-            Expression::LetBindings(ref l) => l.span,
-            Expression::If(ref i) => i.span,
-            Expression::StructInitializer(ref si) => si.span,
-            Expression::StructMemberAccess(ref sma) => sma.span,
-            Expression::StructPattern(ref p) => p.span,
+            Expression::IntLiteral(ref span, _) => span.clone(),
+            Expression::FloatLiteral(ref span, _) => span.clone(),
+            Expression::BoolLiteral(ref span, _) => span.clone(),
+            Expression::StringLiteral(ref span, _) => span.clone(),
+            Expression::ArrayLiteral(ref a) => a.span.clone(),
+            Expression::ArrayGenerator(ref a) => a.span.clone(),
+            Expression::ArrayPattern(ref a) => a.span.clone(),
+            Expression::EmptyArrayPattern(ref a) => a.span.clone(),
+            Expression::UnaryOp(ref op) => op.span.clone(),
+            Expression::BinaryOp(ref op) => op.span.clone(),
+            Expression::Block(ref b) => b.span.clone(),
+            Expression::Call(ref c) => c.span.clone(),
+            Expression::NameRef(ref nr) => nr.span.clone(),
+            Expression::Match(ref m) => m.span.clone(),
+            Expression::Lambda(ref l) => l.span.clone(),
+            Expression::Let(ref l) => l.span.clone(),
+            Expression::LetBindings(ref l) => l.span.clone(),
+            Expression::If(ref i) => i.span.clone(),
+            Expression::StructInitializer(ref si) => si.span.clone(),
+            Expression::StructMemberAccess(ref sma) => sma.span.clone(),
+            Expression::StructPattern(ref p) => p.span.clone(),
         }
     }
 
@@ -118,7 +119,7 @@ impl Expression
         match self
         {
             Expression::NameRef(nr) => Ok(nr),
-            _ => err(self.span().start, ErrorCode::TypeError, format!("Expected name reference")),
+            _ => err(&self.span(), ErrorCode::TypeError, format!("Expected name reference")),
         }
     }
 

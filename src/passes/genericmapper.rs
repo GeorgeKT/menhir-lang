@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use itertools::free::join;
 use ast::{func_type, array_type, struct_type, struct_member, sum_type, sum_type_case, Type};
-use compileerror::{Pos, CompileResult, ErrorCode, err};
+use compileerror::{CompileResult, ErrorCode, err};
+use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct GenericMapper
@@ -18,11 +19,11 @@ impl GenericMapper
         }
     }
 
-    pub fn add(&mut self, from: &Type, to: &Type, pos: Pos) -> CompileResult<()>
+    pub fn add(&mut self, from: &Type, to: &Type, span: &Span) -> CompileResult<()>
     {
         if let Some(prev_arg_type) = self.mapping.insert(from.clone(), to.clone()) {
             if prev_arg_type != *to {
-                return err(pos, ErrorCode::GenericTypeSubstitutionError,
+                return err(span, ErrorCode::GenericTypeSubstitutionError,
                     format!("Generic argument {} mismatch, expecting type {}, not {}", from, prev_arg_type, to));
             }
         }
@@ -53,7 +54,7 @@ impl GenericMapper
             Type::Struct(ref st) => {
                 struct_type(
                     st.members.iter()
-                        .map(|m| struct_member(&m.name, self.substitute(&m.typ), m.span))
+                        .map(|m| struct_member(&m.name, self.substitute(&m.typ), m.span.clone()))
                         .collect()
                 )
             },
@@ -78,7 +79,7 @@ impl GenericMapper
 }
 
 
-pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut GenericMapper, pos: Pos) -> CompileResult<Type>
+pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut GenericMapper, span: &Span) -> CompileResult<Type>
 {
     if *actual == *generic {
         return Ok(actual.clone());
@@ -90,7 +91,7 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
     }
 
     let map_err = || {
-        err(pos, ErrorCode::GenericTypeSubstitutionError, format!("Cannot map argument type {} on type {}", actual, new_generic))
+        err(span, ErrorCode::GenericTypeSubstitutionError, format!("Cannot map argument type {} on type {}", actual, new_generic))
     };
     match new_generic
     {
@@ -98,15 +99,15 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
             Ok(actual.clone())
         },
         Type::Generic(_) => {
-            try!(known_types.add(&new_generic, actual, pos));
+            try!(known_types.add(&new_generic, actual, span));
             Ok(actual.clone())
         },
         Type::Array(ref generic_at) => {
             match *actual
             {
                 Type::Array(ref actual_at) => {
-                    try!(known_types.add(&generic_at.element_type, &actual_at.element_type, pos));
-                    let new_el_type = try!(fill_in_generics(&actual_at.element_type, &generic_at.element_type, known_types, pos));
+                    try!(known_types.add(&generic_at.element_type, &actual_at.element_type, span));
+                    let new_el_type = try!(fill_in_generics(&actual_at.element_type, &generic_at.element_type, known_types, span));
                     Ok(array_type(new_el_type))
                 },
                 _ => map_err(),
@@ -121,11 +122,11 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
 
                     let mut new_args = Vec::with_capacity(generic_ft.args.len());
                     for (ga, aa) in generic_ft.args.iter().zip(actual_ft.args.iter()) {
-                        let na = try!(fill_in_generics(aa, ga, known_types, pos));
+                        let na = try!(fill_in_generics(aa, ga, known_types, span));
                         new_args.push(na);
                     }
 
-                    let nr = try!(fill_in_generics(&actual_ft.return_type, &generic_ft.return_type, known_types, pos));
+                    let nr = try!(fill_in_generics(&actual_ft.return_type, &generic_ft.return_type, known_types, span));
                     Ok(func_type(new_args, nr))
                 },
                 _ => map_err(),
@@ -144,8 +145,8 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
                             return map_err();
                         }
 
-                        let nt = try!(fill_in_generics(&aa.typ, &ga.typ, known_types, pos));
-                        new_members.push(struct_member(&aa.name, nt, aa.span));
+                        let nt = try!(fill_in_generics(&aa.typ, &ga.typ, known_types, span));
+                        new_members.push(struct_member(&aa.name, nt, aa.span.clone()));
                     }
 
                     Ok(struct_type(new_members))
@@ -166,7 +167,7 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
                             return map_err();
                         }
 
-                        let nt = try!(fill_in_generics(&aa.typ, &ga.typ, known_types, pos));
+                        let nt = try!(fill_in_generics(&aa.typ, &ga.typ, known_types, span));
                         new_cases.push(sum_type_case(&aa.name, nt));
                     }
 
@@ -184,7 +185,7 @@ mod tests
 {
     use super::*;
     use ast::{Type, array_type, func_type, string_type};
-    use compileerror::Pos;
+    use span::Span;
 
     fn gen_type(name: &str) -> Type
     {
@@ -196,7 +197,7 @@ mod tests
     {
         let mut tm = GenericMapper::new();
         let ga = gen_type("a");
-        assert!(fill_in_generics(&Type::Int, &ga, &mut tm, Pos::default()) == Ok(Type::Int));
+        assert!(fill_in_generics(&Type::Int, &ga, &mut tm, &Span::default()) == Ok(Type::Int));
         assert!(tm.substitute(&ga) == Type::Int);
     }
 
@@ -205,7 +206,7 @@ mod tests
     {
         let mut tm = GenericMapper::new();
         let ga = array_type(gen_type("a"));
-        let r = fill_in_generics(&array_type(Type::Int), &ga, &mut tm, Pos::default());
+        let r = fill_in_generics(&array_type(Type::Int), &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
         assert!(r == Ok(array_type(Type::Int)));
@@ -217,7 +218,7 @@ mod tests
     {
         let mut tm = GenericMapper::new();
         let ga = array_type(gen_type("a"));
-        let r = fill_in_generics(&array_type(Type::Int), &ga, &mut tm, Pos::default());
+        let r = fill_in_generics(&array_type(Type::Int), &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
         assert!(r == Ok(array_type(Type::Int)));
@@ -230,7 +231,7 @@ mod tests
         let mut tm = GenericMapper::new();
         let ga = func_type(vec![gen_type("a"), gen_type("b"), gen_type("c")], gen_type("d"));
         let aa = func_type(vec![Type::Int, Type::Float, Type::Bool], string_type());
-        let r = fill_in_generics(&aa, &ga, &mut tm, Pos::default());
+        let r = fill_in_generics(&aa, &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
         assert!(r == Ok(aa));
@@ -246,7 +247,7 @@ mod tests
         let mut tm = GenericMapper::new();
         let ga = func_type(vec![gen_type("a"), gen_type("b"), gen_type("c")], gen_type("d"));
         let aa = func_type(vec![Type::Int, Type::Float, Type::Bool, Type::Int], string_type());
-        let r = fill_in_generics(&aa, &ga, &mut tm, Pos::default());
+        let r = fill_in_generics(&aa, &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
         assert!(r.is_err());
@@ -258,7 +259,7 @@ mod tests
         let mut tm = GenericMapper::new();
         let ga = func_type(vec![gen_type("a"), gen_type("b"), gen_type("c"), Type::Int], gen_type("d"));
         let aa = func_type(vec![Type::Int, Type::Float, Type::Bool, Type::Int], string_type());
-        let r = fill_in_generics(&aa, &ga, &mut tm, Pos::default());
+        let r = fill_in_generics(&aa, &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
         assert!(r == Ok(aa));
@@ -273,7 +274,7 @@ mod tests
     {
         let mut tm = GenericMapper::new();
         let ga = gen_type("a");
-        let r = fill_in_generics(&array_type(Type::Int), &ga, &mut tm, Pos::default());
+        let r = fill_in_generics(&array_type(Type::Int), &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
         assert!(r == Ok(array_type(Type::Int)));
@@ -284,13 +285,13 @@ mod tests
     fn test_with_already_filled_in_map()
     {
         let mut tm = GenericMapper::new();
-        tm.add(&gen_type("a"), &Type::Int, Pos::zero()).unwrap();
-        tm.add(&gen_type("b"), &Type::Float, Pos::zero()).unwrap();
-        tm.add(&gen_type("c"), &Type::Bool, Pos::zero()).unwrap();
+        tm.add(&gen_type("a"), &Type::Int, &Span::default()).unwrap();
+        tm.add(&gen_type("b"), &Type::Float, &Span::default()).unwrap();
+        tm.add(&gen_type("c"), &Type::Bool, &Span::default()).unwrap();
 
         let ga = func_type(vec![gen_type("a"), gen_type("b")], gen_type("c"));
         let aa = func_type(vec![Type::Unknown, Type::Unknown], Type::Unknown);
-        let r = fill_in_generics(&aa, &ga, &mut tm, Pos::default());
+        let r = fill_in_generics(&aa, &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
         assert!(r == Ok(func_type(vec![Type::Int, Type::Float], Type::Bool)));

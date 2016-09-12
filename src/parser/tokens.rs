@@ -1,5 +1,5 @@
 use std::fmt::{Formatter, Display, Error};
-use compileerror::{Span};
+use span::{Span};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Operator

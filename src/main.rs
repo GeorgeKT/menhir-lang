@@ -13,6 +13,7 @@ mod codegen;
 mod compileerror;
 mod parser;
 mod passes;
+mod span;
 
 
 use std::path::{Path, PathBuf};
@@ -77,7 +78,7 @@ fn main()
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.decode())
         .unwrap_or_else(|e| e.exit());
-    
+
     let input_file = args.arg_input_file.expect("Missing input file argument");
     let output_file = args.flag_output.unwrap_or(default_output_file(&input_file));
     let debug_compiler = args.flag_debug.unwrap_or(false);

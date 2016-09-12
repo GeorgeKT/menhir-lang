@@ -1,5 +1,5 @@
 use ast::*;
-use compileerror::Span;
+use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct IfExpression
@@ -30,7 +30,7 @@ impl IfExpression
                 },
             ],
             typ: self.typ.clone(),
-            span: self.span,
+            span: self.span.clone(),
         }
     }
 }

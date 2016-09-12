@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
-use compileerror::{Pos, Span, CompileError, CompileResult, ErrorCode, err};
+use compileerror::{CompileError, CompileResult, ErrorCode, err};
 use parser::{Token, TokenKind, Operator};
-
+use span::{Pos, Span};
 
 
 pub struct TokenQueue
@@ -50,7 +50,7 @@ impl TokenQueue
             self.last_pos = tok.span.end;
             Ok(tok)
         } else {
-            err(self.last_pos, ErrorCode::UnexpectedEOF, format!("Unexpected end of file"))
+            err(&Span::default(), ErrorCode::UnexpectedEOF, format!("Unexpected end of file"))
         }
     }
 
@@ -73,22 +73,21 @@ impl TokenQueue
             }
             else
             {
-                Err(CompileError::new(tok.span.start, ErrorCode::UnexpectedToken, format!("Unexpected token '{}'", tok)))
+                Err(CompileError::new(&tok.span, ErrorCode::UnexpectedToken, format!("Unexpected token '{}'", tok)))
             })
     }
 
-    pub fn expect_int(&mut self) -> CompileResult<(u64, Pos)>
+    pub fn expect_int(&mut self) -> CompileResult<(u64, Span)>
     {
         let tok = try!(self.pop());
-        if let TokenKind::Number(v) = tok.kind
+        if let TokenKind::Number(ref v) = tok.kind
         {
-            let pos = tok.span.start;
-            let val = try!(v.parse::<u64>().map_err(|_| CompileError::new(pos, ErrorCode::InvalidInteger, format!("{} is not a valid integer", v))));
-            Ok((val, tok.span.start))
+            let val = try!(v.parse::<u64>().map_err(|_| CompileError::new(&tok.span, ErrorCode::InvalidInteger, format!("{} is not a valid integer", v))));
+            Ok((val, tok.span))
         }
         else
         {
-            err(tok.span.start, ErrorCode::ExpectedIntLiteral, format!("Expected integer literal, found {}", tok))
+            err(&tok.span, ErrorCode::ExpectedIntLiteral, format!("Expected integer literal, found {}", tok))
         }
     }
 
@@ -101,7 +100,7 @@ impl TokenQueue
         }
         else
         {
-            err(tok.span.start, ErrorCode::ExpectedIdentifier, format!("Expected identifier, found {}", tok))
+            err(&tok.span, ErrorCode::ExpectedIdentifier, format!("Expected identifier, found {}", tok))
         }
     }
 
@@ -114,7 +113,7 @@ impl TokenQueue
         }
         else
         {
-            err(tok.span.start, ErrorCode::ExpectedOperator, format!("Expected operator, found {}", tok))
+            err(&tok.span, ErrorCode::ExpectedOperator, format!("Expected operator, found {}", tok))
         }
     }
 

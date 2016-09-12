@@ -1,8 +1,9 @@
 use std::fs;
 use std::io::Read;
 use ast::*;
-use compileerror::{CompileResult, ErrorCode, Span, Pos, err};
+use compileerror::{CompileResult, ErrorCode, err};
 use parser::{TokenQueue, Token, TokenKind, Operator, Lexer, ParserOptions};
+use span::{Span};
 
 fn is_end_of_expression(tok: &Token) -> bool
 {
@@ -27,23 +28,23 @@ fn eat_comma(tq: &mut TokenQueue) -> CompileResult<()>
     Ok(())
 }
 
-fn parse_number(num: &str, span: Span) -> CompileResult<Expression>
+fn parse_number(num: &str, span: &Span) -> CompileResult<Expression>
 {
     if num.find('.').is_some() || num.find('e').is_some() {
         match num.parse::<f64>() {
-            Ok(_) => Ok(Expression::FloatLiteral(span, num.into())),
-            Err(_) => err(span.start, ErrorCode::InvalidFloatingPoint, format!("{} is not a valid floating point number", num))
+            Ok(_) => Ok(Expression::FloatLiteral(span.clone(), num.into())),
+            Err(_) => err(span, ErrorCode::InvalidFloatingPoint, format!("{} is not a valid floating point number", num))
         }
     } else {
         // Should be an integer
         match num.parse::<u64>() {
-            Ok(i) => Ok(Expression::IntLiteral(span, i)),
-            Err(_) => err(span.start, ErrorCode::InvalidInteger, format!("{} is not a valid integer", num))
+            Ok(i) => Ok(Expression::IntLiteral(span.clone(), i)),
+            Err(_) => err(span, ErrorCode::InvalidInteger, format!("{} is not a valid integer", num))
         }
     }
 }
 
-fn parse_array_literal(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
+fn parse_array_literal(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 {
     let mut expressions = Vec::new();
     while !tq.is_next(TokenKind::CloseBracket)
@@ -55,7 +56,7 @@ fn parse_array_literal(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expressio
             try!(tq.pop());
             let (times, _) = try!(tq.expect_int());
             try!(tq.expect(TokenKind::CloseBracket));
-            return Ok(array_lit(vec![e; times as usize], Span::new(pos, tq.pos())));
+            return Ok(array_lit(vec![e; times as usize], span.expanded(tq.pos())));
         }
         else if expressions.is_empty() && tq.is_next(TokenKind::Pipe)
         {
@@ -67,7 +68,7 @@ fn parse_array_literal(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expressio
                 try!(tq.expect(TokenKind::Operator(Operator::Extract)));
                 let iterable = try!(parse_expression(tq));
                 try!(tq.expect(TokenKind::CloseBracket));
-                return Ok(array_generator(e, &var, iterable, Span::new(pos, tq.pos())));
+                return Ok(array_generator(e, &var, iterable, span.expanded(tq.pos())));
             }
             else
             {
@@ -75,7 +76,7 @@ fn parse_array_literal(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expressio
                 try!(tq.expect(TokenKind::Pipe));
                 let (tail, _) = try!(tq.expect_identifier());
                 try!(tq.expect(TokenKind::CloseBracket));
-                return Ok(array_pattern(&head.name, &tail, Span::new(pos, tq.pos())));
+                return Ok(array_pattern(&head.name, &tail, span.expanded(tq.pos())));
             }
         }
         else
@@ -86,10 +87,10 @@ fn parse_array_literal(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expressio
     }
 
     try!(tq.expect(TokenKind::CloseBracket));
-    Ok(array_lit(expressions, Span::new(pos, tq.pos())))
+    Ok(array_lit(expressions, span.expanded(tq.pos())))
 }
 
-fn parse_name(tq: &mut TokenQueue, id: String, pos: Pos) -> CompileResult<NameRef>
+fn parse_name(tq: &mut TokenQueue, id: String, span: &Span) -> CompileResult<NameRef>
 {
     let mut name = id;
     while tq.is_next(TokenKind::DoubleColon)
@@ -100,16 +101,16 @@ fn parse_name(tq: &mut TokenQueue, id: String, pos: Pos) -> CompileResult<NameRe
         name.push_str(&next);
     }
 
-    Ok(NameRef::new(name, Span::new(pos, tq.pos())))
+    Ok(NameRef::new(name, span.expanded(tq.pos())))
 }
 
-fn parse_unary_expression(tq: &mut TokenQueue, op: Operator, op_pos: Pos) -> CompileResult<Expression>
+fn parse_unary_expression(tq: &mut TokenQueue, op: Operator, op_span: &Span) -> CompileResult<Expression>
 {
     if op == Operator::Not || op == Operator::Sub {
         let se = try!(parse_expression(tq));
-        Ok(unary_op(op, se, Span::new(op_pos, tq.pos())))
+        Ok(unary_op(op, se, op_span.expanded(tq.pos())))
     } else {
-        err(op_pos, ErrorCode::InvalidUnaryOperator, format!("Invalid unary operator {}", op))
+        err(op_span, ErrorCode::InvalidUnaryOperator, format!("Invalid unary operator {}", op))
     }
 }
 
@@ -192,8 +193,8 @@ fn parse_comma_separated_list<T, P>(tq: &mut TokenQueue, end_token: TokenKind, p
 fn parse_function_call(tq: &mut TokenQueue, name: NameRef) -> CompileResult<Call>
 {
     let args = try!(parse_comma_separated_list(tq, TokenKind::CloseParen, parse_expression));
-    let pos = name.span.start;
-    Ok(Call::new(name, args, Span::new(pos, tq.pos())))
+    let span = name.span.expanded(tq.pos());
+    Ok(Call::new(name, args, span))
 }
 
 fn parse_generic_arg_list(tq: &mut TokenQueue) -> CompileResult<Vec<Type>>
@@ -258,10 +259,10 @@ fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool) -> Compi
     } else if type_is_optional{
         Type::Generic(name.clone()) // If the type is not known threat it as generic arg
     } else {
-        return err(span.start, ErrorCode::MissingType, format!("Type not specified of function argument {}", name));
+        return err(&span, ErrorCode::MissingType, format!("Type not specified of function argument {}", name));
     };
 
-    Ok(Argument::new(name, typ, Span::new(span.start, tq.pos())))
+    Ok(Argument::new(name, typ, span.expanded(tq.pos())))
 }
 
 fn parse_function_arguments(tq: &mut TokenQueue, type_is_optional: bool) -> CompileResult<Vec<Argument>>
@@ -269,7 +270,7 @@ fn parse_function_arguments(tq: &mut TokenQueue, type_is_optional: bool) -> Comp
     parse_comma_separated_list(tq, TokenKind::CloseParen, |tq| parse_function_argument(tq, type_is_optional))
 }
 
-fn parse_external_function(tq: &mut TokenQueue, start_pos: Pos) -> CompileResult<ExternalFunction>
+fn parse_external_function(tq: &mut TokenQueue, span: &Span) -> CompileResult<ExternalFunction>
 {
     let (name, name_span) = try!(tq.expect_identifier());
 
@@ -284,12 +285,12 @@ fn parse_external_function(tq: &mut TokenQueue, start_pos: Pos) -> CompileResult
 
     let sig_span_end = tq.pos();
     Ok(ExternalFunction::new(
-        sig(&name, ret_type, args, Span::new(name_span.start, sig_span_end)),
-        Span::new(start_pos, tq.pos()),
+        sig(&name, ret_type, args, name_span.expanded(sig_span_end)),
+        span.expanded(tq.pos()),
     ))
 }
 
-fn parse_function_definition(tq: &mut TokenQueue, name: &str, start_pos: Pos) -> CompileResult<Function>
+fn parse_function_definition(tq: &mut TokenQueue, name: &str, span: &Span) -> CompileResult<Function>
 {
     try!(tq.expect(TokenKind::OpenParen));
     let args = try!(parse_function_arguments(tq, false));
@@ -306,13 +307,13 @@ fn parse_function_definition(tq: &mut TokenQueue, name: &str, start_pos: Pos) ->
     let expr = try!(parse_expression(tq));
 
     Ok(Function::new(
-        sig(name, ret_type, args, Span::new(start_pos, sig_span_end)),
+        sig(name, ret_type, args, span.expanded(sig_span_end)),
         true,
         expr,
-        Span::new(start_pos, tq.pos())))
+        span.expanded(tq.pos())))
 }
 
-fn parse_match(tq: &mut TokenQueue, start: Pos) -> CompileResult<Expression>
+fn parse_match(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 {
     let target = try!(parse_expression(tq));
     let mut cases = Vec::new();
@@ -321,27 +322,27 @@ fn parse_match(tq: &mut TokenQueue, start: Pos) -> CompileResult<Expression>
         let pattern = try!(parse_expression(tq)).to_pattern();
         try!(tq.expect(TokenKind::FatArrow));
         let t = try!(parse_expression(tq));
-        let case_start = pattern.span().start;
-        cases.push(match_case(pattern, t, Span::new(case_start, tq.pos())));
+        let case_span = pattern.span().expanded(tq.pos());
+        cases.push(match_case(pattern, t, case_span));
         if tq.is_next(TokenKind::Comma) { // Continue, while we see a comman
             try!(tq.pop());
         } else {
             break;
         }
     }
-    Ok(match_expression(target, cases, Span::new(start, tq.pos())))
+    Ok(match_expression(target, cases, span.expanded(tq.pos())))
 }
 
-fn parse_lambda(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
+fn parse_lambda(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 {
     try!(tq.expect(TokenKind::OpenParen));
     let args = try!(parse_function_arguments(tq, true));
     try!(tq.expect(TokenKind::Arrow));
     let expr = try!(parse_expression(tq));
-    Ok(lambda(args, expr, Span::new(pos, tq.pos())))
+    Ok(lambda(args, expr, span.expanded(tq.pos())))
 }
 
-fn parse_let(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
+fn parse_let(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 {
     let mut bindings = Vec::new();
     while !tq.is_next(TokenKind::In) && !tq.is_next(TokenKind::SemiColon) && !tq.is_next(TokenKind::CloseParen)
@@ -349,7 +350,7 @@ fn parse_let(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
         let (name, span) = try!(tq.expect_identifier());
         try!(tq.expect(TokenKind::Assign));
         let init = try!(parse_expression(tq));
-        bindings.push(let_binding(name, init, Span::new(span.start, tq.pos())));
+        bindings.push(let_binding(name, init, span.expanded(tq.pos())));
         try!(eat_comma(tq));
     }
 
@@ -357,48 +358,48 @@ fn parse_let(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
     {
         try!(tq.expect(TokenKind::In));
         let e = try!(parse_expression(tq));
-        Ok(let_expression(bindings, e, Span::new(pos, tq.pos())))
+        Ok(let_expression(bindings, e, span.expanded(tq.pos())))
     }
     else
     {
-        Ok(let_bindings(bindings, Span::new(pos, tq.pos())))
+        Ok(let_bindings(bindings, span.expanded(tq.pos())))
     }
 
 }
 
-fn parse_if(tq: &mut TokenQueue, pos: Pos) -> CompileResult<Expression>
+fn parse_if(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 {
     let cond = try!(parse_expression(tq));
     try!(tq.expect(TokenKind::Then));
     let on_true = try!(parse_expression(tq));
     try!(tq.expect(TokenKind::Else));
     let on_false = try!(parse_expression(tq));
-    Ok(if_expression(cond, on_true, on_false, Span::new(pos, tq.pos())))
+    Ok(if_expression(cond, on_true, on_false, span.expanded(tq.pos())))
 }
 
-fn parse_type_declaration(tq: &mut TokenQueue, pos: Pos) -> CompileResult<TypeDeclaration>
+fn parse_type_declaration(tq: &mut TokenQueue, span: &Span) -> CompileResult<TypeDeclaration>
 {
     let (name, _) = try!(tq.expect_identifier());
     try!(tq.expect(TokenKind::Assign));
     if tq.is_next(TokenKind::OpenCurly)
     {
-        let sd = try!(parse_struct_type(tq, &name, pos));
+        let sd = try!(parse_struct_type(tq, &name, span));
         Ok(TypeDeclaration::Struct(sd))
     }
     else if tq.is_next_at(1, TokenKind::Pipe) || tq.is_next_at(1, TokenKind::OpenCurly)
     {
-        let st = try!(parse_sum_type(tq, &name, pos));
+        let st = try!(parse_sum_type(tq, &name, span));
         Ok(TypeDeclaration::Sum(st))
     }
     else
     {
         let typ = try!(parse_type(tq));
-        Ok(TypeDeclaration::Alias(type_alias(&name, typ, Span::new(pos, tq.pos()))))
+        Ok(TypeDeclaration::Alias(type_alias(&name, typ, span.expanded(tq.pos()))))
     }
 }
 
 
-fn parse_sum_type(tq: &mut TokenQueue, name: &str, pos: Pos) -> CompileResult<SumTypeDeclaration>
+fn parse_sum_type(tq: &mut TokenQueue, name: &str, span: &Span) -> CompileResult<SumTypeDeclaration>
 {
     let mut cases = Vec::new();
     loop
@@ -411,8 +412,8 @@ fn parse_sum_type(tq: &mut TokenQueue, name: &str, pos: Pos) -> CompileResult<Su
         }
         else if tq.is_next(TokenKind::OpenCurly)
         {
-            let sd = try!(parse_struct_type(tq, &case_name, case_name_span.start));
-            cases.push(sum_type_case_decl(&case_name, Some(sd), Span::new(case_name_span.start, tq.pos())));
+            let sd = try!(parse_struct_type(tq, &case_name, &case_name_span));
+            cases.push(sum_type_case_decl(&case_name, Some(sd), case_name_span.expanded(tq.pos())));
             if tq.is_next(TokenKind::Pipe)
             {
                 try!(tq.pop());
@@ -429,10 +430,10 @@ fn parse_sum_type(tq: &mut TokenQueue, name: &str, pos: Pos) -> CompileResult<Su
         }
     }
 
-    Ok(sum_type_decl(name, cases, Span::new(pos, tq.pos())))
+    Ok(sum_type_decl(name, cases, span.expanded(tq.pos())))
 }
 
-fn parse_struct_type(tq: &mut TokenQueue, name: &str, pos: Pos) -> CompileResult<StructDeclaration>
+fn parse_struct_type(tq: &mut TokenQueue, name: &str, span: &Span) -> CompileResult<StructDeclaration>
 {
     try!(tq.expect(TokenKind::OpenCurly));
     let mut members = Vec::new();
@@ -443,20 +444,20 @@ fn parse_struct_type(tq: &mut TokenQueue, name: &str, pos: Pos) -> CompileResult
             let (member_name, member_name_span) = try!(tq.expect_identifier());
             try!(tq.expect(TokenKind::Colon));
             let typ = try!(parse_type(tq));
-            members.push(struct_member(&member_name, typ, Span::new(member_name_span.start, tq.pos())));
+            members.push(struct_member(&member_name, typ, member_name_span.expanded(tq.pos())));
         }
         else // Anonymouse struct member
         {
-            let start_pos = tq.pos();
+            let span_start = tq.pos();
             let member_name = format!("_{}", members.len());
             let typ = try!(parse_type(tq));
-            members.push(struct_member(&member_name, typ, Span::new(start_pos, tq.pos())));
+            members.push(struct_member(&member_name, typ, Span::new(&span.file, span_start, tq.pos())));
         }
 
         try!(eat_comma(tq));
     }
     try!(tq.expect(TokenKind::CloseCurly));
-    Ok(struct_declaration(name, members, Span::new(pos, tq.pos())))
+    Ok(struct_declaration(name, members, span.expanded(tq.pos())))
 }
 
 fn parse_struct_initializer(tq: &mut TokenQueue, struct_name: NameRef) -> CompileResult<Expression>
@@ -472,7 +473,7 @@ fn parse_struct_initializer(tq: &mut TokenQueue, struct_name: NameRef) -> Compil
     try!(tq.expect(TokenKind::CloseCurly));
 
     Ok(Expression::StructInitializer(
-        struct_initializer(&struct_name.name, expressions, Span::new(struct_name.span.start, tq.pos()))
+        struct_initializer(&struct_name.name, expressions, struct_name.span.expanded(tq.pos()))
     ))
 }
 
@@ -489,13 +490,13 @@ fn parse_struct_member_access(tq: &mut TokenQueue, name: NameRef) -> CompileResu
         members.push(next);
     }
 
-    Ok(Expression::StructMemberAccess(struct_member_access(&name.name, members, Span::new(name.span.start, tq.pos()))))
+    Ok(Expression::StructMemberAccess(struct_member_access(&name.name, members, name.span.expanded(tq.pos()))))
 }
 
-fn parse_block(tq: &mut TokenQueue, start: Pos) -> CompileResult<Expression>
+fn parse_block(tq: &mut TokenQueue, start: &Span) -> CompileResult<Expression>
 {
     let expressions = try!(parse_list(tq, TokenKind::SemiColon, TokenKind::CloseParen, parse_expression));
-    Ok(block(expressions, Span::new(start, tq.pos())))
+    Ok(block(expressions, start.expanded(tq.pos())))
 }
 
 fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expression>
@@ -511,31 +512,31 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
         },
 
         TokenKind::Lambda => {
-            parse_lambda(tq, tok.span.start)
+            parse_lambda(tq, &tok.span)
         },
 
         TokenKind::Match => {
-            parse_match(tq, tok.span.start)
+            parse_match(tq, &tok.span)
         },
 
         TokenKind::Let => {
-            parse_let(tq, tok.span.start)
+            parse_let(tq, &tok.span)
         },
 
         TokenKind::If => {
-            parse_if(tq, tok.span.start)
+            parse_if(tq, &tok.span)
         },
 
         TokenKind::OpenParen => {
-            parse_block(tq, tok.span.start)
+            parse_block(tq, &tok.span)
         },
 
         TokenKind::OpenBracket => {
-            parse_array_literal(tq, tok.span.start)
+            parse_array_literal(tq, &tok.span)
         },
 
         TokenKind::Identifier(id) => {
-            let nr = try!(parse_name(tq, id, tok.span.start));
+            let nr = try!(parse_name(tq, id, &tok.span));
             if tq.is_next(TokenKind::OpenParen)
             {
                 try!(tq.pop());
@@ -560,14 +561,14 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
         },
 
         TokenKind::Number(n) => {
-            Ok(try!(parse_number(&n, tok.span)))
+            Ok(try!(parse_number(&n, &tok.span)))
         },
 
-        TokenKind::Operator(op) => parse_unary_expression(tq, op, tok.span.start),
+        TokenKind::Operator(op) => parse_unary_expression(tq, op, &tok.span),
 
 
 
-        _ => err(tok.span.start, ErrorCode::UnexpectedToken, format!("Unexpected token '{}'", tok)),
+        _ => err(&tok.span, ErrorCode::UnexpectedToken, format!("Unexpected token '{}'", tok)),
     }
 }
 
@@ -606,7 +607,7 @@ pub fn parse_file(options: &ParserOptions, file_path: &str) -> CompileResult<Mod
     let mut file = try!(fs::File::open(file_path));
     let path = Path::new(file_path);
     let module_name: &OsStr = path.file_stem().expect("Invalid filename");
-    parse_module(options, &mut file, module_name.to_str().expect("Invalid UTF8 filename"))
+    parse_module(options, &mut file, module_name.to_str().expect("Invalid UTF8 filename"), file_path)
 }
 
 fn parse_import(options: &ParserOptions, import_name: &str) -> CompileResult<Module>
@@ -614,17 +615,17 @@ fn parse_import(options: &ParserOptions, import_name: &str) -> CompileResult<Mod
     let file_name = format!("{}.cobra", import_name);
     for dir in &options.import_dirs {
         let dwf = dir.join(&file_name);
-        if let Ok(mut file) = fs::File::open(dwf) {
-            return parse_module(options, &mut file, import_name);
+        if let Ok(mut file) = fs::File::open(&dwf) {
+            return parse_module(options, &mut file, import_name, dwf.to_str().expect("Invalid file name"));
         }
     }
 
-    err(Pos::zero(), ErrorCode::FileNotFound, format!("Unable to find file for import {}", import_name))
+    err(&Span::default(), ErrorCode::FileNotFound, format!("Unable to find file for import {}", import_name))
 }
 
-pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, name: &str) -> CompileResult<Module>
+pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, name: &str, file_name: &str) -> CompileResult<Module>
 {
-    let mut tq = try!(Lexer::new().read(input));
+    let mut tq = try!(Lexer::new(file_name).read(input));
     let mut module = Module::new(name);
     println!("Parsing module {}", name);
 
@@ -634,19 +635,17 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
         match tok.kind
         {
             TokenKind::Type => {
-                let sd = try!(parse_type_declaration(&mut tq, tok.span.start));
-                let pos = sd.span().start;
+                let sd = try!(parse_type_declaration(&mut tq, &tok.span));
                 if module.types.contains_key(sd.name()) {
-                    return err(pos, ErrorCode::RedefinitionOfStruct, format!("Type {} redefined", sd.name()));
+                    return err(&sd.span(), ErrorCode::RedefinitionOfStruct, format!("Type {} redefined", sd.name()));
                 }
                 module.types.insert(sd.name().into(), sd);
             },
 
             TokenKind::Extern => {
-                let ext_func = try!(parse_external_function(&mut tq, tok.span.start));
+                let ext_func = try!(parse_external_function(&mut tq, &tok.span));
                 if module.externals.contains_key(&ext_func.sig.name) {
-                    let pos = ext_func.span.start;
-                    return err(pos, ErrorCode::RedefinitionOfFunction, format!("External function {} redefined", ext_func.sig.name));
+                    return err(&ext_func.span, ErrorCode::RedefinitionOfFunction, format!("External function {} redefined", ext_func.sig.name));
                 }
                 module.externals.insert(ext_func.sig.name.clone(), ext_func);
             },
@@ -666,16 +665,15 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
             },
 
             TokenKind::Identifier(ref id) => {
-                let func = try!(parse_function_definition(&mut tq, &id, tok.span.start));
-                let pos = func.span.start;
+                let func = try!(parse_function_definition(&mut tq, &id, &tok.span));
                 if module.functions.contains_key(&func.sig.name) {
-                    return err(pos, ErrorCode::RedefinitionOfFunction, format!("Function {} redefined", func.sig.name));
+                    return err(&func.span, ErrorCode::RedefinitionOfFunction, format!("Function {} redefined", func.sig.name));
                 }
                 module.functions.insert(func.sig.name.clone(), func);
             }
             _ => {
                 println!("tok: {:?}", tok);
-                return err(tok.span.start, ErrorCode::ExpressionNotAllowedAtTopLevel, format!("Expression is not allowed at toplevel"));
+                return err(&tok.span, ErrorCode::ExpressionNotAllowedAtTopLevel, format!("Expression is not allowed at toplevel"));
             }
         }
     }

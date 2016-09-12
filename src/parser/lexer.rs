@@ -1,7 +1,8 @@
 use std::io::{Read, BufReader, BufRead};
 use std::mem;
-use compileerror::{Pos, Span, CompileResult, ErrorCode, err};
+use compileerror::{CompileResult, ErrorCode, err};
 use parser::{TokenQueue, TokenKind, Operator, Token};
+use span::{Span, Pos};
 
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -23,6 +24,7 @@ pub struct Lexer
     token_start_pos: Pos,
     data: String,
     escape_code: bool,
+    file_name: String,
 }
 
 fn is_operator_start(c: char) -> bool
@@ -42,7 +44,7 @@ fn is_identifier_start(c: char) -> bool
 
 impl Lexer
 {
-    pub fn new() -> Lexer
+    pub fn new(file_name: &str) -> Lexer
     {
         Lexer {
             state: LexState::Idle,
@@ -51,6 +53,7 @@ impl Lexer
             token_start_pos: Pos::new(1, 1),
             data: String::new(),
             escape_code: false,
+            file_name: file_name.into(),
         }
     }
 
@@ -64,27 +67,27 @@ impl Lexer
 
     fn idle(&mut self, c: char) -> CompileResult<()>
     {
-        let pos = self.pos;
+        let span = self.current_single_span();
         match c
         {
             '\n' | ' ' | '\t' => Ok(()),
             '#' => {self.state = LexState::Comment; Ok(())},
-            ',' => {self.add(TokenKind::Comma, Span::single(pos)); Ok(())},
-            '(' => {self.add(TokenKind::OpenParen, Span::single(pos)); Ok(())},
-            ')' => {self.add(TokenKind::CloseParen, Span::single(pos)); Ok(())},
-            '{' => {self.add(TokenKind::OpenCurly, Span::single(pos)); Ok(())},
-            '}' => {self.add(TokenKind::CloseCurly, Span::single(pos)); Ok(())},
-            '[' => {self.add(TokenKind::OpenBracket, Span::single(pos)); Ok(())},
-            ']' => {self.add(TokenKind::CloseBracket, Span::single(pos)); Ok(())},
-            '@' => {self.add(TokenKind::Lambda, Span::single(pos)); Ok(())},
-            '$' => {self.add(TokenKind::Dollar, Span::single(pos)); Ok(())},
-            ';' => {self.add(TokenKind::SemiColon, Span::single(pos)); Ok(())},
+            ',' => {self.add(TokenKind::Comma, span); Ok(())},
+            '(' => {self.add(TokenKind::OpenParen, span); Ok(())},
+            ')' => {self.add(TokenKind::CloseParen, span); Ok(())},
+            '{' => {self.add(TokenKind::OpenCurly, span); Ok(())},
+            '}' => {self.add(TokenKind::CloseCurly, span); Ok(())},
+            '[' => {self.add(TokenKind::OpenBracket, span); Ok(())},
+            ']' => {self.add(TokenKind::CloseBracket, span); Ok(())},
+            '@' => {self.add(TokenKind::Lambda, span); Ok(())},
+            '$' => {self.add(TokenKind::Dollar, span); Ok(())},
+            ';' => {self.add(TokenKind::SemiColon, span); Ok(())},
             '0'...'9' => {self.start(c, LexState::Number); Ok(())},
             '\"' => {self.start(c, LexState::InString); Ok(())},
             ch if is_identifier_start(ch) => {self.start(c, LexState::Identifier); Ok(())},
             ch if is_operator_start(ch) => {self.start(c, LexState::Operator); Ok(())}
             _ => {
-                err(self.pos, ErrorCode::UnexpectedChar, format!("Unexpected char {}", c))
+                err(&span, ErrorCode::UnexpectedChar, format!("Unexpected char {}", c))
             }
         }
     }
@@ -119,7 +122,12 @@ impl Lexer
 
     fn current_span(&self) -> Span
     {
-        Span::new(self.token_start_pos, Pos::new(self.pos.line, self.pos.offset - 1))
+        Span::new(&self.file_name, self.token_start_pos, Pos::new(self.pos.line, self.pos.offset - 1))
+    }
+
+    fn current_single_span(&self) -> Span
+    {
+        Span::single(&self.file_name, self.pos.clone())
     }
 
     fn identifier(&mut self, c: char) -> CompileResult<()>
@@ -182,7 +190,7 @@ impl Lexer
             "|" => Ok(TokenKind::Pipe),
             "<-" => Ok(TokenKind::Operator(Operator::Extract)),
             "." => Ok(TokenKind::Operator(Operator::Dot)),
-            _ => err(self.pos, ErrorCode::InvalidOperator, format!("Invalid operator {}", self.data)),
+            _ => err(&self.current_single_span(), ErrorCode::InvalidOperator, format!("Invalid operator {}", self.data)),
         }
     }
 
@@ -276,8 +284,8 @@ impl Lexer
             self.pos.line += 1;
         }
 
-        let pos = self.pos;
-        self.add(TokenKind::EOF, Span::single(pos));
+        let span = self.current_single_span();
+        self.add(TokenKind::EOF, span);
         //self.tokens.dump();
         Ok(mem::replace(&mut self.tokens, TokenQueue::new()))
     }
@@ -292,18 +300,18 @@ mod tests
 {
     use std::io::Cursor;
     use parser::*;
-    use compileerror::*;
+    use span::*;
 
     fn tok(kind: TokenKind, sline: usize, soffset: usize, eline: usize, eoffset: usize) -> Token
     {
-        Token::new(kind, span(sline, soffset, eline, eoffset))
+        Token::new(kind, Span::new("", Pos::new(sline, soffset), Pos::new(eline, eoffset)))
     }
 
     #[test]
     fn test_keywords()
     {
         let mut cursor = Cursor::new("import match");
-        let mut lexer = Lexer::new();
+        let mut lexer = Lexer::new("");
         let tokens: Vec<Token> = lexer
             .read(&mut cursor)
             .expect("Lexing failed")
@@ -320,7 +328,7 @@ mod tests
     fn test_identifiers_and_numbers()
     {
         let mut cursor = Cursor::new("blaat 8888 _foo_16");
-        let tokens: Vec<Token> = Lexer::new()
+        let tokens: Vec<Token> = Lexer::new("")
             .read(&mut cursor)
             .expect("Lexing failed")
             .collect();
@@ -337,7 +345,7 @@ mod tests
     fn test_specials()
     {
         let mut cursor = Cursor::new("+ - * / % < <= > >= == = != ! || && => -> : , :: $ @");
-        let tokens: Vec<Token> = Lexer::new()
+        let tokens: Vec<Token> = Lexer::new("")
             .read(&mut cursor)
             .expect("Lexing failed")
             .collect();
@@ -373,7 +381,7 @@ mod tests
     fn test_string()
     {
         let mut cursor = Cursor::new(r#""This is a string" "Blaat\n" "$a""#);
-        let tokens: Vec<Token> = Lexer::new()
+        let tokens: Vec<Token> = Lexer::new("")
             .read(&mut cursor)
             .expect("Lexing failed")
             .collect();

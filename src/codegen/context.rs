@@ -10,8 +10,9 @@ use llvm::target::*;
 
 use ast::{Type, array_type};
 use codegen::{cstr, ValueRef, CodeGenOptions, TargetMachine};
-use compileerror::{Pos, CompileResult, CompileError, ErrorCode, err};
+use compileerror::{CompileResult, CompileError, ErrorCode, err};
 use codegen::symboltable::{VariableInstance, FunctionInstance, SymbolTable};
+use span::Span;
 
 
 pub struct StackFrame
@@ -151,7 +152,7 @@ impl Context
             .recursive(true)
             .create(&opts.build_dir)
             .map_err(|e| CompileError::new(
-                Pos::zero(),
+                &Span::default(),
                 ErrorCode::CodegenError,
                 format!("Unable to create directory for {}: {}", opts.build_dir, e))));
 
@@ -206,7 +207,7 @@ impl Context
                 let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
                 let e = format!("Module verification error: {}", msg);
                 LLVMDisposeMessage(error_message);
-                err(Pos::zero(), ErrorCode::CodegenError, e)
+                err(&Span::default(), ErrorCode::CodegenError, e)
             } else {
                 Ok(())
             }

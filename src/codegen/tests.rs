@@ -5,19 +5,19 @@ use std::io::Cursor;
 use llvm::prelude::*;
 use llvm::core::*;
 use llvm::execution_engine::*;
-use compileerror::{ErrorCode, err, CompileResult, Pos};
+use compileerror::{ErrorCode, err, CompileResult};
 use parser::{ParserOptions, parse_module};
 use codegen::{codegen, cstr, llvm_init};
 use passes::{type_check_module};
 use ast::{TreePrinter};
-
+use span::Span;
 
 
 fn run(prog: &str, dump: bool) -> CompileResult<i64>
 {
     let mut cursor = Cursor::new(prog);
     let parser_options = ParserOptions::default();
-    let mut md = try!(parse_module(&parser_options, &mut cursor, "test"));
+    let mut md = try!(parse_module(&parser_options, &mut cursor, "test", ""));
     if dump {
         println!("Before type check");
         println!("-----------------");
@@ -46,7 +46,7 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
             let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
             let e = format!("Unable to create interpreter: {}", msg);
             LLVMDisposeMessage(error_message);
-            return err(Pos::zero(), ErrorCode::CodegenError, e);
+            return err(&Span::default(), ErrorCode::CodegenError, e);
         }
 
         let mut func: LLVMValueRef = ptr::null_mut();
@@ -59,7 +59,7 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
             Ok(result)
         } else {
             LLVMDisposeExecutionEngine(ee);
-            err(Pos::zero(), ErrorCode::CodegenError, "No main function found".into())
+            err(&Span::default(), ErrorCode::CodegenError, "No main function found".into())
         }
     }
 }

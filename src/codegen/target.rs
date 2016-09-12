@@ -7,8 +7,9 @@ use llvm::core::*;
 use llvm::target_machine::*;
 use llvm::target::*;
 
-use compileerror::{CompileResult, ErrorCode, Pos, err};
+use compileerror::{CompileResult, ErrorCode, err};
 use codegen::{cstr, cstr_mut};
+use span::Span;
 
 pub struct TargetMachine
 {
@@ -30,7 +31,7 @@ impl TargetMachine
             let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
             let e = format!("Unable to get an LLVM target reference for {}: {}", target_triple_str, msg);
             LLVMDisposeMessage(error_message);
-            return err(Pos::zero(), ErrorCode::CodegenError, e);
+            return err(&Span::default(), ErrorCode::CodegenError, e);
         }
 
         let target_machine = LLVMCreateTargetMachine(
@@ -44,7 +45,7 @@ impl TargetMachine
         );
         if target_machine == ptr::null_mut() {
             let e = format!("Unable to get a LLVM target machine for {}", target_triple_str);
-            return err(Pos::zero(), ErrorCode::CodegenError, e);
+            return err(&Span::default(), ErrorCode::CodegenError, e);
         }
 
         Ok(TargetMachine{
@@ -65,7 +66,7 @@ impl TargetMachine
             let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
             let e = format!("Unable to create object file: {}", msg);
             LLVMDisposeMessage(error_message);
-            return err(Pos::zero(), ErrorCode::CodegenError, e);
+            return err(&Span::default(), ErrorCode::CodegenError, e);
         }
         Ok(())
     }

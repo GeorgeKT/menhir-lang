@@ -1,12 +1,17 @@
 use std::io::Cursor;
 use ast::*;
-use compileerror::{Span, span};
 use parser::*;
+use span::{Pos, Span};
+
+fn span(sl: usize, so: usize, el: usize, eo: usize) -> Span
+{
+    Span::new("", Pos::new(sl, so), Pos::new(el, eo))
+}
 
 pub fn th_expr(data: &str) -> Expression
 {
     let mut cursor = Cursor::new(data);
-    let mut tq = Lexer::new().read(&mut cursor).expect("Lexing failed");
+    let mut tq = Lexer::new("").read(&mut cursor).expect("Lexing failed");
     let e = parse_expression(&mut tq).expect("Parsing failed");
     println!("AST dump:");
     e.print(0);
@@ -17,7 +22,7 @@ pub fn th_mod(data: &str) -> Module
 {
     let mut cursor = Cursor::new(data);
     let parser_options = ParserOptions::default();
-    let md = parse_module(&parser_options, &mut cursor, "test").expect("Parsing failed");
+    let md = parse_module(&parser_options, &mut cursor, "test", "").expect("Parsing failed");
     println!("AST dump:");
     md.print(0);
     md

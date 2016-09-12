@@ -1,5 +1,5 @@
 use ast::{Expression, Type, TreePrinter, prefix};
-use compileerror::{Span};
+use span::{Span};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct LetBinding

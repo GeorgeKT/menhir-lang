@@ -1,6 +1,7 @@
 use std::collections::{HashMap};
 use ast::*;
 use compileerror::*;
+use span::Span;
 
 
 #[derive(Debug)]
@@ -23,10 +24,10 @@ impl StackFrame
         self.symbols.get(name).map(|t| t.clone())
     }
 
-    pub fn add(&mut self, name: &str, t: Type, pos: Pos) -> CompileResult<()>
+    pub fn add(&mut self, name: &str, t: Type, span: &Span) -> CompileResult<()>
     {
         if self.symbols.insert(name.into(), t).is_some() {
-            err(pos, ErrorCode::RedefinitionOfVariable, format!("Symbol {} has already been defined", name))
+            err(span, ErrorCode::RedefinitionOfVariable, format!("Symbol {} has already been defined", name))
         } else {
             Ok(())
         }
@@ -65,9 +66,9 @@ impl TypeCheckerContext
         None
     }
 
-    pub fn add(&mut self, name: &str, t: Type, pos: Pos) -> CompileResult<()>
+    pub fn add(&mut self, name: &str, t: Type, span: &Span) -> CompileResult<()>
     {
-        self.stack.last_mut().expect("Empty stack").add(name, t, pos)
+        self.stack.last_mut().expect("Empty stack").add(name, t, span)
     }
 
     pub fn update(&mut self, name: &str, t: Type)

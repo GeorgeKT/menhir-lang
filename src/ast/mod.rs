@@ -30,7 +30,7 @@ pub use self::structs::*;
 pub use self::sumtype::*;
 pub use self::types::*;
 
-use compileerror::{Span};
+use span::{Span};
 
 pub fn prefix(level: usize) -> String
 {
@@ -61,9 +61,9 @@ impl TypeDeclaration
     {
         match *self
         {
-            TypeDeclaration::Struct(ref sd) => sd.span,
-            TypeDeclaration::Sum(ref s) => s.span,
-            TypeDeclaration::Alias(ref t) => t.span,
+            TypeDeclaration::Struct(ref sd) => sd.span.clone(),
+            TypeDeclaration::Sum(ref s) => s.span.clone(),
+            TypeDeclaration::Alias(ref t) => t.span.clone(),
         }
     }
 

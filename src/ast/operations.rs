@@ -1,5 +1,5 @@
 use ast::{Expression, Type};
-use compileerror::{Span};
+use span::{Span};
 use parser::{Operator};
 
 #[derive(Debug, Eq, PartialEq, Clone)]

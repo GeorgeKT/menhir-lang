@@ -3,7 +3,7 @@ use std::hash::{Hasher, Hash};
 use std::rc::Rc;
 use itertools::free::join;
 use ast::{Expression, TreePrinter, StructMember, prefix};
-use compileerror::Span;
+use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct SumTypeCase

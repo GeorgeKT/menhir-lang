@@ -2,7 +2,8 @@ use std::process::{Output, Command};
 
 use codegen::{CodeGenOptions};
 use codegen::context::{Context};
-use compileerror::{CompileError, CompileResult, Pos, ErrorCode, err};
+use compileerror::{CompileError, CompileResult, ErrorCode, err};
+use span::Span;
 
 
 pub fn link(ctx: &Context, opts: &CodeGenOptions) -> CompileResult<()>
@@ -20,7 +21,7 @@ pub fn link(ctx: &Context, opts: &CodeGenOptions) -> CompileResult<()>
     let output: Output = try!(cmd
         .output()
         .map_err(|e| CompileError::new(
-            Pos::zero(),
+            &Span::default(),
             ErrorCode::CodegenError,
             format!("Unable to spawn the linker: {}", e))));
 
@@ -28,7 +29,7 @@ pub fn link(ctx: &Context, opts: &CodeGenOptions) -> CompileResult<()>
     if !output.status.success() {
         let out = String::from_utf8(output.stderr).expect("Invalid stdout from ld");
         let msg = format!("Linking {} failed:\n{}", program_path, out);
-        return err(Pos::zero(), ErrorCode::CodegenError, msg);
+        return err(&Span::default(), ErrorCode::CodegenError, msg);
     }
 
     Ok(())

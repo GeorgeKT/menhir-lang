@@ -8,7 +8,7 @@ fn subsitute_let_bindings(generic_args: &GenericMapper, lb: &Vec<LetBinding>) ->
     let mut bindings = Vec::with_capacity(lb.len());
     for b in lb.iter() {
         let binding_expr = try!(substitute_expr(generic_args, &b.init));
-        bindings.push(let_binding(b.name.clone(), binding_expr, b.span));
+        bindings.push(let_binding(b.name.clone(), binding_expr, b.span.clone()));
     }
     Ok(bindings)
 }
@@ -19,13 +19,13 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
     {
         Expression::UnaryOp(ref op) => {
             let e = try!(substitute_expr(generic_args, &op.expression));
-            Ok(unary_op(op.operator, e, op.span))
+            Ok(unary_op(op.operator, e, op.span.clone()))
         },
 
         Expression::BinaryOp(ref op) => {
             let l = try!(substitute_expr(generic_args, &op.left));
             let r = try!(substitute_expr(generic_args, &op.right));
-            Ok(bin_op(op.operator, l, r, op.span))
+            Ok(bin_op(op.operator, l, r, op.span.clone()))
         },
 
         Expression::ArrayLiteral(ref a) => {
@@ -33,13 +33,13 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             for el in a.elements.iter() {
                 new_elements.push(try!(substitute_expr(generic_args, el)));
             }
-            Ok(array_lit(new_elements, a.span))
+            Ok(array_lit(new_elements, a.span.clone()))
         },
 
         Expression::ArrayGenerator(ref a) => {
             let iterable = try!(substitute_expr(generic_args, &a.iterable));
             let left = try!(substitute_expr(generic_args, &a.left));
-            Ok(array_generator(left, &a.var, iterable, a.span))
+            Ok(array_generator(left, &a.var, iterable, a.span.clone()))
         },
 
         Expression::Call(ref c) => {
@@ -48,13 +48,13 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
                 new_args.push(try!(substitute_expr(generic_args, a)));
             }
 
-            Ok(Expression::Call(Call::new(c.callee.clone(), new_args, c.span)))
+            Ok(Expression::Call(Call::new(c.callee.clone(), new_args, c.span.clone())))
         },
 
         Expression::Lambda(ref l) => {
-            let args: Vec<Argument> = l.sig.args.iter().map(|a| Argument::new(a.name.clone(), generic_args.substitute(&a.typ), a.span)).collect();
+            let args: Vec<Argument> = l.sig.args.iter().map(|a| Argument::new(a.name.clone(), generic_args.substitute(&a.typ), a.span.clone())).collect();
             let expr = try!(substitute_expr(generic_args, &l.expr));
-            Ok(lambda(args, expr, l.span))
+            Ok(lambda(args, expr, l.span.clone()))
         },
 
         Expression::Match(ref m) => {
@@ -64,20 +64,20 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             {
                 let match_expr = try!(substitute_expr(generic_args, &c.match_expr));
                 let to_execute = try!(substitute_expr(generic_args, &c.to_execute));
-                cases.push(match_case(match_expr, to_execute, c.span));
+                cases.push(match_case(match_expr, to_execute, c.span.clone()));
             }
-            Ok(match_expression(target, cases, m.span))
+            Ok(match_expression(target, cases, m.span.clone()))
         },
 
         Expression::Let(ref l) => {
             let bindings = try!(subsitute_let_bindings(generic_args, &l.bindings));
             let expr = try!(substitute_expr(generic_args, &l.expression));
-            Ok(let_expression(bindings, expr, l.span))
+            Ok(let_expression(bindings, expr, l.span.clone()))
         },
 
         Expression::LetBindings(ref l) => {
             let bindings = try!(subsitute_let_bindings(generic_args, &l.bindings));
-            Ok(let_bindings(bindings, l.span))
+            Ok(let_bindings(bindings, l.span.clone()))
         },
 
         Expression::If(ref i) => {
@@ -85,7 +85,7 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
                  try!(substitute_expr(generic_args, &i.condition)),
                  try!(substitute_expr(generic_args, &i.on_true)),
                  try!(substitute_expr(generic_args, &i.on_true)),
-                 i.span,
+                 i.span.clone(),
             ))
         },
 
@@ -94,18 +94,18 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             for e in &b.expressions {
                 new_expressions.push(try!(substitute_expr(generic_args, e)));
             }
-            Ok(block(new_expressions, b.span))
+            Ok(block(new_expressions, b.span.clone()))
         },
-        Expression::IntLiteral(span, v) => Ok(Expression::IntLiteral(span, v)),
-        Expression::BoolLiteral(span, v) => Ok(Expression::BoolLiteral(span, v)),
-        Expression::FloatLiteral(span, ref v) => Ok(Expression::FloatLiteral(span, v.clone())),
-        Expression::StringLiteral(span, ref v) => Ok(Expression::StringLiteral(span, v.clone())),
+        Expression::IntLiteral(ref span, ref v) => Ok(Expression::IntLiteral(span.clone(), v.clone())),
+        Expression::BoolLiteral(ref span, ref v) => Ok(Expression::BoolLiteral(span.clone(), v.clone())),
+        Expression::FloatLiteral(ref span, ref v) => Ok(Expression::FloatLiteral(span.clone(), v.clone())),
+        Expression::StringLiteral(ref span, ref v) => Ok(Expression::StringLiteral(span.clone(), v.clone())),
         Expression::ArrayPattern(ref ap) => Ok(Expression::ArrayPattern(ap.clone())),
         Expression::EmptyArrayPattern(ref ap) => Ok(Expression::EmptyArrayPattern(ap.clone())),
         Expression::NameRef(ref nr) => {
             let new_nr = NameRef{
                 name: nr.name.clone(),
-                span: nr.span,
+                span: nr.span.clone(),
                 typ: generic_args.substitute(&nr.typ),
             };
             Ok(Expression::NameRef(new_nr))
@@ -117,7 +117,7 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
                 nmi.push(new_e);
             }
 
-            Ok(Expression::StructInitializer(struct_initializer(&si.struct_name, nmi, si.span)))
+            Ok(Expression::StructInitializer(struct_initializer(&si.struct_name, nmi, si.span.clone())))
         },
         Expression::StructMemberAccess(ref sma) => {
             Ok(Expression::StructMemberAccess(sma.clone()))
@@ -128,7 +128,7 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
                 p.bindings.clone(),
                 p.types.iter().map(|t| generic_args.substitute(t)).collect(),
                 generic_args.substitute(&p.typ),
-                p.span))
+                p.span.clone()))
             )
         },
     }
@@ -145,19 +145,19 @@ fn instantiate(func: &Function, generic_args: &GenericMapper) -> CompileResult<F
         .map(|arg| generic_args.substitute(&arg.typ))
         .collect();
     let args = func.sig.args.iter()
-        .map(|arg| Argument::new(arg.name.clone(), generic_args.substitute(&arg.typ), arg.span))
+        .map(|arg| Argument::new(arg.name.clone(), generic_args.substitute(&arg.typ), arg.span.clone()))
         .collect();
     let return_type = generic_args.substitute(&func.sig.return_type);
     let sig = FunctionSignature{
         name: new_func_name(&func.sig.name, generic_args),
         return_type: return_type.clone(),
         args: args,
-        span: func.sig.span,
+        span: func.sig.span.clone(),
         typ: func_type(arg_types, return_type),
     };
 
     let body = try!(substitute_expr(generic_args, &func.expression));
-    Ok(Function::new(sig, func.public, body, func.span))
+    Ok(Function::new(sig, func.public, body, func.span.clone()))
 }
 
 type FunctionMap = HashMap<String, Function>;
@@ -167,7 +167,7 @@ fn resolve_generic_call(new_functions: &mut FunctionMap, module: &Module, call: 
     match module.functions.get(&call.callee.name)
     {
         None => {
-            err(call.span.start, ErrorCode::UnknownName, format!("Unknown function {}", call.callee.name))
+            err(&call.span, ErrorCode::UnknownName, format!("Unknown function {}", call.callee.name))
         },
         Some(ref func) => {
             let name = new_func_name(&func.sig.name, &call.generic_args);

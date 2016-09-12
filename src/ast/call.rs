@@ -1,5 +1,5 @@
 use ast::{Expression, Type, NameRef, TreePrinter, prefix};
-use compileerror::{Span};
+use span::{Span};
 use passes::GenericMapper;
 
 #[derive(Debug, Eq, PartialEq, Clone)]

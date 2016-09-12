@@ -1,5 +1,5 @@
 use ast::{Expression, Type};
-use compileerror::{Span};
+use span::{Span};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Block
