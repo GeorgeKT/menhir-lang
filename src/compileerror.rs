@@ -72,13 +72,13 @@ impl CompileError
             {
                 let line = line.unwrap();
                 let line_idx = idx + 1;
-                println!("{}{}", prefix, line);
+                println!("{:>4}{}{}", line_idx, prefix, line);
                 if line_idx == self.span.start.line
                 {
                     let end = if line_idx == self.span.end.line {self.span.end.offset} else {line.len()};
                     let carets = repeat_string("^", end - self.span.start.offset + 1);
                     let whitespace = repeat_string(" ", self.span.start.offset - 1);
-                    println!("{}{}{}", prefix, whitespace, carets);
+                    println!("{:>4}{}{}{}", line_idx, prefix, whitespace, carets);
                 }
                 else if line_idx == self.span.end.line
                 {
