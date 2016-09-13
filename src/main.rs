@@ -99,7 +99,9 @@ fn main()
     };
 
     match parse_file(&parser_options, &input_file).and_then(|mut module| {
-        //module.print(0);
+        /*use ast::TreePrinter;
+        module.print(0);
+        */
         try!(type_check_module(&mut module));
         llvm_init();
         let mut ctx = try!(codegen(&module));
@@ -107,6 +109,6 @@ fn main()
     })
     {
         Ok(_) => {},
-        Err(e) => println!("Error: {}", e),
+        Err(e) => e.print(),
     }
 }

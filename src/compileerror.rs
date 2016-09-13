@@ -1,6 +1,9 @@
 use std::error::Error;
 use std::convert::From;
+use std::iter::repeat;
+use std::fs::File;
 use std::io;
+use std::io::BufRead;
 use std::fmt;
 use ast::Type;
 use span::Span;
@@ -56,6 +59,42 @@ impl CompileError
             msg: msg,
         }
     }
+
+    pub fn print(&self)
+    {
+        let prefix = "> ";
+        println!("{}{}: {}", prefix, self.span, self.msg);
+        if let Ok(file) = File::open(&self.span.file) {
+            let start_line = if self.span.start.line >= 4 {self.span.start.line - 4} else {0};
+            let reader = io::BufReader::new(file);
+
+            for (idx, line) in reader.lines().enumerate().skip(start_line)
+            {
+                let line = line.unwrap();
+                let line_idx = idx + 1;
+                println!("{}{}", prefix, line);
+                if line_idx == self.span.start.line
+                {
+                    let end = if line_idx == self.span.end.line {self.span.end.offset} else {line.len()};
+                    let carets = repeat_string("^", end - self.span.start.offset + 1);
+                    let whitespace = repeat_string(" ", self.span.start.offset - 1);
+                    println!("{}{}{}", prefix, whitespace, carets);
+                }
+                else if line_idx == self.span.end.line
+                {
+                    let carets = repeat_string("^", self.span.end.offset);
+                    println!("{}{}", prefix, carets);
+                }
+                else if line_idx > self.span.start.line && line_idx < self.span.end.line
+                {
+                    let carets = repeat_string("^", line.len());
+                    println!("{}{}", prefix, carets);
+                }
+
+                if line_idx >= self.span.end.line + 3 {break;}
+            }
+        }
+    }
 }
 
 pub type CompileResult<T> = Result<T, CompileError>;
@@ -70,11 +109,16 @@ pub fn unknown_name(span: &Span, name: &str) -> CompileError
     CompileError::new(span, ErrorCode::UnknownName, format!("Unable to resolve name {}", name))
 }
 
+fn repeat_string(s: &str, count: usize) -> String
+{
+    repeat(s).take(count).collect()
+}
+
 impl fmt::Display for CompileError
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
-        write!(f, "{}: {}", self.span, self.msg)
+        writeln!(f, "{}: {}", self.span, self.msg)
     }
 }
 
