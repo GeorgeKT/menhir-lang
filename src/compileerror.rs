@@ -62,8 +62,8 @@ impl CompileError
 
     pub fn print(&self)
     {
-        let prefix = "> ";
-        println!("{}{}: {}", prefix, self.span, self.msg);
+        let prefix = "| ";
+        println!("     {}{}: {}", prefix, self.span, self.msg);
         if let Ok(file) = File::open(&self.span.file) {
             let start_line = if self.span.start.line >= 4 {self.span.start.line - 4} else {0};
             let reader = io::BufReader::new(file);
@@ -72,23 +72,23 @@ impl CompileError
             {
                 let line = line.unwrap();
                 let line_idx = idx + 1;
-                println!("{:>4}{}{}", line_idx, prefix, line);
+                println!("{:>4} {}{}", line_idx, prefix, line);
                 if line_idx == self.span.start.line
                 {
                     let end = if line_idx == self.span.end.line {self.span.end.offset} else {line.len()};
                     let carets = repeat_string("^", end - self.span.start.offset + 1);
                     let whitespace = repeat_string(" ", self.span.start.offset - 1);
-                    println!("{:>4}{}{}{}", line_idx, prefix, whitespace, carets);
+                    println!("     {}{}{}", prefix, whitespace, carets);
                 }
                 else if line_idx == self.span.end.line
                 {
                     let carets = repeat_string("^", self.span.end.offset);
-                    println!("{}{}", prefix, carets);
+                    println!("     {}{}", prefix, carets);
                 }
                 else if line_idx > self.span.start.line && line_idx < self.span.end.line
                 {
                     let carets = repeat_string("^", line.len());
-                    println!("{}{}", prefix, carets);
+                    println!("    {}{}", prefix, carets);
                 }
 
                 if line_idx >= self.span.end.line + 3 {break;}
