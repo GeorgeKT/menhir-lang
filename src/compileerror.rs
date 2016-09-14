@@ -63,7 +63,7 @@ impl CompileError
     pub fn print(&self)
     {
         let prefix = "| ";
-        println!("     {}{}: {}", prefix, self.span, self.msg);
+        println!("{}: {}", self.span, self.msg);
         if let Ok(file) = File::open(&self.span.file) {
             let start_line = if self.span.start.line >= 4 {self.span.start.line - 4} else {0};
             let reader = io::BufReader::new(file);

@@ -199,8 +199,9 @@ fn resolve_generic_args_in_call(ctx: &mut TypeCheckerContext, ft: &FuncType, c: 
 
 fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> CompileResult<Type>
 {
-    let func_type = try!(ctx.resolve_type(&c.callee.name).ok_or(unknown_name(&c.span, &c.callee.name)));
-    if let Type::Func(ref ft) = func_type
+    let resolved = try!(ctx.resolve_type(&c.callee.name).ok_or(unknown_name(&c.callee.span, &c.callee.name)));
+    c.callee.name = resolved.full_name;
+    if let Type::Func(ref ft) = resolved.typ
     {
         if ft.args.len() != c.args.len() {
             return err(&c.span, ErrorCode::TypeError,
@@ -475,35 +476,36 @@ fn type_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint: Op
         return Ok(nr.typ.clone()); // We have already determined the type
     }
 
-    let resolved_type = try!(ctx.resolve_type(&nr.name).ok_or(unknown_name(&nr.span, &nr.name)));
+    let resolved = try!(ctx.resolve_type(&nr.name).ok_or(unknown_name(&nr.span, &nr.name)));
+    nr.name = resolved.full_name;
 
     if let Some(typ) = type_hint {
-        if resolved_type == Type::Unknown {
+        if resolved.typ == Type::Unknown {
             return err(&nr.span, ErrorCode::UnknownType(nr.name.clone(), typ), format!("{} has unknown type", nr.name))
         }
 
-        if resolved_type == typ {
-            nr.typ = resolved_type;
+        if resolved.typ == typ {
+            nr.typ = resolved.typ;
             return Ok(nr.typ.clone());
         }
 
-        if !resolved_type.is_generic() && !typ.is_generic() && !resolved_type.is_convertible(&typ) {
-            return err(&nr.span, ErrorCode::TypeError, format!("Type mismatch: expecting {}, but {} has type {}", typ, nr.name, resolved_type));
+        if !resolved.typ.is_generic() && !typ.is_generic() && !resolved.typ.is_convertible(&typ) {
+            return err(&nr.span, ErrorCode::TypeError, format!("Type mismatch: expecting {}, but {} has type {}", typ, nr.name, resolved.typ));
         }
 
-        if resolved_type.is_generic() && !typ.is_generic() {
-            if !is_instantiation_of(&typ, &resolved_type) {
-                err(&nr.span, ErrorCode::TypeError, format!("Type mismatch: {} is not a valid instantiation of {}", typ, resolved_type))
+        if resolved.typ.is_generic() && !typ.is_generic() {
+            if !is_instantiation_of(&typ, &resolved.typ) {
+                err(&nr.span, ErrorCode::TypeError, format!("Type mismatch: {} is not a valid instantiation of {}", typ, resolved.typ))
             } else {
                 nr.typ = typ;
                 Ok(nr.typ.clone())
             }
         } else {
-            nr.typ = resolved_type;
+            nr.typ = resolved.typ;
             Ok(nr.typ.clone())
         }
     } else {
-        nr.typ = resolved_type;
+        nr.typ = resolved.typ;
         Ok(nr.typ.clone())
     }
 }
@@ -608,8 +610,9 @@ fn type_check_struct_members_in_initializer(ctx: &mut TypeCheckerContext, member
 
 fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructInitializer) -> CompileResult<Type>
 {
-    let typ = try!(ctx.resolve_type(&si.struct_name).ok_or(unknown_name(&si.span, &si.struct_name)));
-    match typ
+    let resolved = try!(ctx.resolve_type(&si.struct_name).ok_or(unknown_name(&si.span, &si.struct_name)));
+    si.struct_name = resolved.full_name;
+    match resolved.typ
     {
         Type::Struct(st) => {
             si.typ = try!(type_check_struct_members_in_initializer(ctx, &st.members, si));
@@ -654,7 +657,9 @@ fn find_member_type(members: &Vec<StructMember>, member_name: &str, span: &Span)
 
 fn type_check_struct_member_access(ctx: &mut TypeCheckerContext, sma: &mut StructMemberAccess) -> CompileResult<Type>
 {
-    let mut st = try!(ctx.resolve_type(&sma.name).ok_or(unknown_name(&sma.span, &sma.name)));
+    let resolved = try!(ctx.resolve_type(&sma.name).ok_or(unknown_name(&sma.span, &sma.name)));
+    sma.name = resolved.full_name;
+    let mut st = resolved.typ;
     sma.indices.clear();
     for ref member_name in &sma.members
     {
@@ -685,8 +690,9 @@ fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern
         return Ok(p.typ.clone());
     }
 
-    let typ = try!(ctx.resolve_type(&p.name).ok_or(unknown_name(&p.span, &p.name)));
-    match typ
+    let resolved = try!(ctx.resolve_type(&p.name).ok_or(unknown_name(&p.span, &p.name)));
+    p.name = resolved.full_name;
+    match resolved.typ
     {
         Type::Sum(ref st) => {
             let idx = st.index_of(&p.name).expect("Internal Compiler Error: cannot determine index of sum type case");

@@ -10,6 +10,23 @@ pub struct StackFrame
     symbols: HashMap<String, Type>,
 }
 
+pub struct ResolvedName
+{
+    pub full_name: String,
+    pub typ: Type,
+}
+
+impl ResolvedName
+{
+    pub fn new(full_name: &str, typ: Type) -> ResolvedName
+    {
+        ResolvedName{
+            full_name: full_name.into(),
+            typ: typ,
+        }
+    }
+}
+
 impl StackFrame
 {
     pub fn new() -> StackFrame
@@ -19,9 +36,16 @@ impl StackFrame
         }
     }
 
-    pub fn resolve_type(&self, name: &str) -> Option<Type>
+    pub fn resolve_type(&self, name: &str) -> Option<ResolvedName>
     {
-        self.symbols.get(name).map(|t| t.clone())
+        let name_with_double_colons = format!("::{}", name);
+        for (symbol_name, typ) in self.symbols.iter() {
+            if symbol_name == name || symbol_name.ends_with(&name_with_double_colons) {
+                return Some(ResolvedName::new(symbol_name, typ.clone()));
+            }
+        }
+
+        None
     }
 
     pub fn add(&mut self, name: &str, t: Type, span: &Span) -> CompileResult<()>
@@ -54,7 +78,7 @@ impl TypeCheckerContext
         }
     }
 
-    pub fn resolve_type(&self, name: &str) -> Option<Type>
+    pub fn resolve_type(&self, name: &str) -> Option<ResolvedName>
     {
         for sf in self.stack.iter().rev() {
             let t = sf.resolve_type(name);

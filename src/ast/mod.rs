@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
 
 mod arrays;
 mod block;
@@ -97,7 +97,7 @@ pub struct Module
     pub functions: HashMap<String, Function>,
     pub externals: HashMap<String, ExternalFunction>,
     pub types: HashMap<String, TypeDeclaration>,
-    pub imports: HashMap<String, Module>,
+    pub imports: HashSet<String>,
 }
 
 impl Module
@@ -109,7 +109,27 @@ impl Module
             functions: HashMap::new(),
             externals: HashMap::new(),
             types: HashMap::new(),
-            imports: HashMap::new(),
+            imports: HashSet::new(),
+        }
+    }
+
+    pub fn import(&mut self, other: &Module)
+    {
+        self.imports.insert(other.name.clone());
+
+        for func in other.functions.values() {
+            let name = format!("{}::{}", other.name, func.sig.name);
+            self.functions.insert(name, func.clone());
+        }
+
+        for func in other.externals.values() {
+            let name = format!("{}::{}", other.name, func.sig.name);
+            self.externals.insert(name, func.clone());
+        }
+
+        for typ in other.types.values() {
+            let name = format!("{}::{}", other.name, typ.name());
+            self.types.insert(name, typ.clone());
         }
     }
 }

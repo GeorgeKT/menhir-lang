@@ -1,1 +1,8 @@
-main() -> int = 4 + 5 * 7 - 9 / 3 + 5 % 4
+add(x: $a, y: $a) -> $a = x + y
+
+mul(x: $a, y: $a) -> $a = x * y
+
+combine(x: $a, y: $a) -> $a =
+    add(x, y) + mul(x, y)
+
+main() -> int = combine(3, 2)

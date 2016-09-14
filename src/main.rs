@@ -99,7 +99,8 @@ fn main()
     };
 
     match parse_file(&parser_options, &input_file).and_then(|mut module| {
-        /*use ast::TreePrinter;
+        /*
+        use ast::TreePrinter;
         module.print(0);
         */
         try!(type_check_module(&mut module));

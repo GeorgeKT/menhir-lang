@@ -18,22 +18,18 @@ enum ResolveMode
 
 fn resolve_type(ctx: &TypeCheckerContext, typ: &mut Type) -> TypeResolved
 {
-    let rt = if let Type::Unresolved(ref ut) = *typ {
-        ctx.resolve_type(&ut.name)
+    let resolved = if let Type::Unresolved(ref ut) = *typ {
+        if let Some(r) = ctx.resolve_type(&ut.name) {
+            r
+        } else {
+            return TypeResolved::No;
+        }
     } else {
         return TypeResolved::Yes;
     };
 
-    match rt
-    {
-        Some(t) => {
-            *typ = t;
-            TypeResolved::Yes
-        },
-        _ => {
-            TypeResolved::No
-        },
-    }
+    *typ = resolved.typ;
+    TypeResolved::Yes
 }
 
 fn resolve_function_args_and_ret_type(ctx: &mut TypeCheckerContext, sig: &mut FunctionSignature) -> CompileResult<()>

@@ -1,4 +1,6 @@
-import stdlib 
+import stdlib
+
+#println(s: string) -> int = 5
 
 main() -> int = (
     let x = 5;

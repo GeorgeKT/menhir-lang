@@ -290,7 +290,7 @@ fn parse_external_function(tq: &mut TokenQueue, span: &Span) -> CompileResult<Ex
     ))
 }
 
-fn parse_function_definition(tq: &mut TokenQueue, name: &str, span: &Span) -> CompileResult<Function>
+fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, name: &str, span: &Span) -> CompileResult<Function>
 {
     try!(tq.expect(TokenKind::OpenParen));
     let args = try!(parse_function_arguments(tq, false));
@@ -306,8 +306,14 @@ fn parse_function_definition(tq: &mut TokenQueue, name: &str, span: &Span) -> Co
     try!(tq.expect(TokenKind::Assign));
     let expr = try!(parse_expression(tq));
 
+    let full_name = if name != "main" {
+        namespaced(namespace, name)
+    } else {
+        name.into()
+    };
+
     Ok(Function::new(
-        sig(name, ret_type, args, span.expanded(sig_span_end)),
+        sig(&full_name, ret_type, args, span.expanded(sig_span_end)),
         true,
         expr,
         span.expanded(tq.pos())))
@@ -377,29 +383,29 @@ fn parse_if(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
     Ok(if_expression(cond, on_true, on_false, span.expanded(tq.pos())))
 }
 
-fn parse_type_declaration(tq: &mut TokenQueue, span: &Span) -> CompileResult<TypeDeclaration>
+fn parse_type_declaration(tq: &mut TokenQueue, namespace: &str, span: &Span) -> CompileResult<TypeDeclaration>
 {
     let (name, _) = try!(tq.expect_identifier());
     try!(tq.expect(TokenKind::Assign));
     if tq.is_next(TokenKind::OpenCurly)
     {
-        let sd = try!(parse_struct_type(tq, &name, span));
+        let sd = try!(parse_struct_type(tq, namespace, &name, span));
         Ok(TypeDeclaration::Struct(sd))
     }
     else if tq.is_next_at(1, TokenKind::Pipe) || tq.is_next_at(1, TokenKind::OpenCurly)
     {
-        let st = try!(parse_sum_type(tq, &name, span));
+        let st = try!(parse_sum_type(tq, namespace, &name, span));
         Ok(TypeDeclaration::Sum(st))
     }
     else
     {
         let typ = try!(parse_type(tq));
-        Ok(TypeDeclaration::Alias(type_alias(&name, typ, span.expanded(tq.pos()))))
+        Ok(TypeDeclaration::Alias(type_alias(&namespaced(namespace, &name), typ, span.expanded(tq.pos()))))
     }
 }
 
 
-fn parse_sum_type(tq: &mut TokenQueue, name: &str, span: &Span) -> CompileResult<SumTypeDeclaration>
+fn parse_sum_type(tq: &mut TokenQueue, namespace: &str, name: &str, span: &Span) -> CompileResult<SumTypeDeclaration>
 {
     let mut cases = Vec::new();
     loop
@@ -407,13 +413,13 @@ fn parse_sum_type(tq: &mut TokenQueue, name: &str, span: &Span) -> CompileResult
         let (case_name, case_name_span) = try!(tq.expect_identifier());
         if tq.is_next(TokenKind::Pipe)
         {
-            cases.push(sum_type_case_decl(&case_name, None, case_name_span));
+            cases.push(sum_type_case_decl(&namespaced(namespace, &case_name), None, case_name_span));
             try!(tq.pop());
         }
         else if tq.is_next(TokenKind::OpenCurly)
         {
-            let sd = try!(parse_struct_type(tq, &case_name, &case_name_span));
-            cases.push(sum_type_case_decl(&case_name, Some(sd), case_name_span.expanded(tq.pos())));
+            let sd = try!(parse_struct_type(tq, namespace, &case_name, &case_name_span));
+            cases.push(sum_type_case_decl(&namespaced(namespace, &case_name), Some(sd), case_name_span.expanded(tq.pos())));
             if tq.is_next(TokenKind::Pipe)
             {
                 try!(tq.pop());
@@ -425,15 +431,20 @@ fn parse_sum_type(tq: &mut TokenQueue, name: &str, span: &Span) -> CompileResult
         }
         else
         {
-            cases.push(sum_type_case_decl(&case_name, None, case_name_span));
+            cases.push(sum_type_case_decl(&namespaced(namespace, &case_name), None, case_name_span));
             break;
         }
     }
 
-    Ok(sum_type_decl(name, cases, span.expanded(tq.pos())))
+    Ok(sum_type_decl(&namespaced(namespace, &name), cases, span.expanded(tq.pos())))
 }
 
-fn parse_struct_type(tq: &mut TokenQueue, name: &str, span: &Span) -> CompileResult<StructDeclaration>
+fn namespaced(namespace: &str, name: &str) -> String
+{
+    format!("{}::{}", namespace, name)
+}
+
+fn parse_struct_type(tq: &mut TokenQueue, namespace: &str, name: &str, span: &Span) -> CompileResult<StructDeclaration>
 {
     try!(tq.expect(TokenKind::OpenCurly));
     let mut members = Vec::new();
@@ -457,7 +468,7 @@ fn parse_struct_type(tq: &mut TokenQueue, name: &str, span: &Span) -> CompileRes
         try!(eat_comma(tq));
     }
     try!(tq.expect(TokenKind::CloseCurly));
-    Ok(struct_declaration(name, members, span.expanded(tq.pos())))
+    Ok(struct_declaration(&namespaced(namespace, name), members, span.expanded(tq.pos())))
 }
 
 fn parse_struct_initializer(tq: &mut TokenQueue, struct_name: NameRef) -> CompileResult<Expression>
@@ -627,15 +638,15 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
 {
     let mut tq = try!(Lexer::new(file_name).read(input));
     let mut module = Module::new(name);
-    println!("Parsing module {}", name);
-
+    let namespace = name;
+    
     while !tq.is_next(TokenKind::EOF)
     {
         let tok = try!(tq.pop());
         match tok.kind
         {
             TokenKind::Type => {
-                let sd = try!(parse_type_declaration(&mut tq, &tok.span));
+                let sd = try!(parse_type_declaration(&mut tq, namespace, &tok.span));
                 if module.types.contains_key(sd.name()) {
                     return err(&sd.span(), ErrorCode::RedefinitionOfStruct, format!("Type {} redefined", sd.name()));
                 }
@@ -654,8 +665,11 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
                 loop
                 {
                     let (name, _) = try!(tq.expect_identifier());
-                    let m = try!(parse_import(options, &name));
-                    module.imports.insert(name, m);
+                    if !module.imports.contains(&name) {
+                        let m = try!(parse_import(options, &name));
+                        module.import(&m);
+                    }
+
                     if tq.is_next(TokenKind::Comma) {
                         try!(tq.pop());
                     } else {
@@ -665,7 +679,7 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
             },
 
             TokenKind::Identifier(ref id) => {
-                let func = try!(parse_function_definition(&mut tq, &id, &tok.span));
+                let func = try!(parse_function_declaration(&mut tq, namespace, &id, &tok.span));
                 if module.functions.contains_key(&func.sig.name) {
                     return err(&func.span, ErrorCode::RedefinitionOfFunction, format!("Function {} redefined", func.sig.name));
                 }

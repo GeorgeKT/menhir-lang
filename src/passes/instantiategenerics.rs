@@ -155,7 +155,7 @@ fn instantiate(func: &Function, generic_args: &GenericMapper) -> CompileResult<F
         span: func.sig.span.clone(),
         typ: func_type(arg_types, return_type),
     };
-
+    
     let body = try!(substitute_expr(generic_args, &func.expression));
     Ok(Function::new(sig, func.public, body, func.span.clone()))
 }
