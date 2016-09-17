@@ -5,7 +5,6 @@
 #include "cobrart.h"
 
 
-
 int print(COBRAString* s)
 {
     const char* ptr = s->data + s->offset;
