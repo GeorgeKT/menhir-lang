@@ -111,7 +111,7 @@ fn test_match_int()
 {
     assert!(run(r#"
 foo(a: int) -> int =
-    match a
+    match a:
         0 => 100,
         1 => 299,
         _ => 0
@@ -125,7 +125,7 @@ fn test_match_bool()
 {
     assert!(run(r#"
 foo(a: bool) -> int =
-    match a
+    match a:
         true => 100,
         false => 299
 
@@ -175,7 +175,7 @@ fn test_array_iteration()
 {
     let r = run(r#"
 sum(v: [int]) -> int =
-    match v
+    match v:
         [] => 0,
         [head | tail] => head + sum(tail)
 
@@ -191,7 +191,7 @@ fn test_array_iteration2()
 {
     let r = run(r#"
 sum(v: [int]) -> int =
-    match v
+    match v:
         [] => 0,
         [head | tail] => head + sum(tail)
 
@@ -264,7 +264,7 @@ fn test_generic_array_arguments()
 {
     let r = run(r#"
 fold(v: [$a], accu: $b, fn: ($b, $a) -> $b) -> $b =
-    match v
+    match v:
         [] => accu,
         [hd | tail] => fold(tail, fn(accu, hd), fn)
 
@@ -323,7 +323,7 @@ fn test_sum_types() {
 type Option = Some{int} | None
 
 unwrap_or(opt: Option, default: int) -> int =
-    match opt
+    match opt:
         Some{i} => i,
         None => default
 
@@ -338,11 +338,11 @@ main() -> int =
 #[test]
 fn test_anonymous_sum_types() {
     let r = run(r#"
-pair_or_single(a: int, b: int) -> {int, int} | {int} = 
+pair_or_single(a: int, b: int) -> {int, int} | {int} =
     if a != b then {a, b} else {a}
 
 value_of(v: {int, int} | {int})
-    match v
+    match v:
         {a, b} => a + b
         {a} => a
 
@@ -359,7 +359,7 @@ fn test_enum_types() {
 type Animal = Dog | Cat | Bird | Fish
 
 number(a: Animal) -> int =
-    match a
+    match a:
         Dog => 7,
         Cat => 8,
         Fish => 9,
@@ -379,14 +379,14 @@ type Animal = Dog | Cat | Bird | Fish
 type Option = Some{int} | None
 
 number(a: Animal) -> int =
-    match a
+    match a:
         Dog => 7,
         Cat => 8,
         Bird => 22,
         Fish => 9
 
 unwrap_or(opt: Option, def: int) -> int =
-    match opt
+    match opt:
         Some{i} => i,
         None => def
 
@@ -403,7 +403,7 @@ fn test_generic_sum_types() {
 type Option = Some{$a} | None
 
 unwrap_or(opt: Option<$a>, def: $a) -> $a =
-    match opt
+    match opt:
         Some{i} => i,
         None => def
 
@@ -451,8 +451,7 @@ fn test_if() {
     let r = run(r#"
 
 max(a: int, b: int) -> int =
-    if a > b
-    then a
+    if a > b: a
     else b
 
 main() -> int =
@@ -468,8 +467,7 @@ fn test_block() {
     let r = run(r#"
 
 max(a: int, b: int) -> int =
-    if a > b
-    then a
+    if a > b: a
     else b
 
 main() -> int = (let x = max(10, 11);  7 * x)

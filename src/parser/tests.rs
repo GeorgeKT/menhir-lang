@@ -446,7 +446,7 @@ fn test_lambda()
 fn test_match()
 {
     let e = th_expr(r#"
-match a
+match a:
     0 => 1,
     1 => 2,
     2 => 3
@@ -639,12 +639,12 @@ foo(p: Point<int>) -> int = 7
 fn test_if()
 {
     let e = th_expr(r#"
-if true then 5 else 10"#);
+if true: 5 else 10"#);
     assert!(e == if_expression(
         Expression::BoolLiteral(span(2, 4, 2, 7), true),
-        number(5, span(2, 14, 2, 14)),
-        number(10, span(2, 21, 2, 22)),
-        span(2, 1, 2, 22)
+        number(5, span(2, 10, 2, 10)),
+        number(10, span(2, 17, 2, 18)),
+        span(2, 1, 2, 18)
     ))
 }
 

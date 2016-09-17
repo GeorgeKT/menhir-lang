@@ -360,6 +360,7 @@ fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, name: &str, 
 fn parse_match(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 {
     let target = try!(parse_expression(tq));
+    try!(tq.expect(TokenKind::Colon));
     let mut cases = Vec::new();
     loop
     {
@@ -414,7 +415,7 @@ fn parse_let(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 fn parse_if(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 {
     let cond = try!(parse_expression(tq));
-    try!(tq.expect(TokenKind::Then));
+    try!(tq.expect(TokenKind::Colon));
     let on_true = try!(parse_expression(tq));
     try!(tq.expect(TokenKind::Else));
     let on_false = try!(parse_expression(tq));

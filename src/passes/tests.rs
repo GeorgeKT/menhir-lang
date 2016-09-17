@@ -79,21 +79,21 @@ fn test_match()
 {
 	assert!(type_check_mod(r#"
 foo(x: [int]) -> int =
-	match x
+	match x:
 		[] => 0,
 		[head | tail] => head + foo(tail)
 "#).is_ok());
 
 	assert!(type_check_mod(r#"
 foo(x: [int]) -> int =
-	match x
+	match x:
 		7 => 0,
 		[head | tail] => head + foo(tail)
 "#).unwrap_err().error == ErrorCode::TypeError);
 
 	assert!(type_check_mod(r#"
 foo(x: int) -> int =
-	match x
+	match x:
 		7 => 8,
 		6 => 7,
 		_ => 9
