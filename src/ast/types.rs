@@ -2,7 +2,7 @@ use std::fmt;
 use std::hash::{Hasher, Hash};
 use std::rc::Rc;
 use itertools::free::join;
-use ast::{Expression, TreePrinter, StructMember, prefix};
+use ast::{Expression, TreePrinter, prefix};
 use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -38,6 +38,13 @@ impl EnumType
     {
         self.cases.iter().position(|cn| cn == case_name)
     }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct StructMember
+{
+    pub name: String,
+    pub typ: Type,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -275,6 +282,11 @@ pub fn struct_type(members: Vec<StructMember>) -> Type
     }))
 }
 
+pub fn struct_member(name: &str, typ: Type) -> StructMember
+{
+    StructMember{name: name.into(), typ: typ}
+}
+
 pub fn type_alias(name: &str, original: Type, span: Span) -> TypeAlias
 {
     TypeAlias{
@@ -360,10 +372,18 @@ impl fmt::Display for Type
                 },
             Type::Generic(ref g) => write!(f, "${}", g),
             Type::Func(ref ft) => write!(f, "({}) -> {}", join(ft.args.iter(), ", "), ft.return_type),
-            Type::Struct(ref st) => write!(f, "{{{}}}", join(st.members.iter().map(|m| &m.typ), ", ")),
+            Type::Struct(ref st) => write!(f, "{{{}}}", join(st.members.iter(), ", ")),
             Type::Sum(ref st) => write!(f, "{}", join(st.cases.iter().map(|m| &m.typ), " | ")),
             Type::Enum(ref st) => write!(f, "{}", join(st.cases.iter(), " | ")),
         }
+    }
+}
+
+impl fmt::Display for StructMember
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
+    {
+        write!(f, "{}: {}", self.name, self.typ)
     }
 }
 

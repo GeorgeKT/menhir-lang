@@ -72,7 +72,7 @@ fn resolve_struct_member_types(ctx: &mut TypeCheckerContext, sd: &mut StructDecl
             }
         }
 
-        member_types.push(m.clone());
+        member_types.push(struct_member(&m.name, m.typ.clone()));
     }
 
     sd.typ = struct_type(member_types);

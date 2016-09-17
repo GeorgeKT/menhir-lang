@@ -260,6 +260,7 @@ fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> Comp
     let et = try!(type_check_expression(ctx, &mut fun.expression, None));
     ctx.pop_stack();
     if et != fun.sig.return_type {
+        println!("{:?} <> {:?}", et, fun.sig.return_type);
         return err(&fun.span, ErrorCode::TypeError, format!("Function {} has return type {}, but it is returning an expression of type {}",
             fun.sig.name, fun.sig.return_type, et));
     }
@@ -584,7 +585,7 @@ fn type_check_struct_members_in_initializer(ctx: &mut TypeCheckerContext, member
             format!("Type {} has {} members, but attempting to initialize {} members", si.struct_name, members.len(), si.member_initializers.len()));
     }
 
-    let mut new_members: Vec<StructMember> = Vec::with_capacity(members.len());
+    let mut new_members = Vec::with_capacity(members.len());
 
     for (idx, (member, mi)) in members.iter().zip(si.member_initializers.iter_mut()).enumerate()
     {
@@ -602,14 +603,30 @@ fn type_check_struct_members_in_initializer(ctx: &mut TypeCheckerContext, member
                     idx, t, expected_type));
         }
 
-        new_members.push(struct_member(&member.name, t, member.span.clone()));
+        new_members.push(struct_member(&member.name, t));
     }
 
     Ok(struct_type(new_members))
 }
 
+fn type_check_anonymous_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructInitializer) -> CompileResult<Type>
+{
+    let mut new_members = Vec::with_capacity(si.member_initializers.len());
+    for mi in &mut si.member_initializers
+    {
+        let t = try!(type_check_expression(ctx, mi, None));
+        new_members.push(struct_member("", t));
+    }
+    si.typ = struct_type(new_members);
+    Ok(si.typ.clone())
+}
+
 fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructInitializer) -> CompileResult<Type>
 {
+    if si.struct_name.is_empty() {
+        return type_check_anonymous_struct_initializer(ctx, si);
+    }
+
     let resolved = try!(ctx.resolve_type(&si.struct_name).ok_or(unknown_name(&si.span, &si.struct_name)));
     si.struct_name = resolved.full_name;
     match resolved.typ
@@ -646,13 +663,28 @@ fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructIn
 
 
 
-fn find_member_type(members: &Vec<StructMember>, member_name: &str, span: &Span) -> CompileResult<(usize, Type)>
+fn find_member_type(members: &Vec<StructMember>, member_access: &MemberAccessType, span: &Span) -> CompileResult<(usize, Type)>
 {
-    members.iter()
-        .enumerate()
-        .find(|&(_, m)| m.name == member_name)
-        .map(|(idx, m)| (idx, m.typ.clone()))
-        .ok_or(CompileError::new(span, ErrorCode::UnknownStructMember, format!("Unknown struct member {}", member_name)))
+    match member_access
+    {
+        &MemberAccessType::ByName(ref member_name) => {
+            members.iter()
+                .enumerate()
+                .find(|&(_, m)| m.name == *member_name)
+                .map(|(idx, m)| (idx, m.typ.clone()))
+                .ok_or(CompileError::new(span, ErrorCode::UnknownStructMember, format!("Unknown struct member {}", member_name)))
+        },
+
+        &MemberAccessType::ByIndex(index) => {
+            if index > members.len() {
+                return err(span, ErrorCode::UnknownStructMember, format!("Attempting to access member {} of struct, but it only has {} members",
+                    index, members.len()));
+            }
+
+            Ok((index, members[index].typ.clone()))
+        },
+    }
+
 }
 
 fn type_check_struct_member_access(ctx: &mut TypeCheckerContext, sma: &mut StructMemberAccess) -> CompileResult<Type>
@@ -661,20 +693,24 @@ fn type_check_struct_member_access(ctx: &mut TypeCheckerContext, sma: &mut Struc
     sma.name = resolved.full_name;
     let mut st = resolved.typ;
     sma.indices.clear();
-    for ref member_name in &sma.members
+    for member_access in &sma.members
     {
         st = match st
         {
             Type::Struct(ref st) => {
-                let (member_idx, member_type) = try!(find_member_type(&st.members, &member_name, &sma.span));
+                let (member_idx, member_type) = try!(find_member_type(&st.members, &member_access, &sma.span));
                 sma.indices.push(member_idx);
                 member_type
             },
             _ => {
-                if let Some(prop_type) = st.get_property_type(member_name) {
-                    prop_type
+                if let MemberAccessType::ByName(ref member_name) = *member_access {
+                    if let Some(prop_type) = st.get_property_type(member_name) {
+                        prop_type
+                    } else {
+                        return err(&sma.span, ErrorCode::TypeError, format!("Type '{}' has no property named '{}'", st, member_access));
+                    }
                 } else {
-                    return err(&sma.span, ErrorCode::TypeError, format!("Type '{}' has no property named '{}'", st, member_name));
+                    return err(&sma.span, ErrorCode::TypeError, format!("Type '{}' has no property named '{}'", st, member_access));
                 }
             },
         };

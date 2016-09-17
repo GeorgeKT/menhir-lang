@@ -211,7 +211,7 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
     if tq.is_next(TokenKind::Dollar)
     {
         try!(tq.pop());
-        let (name, _pos) = try!(tq.expect_identifier());
+        let (name, _span) = try!(tq.expect_identifier());
         Ok(Type::Generic(name))
     }
     else if tq.is_next(TokenKind::OpenBracket)
@@ -225,16 +225,21 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
     {
         // Function signature: (a, b) -> c
         try!(tq.pop());
-        let mut args = Vec::new();
-        while !tq.is_next(TokenKind::CloseParen)
-        {
-            args.push(try!(parse_type(tq)));
-            try!(eat_comma(tq));
-        }
-        try!(tq.expect(TokenKind::CloseParen));
+        let args = try!(parse_comma_separated_list(tq, TokenKind::CloseParen, parse_type));
         try!(tq.expect(TokenKind::Arrow));
         let ret = try!(parse_type(tq));
         Ok(func_type(args, ret))
+    }
+    else if tq.is_next(TokenKind::OpenCurly)
+    {
+        // Anonymous struct
+        let members = try!(parse_struct_members(tq));
+        Ok(struct_type(
+            members.into_iter().map(|m| StructMember{
+                name: m.name,
+                typ: m.typ
+            }).collect()
+        ))
     }
     else
     {
@@ -312,11 +317,13 @@ fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, name: &str, 
         name.into()
     };
 
+    let func_span = span.expanded(expr.span().end);
     Ok(Function::new(
         sig(&full_name, ret_type, args, span.expanded(sig_span_end)),
         true,
         expr,
-        span.expanded(tq.pos())))
+        func_span
+    ))
 }
 
 fn parse_match(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
@@ -444,61 +451,78 @@ fn namespaced(namespace: &str, name: &str) -> String
     format!("{}::{}", namespace, name)
 }
 
+fn parse_struct_member(tq: &mut TokenQueue, file_name: &str) -> CompileResult<StructMemberDeclaration>
+{
+    if tq.is_next_at(1, TokenKind::Colon) // Named struct member
+    {
+        let (member_name, member_name_span) = try!(tq.expect_identifier());
+        try!(tq.expect(TokenKind::Colon));
+        let typ = try!(parse_type(tq));
+        Ok(struct_member_declaration(&member_name, typ, member_name_span.expanded(tq.pos())))
+    }
+    else // Anonymous struct member
+    {
+        let span_start = tq.pos();
+        let typ = try!(parse_type(tq));
+        Ok(struct_member_declaration("", typ, Span::new(file_name, span_start, tq.pos())))
+    }
+}
+
+fn parse_struct_members(tq: &mut TokenQueue) -> CompileResult<Vec<StructMemberDeclaration>>
+{
+    let span = try!(tq.expect(TokenKind::OpenCurly)).span;
+    parse_comma_separated_list(
+        tq,
+        TokenKind::CloseCurly,
+        |tq| parse_struct_member(tq, &span.file)
+    )
+}
+
 fn parse_struct_type(tq: &mut TokenQueue, namespace: &str, name: &str, span: &Span) -> CompileResult<StructDeclaration>
 {
-    try!(tq.expect(TokenKind::OpenCurly));
-    let mut members = Vec::new();
-    while !tq.is_next(TokenKind::CloseCurly)
-    {
-        if tq.is_next_at(1, TokenKind::Colon) // Named struct member
-        {
-            let (member_name, member_name_span) = try!(tq.expect_identifier());
-            try!(tq.expect(TokenKind::Colon));
-            let typ = try!(parse_type(tq));
-            members.push(struct_member(&member_name, typ, member_name_span.expanded(tq.pos())));
-        }
-        else // Anonymouse struct member
-        {
-            let span_start = tq.pos();
-            let member_name = format!("_{}", members.len());
-            let typ = try!(parse_type(tq));
-            members.push(struct_member(&member_name, typ, Span::new(&span.file, span_start, tq.pos())));
-        }
-
-        try!(eat_comma(tq));
-    }
-    try!(tq.expect(TokenKind::CloseCurly));
+    let members = try!(parse_struct_members(tq));
     Ok(struct_declaration(&namespaced(namespace, name), members, span.expanded(tq.pos())))
 }
 
-fn parse_struct_initializer(tq: &mut TokenQueue, struct_name: NameRef) -> CompileResult<Expression>
+fn parse_struct_initializer(tq: &mut TokenQueue, name: &str, name_span: &Span) -> CompileResult<Expression>
 {
-    try!(tq.expect(TokenKind::OpenCurly));
-    let mut expressions = Vec::new();
-    while !tq.is_next(TokenKind::CloseCurly)
-    {
-        let e = try!(parse_expression(tq));
-        expressions.push(e);
-        try!(eat_comma(tq));
-    }
-    try!(tq.expect(TokenKind::CloseCurly));
-
+    let expressions = try!(parse_comma_separated_list(tq, TokenKind::CloseCurly, parse_expression));
     Ok(Expression::StructInitializer(
-        struct_initializer(&struct_name.name, expressions, struct_name.span.expanded(tq.pos()))
+        struct_initializer(name, expressions, name_span.expanded(tq.pos()))
     ))
 }
 
 fn parse_struct_member_access(tq: &mut TokenQueue, name: NameRef) -> CompileResult<Expression>
 {
     let mut members = Vec::new();
-    try!(tq.expect(TokenKind::Operator(Operator::Dot)));
-    let (first_member, _) = try!(tq.expect_identifier());
-    members.push(first_member);
     while tq.is_next(TokenKind::Operator(Operator::Dot))
     {
         try!(tq.pop());
-        let (next, _) = try!(tq.expect_identifier());
-        members.push(next);
+        let next = try!(tq.pop());
+        match next.kind
+        {
+            TokenKind::Identifier(name) => {
+                members.push(MemberAccessType::ByName(name));
+            },
+
+            TokenKind::Number(idx) => {
+                let index = if idx.ends_with(".") {
+                    // a.5.b
+                    // We have something mistaken as a float number
+                    // This is really a problem in the lexer,
+                    // but the lexer hasn't got enough information to disambiguate between a float number
+                    // and a struct member access with a number 
+                    tq.push_front(Token::new(TokenKind::Operator(Operator::Dot), next.span.clone()));
+                    let real_idx = &idx[0..idx.len() - 1];
+                    real_idx.parse::<usize>().expect("Internal Compiler Error: Parsed number is not valid")
+                } else {
+                    idx.parse::<usize>().expect("Internal Compiler Error: Parsed number is not valid")
+                };
+                members.push(MemberAccessType::ByIndex(index));
+            }
+
+            _ => return err(&next.span, ErrorCode::UnexpectedToken, format!("Expecting integer or an identifier")),
+        }
     }
 
     Ok(Expression::StructMemberAccess(struct_member_access(&name.name, members, name.span.expanded(tq.pos()))))
@@ -546,6 +570,10 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
             parse_array_literal(tq, &tok.span)
         },
 
+        TokenKind::OpenCurly => {
+            parse_struct_initializer(tq, "", &tok.span)
+        },
+
         TokenKind::Identifier(id) => {
             let nr = try!(parse_name(tq, id, &tok.span));
             if tq.is_next(TokenKind::OpenParen)
@@ -555,7 +583,8 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
             }
             else if tq.is_next(TokenKind::OpenCurly)
             {
-                parse_struct_initializer(tq, nr)
+                try!(tq.expect(TokenKind::OpenCurly));
+                parse_struct_initializer(tq, &nr.name, &nr.span)
             }
             else if tq.is_next(TokenKind::Operator(Operator::Dot))
             {
@@ -639,7 +668,7 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
     let mut tq = try!(Lexer::new(file_name).read(input));
     let mut module = Module::new(name);
     let namespace = name;
-    
+
     while !tq.is_next(TokenKind::EOF)
     {
         let tok = try!(tq.pop());

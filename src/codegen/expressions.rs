@@ -389,7 +389,7 @@ unsafe fn gen_call(ctx: &mut Context, c: &Call) -> CompileResult<ValueRef>
 unsafe fn gen_name_ref_store(ctx: &Context, nr: &NameRef, ptr: &mut ValueRef) -> CompileResult<()>
 {
     let v = try!(gen_name_ref(ctx, nr));
-    *ptr = v;
+    try!(ptr.store(ctx, v, &nr.span));
     Ok(())
 }
 

@@ -54,7 +54,7 @@ impl GenericMapper
             Type::Struct(ref st) => {
                 struct_type(
                     st.members.iter()
-                        .map(|m| struct_member(&m.name, self.substitute(&m.typ), m.span.clone()))
+                        .map(|m| struct_member(&m.name, self.substitute(&m.typ)))
                         .collect()
                 )
             },
@@ -146,7 +146,7 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
                         }
 
                         let nt = try!(fill_in_generics(&aa.typ, &ga.typ, known_types, span));
-                        new_members.push(struct_member(&aa.name, nt, aa.span.clone()));
+                        new_members.push(struct_member(&aa.name, nt));
                     }
 
                     Ok(struct_type(new_members))

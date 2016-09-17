@@ -1,11 +1,5 @@
-import stdlib
 
-#println(s: string) -> int = 5
+make_pair(a: int, b: int) -> {int, int} = {a, b}
 
-main() -> int = (
-    let x = 5;
-    println("Hello World !");
-    println("Shit");
-    if x > 5 then println("Yay") else println("Nay");
-    x
-)
+main() -> int =
+    let p = make_pair(4, 5) in p.0 + p.1

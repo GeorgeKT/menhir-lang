@@ -34,7 +34,12 @@ impl ValueRef
                 ValueRef::Array(Array::new(value, at.element_type.clone()))
             },
             Type::Struct(ref st) => {
-                ValueRef::Struct(StructValue::new(value, st.members.iter().map(|m| m.typ.clone()).collect()))
+                ValueRef::Struct(
+                    StructValue::new(
+                        value,
+                        st.members.iter().map(|m| m.typ.clone()).collect()
+                    )
+                )
             },
             Type::Sum(ref st) => {
                 ValueRef::Sum(SumTypeValue::new(value, st.clone()))

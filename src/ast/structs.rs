@@ -1,19 +1,20 @@
+use std::fmt::{Display, Formatter, Error};
 use itertools::free::join;
 use ast::{Expression, TreePrinter, Type, prefix};
 use span::{Span};
 use passes::GenericMapper;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct StructMember
+pub struct StructMemberDeclaration
 {
     pub name: String,
     pub typ: Type,
     pub span: Span,
 }
 
-pub fn struct_member(name: &str, typ: Type, span: Span) -> StructMember
+pub fn struct_member_declaration(name: &str, typ: Type, span: Span) -> StructMemberDeclaration
 {
-    StructMember{
+    StructMemberDeclaration{
         name: name.into(),
         typ: typ,
         span: span,
@@ -24,12 +25,12 @@ pub fn struct_member(name: &str, typ: Type, span: Span) -> StructMember
 pub struct StructDeclaration
 {
     pub name: String,
-    pub members: Vec<StructMember>,
+    pub members: Vec<StructMemberDeclaration>,
     pub span: Span,
     pub typ: Type,
 }
 
-pub fn struct_declaration(name: &str, members: Vec<StructMember>, span: Span) -> StructDeclaration
+pub fn struct_declaration(name: &str, members: Vec<StructMemberDeclaration>, span: Span) -> StructDeclaration
 {
     StructDeclaration{
         name: name.into(),
@@ -88,16 +89,35 @@ pub fn struct_initializer(struct_name: &str, member_initializers: Vec<Expression
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
+pub enum MemberAccessType
+{
+    ByName(String),
+    ByIndex(usize),
+}
+
+impl Display for MemberAccessType
+{
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error>
+    {
+        match *self
+        {
+            MemberAccessType::ByName(ref name) => write!(f, "{}", name),
+            MemberAccessType::ByIndex(index) => write!(f, "{}", index),
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct StructMemberAccess
 {
     pub name: String,
-    pub members: Vec<String>,
+    pub members: Vec<MemberAccessType>,
     pub indices: Vec<usize>, // Index of each member
     pub span: Span,
     pub typ: Type,
 }
 
-pub fn struct_member_access(name: &str, members: Vec<String>, span: Span) -> StructMemberAccess
+pub fn struct_member_access(name: &str, members: Vec<MemberAccessType>, span: Span) -> StructMemberAccess
 {
     StructMemberAccess{
         name: name.into(),
@@ -153,7 +173,7 @@ impl TreePrinter for StructInitializer
     }
 }
 
-impl TreePrinter for StructMember
+impl TreePrinter for StructMemberDeclaration
 {
     fn print(&self, level: usize)
     {

@@ -487,8 +487,8 @@ type Point = {x: int, y: int}
     assert!(*md.types.get("test::Point").unwrap() == TypeDeclaration::Struct(struct_declaration(
         "test::Point",
         vec![
-            struct_member("x", Type::Int, span(2, 15, 2, 20)),
-            struct_member("y", Type::Int, span(2, 23, 2, 28)),
+            struct_member_declaration("x", Type::Int, span(2, 15, 2, 20)),
+            struct_member_declaration("y", Type::Int, span(2, 23, 2, 28)),
         ],
         span(2, 1, 2, 29))
     ))
@@ -503,8 +503,8 @@ type Point = {x: $a, y: $b}
     assert!(*md.types.get("test::Point").unwrap() == TypeDeclaration::Struct(struct_declaration(
         "test::Point",
         vec![
-            struct_member("x", Type::Generic("a".into()), span(2, 15, 2, 19)),
-            struct_member("y", Type::Generic("b".into()), span(2, 22, 2, 26)),
+            struct_member_declaration("x", Type::Generic("a".into()), span(2, 15, 2, 19)),
+            struct_member_declaration("y", Type::Generic("b".into()), span(2, 22, 2, 26)),
         ],
         span(2, 1, 2, 27))
     ))
@@ -530,12 +530,16 @@ Point{6, 7}
 fn test_struct_member_access()
 {
     let e = th_expr(r#"
-a.b.c.d
+a.b.0.d
 "#);
     assert!(e == Expression::StructMemberAccess(
         struct_member_access(
             "a",
-            vec!["b".into(), "c".into(), "d".into()],
+            vec![
+                MemberAccessType::ByName("b".into()),
+                MemberAccessType::ByIndex(0),
+                MemberAccessType::ByName("d".into()),
+            ],
             span(2, 1, 2, 7)
         )
     ))
@@ -572,8 +576,8 @@ type Foo = Bar{int, int} | Foo | Baz{bla: bool}
                     struct_declaration(
                         "test::Bar",
                         vec![
-                            struct_member("_0", Type::Int, span(2, 15, 2, 18)),
-                            struct_member("_1", Type::Int, span(2, 19, 2, 23)),
+                            struct_member_declaration("", Type::Int, span(2, 15, 2, 18)),
+                            struct_member_declaration("", Type::Int, span(2, 19, 2, 23)),
                         ],
                         span(2, 12, 2, 24)
                     )
@@ -587,7 +591,7 @@ type Foo = Bar{int, int} | Foo | Baz{bla: bool}
                     struct_declaration(
                         "test::Baz",
                         vec![
-                            struct_member("bla", Type::Bool, span(2, 38, 2, 46)),
+                            struct_member_declaration("bla", Type::Bool, span(2, 38, 2, 46)),
                         ],
                         span(2, 34, 2, 47)
                     )
@@ -610,8 +614,8 @@ foo(p: Point<int>) -> int = 7
     assert!(*md.types.get("test::Point").unwrap() == TypeDeclaration::Struct(struct_declaration(
         "test::Point",
         vec![
-            struct_member("x", Type::Generic("a".into()), span(2, 15, 2, 19)),
-            struct_member("y", Type::Generic("b".into()), span(2, 22, 2, 26)),
+            struct_member_declaration("x", Type::Generic("a".into()), span(2, 15, 2, 19)),
+            struct_member_declaration("y", Type::Generic("b".into()), span(2, 22, 2, 26)),
         ],
         span(2, 1, 2, 27))
     ));

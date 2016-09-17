@@ -199,7 +199,7 @@ impl Lexer
         if c.is_whitespace() || c.is_alphanumeric() ||
             c == '{' || c == '(' || c == '[' ||
             c == '}' || c == ')' || c == ']' ||
-            c == '$' || c == ','
+            c == '$' || c == ',' || c == '_'
         {
             let kind = try!(self.data_to_token_kind());
             self.state = LexState::Idle;

@@ -306,6 +306,18 @@ main() -> int =
 }
 
 #[test]
+fn test_anonymous_structs() {
+    let r = run(r#"
+make_pair(a: int, b: int) -> {int, int} = {a, b}
+
+main() -> int =
+    let p = make_pair(4, 5) in p.0 + p.1
+    "#, false);
+    println!("r: {:?}", r);
+    assert!(r == Ok(9));
+}
+
+#[test]
 fn test_sum_types() {
     let r = run(r#"
 type Option = Some{int} | None
