@@ -206,7 +206,7 @@ fn parse_generic_arg_list(tq: &mut TokenQueue) -> CompileResult<Vec<Type>>
     parse_comma_separated_list(tq, TokenKind::Operator(Operator::GreaterThan), parse_type)
 }
 
-fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
+fn parse_type_start(tq: &mut TokenQueue) -> CompileResult<Type>
 {
     if tq.is_next(TokenKind::Dollar)
     {
@@ -253,6 +253,37 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
             },
         }
     }
+}
+
+fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
+{
+    let mut cases = Vec::new();
+
+    let add_sum_type_case = |t: Type, cases: &mut Vec<SumTypeCase>| {
+        match t {
+            Type::Struct(_) => cases.push(sum_type_case("", t)),
+            _ => cases.push(sum_type_case("", struct_type(vec![struct_member("", t)]))),
+        }
+    };
+
+    loop
+    {
+        let t = try!(parse_type_start(tq));
+        if !tq.is_next(TokenKind::Pipe) {
+            if cases.is_empty() {
+                return Ok(t)
+            } else {
+                add_sum_type_case(t, &mut cases);
+                break;
+            }
+        } else {
+            add_sum_type_case(t, &mut cases);
+        }
+
+        try!(tq.pop());
+    }
+
+    Ok(sum_type(cases))
 }
 
 fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool) -> CompileResult<Argument>
@@ -511,7 +542,7 @@ fn parse_struct_member_access(tq: &mut TokenQueue, name: NameRef) -> CompileResu
                     // We have something mistaken as a float number
                     // This is really a problem in the lexer,
                     // but the lexer hasn't got enough information to disambiguate between a float number
-                    // and a struct member access with a number 
+                    // and a struct member access with a number
                     tq.push_front(Token::new(TokenKind::Operator(Operator::Dot), next.span.clone()));
                     let real_idx = &idx[0..idx.len() - 1];
                     real_idx.parse::<usize>().expect("Internal Compiler Error: Parsed number is not valid")

@@ -334,6 +334,25 @@ main() -> int =
     assert!(r == Ok(6));
 }
 
+
+#[test]
+fn test_anonymous_sum_types() {
+    let r = run(r#"
+pair_or_single(a: int, b: int) -> {int, int} | {int} = 
+    if a != b then {a, b} else {a}
+
+value_of(v: {int, int} | {int})
+    match v
+        {a, b} => a + b
+        {a} => a
+
+main() -> int =
+    value_of(pair_or_single(4, 5)) + value_of(pair_or_single(3, 3))
+    "#, false);
+    println!("r: {:?}", r);
+    assert!(r == Ok(9));
+}
+
 #[test]
 fn test_enum_types() {
     let r = run(r#"

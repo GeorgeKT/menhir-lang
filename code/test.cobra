@@ -1,5 +1,10 @@
+pair_or_single(a: int, b: int) -> {int, int} | int =
+    if a != b then {a, b} else {a}
 
-make_pair(a: int, b: int) -> {int, int} = {a, b}
+value_of(v: {int, int} | int) -> int =
+    match v:
+        {a, b} => a + b
+        {a} => a
 
 main() -> int =
-    let p = make_pair(4, 5) in p.0 + p.1
+    value_of(pair_or_single(4, 5)) + value_of(pair_or_single(3, 3))
