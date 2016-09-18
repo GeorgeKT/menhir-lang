@@ -12,17 +12,28 @@ pub struct SumTypeCase
     pub typ: Type,
 }
 
+pub trait SumTypeCaseIndexOf
+{
+    fn index_of(&self, case_name: &str) -> Option<usize>;
+    fn num_cases(&self) -> usize;
+}
+
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct SumType
 {
     pub cases: Vec<SumTypeCase>,
 }
 
-impl SumType
+impl SumTypeCaseIndexOf for SumType
 {
-    pub fn index_of(&self, case_name: &str) -> Option<usize>
+    fn index_of(&self, case_name: &str) -> Option<usize>
     {
         self.cases.iter().position(|cn| cn.name == case_name)
+    }
+
+    fn num_cases(&self) -> usize
+    {
+        self.cases.len()
     }
 }
 
@@ -32,11 +43,16 @@ pub struct EnumType
     pub cases: Vec<String>,
 }
 
-impl EnumType
+impl SumTypeCaseIndexOf for EnumType
 {
-    pub fn index_of(&self, case_name: &str) -> Option<usize>
+    fn index_of(&self, case_name: &str) -> Option<usize>
     {
         self.cases.iter().position(|cn| cn == case_name)
+    }
+
+    fn num_cases(&self) -> usize
+    {
+        self.cases.len()
     }
 }
 

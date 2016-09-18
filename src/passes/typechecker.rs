@@ -1,7 +1,7 @@
 use ast::*;
 use compileerror::{CompileResult, CompileError, ErrorCode, err, unknown_name};
 use parser::{Operator};
-use passes::{TypeCheckerContext, instantiate_generics, fill_in_generics, resolve_types};
+use passes::{TypeCheckerContext, instantiate_generics, fill_in_generics, resolve_types, check_match_is_exhaustive};
 use span::Span;
 
 
@@ -269,10 +269,6 @@ fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> Comp
     Ok(fun.sig.typ.clone())
 }
 
-fn check_match_is_complete(m: &MatchExpression, target_type: &Type) -> CompileResult<()>
-{
-    panic!("NYI");
-}
 
 fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> CompileResult<Type>
 {
@@ -338,14 +334,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
                         try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
                     },
                     _ => {
-                        if nr.name != "_"
-                        {
-                            return err(&match_span, ErrorCode::TypeError, format!("Invalid pattern match"));
-                        }
-                        else
-                        {
-                            try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
-                        }
+                        return err(&match_span, ErrorCode::TypeError, format!("Invalid pattern match"));
                     }
                 }
             },
@@ -404,7 +393,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
     }
 
     m.typ = return_type.clone();
-    //try!(check_match_is_complete(m, &target_type));
+    try!(check_match_is_exhaustive(m, &target_type));
     Ok(return_type)
 }
 
@@ -749,7 +738,9 @@ fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern
             {
                 Type::Struct(ref s) => {
                     if s.members.len() != p.bindings.len() {
-                        err(&p.span, ErrorCode::TypeError, format!("Not enough bindings in pattern match"))
+                        err(&p.span, ErrorCode::TypeError,
+                            format!("Wrong number of bindings in pattern match (expecting {}, found {})",
+                                s.members.len(), p.bindings.len()))
                     } else {
                         p.types = s.members.iter().map(|sm| sm.typ.clone()).collect();
                         p.typ = Type::Sum(st.clone());

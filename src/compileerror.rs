@@ -35,6 +35,9 @@ pub enum ErrorCode
     ExpressionNotAllowedAtTopLevel,
     LambdaDoesNotMatch,
     WrongArgumentCount,
+    UnreachablePatternMatch,
+    DuplicatePatternMatch,
+    IncompletePatternMatch,
     UnknownType(String, Type), // Name and expected type
     UnknownStructMember,
     FileNotFound,
@@ -90,7 +93,7 @@ impl CompileError
                     if !line.is_empty() {
                         let carets = repeat_string("^", line.len());
                         println!("     {}{}", prefix, carets);
-                    }    
+                    }
                 }
 
                 if line_idx >= self.span.end.line + 3 {break;}
