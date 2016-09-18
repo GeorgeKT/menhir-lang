@@ -336,21 +336,23 @@ main() -> int =
 
 
 #[test]
-fn test_anonymous_sum_types() {
+fn test_sum_return_types() {
     let r = run(r#"
-pair_or_single(a: int, b: int) -> {int, int} | {int} =
-    if a != b then {a, b} else {a}
+type PairOrSingle = Pair{int, int} | Single{int}
 
-value_of(v: {int, int} | {int})
+pair_or_single(a: int, b: int) -> PairOrSingle =
+    if a != b: Pair{a, b} else Single{a}
+
+value_of(v: PairOrSingle) -> int =
     match v:
-        {a, b} => a + b
-        {a} => a
+        Pair{a, b} => a + b,
+        Single{a} => a
 
 main() -> int =
     value_of(pair_or_single(4, 5)) + value_of(pair_or_single(3, 3))
     "#, false);
     println!("r: {:?}", r);
-    assert!(r == Ok(9));
+    assert!(r == Ok(12));
 }
 
 #[test]

@@ -423,14 +423,13 @@ unsafe fn gen_name_ref(ctx: &Context, nr: &NameRef) -> CompileResult<ValueRef>
 unsafe fn gen_match_case_to_execute(
     ctx: &mut Context,
     mc: &MatchCase,
-    dst: &ValueRef,
+    dst: &mut ValueRef,
     match_case_bb: LLVMBasicBlockRef,
     match_end_bb: LLVMBasicBlockRef,
     next_bb: LLVMBasicBlockRef) -> CompileResult<()>
 {
     LLVMPositionBuilderAtEnd(ctx.builder, match_case_bb);
-    let ret = try!(gen_expression(ctx, &mc.to_execute));
-    try!(dst.store(ctx, ret, &mc.span));
+    try!(gen_expression_store(ctx, &mc.to_execute, dst));
     LLVMBuildBr(ctx.builder, match_end_bb);
     LLVMPositionBuilderAtEnd(ctx.builder, next_bb);
     Ok(())
@@ -520,14 +519,14 @@ unsafe fn gen_equals_seq(ctx: &Context, a: &Array, b: &Array, on_equals_bb: LLVM
 }
 
 
-unsafe fn gen_name_ref_match(
+unsafe fn gen_name_pattern_match(
     ctx: &mut Context,
     mc: &MatchCase,
     target: &ValueRef,
     match_end_bb: LLVMBasicBlockRef,
     match_case_bb: LLVMBasicBlockRef,
     next_bb: LLVMBasicBlockRef,
-    dst: &ValueRef,
+    dst: &mut ValueRef,
     nr: &NameRef) -> CompileResult<()>
 {
     match nr.typ
@@ -564,7 +563,7 @@ unsafe fn gen_struct_pattern_match(
     match_end_bb: LLVMBasicBlockRef,
     match_case_bb: LLVMBasicBlockRef,
     next_bb: LLVMBasicBlockRef,
-    dst: &ValueRef,
+    dst: &mut ValueRef,
     p: &StructPattern) -> CompileResult<()>
 {
     ctx.push_stack(ptr::null_mut());
@@ -609,35 +608,39 @@ unsafe fn gen_match_case(
     target: &ValueRef,
     func: LLVMValueRef,
     match_end_bb: LLVMBasicBlockRef,
-    dst: &ValueRef) -> CompileResult<()>
+    dst: &mut ValueRef) -> CompileResult<()>
 {
     let match_case_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("match_case_bb"));
     let next_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("next_bb"));
 
-    match mc.match_expr
+    match mc.pattern
     {
-        Expression::IntLiteral(_, v) => {
+        Pattern::Literal(Literal::Int(_, v)) => {
             let iv = try!(gen_integer(ctx, v));
             let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(ctx.builder), iv.load(ctx.builder), cstr("cmp"));
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
             gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
         },
-        Expression::FloatLiteral(ref span, ref v) => {
+
+        Pattern::Literal(Literal::Float(ref span, ref v)) => {
             let iv = try!(gen_float(ctx, &v, span));
             let cond = LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, target.load(ctx.builder), iv.load(ctx.builder), cstr("cmp"));
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
             gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
         },
-        Expression::BoolLiteral(_, v) => {
+
+        Pattern::Literal(Literal::Bool(_, v)) => {
             let iv = try!(gen_bool(ctx, v));
             let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(ctx.builder), iv.load(ctx.builder), cstr("cmp"));
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
             gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
         },
-        Expression::NameRef(ref nr) => {
-            gen_name_ref_match(ctx, mc, target, match_end_bb, match_case_bb, next_bb, dst, nr)
+
+        Pattern::Name(ref nr) => {
+            gen_name_pattern_match(ctx, mc, target, match_end_bb, match_case_bb, next_bb, dst, nr)
         },
-        Expression::EmptyArrayPattern(_) => {
+
+        Pattern::EmptyArray(_) => {
             match target
             {
                 &ValueRef::Array(ref arr) => {
@@ -649,7 +652,8 @@ unsafe fn gen_match_case(
                 _ => err(&mc.span, ErrorCode::TypeError, format!("Match expression cannot be matched with an array pattern")),
             }
         },
-        Expression::ArrayPattern(ref ap) => {
+
+        Pattern::Array(ref ap) => {
             ctx.push_stack(ptr::null_mut());
             match target
             {
@@ -661,21 +665,26 @@ unsafe fn gen_match_case(
             ctx.pop_stack();
             Ok(())
         },
-        Expression::ArrayLiteral(ref a) => {
+
+        Pattern::Literal(Literal::Array(ref a)) => {
             let arr = try!(gen_array_literal(ctx, a));
             try!(gen_equals(ctx, target, &arr, match_case_bb, next_bb));
             gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
         },
 
-        Expression::StructPattern(ref p) => {
+        Pattern::Literal(Literal::String(ref span, ref s)) => {
+            let arr = try!(gen_string_literal(ctx, s, span));
+            try!(gen_equals(ctx, target, &arr, match_case_bb, next_bb));
+            gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
+        },
+
+        Pattern::Struct(ref p) => {
             gen_struct_pattern_match(ctx, mc, target, match_end_bb, match_case_bb, next_bb, dst, p)
         }
-        _ => err(&mc.span, ErrorCode::TypeError, format!("Expression is not a valid match pattern")),
-
     }
 }
 
-unsafe fn gen_match_store(ctx: &mut Context, m: &MatchExpression, dst: &ValueRef) -> CompileResult<()>
+unsafe fn gen_match_store(ctx: &mut Context, m: &MatchExpression, dst: &mut ValueRef) -> CompileResult<()>
 {
     let target = try!(gen_expression(ctx, &m.target));
     let func = ctx.get_current_function();
@@ -683,7 +692,7 @@ unsafe fn gen_match_store(ctx: &mut Context, m: &MatchExpression, dst: &ValueRef
 
     for mc in &m.cases
     {
-        try!(gen_match_case(ctx, mc, &target, func, match_end_bb, &dst));
+        try!(gen_match_case(ctx, mc, &target, func, match_end_bb, dst));
     }
 
     LLVMBuildBr(ctx.builder, match_end_bb);
@@ -693,8 +702,8 @@ unsafe fn gen_match_store(ctx: &mut Context, m: &MatchExpression, dst: &ValueRef
 
 unsafe fn gen_match(ctx: &mut Context, m: &MatchExpression) -> CompileResult<ValueRef>
 {
-    let dst = ValueRef::alloc(ctx, &m.typ);
-    try!(gen_match_store(ctx, m, &dst));
+    let mut dst = ValueRef::alloc(ctx, &m.typ);
+    try!(gen_match_store(ctx, m, &mut dst));
     Ok(dst)
 }
 
@@ -807,7 +816,7 @@ unsafe fn gen_struct_initializer_store(ctx: &mut Context, si: &StructInitializer
             let data_struct_ptr = try!(var.case_struct(ctx, index, &si.span));
             store_members(&data_struct_ptr, ctx)
         }
-        _ => panic!("Invalid type {} for struct intializer", si.typ)
+        _ => panic!("Internal Compiler Error: Invalid type {} for struct intializer", si.typ)
     }
 }
 
@@ -858,7 +867,7 @@ pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: &mut 
 {
     match *e
     {
-        Expression::ArrayLiteral(ref a) => {
+        Expression::Literal(Literal::Array(ref a)) => {
             match *ptr
             {
                 ValueRef::Array(ref mut array) => gen_array_literal_store(ctx, a, array),
@@ -872,6 +881,10 @@ pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: &mut 
         Expression::Lambda(ref l) => gen_lambda_store(ctx, l, ptr),
         Expression::Let(ref l) => gen_let_store(ctx, l, ptr),
         Expression::Block(ref b) => gen_block_store(ctx, b, ptr),
+        Expression::If(ref i) => {
+            let match_expr = i.to_match();
+            gen_match_store(ctx, &match_expr, ptr)
+        },
         _ => store(ctx, e, &ptr),
     }
 }
@@ -884,7 +897,7 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
         {
             Expression::UnaryOp(ref u) => gen_unary_op(ctx, u),
             Expression::BinaryOp(ref op) => gen_binary_op(ctx, op),
-            Expression::ArrayLiteral(ref a) => gen_array_literal(ctx, a),
+            Expression::Literal(Literal::Array(ref a)) => gen_array_literal(ctx, a),
             Expression::ArrayGenerator(ref _a) => panic!("NYI"),
             Expression::Call(ref c) => gen_call(ctx, c),
             Expression::NameRef(ref nr) => gen_name_ref(ctx, nr),
@@ -903,17 +916,12 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> CompileResult<ValueR
                 gen_match(ctx, &match_expr)
             },
             Expression::Block(ref b) => gen_block(ctx, b),
-            Expression::IntLiteral(_, v) => gen_integer(ctx, v),
-            Expression::FloatLiteral(ref span, ref v_str) => gen_float(ctx, &v_str, span),
-            Expression::StringLiteral(ref span, ref s)  => gen_string_literal(ctx, s, span),
-            Expression::BoolLiteral(_, v) => gen_bool(ctx, v),
+            Expression::Literal(Literal::Int(_, v)) => gen_integer(ctx, v),
+            Expression::Literal(Literal::Float(ref span, ref v_str)) => gen_float(ctx, &v_str, span),
+            Expression::Literal(Literal::String(ref span, ref s))  => gen_string_literal(ctx, s, span),
+            Expression::Literal(Literal::Bool(_, v)) => gen_bool(ctx, v),
             Expression::StructInitializer(ref si) => gen_struct_initializer(ctx, si),
             Expression::StructMemberAccess(ref sma) => gen_struct_member_access(ctx, sma),
-
-            // We should never get here
-            Expression::ArrayPattern(ref _a) => panic!("Internal Compiler Error: should never get here (gen_expression ArrayPattern)"),
-            Expression::EmptyArrayPattern(ref _a) => panic!("Internal Compiler Error: should never get here (gen_expression EmptyArrayPattern)"),
-            Expression::StructPattern(ref _p) => panic!("Internal Compiler Error: should never get here (gen_expression ArrayPattern)"),
         }
     }
 }

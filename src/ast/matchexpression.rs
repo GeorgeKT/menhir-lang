@@ -1,18 +1,18 @@
-use ast::{Expression, Type, TreePrinter, prefix};
+use ast::{Expression, Type, TreePrinter, Pattern, prefix};
 use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct MatchCase
 {
-    pub match_expr: Expression,
+    pub pattern: Pattern,
     pub to_execute: Expression,
     pub span: Span,
 }
 
-pub fn match_case(e: Expression, to_execute: Expression, span: Span) -> MatchCase
+pub fn match_case(p: Pattern, to_execute: Expression, span: Span) -> MatchCase
 {
     MatchCase{
-        match_expr: e,
+        pattern: p,
         to_execute: to_execute,
         span: span,
     }
@@ -46,7 +46,7 @@ impl TreePrinter for MatchExpression
         self.target.print(level + 1);
         for c in &self.cases {
             println!("{} case", p);
-            c.match_expr.print(level + 2);
+            c.pattern.print(level + 2);
             println!("{} =>", p);
             c.to_execute.print(level + 2);
         }

@@ -12,7 +12,7 @@ pub use self::tests::{th_expr, th_mod};
 pub use self::lexer::{Lexer};
 pub use self::tokenqueue::{TokenQueue};
 pub use self::tokens::{Operator, Token, TokenKind};
-pub use self::parser::{parse_expression, parse_file, parse_module};
+pub use self::parser::{parse_expression, parse_file, parse_module, parse_pattern};
 
 use std::path::PathBuf;
 

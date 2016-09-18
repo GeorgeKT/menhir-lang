@@ -13,6 +13,43 @@ fn subsitute_let_bindings(generic_args: &GenericMapper, lb: &Vec<LetBinding>) ->
     Ok(bindings)
 }
 
+fn substitute_pattern(generic_args: &GenericMapper, p: &Pattern) -> CompileResult<Pattern>
+{
+    match *p
+    {
+        Pattern::Struct(ref p) => {
+            Ok(Pattern::Struct(struct_pattern(
+                &p.name,
+                p.bindings.clone(),
+                p.types.iter().map(|t| generic_args.substitute(t)).collect(),
+                generic_args.substitute(&p.typ),
+                p.span.clone()))
+            )
+        },
+        Pattern::Name(ref nr) => {
+            let new_nr = NameRef{
+                name: nr.name.clone(),
+                span: nr.span.clone(),
+                typ: generic_args.substitute(&nr.typ),
+            };
+            Ok(Pattern::Name(new_nr))
+        },
+        Pattern::Literal(Literal::Array(ref al)) => {
+            substitute_array_literal(generic_args, al).map(|al| Pattern::Literal(al))
+        },
+        _ => Ok(p.clone()),
+    }
+}
+
+fn substitute_array_literal(generic_args: &GenericMapper, al: &ArrayLiteral) -> CompileResult<Literal>
+{
+    let mut new_elements = Vec::with_capacity(al.elements.len());
+    for el in al.elements.iter() {
+        new_elements.push(try!(substitute_expr(generic_args, el)));
+    }
+    Ok(array_lit(new_elements, al.span.clone()))
+}
+
 fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResult<Expression>
 {
     match *e
@@ -28,12 +65,8 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             Ok(bin_op(op.operator, l, r, op.span.clone()))
         },
 
-        Expression::ArrayLiteral(ref a) => {
-            let mut new_elements = Vec::with_capacity(a.elements.len());
-            for el in a.elements.iter() {
-                new_elements.push(try!(substitute_expr(generic_args, el)));
-            }
-            Ok(array_lit(new_elements, a.span.clone()))
+        Expression::Literal(Literal::Array(ref a)) => {
+            substitute_array_literal(generic_args, a).map(|al| Expression::Literal(al))
         },
 
         Expression::ArrayGenerator(ref a) => {
@@ -62,9 +95,9 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             let mut cases = Vec::with_capacity(m.cases.len());
             for c in m.cases.iter()
             {
-                let match_expr = try!(substitute_expr(generic_args, &c.match_expr));
+                let pattern = try!(substitute_pattern(generic_args, &c.pattern));
                 let to_execute = try!(substitute_expr(generic_args, &c.to_execute));
-                cases.push(match_case(match_expr, to_execute, c.span.clone()));
+                cases.push(match_case(pattern, to_execute, c.span.clone()));
             }
             Ok(match_expression(target, cases, m.span.clone()))
         },
@@ -82,10 +115,10 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
 
         Expression::If(ref i) => {
             Ok(if_expression(
-                 try!(substitute_expr(generic_args, &i.condition)),
-                 try!(substitute_expr(generic_args, &i.on_true)),
-                 try!(substitute_expr(generic_args, &i.on_true)),
-                 i.span.clone(),
+                try!(substitute_expr(generic_args, &i.condition)),
+                try!(substitute_expr(generic_args, &i.on_true)),
+                try!(substitute_expr(generic_args, &i.on_true)),
+                i.span.clone(),
             ))
         },
 
@@ -96,12 +129,7 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             }
             Ok(block(new_expressions, b.span.clone()))
         },
-        Expression::IntLiteral(ref span, ref v) => Ok(Expression::IntLiteral(span.clone(), v.clone())),
-        Expression::BoolLiteral(ref span, ref v) => Ok(Expression::BoolLiteral(span.clone(), v.clone())),
-        Expression::FloatLiteral(ref span, ref v) => Ok(Expression::FloatLiteral(span.clone(), v.clone())),
-        Expression::StringLiteral(ref span, ref v) => Ok(Expression::StringLiteral(span.clone(), v.clone())),
-        Expression::ArrayPattern(ref ap) => Ok(Expression::ArrayPattern(ap.clone())),
-        Expression::EmptyArrayPattern(ref ap) => Ok(Expression::EmptyArrayPattern(ap.clone())),
+        Expression::Literal(ref lit) => Ok(Expression::Literal(lit.clone())),
         Expression::NameRef(ref nr) => {
             let new_nr = NameRef{
                 name: nr.name.clone(),
@@ -121,15 +149,6 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
         },
         Expression::StructMemberAccess(ref sma) => {
             Ok(Expression::StructMemberAccess(sma.clone()))
-        },
-        Expression::StructPattern(ref p) => {
-            Ok(Expression::StructPattern(struct_pattern(
-                &p.name,
-                p.bindings.clone(),
-                p.types.iter().map(|t| generic_args.substitute(t)).collect(),
-                generic_args.substitute(&p.typ),
-                p.span.clone()))
-            )
         },
     }
 }
@@ -155,7 +174,7 @@ fn instantiate(func: &Function, generic_args: &GenericMapper) -> CompileResult<F
         span: func.sig.span.clone(),
         typ: func_type(arg_types, return_type),
     };
-    
+
     let body = try!(substitute_expr(generic_args, &func.expression));
     Ok(Function::new(sig, func.public, body, func.span.clone()))
 }
@@ -181,6 +200,20 @@ fn resolve_generic_call(new_functions: &mut FunctionMap, module: &Module, call: 
     }
 }
 
+fn resolve_generics_in_pattern(new_functions: &mut FunctionMap, module: &Module, p: &Pattern) -> CompileResult<()>
+{
+    match *p
+    {
+        Pattern::Literal(Literal::Array(ref al)) => {
+            for el in al.elements.iter() {
+                try!(resolve_generics(new_functions, module, el));
+            }
+            Ok(())
+        },
+        _ => Ok(())
+    }
+}
+
 fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expression) -> CompileResult<()>
 {
     match *e
@@ -191,7 +224,7 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
             resolve_generics(new_functions, module, &op.right)
         },
 
-        Expression::ArrayLiteral(ref a) => {
+        Expression::Literal(Literal::Array(ref a)) => {
             for el in a.elements.iter() {
                 try!(resolve_generics(new_functions, module, el));
             }
@@ -218,7 +251,7 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
             try!(resolve_generics(new_functions, module, &m.target));
             for c in m.cases.iter()
             {
-                try!(resolve_generics(new_functions, module, &c.match_expr));
+                try!(resolve_generics_in_pattern(new_functions, module, &c.pattern));
                 try!(resolve_generics(new_functions, module, &c.to_execute));
             }
             Ok(())
@@ -253,6 +286,20 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
     }
 }
 
+fn replace_generic_calls_in_pattern(new_functions: &FunctionMap, p: &mut Pattern) -> CompileResult<()>
+{
+    match *p
+    {
+        Pattern::Literal(Literal::Array(ref mut al)) => {
+            for el in al.elements.iter_mut() {
+                try!(replace_generic_calls(new_functions, el));
+            }
+            Ok(())
+        },
+        _ => Ok(())
+    }
+}
+
 fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> CompileResult<()>
 {
     match *e
@@ -263,7 +310,7 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
             replace_generic_calls(new_functions, &mut op.right)
         },
 
-        Expression::ArrayLiteral(ref mut a) => {
+        Expression::Literal(Literal::Array(ref mut a)) => {
             for el in a.elements.iter_mut() {
                 try!(replace_generic_calls(new_functions, el));
             }
@@ -295,7 +342,7 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
             try!(replace_generic_calls(new_functions, &mut m.target));
             for c in m.cases.iter_mut()
             {
-                try!(replace_generic_calls(new_functions, &mut c.match_expr));
+                try!(replace_generic_calls_in_pattern(new_functions, &mut c.pattern));
                 try!(replace_generic_calls(new_functions, &mut c.to_execute));
             }
             Ok(())

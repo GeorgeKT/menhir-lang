@@ -285,17 +285,17 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
             }
         };
 
-        let match_span = c.match_expr.span();
-        let case_type = match c.match_expr
+        let match_span = c.pattern.span();
+        let case_type = match c.pattern
         {
-            Expression::EmptyArrayPattern(ref ap) => {
+            Pattern::EmptyArray(ref ap) => {
                 if !target_type.is_sequence() {
                     return err(&ap.span, ErrorCode::TypeError, format!("Attempting to pattern match an expression of type {}, with an empty array", target_type));
                 }
                 try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
             },
 
-            Expression::ArrayPattern(ref ap) => {
+            Pattern::Array(ref ap) => {
                 if !target_type.is_sequence() {
                     return err(&ap.span, ErrorCode::TypeError, format!("Attempting to pattern match an expression of type {}, with an array", target_type));
                 }
@@ -310,7 +310,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
                 ct
             },
 
-            Expression::NameRef(ref mut nr) => {
+            Pattern::Name(ref mut nr) => {
                 try!(type_check_name(ctx, nr, Some(target_type.clone())));
                 if nr.name != "_" && nr.typ != target_type {
                     return err(&match_span, ErrorCode::TypeError,
@@ -345,21 +345,27 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
                 }
             },
 
-            Expression::ArrayLiteral(_) |
-            Expression::IntLiteral(_, _) |
-            Expression::BoolLiteral(_, _) |
-            Expression::FloatLiteral(_, _) |
-            Expression::StringLiteral(_, _) => {
-                let m_type = try!(type_check_expression(ctx, &mut c.match_expr, None));
+            Pattern::Literal(Literal::Array(ref mut al)) => {
+                let m_type = try!(type_check_array_literal(ctx, al));
                 if !target_type.is_matchable(&m_type) {
-                    return err(&c.match_expr.span(), ErrorCode::TypeError, format!("Pattern match of type {}, cannot match with an expression of type {}",
+                    return err(&al.span, ErrorCode::TypeError, format!("Pattern match of type {}, cannot match with an expression of type {}",
                         m_type, target_type));
                 }
 
                 try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
             },
 
-            Expression::StructPattern(ref mut p) => {
+            Pattern::Literal(ref lit)  => {
+                let m_type = lit.get_type();
+                if !target_type.is_matchable(&m_type) {
+                    return err(&c.pattern.span(), ErrorCode::TypeError, format!("Pattern match of type {}, cannot match with an expression of type {}",
+                        m_type, target_type));
+                }
+
+                try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
+            },
+
+            Pattern::Struct(ref mut p) => {
                 try!(type_check_struct_pattern(ctx, p));
                 if p.typ != target_type {
                     return err(&match_span, ErrorCode::TypeError,
@@ -379,10 +385,6 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
                 ctx.pop_stack();
                 ct
             },
-
-            _ => {
-                return err(&c.match_expr.span(), ErrorCode::TypeError, format!("Invalid pattern match"));
-            }
         };
 
         if return_type == Type::Unknown {
@@ -779,10 +781,8 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
     {
         Expression::UnaryOp(ref mut op) => type_check_unary_op(ctx, op),
         Expression::BinaryOp(ref mut op) => type_check_binary_op(ctx, op),
-        Expression::ArrayLiteral(ref mut a) => type_check_array_literal(ctx, a),
-        Expression::ArrayPattern(_) => Ok(Type::Unknown), // Doesn't really have a type
-        Expression::EmptyArrayPattern(_) => Ok(Type::Unknown), // Doesn't really have a type
-        Expression::StructPattern(ref mut p) => type_check_struct_pattern(ctx, p),
+        Expression::Literal(Literal::Array(ref mut a)) => type_check_array_literal(ctx, a),
+        Expression::Literal(ref lit) => Ok(lit.get_type()),
         Expression::ArrayGenerator(ref mut a) => type_check_array_generator(ctx, a),
         Expression::Call(ref mut c) => type_check_call(ctx, c),
         Expression::NameRef(ref mut nr) => type_check_name(ctx, nr, type_hint),
@@ -798,10 +798,6 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         },
         Expression::If(ref mut i) => type_check_if(ctx, i),
         Expression::Block(ref mut b) => type_check_block(ctx, b, type_hint),
-        Expression::IntLiteral(_, _) => Ok(Type::Int),
-        Expression::FloatLiteral(_, _) => Ok(Type::Float),
-        Expression::StringLiteral(_, _)  => Ok(string_type()),
-        Expression::BoolLiteral(_, _) => Ok(Type::Bool),
         Expression::StructInitializer(ref mut si) => type_check_struct_initializer(ctx, si),
         Expression::StructMemberAccess(ref mut sma) => type_check_struct_member_access(ctx, sma),
     }

@@ -1,4 +1,4 @@
-use ast::{Expression, TreePrinter, Type, prefix};
+use ast::{Expression, TreePrinter, Literal, Type, prefix};
 use span::{Span};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -30,19 +30,6 @@ pub struct IndexOperation
 }
 */
 
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct EmptyArrayPattern
-{
-    pub span: Span,
-}
-
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct ArrayPattern
-{
-    pub head: String,
-    pub tail: String,
-    pub span: Span,
-}
 
 /*
 pub fn index_op(target: Expression, index_expr: Expression, span: Span) -> Expression
@@ -57,27 +44,13 @@ pub fn index_op(target: Expression, index_expr: Expression, span: Span) -> Expre
 }
 */
 
-pub fn array_lit(e: Vec<Expression>, span: Span) -> Expression
+pub fn array_lit(e: Vec<Expression>, span: Span) -> Literal
 {
-    Expression::ArrayLiteral(ArrayLiteral{
+    Literal::Array(ArrayLiteral{
         elements: e,
         array_type: Type::Unknown,
         span: span,
     })
-}
-
-pub fn array_pattern(head: &str, tail: &str, span: Span) -> Expression
-{
-    Expression::ArrayPattern(ArrayPattern{
-        head: head.into(),
-        tail: tail.into(),
-        span: span,
-    })
-}
-
-pub fn empty_array_pattern(span: Span) -> Expression
-{
-    Expression::EmptyArrayPattern(EmptyArrayPattern{span: span})
 }
 
 pub fn array_generator(left: Expression, var: &str, iterable: Expression, span: Span) -> Expression

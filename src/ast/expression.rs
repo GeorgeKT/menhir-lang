@@ -1,17 +1,10 @@
-use compileerror::{CompileResult, ErrorCode, err};
 use span::Span;
 use ast::*;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
 {
-    IntLiteral(Span, u64),
-    BoolLiteral(Span, bool),
-    FloatLiteral(Span, String), // Keep as string until we generate code, so we can compare it
-    StringLiteral(Span, String),
-    ArrayLiteral(ArrayLiteral),
-    ArrayPattern(ArrayPattern), // [hd | tail]
-    EmptyArrayPattern(EmptyArrayPattern),
+    Literal(Literal),
     ArrayGenerator(Box<ArrayGenerator>),
     UnaryOp(Box<UnaryOp>),
     BinaryOp(Box<BinaryOp>),
@@ -25,7 +18,6 @@ pub enum Expression
     LetBindings(Box<LetBindingList>),
     StructInitializer(StructInitializer),
     StructMemberAccess(StructMemberAccess),
-    StructPattern(StructPattern),
 }
 
 
@@ -62,14 +54,8 @@ impl Expression
     {
         match *self
         {
-            Expression::IntLiteral(ref span, _) => span.clone(),
-            Expression::FloatLiteral(ref span, _) => span.clone(),
-            Expression::BoolLiteral(ref span, _) => span.clone(),
-            Expression::StringLiteral(ref span, _) => span.clone(),
-            Expression::ArrayLiteral(ref a) => a.span.clone(),
+            Expression::Literal(ref lit) => lit.span(),
             Expression::ArrayGenerator(ref a) => a.span.clone(),
-            Expression::ArrayPattern(ref a) => a.span.clone(),
-            Expression::EmptyArrayPattern(ref a) => a.span.clone(),
             Expression::UnaryOp(ref op) => op.span.clone(),
             Expression::BinaryOp(ref op) => op.span.clone(),
             Expression::Block(ref b) => b.span.clone(),
@@ -82,7 +68,6 @@ impl Expression
             Expression::If(ref i) => i.span.clone(),
             Expression::StructInitializer(ref si) => si.span.clone(),
             Expression::StructMemberAccess(ref sma) => sma.span.clone(),
-            Expression::StructPattern(ref p) => p.span.clone(),
         }
     }
 
@@ -90,14 +75,8 @@ impl Expression
     {
         match *self
         {
-            Expression::IntLiteral(_, _) => Type::Int,
-            Expression::FloatLiteral(_, _) => Type::Float,
-            Expression::BoolLiteral(_, _) => Type::Bool,
-            Expression::StringLiteral(_, _) => array_type(Type::Char),
-            Expression::ArrayLiteral(ref a) => a.array_type.clone(),
+            Expression::Literal(ref lit) => lit.get_type(),
             Expression::ArrayGenerator(ref a) => a.array_type.clone(),
-            Expression::ArrayPattern(_) => Type::Unknown,
-            Expression::EmptyArrayPattern(_) => Type::Unknown,
             Expression::UnaryOp(ref op) => op.typ.clone(),
             Expression::BinaryOp(ref op) => op.typ.clone(),
             Expression::Block(ref b) => b.typ.clone(),
@@ -110,33 +89,6 @@ impl Expression
             Expression::If(ref i) => i.typ.clone(),
             Expression::StructInitializer(ref si) => si.typ.clone(),
             Expression::StructMemberAccess(ref sma) => sma.typ.clone(),
-            Expression::StructPattern(_) => Type::Unknown,
-        }
-    }
-
-    pub fn to_name_ref(self) -> CompileResult<NameRef>
-    {
-        match self
-        {
-            Expression::NameRef(nr) => Ok(nr),
-            _ => err(&self.span(), ErrorCode::TypeError, format!("Expected name reference")),
-        }
-    }
-
-
-    pub fn to_pattern(self) -> Expression
-    {
-        match self
-        {
-            Expression::StructInitializer(si) => si.to_struct_pattern(),
-            Expression::ArrayLiteral(al) => {
-                if al.elements.is_empty() {
-                    empty_array_pattern(al.span)
-                } else {
-                    Expression::ArrayLiteral(al)
-                }
-            }
-            _ => self,
         }
     }
 }
@@ -149,31 +101,8 @@ impl TreePrinter for Expression
         let p = prefix(level);
         match *self
         {
-            Expression::BoolLiteral(ref span, b) => {
-                println!("{}bool {} ({})", p, b, span);
-            },
+            Expression::Literal(ref lit) => lit.print(level),
 
-            Expression::IntLiteral(ref span, integer) => {
-                println!("{}int {} ({})", p, integer, span);
-            },
-            Expression::FloatLiteral(ref span, ref s) => {
-                println!("{}float {} ({})", p, s, span);
-            },
-            Expression::StringLiteral(ref span, ref s) => {
-                println!("{}string \"{}\" ({})", p, s, span);
-            },
-            Expression::ArrayLiteral(ref a) => {
-                println!("{}array ({})", p, a.span);
-                for e in &a.elements {
-                    e.print(level + 1);
-                }
-            },
-            Expression::ArrayPattern(ref a) => {
-                println!("{}array pattern [{} | {}] ({})", p, a.head, a.tail, a.span);
-            },
-            Expression::EmptyArrayPattern(ref a) => {
-                println!("{}empty array pattern [] ({})", p, a.span);
-            },
             Expression::ArrayGenerator(ref a) => a.print(level),
             Expression::UnaryOp(ref op) => {
                 println!("{}unary {} ({})", p, op.operator, op.span);
@@ -199,7 +128,6 @@ impl TreePrinter for Expression
             Expression::If(ref i) => i.print(level),
             Expression::StructInitializer(ref si) => si.print(level),
             Expression::StructMemberAccess(ref sma) => sma.print(level),
-            Expression::StructPattern(ref p) => p.print(level),
         }
     }
 }

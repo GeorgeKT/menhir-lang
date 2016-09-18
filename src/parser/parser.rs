@@ -28,23 +28,23 @@ fn eat_comma(tq: &mut TokenQueue) -> CompileResult<()>
     Ok(())
 }
 
-fn parse_number(num: &str, span: &Span) -> CompileResult<Expression>
+fn parse_number(num: &str, span: &Span) -> CompileResult<Literal>
 {
     if num.find('.').is_some() || num.find('e').is_some() {
         match num.parse::<f64>() {
-            Ok(_) => Ok(Expression::FloatLiteral(span.clone(), num.into())),
+            Ok(_) => Ok(Literal::Float(span.clone(), num.into())),
             Err(_) => err(span, ErrorCode::InvalidFloatingPoint, format!("{} is not a valid floating point number", num))
         }
     } else {
         // Should be an integer
         match num.parse::<u64>() {
-            Ok(i) => Ok(Expression::IntLiteral(span.clone(), i)),
+            Ok(i) => Ok(Literal::Int(span.clone(), i)),
             Err(_) => err(span, ErrorCode::InvalidInteger, format!("{} is not a valid integer", num))
         }
     }
 }
 
-fn parse_array_literal(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
+fn parse_array_literal(tq: &mut TokenQueue, span: &Span) -> CompileResult<Literal>
 {
     let mut expressions = Vec::new();
     while !tq.is_next(TokenKind::CloseBracket)
@@ -57,27 +57,6 @@ fn parse_array_literal(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expres
             let (times, _) = try!(tq.expect_int());
             try!(tq.expect(TokenKind::CloseBracket));
             return Ok(array_lit(vec![e; times as usize], span.expanded(tq.pos())));
-        }
-        else if expressions.is_empty() && tq.is_next(TokenKind::Pipe)
-        {
-            // array pattern [head | tail] or generator [left | x <- a]
-            if tq.is_next_at(2, TokenKind::Operator(Operator::Extract))
-            {
-                try!(tq.expect(TokenKind::Pipe));
-                let (var, _) = try!(tq.expect_identifier());
-                try!(tq.expect(TokenKind::Operator(Operator::Extract)));
-                let iterable = try!(parse_expression(tq));
-                try!(tq.expect(TokenKind::CloseBracket));
-                return Ok(array_generator(e, &var, iterable, span.expanded(tq.pos())));
-            }
-            else
-            {
-                let head = try!(e.to_name_ref());
-                try!(tq.expect(TokenKind::Pipe));
-                let (tail, _) = try!(tq.expect_identifier());
-                try!(tq.expect(TokenKind::CloseBracket));
-                return Ok(array_pattern(&head.name, &tail, span.expanded(tq.pos())));
-            }
         }
         else
         {
@@ -357,6 +336,62 @@ fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, name: &str, 
     ))
 }
 
+fn parse_struct_pattern(tq: &mut TokenQueue, name: &str, span: &Span) -> CompileResult<Pattern>
+{
+    let bindings = try!(parse_comma_separated_list(tq, TokenKind::CloseCurly, |tq| {
+        let (name, _) = try!(tq.expect_identifier());
+        Ok(name)
+    }));
+    Ok(Pattern::Struct(struct_pattern(name, bindings, Vec::new(), Type::Unknown, span.expanded(tq.pos()))))
+}
+
+pub fn parse_pattern(tq: &mut TokenQueue) -> CompileResult<Pattern>
+{
+    let tok = try!(tq.pop());
+    match tok.kind
+    {
+        TokenKind::Number(ref num) => parse_number(num, &tok.span).map(|lit| Pattern::Literal(lit)),
+        TokenKind::True => Ok(Pattern::Literal(Literal::Bool(tok.span, true))),
+        TokenKind::False => Ok(Pattern::Literal(Literal::Bool(tok.span, false))),
+        TokenKind::StringLiteral(s) => Ok(Pattern::Literal(Literal::String(tok.span, s))),
+
+        TokenKind::OpenBracket => {
+            if tq.is_next(TokenKind::CloseBracket)
+            {
+                try!(tq.pop());
+                Ok(empty_array_pattern(tok.span.expanded(tq.pos())))
+            }
+            else if tq.is_next_at(1, TokenKind::Pipe)
+            {
+                let (head, _head_span) = try!(tq.expect_identifier());
+                try!(tq.expect(TokenKind::Pipe));
+                let (tail, _) = try!(tq.expect_identifier());
+                try!(tq.expect(TokenKind::CloseBracket));
+                Ok(array_pattern(&head, &tail, tok.span.expanded(tq.pos())))
+            }
+            else
+            {
+                let al = try!(parse_array_literal(tq, &tok.span));
+                Ok(Pattern::Literal(al))
+            }
+        },
+
+        TokenKind::OpenCurly => {
+            parse_struct_pattern(tq, "", &tok.span)
+        },
+
+        TokenKind::Identifier(id) => {
+            if tq.is_next(TokenKind::OpenCurly) {
+                try!(tq.pop());
+                parse_struct_pattern(tq, &id, &tok.span)
+            } else {
+                Ok(Pattern::Name(NameRef::new(id, tok.span)))
+            }
+        },
+        _ => err(&tok.span, ErrorCode::UnexpectedToken, format!("Unexpected token '{}'", tok)),
+    }
+}
+
 fn parse_match(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 {
     let target = try!(parse_expression(tq));
@@ -364,7 +399,7 @@ fn parse_match(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
     let mut cases = Vec::new();
     loop
     {
-        let pattern = try!(parse_expression(tq)).to_pattern();
+        let pattern = try!(parse_pattern(tq));
         try!(tq.expect(TokenKind::FatArrow));
         let t = try!(parse_expression(tq));
         let case_span = pattern.span().expanded(tq.pos());
@@ -571,11 +606,11 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
     match tok.kind
     {
         TokenKind::True => {
-            Ok(Expression::BoolLiteral(tok.span, true))
+            Ok(Expression::Literal(Literal::Bool(tok.span, true)))
         },
 
         TokenKind::False => {
-            Ok(Expression::BoolLiteral(tok.span, false))
+            Ok(Expression::Literal(Literal::Bool(tok.span, false)))
         },
 
         TokenKind::Lambda => {
@@ -599,7 +634,7 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
         },
 
         TokenKind::OpenBracket => {
-            parse_array_literal(tq, &tok.span)
+            parse_array_literal(tq, &tok.span).map(|al| Expression::Literal(al))
         },
 
         TokenKind::OpenCurly => {
@@ -629,16 +664,14 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
         },
 
         TokenKind::StringLiteral(s) => {
-            Ok(Expression::StringLiteral(tok.span, s))
+            Ok(Expression::Literal(Literal::String(tok.span, s)))
         },
 
         TokenKind::Number(n) => {
-            Ok(try!(parse_number(&n, &tok.span)))
+            parse_number(&n, &tok.span).map(|n| Expression::Literal(n))
         },
 
         TokenKind::Operator(op) => parse_unary_expression(tq, op, &tok.span),
-
-
 
         _ => err(&tok.span, ErrorCode::UnexpectedToken, format!("Unexpected token '{}'", tok)),
     }

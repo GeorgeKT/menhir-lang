@@ -50,33 +50,6 @@ pub struct StructInitializer
     pub generic_args: GenericMapper,
 }
 
-impl StructInitializer
-{
-    pub fn to_struct_pattern(self) -> Expression
-    {
-        let mut bindings = Vec::with_capacity(self.member_initializers.len());
-        for e in &self.member_initializers {
-            if let Expression::NameRef(ref nr) = *e {
-                bindings.push(nr.name.clone());
-            } else {
-                break;
-            }
-        }
-
-        if bindings.len() != self.member_initializers.len() {
-            return Expression::StructInitializer(self); // Not an array pattern
-        }
-
-        Expression::StructPattern(StructPattern{
-            name: self.struct_name,
-            types: Vec::with_capacity(bindings.len()),
-            bindings: bindings,
-            span: self.span,
-            typ: Type::Unknown,
-        })
-    }
-}
-
 pub fn struct_initializer(struct_name: &str, member_initializers: Vec<Expression>, span: Span) -> StructInitializer
 {
     StructInitializer{
@@ -128,27 +101,6 @@ pub fn struct_member_access(name: &str, members: Vec<MemberAccessType>, span: Sp
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct StructPattern
-{
-    pub name: String,
-    pub bindings: Vec<String>,
-    pub types: Vec<Type>,
-    pub typ: Type,
-    pub span: Span,
-}
-
-pub fn struct_pattern(name: &str, bindings: Vec<String>, types: Vec<Type>, typ: Type, span: Span) -> StructPattern
-{
-    StructPattern{
-        name: name.into(),
-        bindings: bindings,
-        types: types,
-        typ: typ,
-        span: span,
-    }
-}
-
 impl TreePrinter for StructDeclaration
 {
     fn print(&self, level: usize)
@@ -188,15 +140,5 @@ impl TreePrinter for StructMemberAccess
     {
         let p = prefix(level);
         println!("{}{}.{} ({})", p, self.name, join(self.members.iter(), "."), self.span);
-    }
-}
-
-
-impl TreePrinter for StructPattern
-{
-    fn print(&self, level: usize)
-    {
-        let p = prefix(level);
-        println!("{}struct pattern {}{{{}}} (span: {}, type: {})", p, self.name, join(self.bindings.iter(), ","), self.span, self.typ);
     }
 }

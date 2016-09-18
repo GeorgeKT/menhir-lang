@@ -19,12 +19,12 @@ impl IfExpression
             target: self.condition.clone(),
             cases: vec![
                 MatchCase{
-                    match_expr: Expression::BoolLiteral(Span::default(), true),
+                    pattern: Pattern::Literal(Literal::Bool(Span::default(), true)),
                     to_execute: self.on_true.clone(),
                     span: self.on_true.span(),
                 },
                 MatchCase{
-                    match_expr: Expression::BoolLiteral(Span::default(), false),
+                    pattern: Pattern::Literal(Literal::Bool(Span::default(), false)),
                     to_execute: self.on_false.clone(),
                     span: self.on_false.span(),
                 },
