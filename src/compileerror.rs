@@ -23,6 +23,7 @@ pub enum ErrorCode
     InvalidBinaryOperator,
     InvalidFloatingPoint,
     InvalidInteger,
+    InvalidCharLiteral,
     TypeError,
     UnknownName,
     MissingType,

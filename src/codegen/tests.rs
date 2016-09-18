@@ -89,7 +89,6 @@ main() -> bool = !true
     "#, false) == Ok(0));
 }
 
-
 #[test]
 fn test_binary_operators()
 {
@@ -472,8 +471,27 @@ max(a: int, b: int) -> int =
     if a > b: a
     else b
 
-main() -> int = (let x = max(10, 11);  7 * x)
+main() -> int = (
+    let x = max(10, 11);
+    7 * x
+)
     "#, true);
     println!("r: {:?}", r);
     assert!(r == Ok(77));
+}
+
+#[test]
+fn test_char()
+{
+    let r = run(r#"
+foo(c: char) -> int =
+    match c:
+        'b' => 5,
+        '\n' => 7,
+        _ => 3
+
+main() -> int = foo('b') + foo('c')
+    "#, true);
+    println!("r: {:?}", r);
+    assert!(r == Ok(8));
 }

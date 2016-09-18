@@ -14,6 +14,7 @@ enum LexState
     Number,
     Operator,
     InString,
+    InChar,
 }
 
 pub struct Lexer
@@ -62,7 +63,9 @@ impl Lexer
         self.token_start_pos = self.pos;
         self.state = ns;
         self.data.clear();
-        if self.state != LexState::InString {self.data.push(c);}
+        if self.state != LexState::InString && self.state != LexState::InChar {
+            self.data.push(c);
+        }
     }
 
     fn idle(&mut self, c: char) -> CompileResult<()>
@@ -84,6 +87,7 @@ impl Lexer
             ';' => {self.add(TokenKind::SemiColon, span); Ok(())},
             '0'...'9' => {self.start(c, LexState::Number); Ok(())},
             '\"' => {self.start(c, LexState::InString); Ok(())},
+            '\'' => {self.start(c, LexState::InChar); Ok(())},
             ch if is_identifier_start(ch) => {self.start(c, LexState::Identifier); Ok(())},
             ch if is_operator_start(ch) => {self.start(c, LexState::Operator); Ok(())}
             _ => {
@@ -213,7 +217,7 @@ impl Lexer
         }
     }
 
-    fn in_string(&mut self, c: char) -> CompileResult<()>
+    fn in_string_or_char_literal(&mut self, c: char, end: char)
     {
         if self.escape_code
         {
@@ -225,15 +229,21 @@ impl Lexer
                 't' => self.data.push('\n'),
                 _   => self.data.push(c),
             }
-
-            Ok(())
         }
         else if c == '\\'
         {
             self.escape_code = true;
-            Ok(())
         }
-        else if c == '"'
+        else if c != end
+        {
+            self.data.push(c);
+        }
+    }
+
+    fn in_string(&mut self, c: char) -> CompileResult<()>
+    {
+        self.in_string_or_char_literal(c, '"');
+        if c == '"'
         {
             let s = mem::replace(&mut self.data, String::new());
             let mut span = self.current_span();
@@ -241,13 +251,30 @@ impl Lexer
             self.add(TokenKind::StringLiteral(s), span);
             self.escape_code = false;
             self.state = LexState::Idle;
-            Ok(())
+
         }
-        else
+        Ok(())
+    }
+
+    fn in_char(&mut self, c: char) -> CompileResult<()>
+    {
+        self.in_string_or_char_literal(c, '\'');
+        if c == '\''
         {
-            self.data.push(c);
-            Ok(())
+            let mut span = self.current_span();
+            span.end.offset += 1; // Need to include the single quote
+            if self.data.len() != 1 {
+                return err(&span, ErrorCode::InvalidCharLiteral, format!("Invalid char literal"));
+            }
+
+            let c = self.data.chars().nth(0).expect("Invalid char literal");
+            self.data.clear();
+            self.add(TokenKind::CharLiteral(c), span);
+            self.escape_code = false;
+            self.state = LexState::Idle;
         }
+
+        Ok(())
     }
 
     fn feed(&mut self, c: char) -> CompileResult<()>
@@ -260,6 +287,7 @@ impl Lexer
             LexState::Number =>  self.number(c),
             LexState::Operator => self.operator(c),
             LexState::InString => self.in_string(c),
+            LexState::InChar => self.in_char(c),
         }
     }
 

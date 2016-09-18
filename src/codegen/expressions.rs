@@ -33,6 +33,13 @@ unsafe fn gen_bool(ctx: &Context, v: bool) -> ValueRef
     ValueRef::Const(LLVMConstInt(LLVMInt1TypeInContext(ctx.context), if v {1} else {0}, 0))
 }
 
+
+unsafe fn gen_char(ctx: &Context, v: u8) -> ValueRef
+{
+    ValueRef::Const(LLVMConstInt(LLVMInt8TypeInContext(ctx.context), v as u64, 0))
+}
+
+
 unsafe fn gen_float(ctx: &Context, num: &str) -> ValueRef
 {
     match num.parse::<f64>()
@@ -613,6 +620,13 @@ unsafe fn gen_match_case(
             gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
         },
 
+        Pattern::Literal(Literal::Char(_, v)) => {
+            let iv = gen_char(ctx, v);
+            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(ctx.builder), iv.load(ctx.builder), cstr("cmp"));
+            LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
+            gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
+        },
+
         Pattern::Name(ref nr) => {
             gen_name_pattern_match(ctx, mc, target, match_end_bb, match_case_bb, next_bb, dst, nr)
         },
@@ -892,6 +906,7 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> ValueRef
             Expression::Literal(Literal::Float(_, ref v_str)) => gen_float(ctx, &v_str),
             Expression::Literal(Literal::String(_, ref s))  => gen_string_literal(ctx, s),
             Expression::Literal(Literal::Bool(_, v)) => gen_bool(ctx, v),
+            Expression::Literal(Literal::Char(_, v)) => gen_char(ctx, v),
             Expression::StructInitializer(ref si) => gen_struct_initializer(ctx, si),
             Expression::StructMemberAccess(ref sma) => gen_struct_member_access(ctx, sma),
         }

@@ -428,6 +428,7 @@ pub fn to_primitive(name: &str) -> Option<Type>
         "float" => Some(Type::Float),
         "string" => Some(array_type(Type::Char)),
         "bool" => Some(Type::Bool),
+        "char" => Some(Type::Char),
         _ => None,
     }
 }
