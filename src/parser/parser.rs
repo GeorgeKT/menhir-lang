@@ -185,7 +185,7 @@ fn parse_generic_arg_list(tq: &mut TokenQueue) -> CompileResult<Vec<Type>>
     parse_comma_separated_list(tq, TokenKind::Operator(Operator::GreaterThan), parse_type)
 }
 
-fn parse_type_start(tq: &mut TokenQueue) -> CompileResult<Type>
+fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
 {
     if tq.is_next(TokenKind::Dollar)
     {
@@ -232,37 +232,6 @@ fn parse_type_start(tq: &mut TokenQueue) -> CompileResult<Type>
             },
         }
     }
-}
-
-fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
-{
-    let mut cases = Vec::new();
-
-    let add_sum_type_case = |t: Type, cases: &mut Vec<SumTypeCase>| {
-        match t {
-            Type::Struct(_) => cases.push(sum_type_case("", t)),
-            _ => cases.push(sum_type_case("", struct_type(vec![struct_member("", t)]))),
-        }
-    };
-
-    loop
-    {
-        let t = try!(parse_type_start(tq));
-        if !tq.is_next(TokenKind::Pipe) {
-            if cases.is_empty() {
-                return Ok(t)
-            } else {
-                add_sum_type_case(t, &mut cases);
-                break;
-            }
-        } else {
-            add_sum_type_case(t, &mut cases);
-        }
-
-        try!(tq.pop());
-    }
-
-    Ok(sum_type(cases))
 }
 
 fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool) -> CompileResult<Argument>
