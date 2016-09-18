@@ -350,7 +350,10 @@ pub fn parse_pattern(tq: &mut TokenQueue) -> CompileResult<Pattern>
         },
 
         TokenKind::Identifier(id) => {
-            if tq.is_next(TokenKind::OpenCurly) {
+            if id == "_" {
+                Ok(Pattern::Any(tok.span))
+            }
+            else if tq.is_next(TokenKind::OpenCurly) {
                 try!(tq.pop());
                 parse_struct_pattern(tq, &id, &tok.span)
             } else {

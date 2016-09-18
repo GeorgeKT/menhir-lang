@@ -35,6 +35,7 @@ pub enum Pattern
     EmptyArray(EmptyArrayPattern),
     Name(NameRef),
     Struct(StructPattern),
+    Any(Span),
 }
 
 impl Pattern
@@ -48,6 +49,7 @@ impl Pattern
             Pattern::EmptyArray(ref a) => a.span.clone(),
             Pattern::Name(ref n) => n.span.clone(),
             Pattern::Struct(ref s) => s.span.clone(),
+            Pattern::Any(ref span) => span.clone(),
         }
     }
 }
@@ -89,6 +91,7 @@ impl TreePrinter for Pattern
             Pattern::EmptyArray(ref a) => println!("{}empty array pattern [] ({})", p, a.span),
             Pattern::Name(ref n) => println!("{}name pattern {} ({})", p, n.name, n.span),
             Pattern::Struct(ref s) => println!("{}struct pattern {}{{{}}} (span: {}, type: {})", p, s.name, join(s.bindings.iter(), ","), s.span, s.typ),
+            Pattern::Any(ref span) => println!("{}any pattern ({})", p, span),
         }
     }
 }

@@ -269,6 +269,11 @@ fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> Comp
     Ok(fun.sig.typ.clone())
 }
 
+fn check_match_is_complete(m: &MatchExpression, target_type: &Type) -> CompileResult<()>
+{
+    panic!("NYI");
+}
+
 fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> CompileResult<Type>
 {
     let target_type = try!(type_check_expression(ctx, &mut m.target, None));
@@ -312,7 +317,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
 
             Pattern::Name(ref mut nr) => {
                 try!(type_check_name(ctx, nr, Some(target_type.clone())));
-                if nr.name != "_" && nr.typ != target_type {
+                if nr.typ != target_type {
                     return err(&match_span, ErrorCode::TypeError,
                         format!("Cannot pattern match an expression of type {} with an expression of type {}",
                             target_type, nr.typ));
@@ -385,6 +390,10 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
                 ctx.pop_stack();
                 ct
             },
+
+            Pattern::Any(_) => {
+                try!(infer_case_type(ctx, &mut c.to_execute, &return_type))
+            }
         };
 
         if return_type == Type::Unknown {
@@ -395,6 +404,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Co
     }
 
     m.typ = return_type.clone();
+    //try!(check_match_is_complete(m, &target_type));
     Ok(return_type)
 }
 

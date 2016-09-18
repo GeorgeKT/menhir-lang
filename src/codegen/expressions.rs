@@ -528,11 +528,7 @@ unsafe fn gen_name_pattern_match(
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
         },
         _ => {
-            if nr.name == "_" {
-                LLVMBuildBr(ctx.builder, match_case_bb);
-            } else {
-                panic!("Internal Compiler Error: Expression is not a valid match pattern");
-            }
+            panic!("Internal Compiler Error: Expression is not a valid match pattern");
         }
     }
 
@@ -619,6 +615,11 @@ unsafe fn gen_match_case(
 
         Pattern::Name(ref nr) => {
             gen_name_pattern_match(ctx, mc, target, match_end_bb, match_case_bb, next_bb, dst, nr)
+        },
+
+        Pattern::Any(_) => {
+            LLVMBuildBr(ctx.builder, match_case_bb);
+            gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
         },
 
         Pattern::EmptyArray(_) => {
