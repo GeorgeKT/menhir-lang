@@ -3,8 +3,6 @@ use llvm::core::*;
 
 use ast::Type;
 use codegen::{Context, Array, StructValue, SumTypeValue, cstr};
-use compileerror::{CompileResult, ErrorCode, err};
-use span::Span;
 
 
 #[derive(Debug, Clone)]
@@ -74,58 +72,56 @@ impl ValueRef
         }
     }
 
-    pub unsafe fn store_direct(&self, ctx: &Context, val: LLVMValueRef, span: &Span) -> CompileResult<()>
+    pub unsafe fn store_direct(&self, ctx: &Context, val: LLVMValueRef)
     {
         match *self
         {
             ValueRef::Ptr(av) => {
                 LLVMBuildStore(ctx.builder, val, av);
-                Ok(())
             },
             _ => {
-                err(span, ErrorCode::CodegenError, format!("Store not allowed"))
+                panic!("Internal Compiler Error: Store not allowed")
             },
         }
     }
 
-    pub unsafe fn store(&self, ctx: &Context, val: ValueRef, span: &Span) -> CompileResult<()>
+    pub unsafe fn store(&self, ctx: &Context, val: ValueRef)
     {
         match *self
         {
             ValueRef::Ptr(av) => {
                 LLVMBuildStore(ctx.builder, val.load(ctx.builder), av);
-                Ok(())
             },
             _ => {
-                err(span, ErrorCode::CodegenError, format!("Store not allowed"))
+                panic!("Internal Compiler Error: Store not allowed")
             },
         }
     }
 
-    pub unsafe fn member(&self, ctx: &Context, idx: usize, span: &Span) -> CompileResult<ValueRef>
+    pub unsafe fn member(&self, ctx: &Context, idx: usize) -> ValueRef
     {
         match *self
         {
-            ValueRef::Struct(ref vr) => Ok(vr.get_member_ptr(ctx, idx)),
-            _ => err(span, ErrorCode::CodegenError, format!("Attempting to get a struct member from a non struct")),
+            ValueRef::Struct(ref vr) => vr.get_member_ptr(ctx, idx),
+            _ => panic!("Internal Compiler Error: Attempting to get a struct member from a non struct"),
         }
     }
 
-    pub unsafe fn case_struct(&self, ctx: &Context, idx: usize, span: &Span) -> CompileResult<ValueRef>
+    pub unsafe fn case_struct(&self, ctx: &Context, idx: usize) -> ValueRef
     {
         match *self
         {
-            ValueRef::Sum(ref st) => Ok(st.get_data_ptr(ctx, idx)),
-            _ => err(span, ErrorCode::CodegenError, format!("Attempting to get a sum type case member from a non sum type")),
+            ValueRef::Sum(ref st) => st.get_data_ptr(ctx, idx),
+            _ => panic!("Internal Compiler Error: Attempting to get a sum type case member from a non sum type"),
         }
     }
 
-    pub unsafe fn case_type(&self, ctx: &Context, span: &Span) -> CompileResult<ValueRef>
+    pub unsafe fn case_type(&self, ctx: &Context) -> ValueRef
     {
         match *self
         {
-            ValueRef::Sum(ref st) => Ok(st.get_type_ptr(ctx)),
-            _ => err(span, ErrorCode::CodegenError, format!("Attempting to get a sum type case member from a non sum type")),
+            ValueRef::Sum(ref st) => st.get_type_ptr(ctx),
+            _ => panic!("Internal Compiler Error: Attempting to get a sum type case member from a non sum type"),
         }
     }
 }

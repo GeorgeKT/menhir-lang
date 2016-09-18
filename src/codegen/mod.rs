@@ -88,12 +88,12 @@ pub struct CodeGenOptions
     pub optimize: bool,
 }
 
-fn gen_module(ctx: &mut Context, module: &Module) -> CompileResult<()>
+fn gen_module(ctx: &mut Context, module: &Module)
 {
     for ref func in module.functions.values() {
         if !func.is_generic() {
             unsafe {
-                let fi = Rc::new(try!(gen_function_sig(ctx, &func.sig)));
+                let fi = Rc::new(gen_function_sig(ctx, &func.sig));
                 ctx.add_function(fi);
             }
         }
@@ -101,7 +101,7 @@ fn gen_module(ctx: &mut Context, module: &Module) -> CompileResult<()>
 
     for ref func in module.externals.values() {
         unsafe {
-            let fi = try!(gen_function_sig(ctx, &func.sig));
+            let fi = gen_function_sig(ctx, &func.sig);
             ctx.add_function(Rc::new(fi));
         }
     }
@@ -109,12 +109,10 @@ fn gen_module(ctx: &mut Context, module: &Module) -> CompileResult<()>
     for ref func in module.functions.values() {
         if !func.is_generic() {
             unsafe{
-                try!(gen_function(ctx, &func.sig, &func.expression));
+                gen_function(ctx, &func.sig, &func.expression);
             }
         }
     }
-
-    Ok(())
 }
 
 pub fn codegen(m: &Module) -> CompileResult<Context>
@@ -122,7 +120,7 @@ pub fn codegen(m: &Module) -> CompileResult<Context>
     unsafe {
         // Set up a context, module and builder in that context.
         let mut ctx = try!(Context::new(&m.name));
-        try!(gen_module(&mut ctx, m));
+        gen_module(&mut ctx, m);
 
         match ctx.verify()
         {
