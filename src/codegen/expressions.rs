@@ -64,7 +64,7 @@ unsafe fn gen_string_literal(ctx: &Context, s: &str) -> ValueRef
     LLVMSetInitializer(glob, string_data.get());
 
     let typ = ctx.resolve_type(&string_type());
-    let array = Array::new(ctx.alloc(typ, "string"), Type::Char);
+    let array = Array::new(ctx.stack_alloc(typ, "string"), Type::Char);
 
     let length_ptr = array.get_length_ptr(ctx);
     length_ptr.store_direct(ctx, const_int(ctx, s.len() as u64));
@@ -176,7 +176,7 @@ unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> ValueRef
                     },
 
                     Operator::Equals | Operator::NotEquals => {
-                        let dst = ctx.alloc(ctx.resolve_type(&Type::Bool), "dst");
+                        let dst = ctx.stack_alloc(ctx.resolve_type(&Type::Bool), "dst");
                         let func = ctx.get_current_function();
                         let on_eq = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("on_eq"));
                         let on_not_eq = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("on_not_eq"));
@@ -296,17 +296,17 @@ pub unsafe fn gen_function(ctx: &mut Context, signature: &FunctionSignature, bod
         let ret_arg = LLVMGetParam(fi.function, signature.args.len() as libc::c_uint);
         let mut vr = ValueRef::new(ret_arg, &signature.return_type);
         gen_expression_store(ctx, body, &mut vr);
+        ctx.pop_stack();
         LLVMBuildRetVoid(ctx.builder);
         vr
     }
     else
     {
         let ret = gen_expression(ctx, body);
+        ctx.pop_stack();
         LLVMBuildRet(ctx.builder, ret.load(ctx.builder));
         ret
     };
-
-    ctx.pop_stack();
 
     if current_bb != ptr::null_mut() {
         LLVMPositionBuilderAtEnd(ctx.builder, current_bb);
@@ -768,7 +768,8 @@ unsafe fn gen_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> ValueRef
     match a.array_type
     {
         Type::Array(ref at) => {
-            let mut array = Array::alloc(ctx, at.element_type.clone(), a.elements.len());
+            let array_type = ctx.resolve_type(&a.array_type);
+            let mut array = Array::alloc(ctx, array_type, at.element_type.clone(), a.elements.len());
             gen_array_literal_store(ctx, a, &mut array);
             ValueRef::Array(array)
         },

@@ -9,7 +9,7 @@ use llvm::core::*;
 use llvm::target::*;
 
 use ast::{Type, array_type};
-use codegen::{cstr, ValueRef, CodeGenOptions, TargetMachine};
+use codegen::{cstr, ValueRef, CodeGenOptions, TargetMachine, const_int};
 use compileerror::{CompileResult, CompileError, ErrorCode, err};
 use codegen::symboltable::{VariableInstance, FunctionInstance, SymbolTable};
 use span::Span;
@@ -19,6 +19,7 @@ pub struct StackFrame
 {
     pub symbols: SymbolTable,
     pub current_function: LLVMValueRef,
+    to_dec_ref: Vec<LLVMValueRef>,
 }
 
 impl StackFrame
@@ -28,8 +29,34 @@ impl StackFrame
         StackFrame{
             symbols: SymbolTable::new(),
             current_function: current_function,
+            to_dec_ref: Vec::new(),
         }
     }
+
+    pub fn add_dec_ref_target(&mut self, target: LLVMValueRef)
+    {
+        self.to_dec_ref.push(target);
+    }
+
+    pub fn cleanup(&self, ctx: &Context)
+    {
+        let arc_dec_ref = ctx.get_builtin("arc_dec_ref");
+        for object in &self.to_dec_ref {
+            unsafe {
+                let void_ptr = LLVMBuildBitCast(ctx.builder, *object, ctx.resolve_type(&Type::VoidPtr), cstr("cast_to_void_ptr"));
+                let mut args = vec![void_ptr];
+                LLVMBuildCall(ctx.builder, arc_dec_ref.function, args.as_mut_ptr(), 1, cstr(""));
+            }
+        }
+    }
+}
+
+#[allow(unused)]
+#[derive(Eq, PartialEq, Debug)]
+pub enum CodeGenMode
+{
+    Normal,
+    UnitTest, // Replaces arc_alloc, by malloc
 }
 
 pub struct Context
@@ -40,11 +67,13 @@ pub struct Context
     target_machine: TargetMachine,
     name: String,
     stack: Vec<StackFrame>,
+    builtins: SymbolTable,
+    mode: CodeGenMode,
 }
 
 impl Context
 {
-	pub fn new(module_name: &str) -> CompileResult<Context>
+	pub fn new(module_name: &str, mode: CodeGenMode) -> CompileResult<Context>
 	{
 		unsafe {
             let cname = CString::new(module_name).expect("Invalid module name");
@@ -57,6 +86,8 @@ impl Context
                 target_machine: target_machine,
                 name: module_name.into(),
                 stack: vec![StackFrame::new(ptr::null_mut())],
+                builtins: SymbolTable::new(),
+                mode: mode,
             })
         }
 	}
@@ -81,6 +112,18 @@ impl Context
         }
 
         None
+    }
+
+    pub fn add_builtin(&mut self, f: Rc<FunctionInstance>)
+    {
+        self.builtins.add_function(f);
+    }
+
+    pub fn get_builtin(&self, name: &str) -> Rc<FunctionInstance>
+    {
+        self.builtins
+            .get_function(name)
+            .expect("Internal Compiler Error: Attempting to get unknown builtin function")
     }
 
     pub fn add_function(&mut self, f: Rc<FunctionInstance>)
@@ -108,7 +151,12 @@ impl Context
 
     pub fn pop_stack(&mut self)
     {
-        self.stack.pop();
+        let sf = self.stack.pop();
+        if let Some(stack_frame) = sf {
+            if self.mode == CodeGenMode::Normal {
+                stack_frame.cleanup(self);
+            }
+        }
     }
 
     pub fn get_current_function(&self) -> LLVMValueRef
@@ -120,10 +168,10 @@ impl Context
             }
         }
 
-        panic!("No current function on stack, we should have caught this !");
+        panic!("Internal Compiler Error: No current function on stack, we should have caught this !");
     }
 
-    pub unsafe fn alloc(&self, typ: LLVMTypeRef, name: &str) -> LLVMValueRef
+    pub unsafe fn stack_alloc(&self, typ: LLVMTypeRef, name: &str) -> LLVMValueRef
     {
         let func = self.get_current_function();
         let entry_bb = LLVMGetEntryBasicBlock(func);
@@ -133,6 +181,43 @@ impl Context
         let alloc = LLVMBuildAlloca(self.builder, typ, cstr(name));
         LLVMPositionBuilderAtEnd(self.builder, current_bb); // Position the builder where it was before
         alloc
+    }
+
+/*
+    pub unsafe fn heap_alloc(&self, typ: LLVMTypeRef, name: &str) -> LLVMValueRef
+    {
+        let arc_alloc = self.get_builtin("arc_alloc");
+        let size = self.target_machine.size_of_type(typ);
+        let mut args = vec![
+            const_int(self, size as u64)
+        ];
+        let void_ptr = LLVMBuildCall(self.builder, arc_alloc.function, args.as_mut_ptr(), 1, cstr(name));
+        LLVMBuildBitCast(self.builder, void_ptr, LLVMPointerType(typ, 0), cstr("cast_to_ptr"))
+    }
+    */
+
+    pub unsafe fn heap_alloc_array(&self, element_type: LLVMTypeRef, len: LLVMValueRef, name: &str) -> LLVMValueRef
+    {
+        match self.mode
+        {
+            CodeGenMode::Normal => {
+                let arc_alloc = self.get_builtin("arc_alloc");
+                let size = self.target_machine.size_of_type(element_type);
+                let mut args = vec![
+                    LLVMBuildMul(self.builder, len, const_int(self, size as u64), cstr("array_len"))
+                ];
+                let void_ptr = LLVMBuildCall(self.builder, arc_alloc.function, args.as_mut_ptr(), 1, cstr(name));
+                LLVMBuildBitCast(self.builder, void_ptr, LLVMPointerType(element_type, 0), cstr("cast_to_ptr"))
+            },
+            CodeGenMode::UnitTest => {
+                LLVMBuildArrayMalloc(self.builder, element_type, len, cstr("heap_alloc"))
+            },
+        }
+    }
+
+    pub fn add_dec_ref_target(&mut self, target: LLVMValueRef)
+    {
+        self.stack.last_mut().expect("Stack is empty").add_dec_ref_target(target)
     }
 
     pub unsafe fn gen_object_file(&self, opts: &CodeGenOptions) -> CompileResult<String>
@@ -226,6 +311,7 @@ impl Context
         match *typ
         {
             Type::Void => LLVMVoidTypeInContext(self.context),
+            Type::VoidPtr => LLVMPointerType(LLVMVoidTypeInContext(self.context), 0),
             Type::Int => LLVMInt64TypeInContext(self.context),
             Type::Bool => LLVMInt1TypeInContext(self.context),
             Type::Float => LLVMDoubleTypeInContext(self.context),

@@ -1,12 +1,13 @@
-type PairOrSingle = Pair{int, int} | Single{int}
-
-pair_or_single(a: int, b: int) -> PairOrSingle =
-    if a != b: Pair{a, b} else Single{a}
-
-value_of(v: PairOrSingle) -> int =
-    match v:
-        Pair{a, b} => a + b,
-        Single{a} => a
+import io
 
 main() -> int =
-    value_of(pair_or_single(4, 5)) + value_of(pair_or_single(3, 3))
+    match open("/tmp/foo", WriteOnly):
+        Ok{file} => (
+            write(file, "Hello World!");
+            close(file);
+            0
+        ),
+        Err{err} => (
+            println("Failed to open /tmp/foo");
+            1
+        )

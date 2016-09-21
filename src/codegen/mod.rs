@@ -17,12 +17,13 @@ use std::rc::Rc;
 use llvm::prelude::*;
 use llvm::core::*;
 
-use ast::Module;
+use ast::*;
 use compileerror::{CompileResult};
 use codegen::expressions::{gen_function, gen_function_sig};
+use span::Span;
 
 pub use codegen::expressions::const_int;
-pub use codegen::context::{Context};
+pub use codegen::context::{Context, CodeGenMode};
 pub use codegen::linker::link;
 pub use codegen::valueref::ValueRef;
 pub use codegen::array::Array;
@@ -88,6 +89,50 @@ pub struct CodeGenOptions
     pub optimize: bool,
 }
 
+fn add_builtin_functions(ctx: &mut Context)
+{
+    /*
+    As defined in cobra-runtime:
+    void* arc_alloc(size_t size);
+    void arc_inc_ref(void* ptr);
+    void arc_dec_ref(void* ptr);
+    */
+
+    let functions = vec![
+        sig(
+            "arc_alloc",
+            Type::VoidPtr,
+            vec![
+                Argument::new("size".into(), Type::Int, Span::default())
+            ],
+            Span::default()
+        ),
+        sig(
+            "arc_inc_ref",
+            Type::Void,
+            vec![
+                Argument::new("ptr".into(), Type::VoidPtr, Span::default())
+            ],
+            Span::default()
+        ),
+        sig(
+            "arc_dec_ref",
+            Type::Void,
+            vec![
+                Argument::new("ptr".into(), Type::VoidPtr, Span::default())
+            ],
+            Span::default()
+        )
+    ];
+
+    for func_sig in &functions {
+        let instance = unsafe {
+            gen_function_sig(ctx, &func_sig)
+        };
+        ctx.add_builtin(Rc::new(instance));
+    }
+}
+
 fn gen_module(ctx: &mut Context, module: &Module)
 {
     for ref func in module.functions.values() {
@@ -115,11 +160,12 @@ fn gen_module(ctx: &mut Context, module: &Module)
     }
 }
 
-pub fn codegen(m: &Module) -> CompileResult<Context>
+pub fn codegen(m: &Module, mode: CodeGenMode) -> CompileResult<Context>
 {
     unsafe {
         // Set up a context, module and builder in that context.
-        let mut ctx = try!(Context::new(&m.name));
+        let mut ctx = try!(Context::new(&m.name, mode));
+        add_builtin_functions(&mut ctx);
         gen_module(&mut ctx, m);
 
         match ctx.verify()

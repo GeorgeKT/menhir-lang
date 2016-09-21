@@ -7,7 +7,7 @@ use llvm::core::*;
 use llvm::execution_engine::*;
 use compileerror::{ErrorCode, err, CompileResult};
 use parser::{ParserOptions, parse_module};
-use codegen::{codegen, cstr, llvm_init};
+use codegen::{codegen, cstr, llvm_init, CodeGenMode};
 use passes::{type_check_module};
 use ast::{TreePrinter};
 use span::Span;
@@ -35,7 +35,7 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
     }
 
     llvm_init();
-    let mut ctx = try!(codegen(&md));
+    let mut ctx = try!(codegen(&md, CodeGenMode::UnitTest));
 
     unsafe {
         LLVMLinkInInterpreter();

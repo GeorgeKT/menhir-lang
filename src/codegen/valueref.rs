@@ -20,7 +20,7 @@ impl ValueRef
     pub unsafe fn alloc(ctx: &Context, typ: &Type) -> ValueRef
     {
         let llvm_type = ctx.resolve_type(typ);
-        let alloc = ctx.alloc(llvm_type, "alloc");
+        let alloc = ctx.stack_alloc(llvm_type, "alloc");
         ValueRef::new(alloc, typ)
     }
 

@@ -1,35 +1,8 @@
-use std::os::raw::c_uint;
 use llvm::prelude::*;
 use llvm::core::*;
 
 use ast::{Type, array_type};
 use codegen::{const_int, cstr, ValueRef, Context};
-
-#[derive(Debug, Clone)]
-pub struct ArrayData
-{
-    array: LLVMValueRef,
-    element_type: Type,
-}
-
-impl ArrayData
-{
-    pub unsafe fn alloc(ctx: &Context, element_type: &Type, len: usize) -> ArrayData
-    {
-        let typ = LLVMArrayType(ctx.resolve_type(element_type), len as c_uint);
-        ArrayData{
-            array: ctx.alloc(typ, "array_data"),
-            element_type: element_type.clone(),
-        }
-    }
-
-    pub unsafe fn get_element(&self, ctx: &Context, index: LLVMValueRef) -> ValueRef
-    {
-        let mut index_expr = vec![const_int(ctx, 0), index];
-        let element = LLVMBuildGEP(ctx.builder, self.array, index_expr.as_mut_ptr(), 2, cstr("el"));
-        ValueRef::new(element, &self.element_type)
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct Array
@@ -38,7 +11,20 @@ pub struct Array
     element_type: Type,
 }
 
+unsafe fn heap_alloc_array(ctx: &mut Context, element_type: &Type, len: LLVMValueRef) -> LLVMValueRef
+{
+    let llvm_element_type = ctx.resolve_type(&element_type);
+    let array = ctx.heap_alloc_array(llvm_element_type, len, "array_data");
+    ctx.add_dec_ref_target(array);
+    array
+}
 
+unsafe fn get_array_element(ctx: &Context, array: LLVMValueRef, index: LLVMValueRef, element_type: &Type) -> ValueRef
+{
+    let mut index_expr = vec![index];
+    let element = LLVMBuildGEP(ctx.builder, array, index_expr.as_mut_ptr(), 1, cstr("el"));
+    ValueRef::new(element, element_type)
+}
 
 impl Array
 {
@@ -56,7 +42,7 @@ impl Array
         let slice_type = ctx.resolve_type(&array_type(Type::Int));
         let slice = Array{
             element_type: Type::Int,
-            array: ctx.alloc(slice_type, "array"),
+            array: ctx.stack_alloc(slice_type, "array"),
         };
 
         let length_ptr = slice.get_length_ptr(ctx);
@@ -70,10 +56,11 @@ impl Array
         slice
     }
 
-    pub unsafe fn init(&mut self, ctx: &Context, len: usize)
+    pub unsafe fn init(&mut self, ctx: &mut Context, len: usize)
     {
         // First allocate the storage
-        let array_data = ArrayData::alloc(ctx, &self.element_type, len);
+        let array_len =  const_int(ctx, len as u64);
+        let array_data = heap_alloc_array(ctx, &self.element_type, array_len);
 
         let length_ptr = self.get_length_ptr(ctx);
         length_ptr.store_direct(ctx, const_int(ctx, len as u64));
@@ -81,23 +68,21 @@ impl Array
         let offset_ptr = self.get_offset_ptr(ctx);
         offset_ptr.store_direct(ctx, const_int(ctx, 0));
 
-        let first = array_data.get_element(ctx, const_int(ctx, 0));
+        let first = get_array_element(ctx, array_data, const_int(ctx, 0), &self.element_type);
         let data_ptr = self.get_data_ptr(ctx);
         data_ptr.store_direct(ctx, first.get());
     }
 
-    pub unsafe fn alloc(ctx: &Context, element_type: Type, len: usize) -> Array
+    pub unsafe fn alloc(ctx: &mut Context, array_type: LLVMTypeRef, element_type: Type, len: usize) -> Array
     {
-        let slice_type = ctx.resolve_type(&array_type(element_type.clone()));
         let mut slice = Array{
+            array: ctx.stack_alloc(array_type, "array"),
             element_type: element_type,
-            array: ctx.alloc(slice_type, "array"),
         };
 
         slice.init(ctx, len);
         slice
     }
-
 
     pub fn get(&self) -> LLVMValueRef {self.array}
 
@@ -130,7 +115,7 @@ impl Array
     {
         let slice_type = ctx.resolve_type(&array_type(self.element_type.clone()));
         let slice = Array{
-            array: ctx.alloc(slice_type, "subslice"),
+            array: ctx.stack_alloc(slice_type, "subslice"),
             element_type: self.element_type.clone(),
         };
 

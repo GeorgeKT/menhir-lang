@@ -1,4 +1,1 @@
 import option, result
-
-extern print(s: string) -> int
-extern println(s: string) -> int

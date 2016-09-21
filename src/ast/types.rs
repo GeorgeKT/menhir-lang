@@ -93,6 +93,7 @@ pub struct UnresolvedType
 pub enum Type
 {
     Void,
+    VoidPtr,
     Unknown,
     Int,
     Float,
@@ -368,6 +369,7 @@ impl fmt::Display for Type
         match *self
         {
             Type::Void => write!(f, "void"),
+            Type::VoidPtr => write!(f, "void*"),
             Type::Unknown => write!(f, "unknown"),
             Type::Int => write!(f, "int"),
             Type::Float => write!(f, "float"),

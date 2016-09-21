@@ -1,16 +1,16 @@
 type Option = Some{$a} | None
 
 unwrap_option_or(r: Option<$a>, default: $a) -> $a =
-    match r
+    match r:
         Some{v} => v,
         _ => default
 
 is_some(r: Option<$a>) -> bool =
-    match r
+    match r:
         Some{_} => true,
         _ => false
 
 is_none(r: Option<$a>) -> bool =
-    match r
+    match r:
         Some{_} => false,
         _ => true

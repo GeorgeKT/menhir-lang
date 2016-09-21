@@ -1,8 +1,4 @@
-add(x: $a, y: $a) -> $a = x + y
 
-mul(x: $a, y: $a) -> $a = x * y
 
-combine(x: $a, y: $a) -> $a =
-    add(x, y) + mul(x, y)
-
-main() -> int = combine(3, 2)
+main() -> int =
+    let x = [1, 2, 3, 4] in 5

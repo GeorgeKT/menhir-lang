@@ -18,7 +18,7 @@ mod span;
 
 use std::path::{Path, PathBuf};
 
-use codegen::{CodeGenOptions, codegen, link, llvm_init};
+use codegen::{CodeGenOptions, CodeGenMode, codegen, link, llvm_init};
 use docopt::Docopt;
 use parser::{ParserOptions, parse_file};
 use passes::{type_check_module};
@@ -105,7 +105,7 @@ fn main()
         */
         try!(type_check_module(&mut module));
         llvm_init();
-        let mut ctx = try!(codegen(&module));
+        let mut ctx = try!(codegen(&module, CodeGenMode::Normal));
         link(&mut ctx, &opts)
     })
     {
