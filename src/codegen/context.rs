@@ -9,7 +9,7 @@ use llvm::core::*;
 use llvm::target::*;
 
 use ast::{Type, array_type};
-use codegen::{cstr, ValueRef, CodeGenOptions, TargetMachine, const_int};
+use codegen::{ValueRef, CodeGenOptions, TargetMachine, const_int};
 use compileerror::{CompileResult, CompileError, ErrorCode, err};
 use codegen::symboltable::{VariableInstance, FunctionInstance, SymbolTable};
 use span::Span;
@@ -43,20 +43,12 @@ impl StackFrame
         let arc_dec_ref = ctx.get_builtin("arc_dec_ref");
         for object in &self.to_dec_ref {
             unsafe {
-                let void_ptr = LLVMBuildBitCast(ctx.builder, *object, ctx.resolve_type(&Type::VoidPtr), cstr("cast_to_void_ptr"));
+                let void_ptr = LLVMBuildBitCast(ctx.builder, *object, ctx.resolve_type(&Type::VoidPtr), cstr!("cast_to_void_ptr"));
                 let mut args = vec![void_ptr];
-                LLVMBuildCall(ctx.builder, arc_dec_ref.function, args.as_mut_ptr(), 1, cstr(""));
+                LLVMBuildCall(ctx.builder, arc_dec_ref.function, args.as_mut_ptr(), 1, cstr!(""));
             }
         }
     }
-}
-
-#[allow(unused)]
-#[derive(Eq, PartialEq, Debug)]
-pub enum CodeGenMode
-{
-    Normal,
-    UnitTest, // Replaces arc_alloc, by malloc
 }
 
 pub struct Context
@@ -68,12 +60,11 @@ pub struct Context
     name: String,
     stack: Vec<StackFrame>,
     builtins: SymbolTable,
-    mode: CodeGenMode,
 }
 
 impl Context
 {
-	pub fn new(module_name: &str, mode: CodeGenMode) -> CompileResult<Context>
+	pub fn new(module_name: &str) -> CompileResult<Context>
 	{
 		unsafe {
             let cname = CString::new(module_name).expect("Invalid module name");
@@ -87,7 +78,6 @@ impl Context
                 name: module_name.into(),
                 stack: vec![StackFrame::new(ptr::null_mut())],
                 builtins: SymbolTable::new(),
-                mode: mode,
             })
         }
 	}
@@ -153,9 +143,7 @@ impl Context
     {
         let sf = self.stack.pop();
         if let Some(stack_frame) = sf {
-            if self.mode == CodeGenMode::Normal {
-                stack_frame.cleanup(self);
-            }
+            stack_frame.cleanup(self);
         }
     }
 
@@ -178,7 +166,9 @@ impl Context
         let current_bb = LLVMGetInsertBlock(self.builder);
         // We allocate in the entry block
         LLVMPositionBuilder(self.builder, entry_bb, LLVMGetFirstInstruction(entry_bb));
-        let alloc = LLVMBuildAlloca(self.builder, typ, cstr(name));
+
+        let name = CString::new(name).expect("Invalid string");
+        let alloc = LLVMBuildAlloca(self.builder, typ, name.as_ptr());
         LLVMPositionBuilderAtEnd(self.builder, current_bb); // Position the builder where it was before
         alloc
     }
@@ -191,28 +181,21 @@ impl Context
         let mut args = vec![
             const_int(self, size as u64)
         ];
-        let void_ptr = LLVMBuildCall(self.builder, arc_alloc.function, args.as_mut_ptr(), 1, cstr(name));
-        LLVMBuildBitCast(self.builder, void_ptr, LLVMPointerType(typ, 0), cstr("cast_to_ptr"))
+        let void_ptr = LLVMBuildCall(self.builder, arc_alloc.function, args.as_mut_ptr(), 1, cstr!(name));
+        LLVMBuildBitCast(self.builder, void_ptr, LLVMPointerType(typ, 0), cstr!("cast_to_ptr"))
     }
     */
 
     pub unsafe fn heap_alloc_array(&self, element_type: LLVMTypeRef, len: LLVMValueRef, name: &str) -> LLVMValueRef
     {
-        match self.mode
-        {
-            CodeGenMode::Normal => {
-                let arc_alloc = self.get_builtin("arc_alloc");
-                let size = self.target_machine.size_of_type(element_type);
-                let mut args = vec![
-                    LLVMBuildMul(self.builder, len, const_int(self, size as u64), cstr("array_len"))
-                ];
-                let void_ptr = LLVMBuildCall(self.builder, arc_alloc.function, args.as_mut_ptr(), 1, cstr(name));
-                LLVMBuildBitCast(self.builder, void_ptr, LLVMPointerType(element_type, 0), cstr("cast_to_ptr"))
-            },
-            CodeGenMode::UnitTest => {
-                LLVMBuildArrayMalloc(self.builder, element_type, len, cstr("heap_alloc"))
-            },
-        }
+        let arc_alloc = self.get_builtin("arc_alloc");
+        let size = self.target_machine.size_of_type(element_type);
+        let mut args = vec![
+            LLVMBuildMul(self.builder, len, const_int(self, size as u64), cstr!("array_len"))
+        ];
+        let name = CString::new(name).expect("Invalid string");
+        let void_ptr = LLVMBuildCall(self.builder, arc_alloc.function, args.as_mut_ptr(), 1, name.as_ptr());
+        LLVMBuildBitCast(self.builder, void_ptr, LLVMPointerType(element_type, 0), cstr!("cast_to_ptr"))
     }
 
     pub fn add_dec_ref_target(&mut self, target: LLVMValueRef)

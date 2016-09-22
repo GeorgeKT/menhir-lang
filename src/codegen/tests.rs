@@ -1,20 +1,26 @@
 use std::ptr;
 use std::ffi::CStr;
-use std::os::raw::c_char;
 use std::io::Cursor;
+use libc;
 use llvm::prelude::*;
 use llvm::core::*;
 use llvm::execution_engine::*;
 use compileerror::{ErrorCode, err, CompileResult};
 use parser::{ParserOptions, parse_module};
-use codegen::{codegen, cstr, llvm_init, CodeGenMode};
+use codegen::{codegen, llvm_init};
 use passes::{type_check_module};
 use ast::{TreePrinter};
 use span::Span;
 
+#[link(name="cobraruntime")]
+extern {
+    fn cobra_runtime_version() -> libc::c_uint;
+}
 
 fn run(prog: &str, dump: bool) -> CompileResult<i64>
 {
+    // Call this so, we force the compiler to link to the runtime library
+    println!("COBRA runtime version {}", unsafe{cobra_runtime_version()});
     let mut cursor = Cursor::new(prog);
     let parser_options = ParserOptions::default();
     let mut md = try!(parse_module(&parser_options, &mut cursor, "test", ""));
@@ -35,13 +41,13 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
     }
 
     llvm_init();
-    let mut ctx = try!(codegen(&md, CodeGenMode::UnitTest));
+    let mut ctx = try!(codegen(&md));
 
     unsafe {
         LLVMLinkInInterpreter();
 
         let mut ee: LLVMExecutionEngineRef = ptr::null_mut();
-        let mut error_message: *mut c_char = ptr::null_mut();
+        let mut error_message: *mut libc::c_char = ptr::null_mut();
         if LLVMCreateInterpreterForModule(&mut ee, ctx.take_module_ref(), &mut error_message) != 0 {
             let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
             let e = format!("Unable to create interpreter: {}", msg);
@@ -50,7 +56,7 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
         }
 
         let mut func: LLVMValueRef = ptr::null_mut();
-        if LLVMFindFunction(ee, cstr("main"), &mut func) == 0 {
+        if LLVMFindFunction(ee, cstr!("main"), &mut func) == 0 {
             let val = LLVMRunFunction(ee, func, 0, ptr::null_mut());
             let result = LLVMGenericValueToInt(val, 0) as i64;
             LLVMDisposeGenericValue(val);

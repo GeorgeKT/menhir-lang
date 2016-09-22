@@ -1,5 +1,6 @@
 use std::ptr;
 use std::rc::Rc;
+use std::ffi::CString;
 use std::os::raw::c_uint;
 
 use libc;
@@ -9,7 +10,7 @@ use llvm::*;
 
 use ast::*;
 use parser::Operator;
-use codegen::{cstr, Context, ValueRef, Array};
+use codegen::{Context, ValueRef, Array};
 use codegen::symboltable::{FunctionInstance};
 
 
@@ -56,7 +57,7 @@ unsafe fn gen_const_string_literal(ctx: &Context, s: &str) -> ValueRef
 
 unsafe fn gen_string_literal(ctx: &Context, s: &str) -> ValueRef
 {
-    let glob = LLVMAddGlobal(ctx.module, LLVMArrayType(LLVMInt8TypeInContext(ctx.context), s.len() as c_uint),  cstr("string"));
+    let glob = LLVMAddGlobal(ctx.module, LLVMArrayType(LLVMInt8TypeInContext(ctx.context), s.len() as c_uint),  cstr!("string"));
 
     LLVMSetLinkage(glob, LLVMLinkage::LLVMInternalLinkage);
     LLVMSetGlobalConstant(glob, 1);
@@ -75,7 +76,7 @@ unsafe fn gen_string_literal(ctx: &Context, s: &str) -> ValueRef
     let data_ptr = array.get_data_ptr(ctx);
 
     let mut index_expr = vec![const_int(ctx, 0), const_int(ctx, 0)];
-    let first_element = LLVMBuildGEP(ctx.builder, glob, index_expr.as_mut_ptr(), 2, cstr("first_element"));
+    let first_element = LLVMBuildGEP(ctx.builder, glob, index_expr.as_mut_ptr(), 2, cstr!("first_element"));
     data_ptr.store_direct(ctx, first_element);
 
     ValueRef::Array(array)
@@ -87,10 +88,10 @@ unsafe fn gen_unary_op(ctx: &mut Context, op: &UnaryOp) -> ValueRef
     match op.operator
     {
         Operator::Sub => {
-            ValueRef::Const(LLVMBuildNeg(ctx.builder, e_val.load(ctx.builder), cstr("neg")))
+            ValueRef::Const(LLVMBuildNeg(ctx.builder, e_val.load(ctx.builder), cstr!("neg")))
         },
         Operator::Not => {
-            ValueRef::Const(LLVMBuildNot(ctx.builder, e_val.load(ctx.builder), cstr("not")))
+            ValueRef::Const(LLVMBuildNot(ctx.builder, e_val.load(ctx.builder), cstr!("not")))
         },
         _ => panic!("Internal Compiler Error: Operator {} is not a unary operator", op.operator),
     }
@@ -111,17 +112,17 @@ unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> ValueRef
 
             ValueRef::Const(match op.operator
             {
-                Operator::Add => LLVMBuildAdd(ctx.builder, l, r, cstr("add")),
-                Operator::Sub => LLVMBuildSub(ctx.builder, l, r, cstr("sub")),
-                Operator::Mul => LLVMBuildMul(ctx.builder, l, r, cstr("mul")),
-                Operator::Div => LLVMBuildUDiv(ctx.builder, l, r, cstr("div")),
-                Operator::Mod => LLVMBuildURem(ctx.builder, l, r, cstr("mod")),
-                Operator::LessThan => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, l, r, cstr("cmp")),
-                Operator::LessThanEquals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLE, l, r, cstr("cmp")),
-                Operator::GreaterThan => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, l, r, cstr("cmp")),
-                Operator::GreaterThanEquals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGE, l, r, cstr("cmp")),
-                Operator::Equals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, l, r, cstr("cmp")),
-                Operator::NotEquals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, l, r, cstr("cmp")),
+                Operator::Add => LLVMBuildAdd(ctx.builder, l, r, cstr!("add")),
+                Operator::Sub => LLVMBuildSub(ctx.builder, l, r, cstr!("sub")),
+                Operator::Mul => LLVMBuildMul(ctx.builder, l, r, cstr!("mul")),
+                Operator::Div => LLVMBuildUDiv(ctx.builder, l, r, cstr!("div")),
+                Operator::Mod => LLVMBuildURem(ctx.builder, l, r, cstr!("mod")),
+                Operator::LessThan => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, l, r, cstr!("cmp")),
+                Operator::LessThanEquals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLE, l, r, cstr!("cmp")),
+                Operator::GreaterThan => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, l, r, cstr!("cmp")),
+                Operator::GreaterThanEquals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGE, l, r, cstr!("cmp")),
+                Operator::Equals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, l, r, cstr!("cmp")),
+                Operator::NotEquals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, l, r, cstr!("cmp")),
                 _ => panic!("Internal Compiler Error: Operator {} is not supported on integers", op.operator),
             })
         }
@@ -132,17 +133,17 @@ unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> ValueRef
 
             ValueRef::Const(match op.operator
             {
-                Operator::Add => LLVMBuildFAdd(ctx.builder, l, r, cstr("add")),
-                Operator::Sub => LLVMBuildFSub(ctx.builder, l, r, cstr("sub")),
-                Operator::Mul => LLVMBuildFMul(ctx.builder, l, r, cstr("mul")),
-                Operator::Div => LLVMBuildFDiv(ctx.builder, l, r, cstr("div")),
-                Operator::Mod => LLVMBuildFRem(ctx.builder, l, r, cstr("mod")),
-                Operator::LessThan => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLT, l, r, cstr("cmp")),
-                Operator::LessThanEquals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLE, l, r, cstr("cmp")),
-                Operator::GreaterThan => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGT, l, r, cstr("cmp")),
-                Operator::GreaterThanEquals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGE, l, r, cstr("cmp")),
-                Operator::Equals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, l, r, cstr("cmp")),
-                Operator::NotEquals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealONE, l, r, cstr("cmp")),
+                Operator::Add => LLVMBuildFAdd(ctx.builder, l, r, cstr!("add")),
+                Operator::Sub => LLVMBuildFSub(ctx.builder, l, r, cstr!("sub")),
+                Operator::Mul => LLVMBuildFMul(ctx.builder, l, r, cstr!("mul")),
+                Operator::Div => LLVMBuildFDiv(ctx.builder, l, r, cstr!("div")),
+                Operator::Mod => LLVMBuildFRem(ctx.builder, l, r, cstr!("mod")),
+                Operator::LessThan => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLT, l, r, cstr!("cmp")),
+                Operator::LessThanEquals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLE, l, r, cstr!("cmp")),
+                Operator::GreaterThan => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGT, l, r, cstr!("cmp")),
+                Operator::GreaterThanEquals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGE, l, r, cstr!("cmp")),
+                Operator::Equals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, l, r, cstr!("cmp")),
+                Operator::NotEquals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealONE, l, r, cstr!("cmp")),
                 _ => panic!("Internal Compiler Error: Operator {} is not supported on floats", op.operator),
             })
         },
@@ -153,8 +154,8 @@ unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> ValueRef
 
             ValueRef::Const(match op.operator
             {
-                Operator::And => LLVMBuildAnd(ctx.builder, l, r, cstr("and")),
-                Operator::Or => LLVMBuildOr(ctx.builder, left_val.load(ctx.builder), right_val.load(ctx.builder), cstr("or")),
+                Operator::And => LLVMBuildAnd(ctx.builder, l, r, cstr!("and")),
+                Operator::Or => LLVMBuildOr(ctx.builder, left_val.load(ctx.builder), right_val.load(ctx.builder), cstr!("or")),
                 _ => panic!("Internal Compiler Error: Operator {} is not supported on bools", op.operator),
             })
         },
@@ -168,7 +169,7 @@ unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> ValueRef
                     Operator::Add => {
                         /*let a_length = ar.get_length_ptr(ctx).load(ctx.builder);
                         let b_length = br.get_length_ptr(ctx).load(ctx.builder);
-                        let new_size = LLVMBuildAdd(ctx.builder, a_length, b_length, cstr("new_size"));
+                        let new_size = LLVMBuildAdd(ctx.builder, a_length, b_length, cstr!("new_size"));
 
                         let array = Array::new()
                         */
@@ -178,9 +179,9 @@ unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> ValueRef
                     Operator::Equals | Operator::NotEquals => {
                         let dst = ctx.stack_alloc(ctx.resolve_type(&Type::Bool), "dst");
                         let func = ctx.get_current_function();
-                        let on_eq = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("on_eq"));
-                        let on_not_eq = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("on_not_eq"));
-                        let after_eq = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("after_eq"));
+                        let on_eq = LLVMAppendBasicBlockInContext(ctx.context, func, cstr!("on_eq"));
+                        let on_not_eq = LLVMAppendBasicBlockInContext(ctx.context, func, cstr!("on_not_eq"));
+                        let after_eq = LLVMAppendBasicBlockInContext(ctx.context, func, cstr!("after_eq"));
                         gen_equals_seq(ctx, ar, br, on_eq, on_not_eq);
 
                         LLVMPositionBuilderAtEnd(ctx.builder, on_eq);
@@ -193,7 +194,7 @@ unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> ValueRef
 
                         LLVMPositionBuilderAtEnd(ctx.builder, after_eq);
                         ValueRef::Const(
-                            if op.operator == Operator::Equals {dst} else {LLVMBuildNot(ctx.builder, dst, cstr("not"))}
+                            if op.operator == Operator::Equals {dst} else {LLVMBuildNot(ctx.builder, dst, cstr!("not"))}
                         )
                     }
 
@@ -249,7 +250,8 @@ pub unsafe fn gen_function_sig(ctx: &Context, sig: &FunctionSignature) -> Functi
     let mut fi = make_function_instance(ctx, sig);
     let mut arg_types: Vec<LLVMTypeRef> = fi.args.iter().map(|&(typ, _)| typ).collect();
     let function_type = LLVMFunctionType(fi.return_type, arg_types.as_mut_ptr(), arg_types.len() as libc::c_uint, 0);
-    fi.function = LLVMAddFunction(ctx.module, cstr(&sig.name), function_type);
+    let name = CString::new(sig.name.as_bytes()).expect("Invalid string");
+    fi.function = LLVMAddFunction(ctx.module, name.into_raw(), function_type);
     fi
 }
 
@@ -263,7 +265,7 @@ pub unsafe fn gen_function_ptr(ctx: &Context, func_ptr: LLVMValueRef, sig: Funct
 pub unsafe fn gen_function(ctx: &mut Context, signature: &FunctionSignature, body: &Expression) -> ValueRef
 {
     let fi = ctx.get_function(&signature.name).expect("Internal Compiler Error: Unknown function");
-    let bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, cstr("entry"));
+    let bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, cstr!("entry"));
     let current_bb = LLVMGetInsertBlock(ctx.builder);
     LLVMPositionBuilderAtEnd(ctx.builder, bb);
 
@@ -356,11 +358,11 @@ unsafe fn gen_call_store(ctx: &mut Context, c: &Call, ptr: &ValueRef)
     if func.sig.return_type.return_by_ptr()
     {
         arg_vals.push(ptr.get());
-        LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr(""));
+        LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr!(""));
     }
     else
     {
-        let call_ret = LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr(""));
+        let call_ret = LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr!(""));
         ptr.store(ctx, ValueRef::Const(call_ret));
     }
 }
@@ -377,7 +379,7 @@ unsafe fn gen_call(ctx: &mut Context, c: &Call) -> ValueRef
     else
     {
         let mut arg_vals = gen_call_args(ctx, c, &func);
-        ValueRef::Const(LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr("")))
+        ValueRef::Const(LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr!("")))
     }
 }
 
@@ -440,7 +442,7 @@ unsafe fn gen_sequence_match(
     let tail = seq.tail(ctx);
     ctx.add_variable(&ap.tail, tail);
 
-    let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, seq.gen_length(ctx).get(), const_int(ctx, 0), cstr("cmp"));
+    let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, seq.gen_length(ctx).get(), const_int(ctx, 0), cstr!("cmp"));
     LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
 }
 
@@ -453,9 +455,9 @@ unsafe fn gen_llvm_equals(
 {
     let left_type = LLVMTypeOf(left);
     let cmp = if is_floating_point(ctx.context, left_type) {
-        LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, left, right, cstr("cmp"))
+        LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, left, right, cstr!("cmp"))
     } else {
-        LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr("cmp"))
+        LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("cmp"))
     };
 
     LLVMBuildCondBr(ctx.builder, cmp, on_equals_bb, on_not_equals_bb);
@@ -475,13 +477,13 @@ unsafe fn gen_equals(ctx: &Context,left: &ValueRef, right: &ValueRef, on_equals_
 unsafe fn gen_equals_seq(ctx: &Context, a: &Array, b: &Array, on_equals_bb: LLVMBasicBlockRef, on_not_equals_bb: LLVMBasicBlockRef)
 {
     let func = ctx.get_current_function();
-    let after_equal_length_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("after_equal_length_bb"));
-    let for_cond_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("for_cond_bb"));
-    let for_body_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("for_body_bb"));
-    let after_element_cmp_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("after_element_cmp_bb"));
+    let after_equal_length_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr!("after_equal_length_bb"));
+    let for_cond_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr!("for_cond_bb"));
+    let for_body_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr!("for_body_bb"));
+    let after_element_cmp_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr!("after_element_cmp_bb"));
 
     // First check if sequences have the same length
-    let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, a.gen_length(ctx).get(), b.gen_length(ctx).get(), cstr("cmp"));
+    let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, a.gen_length(ctx).get(), b.gen_length(ctx).get(), cstr!("cmp"));
     LLVMBuildCondBr(ctx.builder, cond, after_equal_length_bb, on_not_equals_bb);
     LLVMPositionBuilderAtEnd(ctx.builder, after_equal_length_bb);
 
@@ -491,7 +493,7 @@ unsafe fn gen_equals_seq(ctx: &Context, a: &Array, b: &Array, on_equals_bb: LLVM
     LLVMBuildBr(ctx.builder, for_cond_bb);
 
     LLVMPositionBuilderAtEnd(ctx.builder, for_cond_bb);
-    let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, counter.load(ctx.builder), a.gen_length(ctx).get(), cstr("cmp"));
+    let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, counter.load(ctx.builder), a.gen_length(ctx).get(), cstr!("cmp"));
     LLVMBuildCondBr(ctx.builder, cond, for_body_bb, on_equals_bb);
     LLVMPositionBuilderAtEnd(ctx.builder, for_body_bb);
 
@@ -503,7 +505,7 @@ unsafe fn gen_equals_seq(ctx: &Context, a: &Array, b: &Array, on_equals_bb: LLVM
     LLVMPositionBuilderAtEnd(ctx.builder, after_element_cmp_bb);
 
     // Increment counter, and jump back to for_cond_bb
-    let index = LLVMBuildAdd(ctx.builder, index, const_int(ctx, 1), cstr("inc_index"));
+    let index = LLVMBuildAdd(ctx.builder, index, const_int(ctx, 1), cstr!("inc_index"));
     counter.store_direct(ctx, index);
     LLVMBuildBr(ctx.builder, for_cond_bb);
 }
@@ -524,14 +526,14 @@ unsafe fn gen_name_pattern_match(
         Type::Enum(ref et) => {
             let idx = et.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
             let cv = const_int(ctx, idx as u64);
-            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(ctx.builder), cv, cstr("cmp"));
+            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(ctx.builder), cv, cstr!("cmp"));
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
         },
         Type::Sum(ref st) => {
             let idx = st.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
             let case_type_ptr = target.case_type(ctx);
             let cv = const_int(ctx, idx as u64);
-            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, case_type_ptr.load(ctx.builder), cv, cstr("cmp"));
+            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, case_type_ptr.load(ctx.builder), cv, cstr!("cmp"));
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
         },
         _ => {
@@ -573,7 +575,7 @@ unsafe fn gen_struct_pattern_match(
         Type::Sum(ref st) => {
             let case_type_ptr = target.case_type(ctx);
             let idx = st.index_of(&p.name).expect("Internal Compiler Error: cannot determine index of sum type case");
-            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, case_type_ptr.load(ctx.builder), const_int(ctx, idx as u64), cstr("cmp"));
+            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, case_type_ptr.load(ctx.builder), const_int(ctx, idx as u64), cstr!("cmp"));
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
             LLVMPositionBuilderAtEnd(ctx.builder, match_case_bb);
             let struct_ptr = target.case_struct(ctx, idx);
@@ -594,35 +596,35 @@ unsafe fn gen_match_case(
     match_end_bb: LLVMBasicBlockRef,
     dst: &mut ValueRef)
 {
-    let match_case_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("match_case_bb"));
-    let next_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("next_bb"));
+    let match_case_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr!("match_case_bb"));
+    let next_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr!("next_bb"));
 
     match mc.pattern
     {
         Pattern::Literal(Literal::Int(_, v)) => {
             let iv = gen_integer(ctx, v);
-            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(ctx.builder), iv.load(ctx.builder), cstr("cmp"));
+            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(ctx.builder), iv.load(ctx.builder), cstr!("cmp"));
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
             gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
         },
 
         Pattern::Literal(Literal::Float(_, ref v)) => {
             let iv = gen_float(ctx, &v);
-            let cond = LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, target.load(ctx.builder), iv.load(ctx.builder), cstr("cmp"));
+            let cond = LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, target.load(ctx.builder), iv.load(ctx.builder), cstr!("cmp"));
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
             gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
         },
 
         Pattern::Literal(Literal::Bool(_, v)) => {
             let iv = gen_bool(ctx, v);
-            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(ctx.builder), iv.load(ctx.builder), cstr("cmp"));
+            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(ctx.builder), iv.load(ctx.builder), cstr!("cmp"));
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
             gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
         },
 
         Pattern::Literal(Literal::Char(_, v)) => {
             let iv = gen_char(ctx, v);
-            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(ctx.builder), iv.load(ctx.builder), cstr("cmp"));
+            let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, target.load(ctx.builder), iv.load(ctx.builder), cstr!("cmp"));
             LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
             gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
         },
@@ -641,7 +643,7 @@ unsafe fn gen_match_case(
             {
                 &ValueRef::Array(ref arr) => {
                     let length_ptr = arr.get_length_ptr(ctx);
-                    let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, length_ptr.load(ctx.builder), const_int(ctx, 0), cstr("cmp"));
+                    let cond = LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, length_ptr.load(ctx.builder), const_int(ctx, 0), cstr!("cmp"));
                     LLVMBuildCondBr(ctx.builder, cond, match_case_bb, next_bb);
                     gen_match_case_to_execute(ctx, mc, dst, match_case_bb, match_end_bb, next_bb)
                 },
@@ -683,7 +685,7 @@ unsafe fn gen_match_store(ctx: &mut Context, m: &MatchExpression, dst: &mut Valu
 {
     let target = gen_expression(ctx, &m.target);
     let func = ctx.get_current_function();
-    let match_end_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr("match_end_bb"));
+    let match_end_bb = LLVMAppendBasicBlockInContext(ctx.context, func, cstr!("match_end_bb"));
 
     for mc in &m.cases
     {

@@ -2,7 +2,7 @@ use llvm::prelude::*;
 use llvm::core::*;
 
 use ast::Type;
-use codegen::{Context, Array, StructValue, SumTypeValue, cstr};
+use codegen::{Context, Array, StructValue, SumTypeValue};
 
 
 #[derive(Debug, Clone)]
@@ -53,7 +53,7 @@ impl ValueRef
         match *self
         {
             ValueRef::Const(cv) => cv,
-            ValueRef::Ptr(av) => LLVMBuildLoad(builder, av, cstr("load")),
+            ValueRef::Ptr(av) => LLVMBuildLoad(builder, av, cstr!("load")),
             ValueRef::Array(ref arr) => arr.get(),
             ValueRef::Struct(ref sv) => sv.get(),
             ValueRef::Sum(ref s) => s.get(),

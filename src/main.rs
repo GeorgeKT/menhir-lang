@@ -6,9 +6,8 @@ extern crate rustc_serialize;
 extern crate itertools;
 extern crate uuid;
 
-
-
 mod ast;
+#[macro_use]
 mod codegen;
 mod compileerror;
 mod parser;
@@ -17,8 +16,7 @@ mod span;
 
 
 use std::path::{Path, PathBuf};
-
-use codegen::{CodeGenOptions, CodeGenMode, codegen, link, llvm_init};
+use codegen::{CodeGenOptions, codegen, link, llvm_init};
 use docopt::Docopt;
 use parser::{ParserOptions, parse_file};
 use passes::{type_check_module};
@@ -47,21 +45,6 @@ struct Args
     flag_imports: Option<String>,
 }
 
-fn find_runtime_library() -> Option<String>
-{
-    let paths = [
-        "/usr/lib/libcobraruntime.a",
-        "/usr/local/lib/libcobraruntime.a",
-    ];
-
-    for p in &paths {
-        if Path::new(*p).exists() {
-            return Some((*p).into());
-        }
-    }
-
-    None
-}
 
 fn default_output_file(input_file: &str) -> String
 {
@@ -94,7 +77,6 @@ fn main()
         dump_ir: debug_compiler,
         build_dir: "build".into(),
         program_name: output_file,
-        runtime_library: find_runtime_library().expect("Unable to find the cobra runtime library"),
         optimize: args.flag_optimize.unwrap_or(false),
     };
 
@@ -105,7 +87,7 @@ fn main()
         */
         try!(type_check_module(&mut module));
         llvm_init();
-        let mut ctx = try!(codegen(&module, CodeGenMode::Normal));
+        let mut ctx = try!(codegen(&module));
         link(&mut ctx, &opts)
     })
     {

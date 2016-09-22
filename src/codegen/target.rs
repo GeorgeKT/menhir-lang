@@ -1,5 +1,5 @@
 use std::ptr;
-use std::ffi::{CStr};
+use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
 use llvm::prelude::*;
@@ -8,7 +8,6 @@ use llvm::target_machine::*;
 use llvm::target::*;
 
 use compileerror::{CompileResult, ErrorCode, err};
-use codegen::{cstr, cstr_mut};
 use span::Span;
 
 pub struct TargetMachine
@@ -37,8 +36,8 @@ impl TargetMachine
         let target_machine = LLVMCreateTargetMachine(
             target,
             target_triple.as_ptr(),
-            cstr(""),
-            cstr(""),
+            cstr!(""),
+            cstr!(""),
             LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault,
             LLVMRelocMode::LLVMRelocDefault,
             LLVMCodeModel::LLVMCodeModelDefault,
@@ -62,7 +61,8 @@ impl TargetMachine
     pub unsafe fn emit_to_file(&self, module: LLVMModuleRef, obj_file_name: &str) -> CompileResult<()>
     {
         let mut error_message: *mut c_char = ptr::null_mut();
-        if LLVMTargetMachineEmitToFile(self.target_machine, module, cstr_mut(obj_file_name), LLVMCodeGenFileType::LLVMObjectFile, &mut error_message) != 0 {
+        let obj_file_name = CString::new(obj_file_name).expect("Invalid String");
+        if LLVMTargetMachineEmitToFile(self.target_machine, module, obj_file_name.into_raw(), LLVMCodeGenFileType::LLVMObjectFile, &mut error_message) != 0 {
             let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
             let e = format!("Unable to create object file: {}", msg);
             LLVMDisposeMessage(error_message);

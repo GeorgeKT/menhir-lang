@@ -3,7 +3,7 @@ use llvm::prelude::*;
 use llvm::core::*;
 
 use ast::Type;
-use codegen::{Context, ValueRef, cstr};
+use codegen::{Context, ValueRef};
 
 #[derive(Debug, Clone)]
 pub struct StructValue
@@ -24,7 +24,7 @@ impl StructValue
 
     pub unsafe fn get_member_ptr(&self, ctx: &Context, idx: usize) -> ValueRef
     {
-        let member = LLVMBuildStructGEP(ctx.builder, self.value, idx as c_uint, cstr("member"));
+        let member = LLVMBuildStructGEP(ctx.builder, self.value, idx as c_uint, cstr!("member"));
         ValueRef::new(member, &self.member_types[idx])
     }
 

@@ -2,7 +2,7 @@ use llvm::prelude::*;
 use llvm::core::*;
 
 use ast::{Type, array_type};
-use codegen::{const_int, cstr, ValueRef, Context};
+use codegen::{const_int, ValueRef, Context};
 
 #[derive(Debug, Clone)]
 pub struct Array
@@ -22,7 +22,7 @@ unsafe fn heap_alloc_array(ctx: &mut Context, element_type: &Type, len: LLVMValu
 unsafe fn get_array_element(ctx: &Context, array: LLVMValueRef, index: LLVMValueRef, element_type: &Type) -> ValueRef
 {
     let mut index_expr = vec![index];
-    let element = LLVMBuildGEP(ctx.builder, array, index_expr.as_mut_ptr(), 1, cstr("el"));
+    let element = LLVMBuildGEP(ctx.builder, array, index_expr.as_mut_ptr(), 1, cstr!("el"));
     ValueRef::new(element, element_type)
 }
 
@@ -98,17 +98,17 @@ impl Array
 
     pub unsafe fn get_length_ptr(&self, ctx: &Context) -> ValueRef
     {
-        ValueRef::Ptr(LLVMBuildStructGEP(ctx.builder, self.array, 1, cstr("length")))
+        ValueRef::Ptr(LLVMBuildStructGEP(ctx.builder, self.array, 1, cstr!("length")))
     }
 
     pub unsafe fn get_offset_ptr(&self, ctx: &Context) -> ValueRef
     {
-        ValueRef::Ptr(LLVMBuildStructGEP(ctx.builder, self.array, 2, cstr("offset")))
+        ValueRef::Ptr(LLVMBuildStructGEP(ctx.builder, self.array, 2, cstr!("offset")))
     }
 
     pub unsafe fn get_data_ptr(&self, ctx: &Context) -> ValueRef
     {
-        ValueRef::Ptr(LLVMBuildStructGEP(ctx.builder, self.array, 0, cstr("data_ptr")))
+        ValueRef::Ptr(LLVMBuildStructGEP(ctx.builder, self.array, 0, cstr!("data_ptr")))
     }
 
     pub unsafe fn subslice(&self, ctx: &Context, offset: u64) -> ValueRef
@@ -121,12 +121,12 @@ impl Array
 
         let slice_length_ptr = slice.get_length_ptr(ctx);
         let length_ptr = self.get_length_ptr(ctx);
-        let new_length = LLVMBuildSub(ctx.builder, length_ptr.load(ctx.builder), const_int(ctx, offset), cstr("new_length"));
+        let new_length = LLVMBuildSub(ctx.builder, length_ptr.load(ctx.builder), const_int(ctx, offset), cstr!("new_length"));
         slice_length_ptr.store_direct(ctx, new_length);
 
         let slice_offset_ptr = slice.get_offset_ptr(ctx);
         let offset_ptr = self.get_offset_ptr(ctx);
-        let new_offset = LLVMBuildAdd(ctx.builder, offset_ptr.load(ctx.builder), const_int(ctx, offset), cstr("new_offset"));
+        let new_offset = LLVMBuildAdd(ctx.builder, offset_ptr.load(ctx.builder), const_int(ctx, offset), cstr!("new_offset"));
         slice_offset_ptr.store_direct(ctx, new_offset);
 
         let slice_data_ptr = slice.get_data_ptr(ctx);
@@ -141,10 +141,10 @@ impl Array
 
         let offset_ptr = self.get_offset_ptr(ctx);
         let offset = offset_ptr.load(ctx.builder);
-        let new_pos = LLVMBuildAdd(ctx.builder, offset, idx, cstr("add"));
+        let new_pos = LLVMBuildAdd(ctx.builder, offset, idx, cstr!("add"));
 
         let mut index_expr = vec![new_pos];
-        let element = LLVMBuildGEP(ctx.builder, array_ptr, index_expr.as_mut_ptr(), 1, cstr("el"));
+        let element = LLVMBuildGEP(ctx.builder, array_ptr, index_expr.as_mut_ptr(), 1, cstr!("el"));
         ValueRef::new(element, &self.element_type)
     }
 

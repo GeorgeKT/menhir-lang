@@ -15,7 +15,7 @@ pub fn link(ctx: &Context, opts: &CodeGenOptions) -> CompileResult<()>
     let program_path = format!("{}/{}", opts.build_dir, opts.program_name);
 
     let mut cmd = Command::new("gcc");
-    cmd.arg("-o").arg(&program_path).arg(obj_file).arg(&opts.runtime_library);
+    cmd.arg("-o").arg(&program_path).arg(obj_file).arg("-lcobraruntime");
 
     println!("  Linking {}", program_path);
     let output: Output = try!(cmd
