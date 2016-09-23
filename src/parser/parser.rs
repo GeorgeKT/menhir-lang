@@ -534,7 +534,7 @@ fn parse_struct_initializer(tq: &mut TokenQueue, name: &str, name_span: &Span) -
 
 fn parse_struct_member_access(tq: &mut TokenQueue, name: NameRef) -> CompileResult<Expression>
 {
-    let mut members = Vec::new();
+    let mut methods = Vec::new();
     while tq.is_next(TokenKind::Operator(Operator::Dot))
     {
         try!(tq.pop());
@@ -542,7 +542,7 @@ fn parse_struct_member_access(tq: &mut TokenQueue, name: NameRef) -> CompileResu
         match next.kind
         {
             TokenKind::Identifier(name) => {
-                members.push(MemberAccessType::ByName(name));
+                methods.push(MemberAccessMethod::ByName(name));
             },
 
             TokenKind::Number(idx) => {
@@ -558,14 +558,14 @@ fn parse_struct_member_access(tq: &mut TokenQueue, name: NameRef) -> CompileResu
                 } else {
                     idx.parse::<usize>().expect("Internal Compiler Error: Parsed number is not valid")
                 };
-                members.push(MemberAccessType::ByIndex(index));
+                methods.push(MemberAccessMethod::ByIndex(index));
             }
 
             _ => return err(&next.span, ErrorCode::UnexpectedToken, format!("Expecting integer or an identifier")),
         }
     }
 
-    Ok(Expression::StructMemberAccess(struct_member_access(&name.name, members, name.span.expanded(tq.pos()))))
+    Ok(Expression::MemberAccess(member_access(&name.name, methods, name.span.expanded(tq.pos()))))
 }
 
 fn parse_block(tq: &mut TokenQueue, start: &Span) -> CompileResult<Expression>

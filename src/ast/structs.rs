@@ -1,5 +1,3 @@
-use std::fmt::{Display, Formatter, Error};
-use itertools::free::join;
 use ast::{Expression, TreePrinter, Type, prefix};
 use span::{Span};
 use passes::GenericMapper;
@@ -61,45 +59,6 @@ pub fn struct_initializer(struct_name: &str, member_initializers: Vec<Expression
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub enum MemberAccessType
-{
-    ByName(String),
-    ByIndex(usize),
-}
-
-impl Display for MemberAccessType
-{
-    fn fmt(&self, f: &mut Formatter) -> Result<(), Error>
-    {
-        match *self
-        {
-            MemberAccessType::ByName(ref name) => write!(f, "{}", name),
-            MemberAccessType::ByIndex(index) => write!(f, "{}", index),
-        }
-    }
-}
-
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct StructMemberAccess
-{
-    pub name: String,
-    pub members: Vec<MemberAccessType>,
-    pub indices: Vec<usize>, // Index of each member
-    pub span: Span,
-    pub typ: Type,
-}
-
-pub fn struct_member_access(name: &str, members: Vec<MemberAccessType>, span: Span) -> StructMemberAccess
-{
-    StructMemberAccess{
-        name: name.into(),
-        indices: Vec::with_capacity(members.len()),
-        members: members,
-        span: span,
-        typ: Type::Unknown,
-    }
-}
 
 impl TreePrinter for StructDeclaration
 {
@@ -131,14 +90,5 @@ impl TreePrinter for StructMemberDeclaration
     {
         let p = prefix(level);
         println!("{}{}:{} ({})", p, self.name, self.typ, self.span);
-    }
-}
-
-impl TreePrinter for StructMemberAccess
-{
-    fn print(&self, level: usize)
-    {
-        let p = prefix(level);
-        println!("{}{}.{} ({})", p, self.name, join(self.members.iter(), "."), self.span);
     }
 }

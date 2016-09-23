@@ -2,13 +2,14 @@ use llvm::prelude::*;
 use llvm::core::*;
 
 use ast::{Type, array_type};
-use codegen::{const_int, ValueRef, Context};
+use codegen::{const_int, const_bool, ValueRef, Context};
 
 #[derive(Debug, Clone)]
 pub struct Array
 {
     array: LLVMValueRef,
-    element_type: Type,
+    pub element_type: Type,
+    empty: bool,
 }
 
 unsafe fn heap_alloc_array(ctx: &mut Context, element_type: &Type, len: LLVMValueRef) -> LLVMValueRef
@@ -28,49 +29,73 @@ unsafe fn get_array_element(ctx: &Context, array: LLVMValueRef, index: LLVMValue
 
 impl Array
 {
-    pub unsafe fn new(arr: LLVMValueRef, element_type: Type) -> Array
+    pub unsafe fn new(arr: LLVMValueRef, element_type: Type, empty: bool) -> Array
     {
         Array{
             array: arr,
             element_type: element_type,
+            empty: empty,
         }
+    }
+
+    pub unsafe fn concat(ctx: &mut Context, left: &Array, right: &Array) -> Array
+    {
+        if left.empty && right.empty {
+            return Array::empty(ctx);
+        }
+
+        let element_type = if !left.empty {&left.element_type} else {&right.element_type};
+
+        let at = ctx.resolve_type(&array_type(element_type.clone()));
+        let result = Array{
+            array: ctx.stack_alloc(at, "array"),
+            element_type: element_type.clone(),
+            empty: false,
+        };
+
+        let concat_fn = ctx.get_builtin("concat");
+        let size = ctx.size_of_type(element_type);
+        let mut args = vec![
+            left.array,
+            right.array,
+            const_int(ctx, size as u64),
+            result.array,
+        ];
+
+        LLVMBuildCall(ctx.builder, concat_fn.function, args.as_mut_ptr(), 4, cstr!(""));
+        let storage_ptr = result.get_data_ptr(ctx).load(ctx.builder);
+        ctx.add_dec_ref_target(storage_ptr);
+        result
     }
 
     pub unsafe fn empty(ctx: &Context) -> Array
     {
-        let element_type = ctx.resolve_type(&Type::Int);
         let slice_type = ctx.resolve_type(&array_type(Type::Int));
         let slice = Array{
             element_type: Type::Int,
             array: ctx.stack_alloc(slice_type, "array"),
+            empty: true,
         };
 
-        let length_ptr = slice.get_length_ptr(ctx);
-        length_ptr.store_direct(ctx, const_int(ctx, 0));
-
-        let offset_ptr = slice.get_offset_ptr(ctx);
-        offset_ptr.store_direct(ctx, const_int(ctx, 0));
-
-        let data_ptr = slice.get_data_ptr(ctx);
-        data_ptr.store_direct(ctx, LLVMConstPointerNull(LLVMPointerType(element_type, 0)));
+        let zero = const_int(ctx, 0);
+        slice.set_length(ctx, zero);
+        slice.set_offset(ctx, zero);
+        slice.set_heap_allocated_flag(ctx, const_bool(ctx, false));
+        slice.set_data_ptr(ctx, LLVMConstPointerNull(LLVMPointerType(LLVMVoidTypeInContext(ctx.context), 0)));
         slice
     }
 
-    pub unsafe fn init(&mut self, ctx: &mut Context, len: usize)
+    pub unsafe fn init(&mut self, ctx: &mut Context, len: LLVMValueRef)
     {
         // First allocate the storage
-        let array_len =  const_int(ctx, len as u64);
-        let array_data = heap_alloc_array(ctx, &self.element_type, array_len);
+        let array_data = heap_alloc_array(ctx, &self.element_type, len);
 
-        let length_ptr = self.get_length_ptr(ctx);
-        length_ptr.store_direct(ctx, const_int(ctx, len as u64));
-
-        let offset_ptr = self.get_offset_ptr(ctx);
-        offset_ptr.store_direct(ctx, const_int(ctx, 0));
+        self.set_length(ctx, len);
+        self.set_offset(ctx, const_int(ctx, 0));
+        self.set_heap_allocated_flag(ctx, const_bool(ctx, true));
 
         let first = get_array_element(ctx, array_data, const_int(ctx, 0), &self.element_type);
-        let data_ptr = self.get_data_ptr(ctx);
-        data_ptr.store_direct(ctx, first.get());
+        self.set_data_ptr(ctx, first.get());
     }
 
     pub unsafe fn alloc(ctx: &mut Context, array_type: LLVMTypeRef, element_type: Type, len: usize) -> Array
@@ -78,10 +103,27 @@ impl Array
         let mut slice = Array{
             array: ctx.stack_alloc(array_type, "array"),
             element_type: element_type,
+            empty: false,
         };
 
-        slice.init(ctx, len);
+        let len_value = const_int(ctx, len as u64);
+        slice.init(ctx, len_value);
         slice
+    }
+
+    pub unsafe fn fill_with_string_literal(&self, ctx: &Context, glob: LLVMValueRef, len: usize)
+    {
+        self.set_length(ctx, const_int(ctx, len as u64));
+        self.set_offset(ctx, const_int(ctx, 0));
+
+        let data_ptr = self.get_data_ptr(ctx);
+
+        let mut index_expr = vec![const_int(ctx, 0), const_int(ctx, 0)];
+        let first_element = LLVMBuildGEP(ctx.builder, glob, index_expr.as_mut_ptr(), 2, cstr!("first_element"));
+        data_ptr.store_direct(ctx, first_element);
+
+        let heap_allocated_ptr = self.get_heap_allocated_flag_ptr(ctx);
+        heap_allocated_ptr.store_direct(ctx, const_bool(ctx, false))
     }
 
     pub fn get(&self) -> LLVMValueRef {self.array}
@@ -101,14 +143,43 @@ impl Array
         ValueRef::Ptr(LLVMBuildStructGEP(ctx.builder, self.array, 1, cstr!("length")))
     }
 
+    pub unsafe fn set_length(&self, ctx: &Context, len: LLVMValueRef)
+    {
+        let length_ptr = self.get_length_ptr(ctx);
+        length_ptr.store_direct(ctx, len);
+    }
+
     pub unsafe fn get_offset_ptr(&self, ctx: &Context) -> ValueRef
     {
         ValueRef::Ptr(LLVMBuildStructGEP(ctx.builder, self.array, 2, cstr!("offset")))
     }
 
+    pub unsafe fn set_offset(&self, ctx: &Context, offset: LLVMValueRef)
+    {
+        let offset_ptr = self.get_offset_ptr(ctx);
+        offset_ptr.store_direct(ctx, offset);
+    }
+
+    pub unsafe fn get_heap_allocated_flag_ptr(&self, ctx: &Context) -> ValueRef
+    {
+        ValueRef::Ptr(LLVMBuildStructGEP(ctx.builder, self.array, 3, cstr!("heap_allocated")))
+    }
+
+    pub unsafe fn set_heap_allocated_flag(&self, ctx: &Context, val: LLVMValueRef)
+    {
+        let ptr = self.get_heap_allocated_flag_ptr(ctx);
+        ptr.store_direct(ctx, val);
+    }
+
     pub unsafe fn get_data_ptr(&self, ctx: &Context) -> ValueRef
     {
         ValueRef::Ptr(LLVMBuildStructGEP(ctx.builder, self.array, 0, cstr!("data_ptr")))
+    }
+
+    pub unsafe fn set_data_ptr(&self, ctx: &Context, val: LLVMValueRef)
+    {
+        let data_ptr = self.get_data_ptr(ctx);
+        data_ptr.store_direct(ctx, val);
     }
 
     pub unsafe fn subslice(&self, ctx: &Context, offset: u64) -> ValueRef
@@ -117,20 +188,20 @@ impl Array
         let slice = Array{
             array: ctx.stack_alloc(slice_type, "subslice"),
             element_type: self.element_type.clone(),
+            empty: false,
         };
 
-        let slice_length_ptr = slice.get_length_ptr(ctx);
+
         let length_ptr = self.get_length_ptr(ctx);
         let new_length = LLVMBuildSub(ctx.builder, length_ptr.load(ctx.builder), const_int(ctx, offset), cstr!("new_length"));
-        slice_length_ptr.store_direct(ctx, new_length);
+        slice.set_length(ctx, new_length);
 
-        let slice_offset_ptr = slice.get_offset_ptr(ctx);
         let offset_ptr = self.get_offset_ptr(ctx);
         let new_offset = LLVMBuildAdd(ctx.builder, offset_ptr.load(ctx.builder), const_int(ctx, offset), cstr!("new_offset"));
-        slice_offset_ptr.store_direct(ctx, new_offset);
+        slice.set_offset(ctx, new_offset);
 
-        let slice_data_ptr = slice.get_data_ptr(ctx);
-        slice_data_ptr.store_direct(ctx, self.get_data_ptr(ctx).load(ctx.builder));
+        slice.set_data_ptr(ctx, self.get_data_ptr(ctx).load(ctx.builder));
+        slice.set_heap_allocated_flag(ctx, self.get_heap_allocated_flag_ptr(ctx).load(ctx.builder));
         ValueRef::Array(slice)
     }
 

@@ -289,6 +289,12 @@ impl Context
         mem::replace(&mut self.module, ptr::null_mut())
     }
 
+    pub unsafe fn size_of_type(&self, typ: &Type) -> usize
+    {
+        let llvm_type = self.resolve_type(typ);
+        self.target_machine.size_of_type(llvm_type)
+    }
+
     pub unsafe fn resolve_type(&self, typ: &Type) -> LLVMTypeRef
     {
         match *typ
@@ -306,6 +312,7 @@ impl Context
                     LLVMPointerType(element_type, 0),      // Pointer to data
                     LLVMInt64TypeInContext(self.context),  // Length of string
                     LLVMInt64TypeInContext(self.context),  // Offset in data pointer
+                    LLVMInt1TypeInContext(self.context),   // Heap allocated flag
                 ];
                 LLVMStructType(member_types.as_mut_ptr(), member_types.len() as c_uint, 0)
             },

@@ -1,7 +1,7 @@
 use llvm::prelude::*;
 use llvm::core::*;
 
-use ast::Type;
+use ast::{Type, MemberAccessType, ArrayProperty};
 use codegen::{Context, Array, StructValue, SumTypeValue};
 
 
@@ -29,7 +29,7 @@ impl ValueRef
         match *typ
         {
             Type::Array(ref at) => {
-                ValueRef::Array(Array::new(value, at.element_type.clone()))
+                ValueRef::Array(Array::new(value, at.element_type.clone(), false))
             },
             Type::Struct(ref st) => {
                 ValueRef::Struct(
@@ -85,12 +85,23 @@ impl ValueRef
         }
     }
 
-    pub unsafe fn store(&self, ctx: &Context, val: ValueRef)
+    pub unsafe fn store(&mut self, ctx: &Context, val: ValueRef)
     {
         match *self
         {
             ValueRef::Ptr(av) => {
                 LLVMBuildStore(ctx.builder, val.load(ctx.builder), av);
+            },
+            ValueRef::Array(ref mut array) => {
+                match val
+                {
+                    ValueRef::Array(vr) => {
+                        *array = vr;
+                    }
+                    _ => {
+                        panic!("Internal Compiler Error: Store not allowed")
+                    },
+                }
             },
             _ => {
                 panic!("Internal Compiler Error: Store not allowed")
@@ -98,12 +109,19 @@ impl ValueRef
         }
     }
 
-    pub unsafe fn member(&self, ctx: &Context, idx: usize) -> ValueRef
+    pub unsafe fn member(&self, ctx: &Context, at: &MemberAccessType) -> ValueRef
     {
-        match *self
+        match (self, at)
         {
-            ValueRef::Struct(ref vr) => vr.get_member_ptr(ctx, idx),
-            _ => panic!("Internal Compiler Error: Attempting to get a struct member from a non struct"),
+            (&ValueRef::Struct(ref vr), &MemberAccessType::StructMember(idx)) => {
+                vr.get_member_ptr(ctx, idx)
+            },
+
+            (&ValueRef::Array(ref ar), &MemberAccessType::ArrayProperty(ArrayProperty::Len)) => {
+                ar.get_length_ptr(ctx)
+
+            },
+            _ => panic!("Internal Compiler Error: Invalid member access"),
         }
     }
 

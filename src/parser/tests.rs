@@ -549,13 +549,13 @@ fn test_struct_member_access()
     let e = th_expr(r#"
 a.b.0.d
 "#);
-    assert!(e == Expression::StructMemberAccess(
-        struct_member_access(
+    assert!(e == Expression::MemberAccess(
+        member_access(
             "a",
             vec![
-                MemberAccessType::ByName("b".into()),
-                MemberAccessType::ByIndex(0),
-                MemberAccessType::ByName("d".into()),
+                MemberAccessMethod::ByName("b".into()),
+                MemberAccessMethod::ByIndex(0),
+                MemberAccessMethod::ByName("d".into()),
             ],
             span(2, 1, 2, 7)
         )

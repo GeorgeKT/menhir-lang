@@ -17,7 +17,7 @@ pub enum Expression
     Let(Box<LetExpression>),
     LetBindings(Box<LetBindingList>),
     StructInitializer(StructInitializer),
-    StructMemberAccess(StructMemberAccess),
+    MemberAccess(MemberAccess),
 }
 
 
@@ -67,7 +67,7 @@ impl Expression
             Expression::LetBindings(ref l) => l.span.clone(),
             Expression::If(ref i) => i.span.clone(),
             Expression::StructInitializer(ref si) => si.span.clone(),
-            Expression::StructMemberAccess(ref sma) => sma.span.clone(),
+            Expression::MemberAccess(ref sma) => sma.span.clone(),
         }
     }
 
@@ -88,7 +88,7 @@ impl Expression
             Expression::LetBindings(ref l) => l.bindings.last().map(|b| b.typ.clone()).expect("Binding types are not known"),
             Expression::If(ref i) => i.typ.clone(),
             Expression::StructInitializer(ref si) => si.typ.clone(),
-            Expression::StructMemberAccess(ref sma) => sma.typ.clone(),
+            Expression::MemberAccess(ref sma) => sma.typ.clone(),
         }
     }
 }
@@ -127,7 +127,7 @@ impl TreePrinter for Expression
             Expression::LetBindings(ref l) => l.print(level),
             Expression::If(ref i) => i.print(level),
             Expression::StructInitializer(ref si) => si.print(level),
-            Expression::StructMemberAccess(ref sma) => sma.print(level),
+            Expression::MemberAccess(ref sma) => sma.print(level),
         }
     }
 }

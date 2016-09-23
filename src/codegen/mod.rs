@@ -34,7 +34,7 @@ use codegen::expressions::{gen_function, gen_function_sig};
 use codegen::builtin::add_builtin_functions;
 
 
-pub use codegen::expressions::const_int;
+pub use codegen::expressions::{const_bool, const_int};
 pub use codegen::context::{Context};
 pub use codegen::linker::link;
 pub use codegen::valueref::ValueRef;

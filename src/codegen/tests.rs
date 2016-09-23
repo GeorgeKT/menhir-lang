@@ -436,7 +436,6 @@ main() -> int = add(Pair{4, 14})
 }
 
 
-/*
 #[test]
 fn test_strings() {
     let r = run(r#"
@@ -451,7 +450,7 @@ main() -> int =
     println!("r: {:?}", r);
     assert!(r == Ok(11));
 }
-*/
+
 
 #[test]
 fn test_if() {

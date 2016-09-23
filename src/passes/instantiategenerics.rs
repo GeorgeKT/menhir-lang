@@ -147,8 +147,8 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
 
             Ok(Expression::StructInitializer(struct_initializer(&si.struct_name, nmi, si.span.clone())))
         },
-        Expression::StructMemberAccess(ref sma) => {
-            Ok(Expression::StructMemberAccess(sma.clone()))
+        Expression::MemberAccess(ref sma) => {
+            Ok(Expression::MemberAccess(sma.clone()))
         },
     }
 }

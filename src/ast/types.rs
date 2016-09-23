@@ -2,7 +2,7 @@ use std::fmt;
 use std::hash::{Hasher, Hash};
 use std::rc::Rc;
 use itertools::free::join;
-use ast::{Expression, TreePrinter, prefix};
+use ast::{Expression, TreePrinter, MemberAccessType, ArrayProperty, prefix};
 use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -116,6 +116,7 @@ pub struct TypeAlias
     pub original: Type,
     pub span: Span,
 }
+
 
 impl Type
 {
@@ -239,12 +240,17 @@ impl Type
         }
     }
 
-    pub fn get_property_type(&self, name: &str) -> Option<Type>
+    pub fn get_property_type(&self, name: &str) -> Option<(Type, MemberAccessType)>
     {
         match *self
         {
-            Type::Array(_) =>
-                if name == "len" {Some(Type::Int)} else {None},
+            Type::Array(_) => {
+                match name
+                {
+                    "len" => Some((Type::Int, MemberAccessType::ArrayProperty(ArrayProperty::Len))),
+                    _ => None,
+                }
+            },
             _ => None,
         }
     }

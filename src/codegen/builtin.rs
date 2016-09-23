@@ -11,6 +11,7 @@ pub fn add_builtin_functions(ctx: &mut Context)
     void* arc_alloc(size_t size);
     void arc_inc_ref(void* ptr);
     void arc_dec_ref(void* ptr);
+    void concat(array, array, element_len, array)
     */
 
     let functions = vec![
@@ -35,6 +36,16 @@ pub fn add_builtin_functions(ctx: &mut Context)
             Type::Void,
             vec![
                 Argument::new("ptr".into(), Type::VoidPtr, Span::default())
+            ],
+            Span::default()
+        ),
+        sig(
+            "concat",
+            string_type(), // This is passed as an additional pointer argument
+            vec![
+                Argument::with_passing_mode("a".into(), string_type(), ArgumentPassingMode::ByPtr),
+                Argument::with_passing_mode("b".into(), string_type(), ArgumentPassingMode::ByPtr),
+                Argument::with_passing_mode("element_len".into(), Type::Int, ArgumentPassingMode::ByValue),
             ],
             Span::default()
         )

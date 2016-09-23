@@ -664,11 +664,11 @@ fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructIn
 
 
 
-fn find_member_type(members: &Vec<StructMember>, member_access: &MemberAccessType, span: &Span) -> CompileResult<(usize, Type)>
+fn find_member_type(members: &Vec<StructMember>, member_access: &MemberAccessMethod, span: &Span) -> CompileResult<(usize, Type)>
 {
     match member_access
     {
-        &MemberAccessType::ByName(ref member_name) => {
+        &MemberAccessMethod::ByName(ref member_name) => {
             members.iter()
                 .enumerate()
                 .find(|&(_, m)| m.name == *member_name)
@@ -676,7 +676,7 @@ fn find_member_type(members: &Vec<StructMember>, member_access: &MemberAccessTyp
                 .ok_or(CompileError::new(span, ErrorCode::UnknownStructMember, format!("Unknown struct member {}", member_name)))
         },
 
-        &MemberAccessType::ByIndex(index) => {
+        &MemberAccessMethod::ByIndex(index) => {
             if index > members.len() {
                 return err(span, ErrorCode::UnknownStructMember, format!("Attempting to access member {} of struct, but it only has {} members",
                     index, members.len()));
@@ -688,30 +688,35 @@ fn find_member_type(members: &Vec<StructMember>, member_access: &MemberAccessTyp
 
 }
 
-fn type_check_struct_member_access(ctx: &mut TypeCheckerContext, sma: &mut StructMemberAccess) -> CompileResult<Type>
+fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess) -> CompileResult<Type>
 {
     let resolved = try!(ctx.resolve_type(&sma.name).ok_or(unknown_name(&sma.span, &sma.name)));
     sma.name = resolved.full_name;
     let mut st = resolved.typ;
-    sma.indices.clear();
-    for member_access in &sma.members
+    sma.access_types.clear();
+    for access_method in &sma.access_methods
     {
         st = match st
         {
             Type::Struct(ref st) => {
-                let (member_idx, member_type) = try!(find_member_type(&st.members, &member_access, &sma.span));
-                sma.indices.push(member_idx);
+                let (member_idx, member_type) = try!(find_member_type(&st.members, access_method, &sma.span));
+                sma.access_types.push(MemberAccessType::StructMember(member_idx));
                 member_type
             },
             _ => {
-                if let MemberAccessType::ByName(ref member_name) = *member_access {
-                    if let Some(prop_type) = st.get_property_type(member_name) {
-                        prop_type
-                    } else {
-                        return err(&sma.span, ErrorCode::TypeError, format!("Type '{}' has no property named '{}'", st, member_access));
+                match *access_method
+                {
+                    MemberAccessMethod::ByName(ref member_name) => {
+                        if let Some((prop_type, prop_access_type)) = st.get_property_type(member_name) {
+                            sma.access_types.push(prop_access_type);
+                            prop_type
+                        } else {
+                            return err(&sma.span, ErrorCode::TypeError, format!("Type '{}' has no property named '{}'", st, member_name));
+                        }
+                    },
+                    MemberAccessMethod::ByIndex(idx) => {
+                        return err(&sma.span, ErrorCode::TypeError, format!("Type '{}' has no property named '{}'", st, idx));
                     }
-                } else {
-                    return err(&sma.span, ErrorCode::TypeError, format!("Type '{}' has no property named '{}'", st, member_access));
                 }
             },
         };
@@ -800,7 +805,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::If(ref mut i) => type_check_if(ctx, i),
         Expression::Block(ref mut b) => type_check_block(ctx, b, type_hint),
         Expression::StructInitializer(ref mut si) => type_check_struct_initializer(ctx, si),
-        Expression::StructMemberAccess(ref mut sma) => type_check_struct_member_access(ctx, sma),
+        Expression::MemberAccess(ref mut sma) => type_check_member_access(ctx, sma),
     }
 }
 

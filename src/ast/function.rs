@@ -28,6 +28,16 @@ impl Argument
             span: span,
         }
     }
+
+    pub fn with_passing_mode(name: String, typ: Type, passing_mode: ArgumentPassingMode) -> Argument
+    {
+        Argument{
+            name: name,
+            typ: typ,
+            passing_mode: passing_mode,
+            span: Span::default(),
+        }
+    }
 }
 
 impl TreePrinter for Argument

@@ -1,4 +1,8 @@
+import stdlib
 
+len(a: string) -> int = a.len
+
+#concat(a: string, b: string) -> string = a + b
 
 main() -> int =
-    let x = [1, 2, 3, 4] in 5
+    let x = "Hello" + " World" in println(x)

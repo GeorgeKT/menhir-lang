@@ -24,6 +24,11 @@ pub unsafe fn const_int(ctx: &Context, v: u64) -> LLVMValueRef
     LLVMConstInt(LLVMInt64TypeInContext(ctx.context), v, 0)
 }
 
+pub unsafe fn const_bool(ctx: &Context, v: bool) -> LLVMValueRef
+{
+    LLVMConstInt(LLVMInt1TypeInContext(ctx.context), if v {1} else {0}, 0)
+}
+
 unsafe fn gen_integer(ctx: &Context, v: u64) -> ValueRef
 {
     ValueRef::Const(const_int(ctx, v))
@@ -33,7 +38,6 @@ unsafe fn gen_bool(ctx: &Context, v: bool) -> ValueRef
 {
     ValueRef::Const(LLVMConstInt(LLVMInt1TypeInContext(ctx.context), if v {1} else {0}, 0))
 }
-
 
 unsafe fn gen_char(ctx: &Context, v: u8) -> ValueRef
 {
@@ -57,29 +61,21 @@ unsafe fn gen_const_string_literal(ctx: &Context, s: &str) -> ValueRef
 
 unsafe fn gen_string_literal(ctx: &Context, s: &str) -> ValueRef
 {
+    let typ = ctx.resolve_type(&string_type());
+    let array = Array::new(ctx.stack_alloc(typ, "string"), Type::Char, s.is_empty());
+    gen_string_literal_store(ctx, s, &array);
+    ValueRef::Array(array)
+}
+
+unsafe fn gen_string_literal_store(ctx: &Context, s: &str, array: &Array)
+{
     let glob = LLVMAddGlobal(ctx.module, LLVMArrayType(LLVMInt8TypeInContext(ctx.context), s.len() as c_uint),  cstr!("string"));
 
     LLVMSetLinkage(glob, LLVMLinkage::LLVMInternalLinkage);
     LLVMSetGlobalConstant(glob, 1);
     let string_data = gen_const_string_literal(ctx, s);
     LLVMSetInitializer(glob, string_data.get());
-
-    let typ = ctx.resolve_type(&string_type());
-    let array = Array::new(ctx.stack_alloc(typ, "string"), Type::Char);
-
-    let length_ptr = array.get_length_ptr(ctx);
-    length_ptr.store_direct(ctx, const_int(ctx, s.len() as u64));
-
-    let offset_ptr = array.get_offset_ptr(ctx);
-    offset_ptr.store_direct(ctx, const_int(ctx, 0));
-
-    let data_ptr = array.get_data_ptr(ctx);
-
-    let mut index_expr = vec![const_int(ctx, 0), const_int(ctx, 0)];
-    let first_element = LLVMBuildGEP(ctx.builder, glob, index_expr.as_mut_ptr(), 2, cstr!("first_element"));
-    data_ptr.store_direct(ctx, first_element);
-
-    ValueRef::Array(array)
+    array.fill_with_string_literal(ctx, glob, s.len())
 }
 
 unsafe fn gen_unary_op(ctx: &mut Context, op: &UnaryOp) -> ValueRef
@@ -167,32 +163,11 @@ unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> ValueRef
                 match op.operator
                 {
                     Operator::Add => {
-                        /*let a_length = ar.get_length_ptr(ctx).load(ctx.builder);
-                        let b_length = br.get_length_ptr(ctx).load(ctx.builder);
-                        let new_size = LLVMBuildAdd(ctx.builder, a_length, b_length, cstr!("new_size"));
-
-                        let array = Array::new()
-                        */
-                        panic!("NYI");
+                        ValueRef::Array(Array::concat(ctx, ar, br))
                     },
 
                     Operator::Equals | Operator::NotEquals => {
-                        let dst = ctx.stack_alloc(ctx.resolve_type(&Type::Bool), "dst");
-                        let func = ctx.get_current_function();
-                        let on_eq = LLVMAppendBasicBlockInContext(ctx.context, func, cstr!("on_eq"));
-                        let on_not_eq = LLVMAppendBasicBlockInContext(ctx.context, func, cstr!("on_not_eq"));
-                        let after_eq = LLVMAppendBasicBlockInContext(ctx.context, func, cstr!("after_eq"));
-                        gen_equals_seq(ctx, ar, br, on_eq, on_not_eq);
-
-                        LLVMPositionBuilderAtEnd(ctx.builder, on_eq);
-                        LLVMBuildStore(ctx.builder, const_int(ctx, 1), dst);
-                        LLVMBuildBr(ctx.builder, after_eq);
-
-                        LLVMPositionBuilderAtEnd(ctx.builder, on_not_eq);
-                        LLVMBuildStore(ctx.builder, const_int(ctx, 0), dst);
-                        LLVMBuildBr(ctx.builder, after_eq);
-
-                        LLVMPositionBuilderAtEnd(ctx.builder, after_eq);
+                        let dst = gen_array_equals(ctx, ar, br);
                         ValueRef::Const(
                             if op.operator == Operator::Equals {dst} else {LLVMBuildNot(ctx.builder, dst, cstr!("not"))}
                         )
@@ -210,7 +185,27 @@ unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> ValueRef
 
         _ => panic!("Internal Compiler Error: Operator {} is not a binary operator", op.operator),
     }
+}
 
+pub unsafe fn gen_array_equals(ctx: &mut Context, ar: &Array, br: &Array) -> LLVMValueRef
+{
+    let dst = ctx.stack_alloc(ctx.resolve_type(&Type::Bool), "dst");
+    let func = ctx.get_current_function();
+    let on_eq = LLVMAppendBasicBlockInContext(ctx.context, func, cstr!("on_eq"));
+    let on_not_eq = LLVMAppendBasicBlockInContext(ctx.context, func, cstr!("on_not_eq"));
+    let after_eq = LLVMAppendBasicBlockInContext(ctx.context, func, cstr!("after_eq"));
+    gen_equals_seq(ctx, ar, br, on_eq, on_not_eq);
+
+    LLVMPositionBuilderAtEnd(ctx.builder, on_eq);
+    LLVMBuildStore(ctx.builder, const_int(ctx, 1), dst);
+    LLVMBuildBr(ctx.builder, after_eq);
+
+    LLVMPositionBuilderAtEnd(ctx.builder, on_not_eq);
+    LLVMBuildStore(ctx.builder, const_int(ctx, 0), dst);
+    LLVMBuildBr(ctx.builder, after_eq);
+
+    LLVMPositionBuilderAtEnd(ctx.builder, after_eq);
+    dst
 }
 
 unsafe fn make_function_instance(ctx: &Context, sig: &FunctionSignature) -> FunctionInstance
@@ -350,7 +345,7 @@ unsafe fn gen_call_args(ctx: &mut Context, c: &Call, func: &FunctionInstance) ->
     arg_vals
 }
 
-unsafe fn gen_call_store(ctx: &mut Context, c: &Call, ptr: &ValueRef)
+unsafe fn gen_call_store(ctx: &mut Context, c: &Call, ptr: &mut ValueRef)
 {
     let func = ctx.get_function(&c.callee.name).expect("Internal Compiler Error: Unknown function");
 
@@ -372,8 +367,8 @@ unsafe fn gen_call(ctx: &mut Context, c: &Call) -> ValueRef
     let func = ctx.get_function(&c.callee.name).expect("Internal Compiler Error: Unknown function");
     if func.sig.return_type.return_by_ptr()
     {
-        let vr = ValueRef::alloc(ctx, &func.sig.return_type);
-        gen_call_store(ctx, c, &vr);
+        let mut vr = ValueRef::alloc(ctx, &func.sig.return_type);
+        gen_call_store(ctx, c, &mut vr);
         vr
     }
     else
@@ -559,7 +554,7 @@ unsafe fn gen_struct_pattern_match(
     let add_bindings = |var: &ValueRef, ctx: &mut Context| {
         for (idx, b) in p.bindings.iter().enumerate() {
             if b != "_" {
-                let member_ptr = var.member(ctx, idx);
+                let member_ptr = var.member(ctx, &MemberAccessType::StructMember(idx));
                 ctx.add_variable(&b, member_ptr);
             }
         }
@@ -750,11 +745,12 @@ unsafe fn gen_let(ctx: &mut Context, l: &LetExpression) -> ValueRef
 
 unsafe fn gen_array_literal_store(ctx: &mut Context, a: &ArrayLiteral, array: &mut Array)
 {
-    array.init(ctx, a.elements.len());
+    let len = const_int(ctx, a.elements.len() as u64);
+    array.init(ctx, len);
     for (idx, element) in a.elements.iter().enumerate()
     {
         let index = const_int(ctx, idx as u64);
-        let el_ptr = array.get_element(ctx, index);
+        let mut el_ptr = array.get_element(ctx, index);
         let e_val = gen_expression(ctx, element);
         el_ptr.store(ctx, e_val);
     }
@@ -777,11 +773,9 @@ unsafe fn gen_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> ValueRef
         },
         _ => panic!("Array literal has the type {}", a.array_type),
     }
-
-
 }
 
-unsafe fn store(ctx: &mut Context, e: &Expression, ptr: &ValueRef)
+unsafe fn store(ctx: &mut Context, e: &Expression, ptr: &mut ValueRef)
 {
     let v = gen_expression(ctx, e);
     ptr.store(ctx, v);
@@ -791,7 +785,7 @@ unsafe fn gen_struct_initializer_store(ctx: &mut Context, si: &StructInitializer
 {
     let store_members = |var: &ValueRef, ctx: &mut Context| {
         for (idx, ref member_init) in si.member_initializers.iter().enumerate() {
-            let mut member_ptr = var.member(ctx, idx);
+            let mut member_ptr = var.member(ctx, &MemberAccessType::StructMember(idx));
             gen_expression_store(ctx, member_init, &mut member_ptr);
         }
     };
@@ -818,12 +812,12 @@ unsafe fn gen_struct_initializer(ctx: &mut Context, si: &StructInitializer) -> V
     var
 }
 
-unsafe fn gen_struct_member_access(ctx: &Context, sma: &StructMemberAccess) -> ValueRef
+unsafe fn gen_member_access(ctx: &Context, sma: &MemberAccess) -> ValueRef
 {
     let mut var = ctx.get_variable(&sma.name).expect("Internal Compiler Error: Unknown variable").value.clone();
-    for idx in &sma.indices
+    for at in &sma.access_types
     {
-        var = var.member(ctx, *idx);
+        var = var.member(ctx, at);
     }
     var
 }
@@ -874,7 +868,9 @@ pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: &mut 
             let match_expr = i.to_match();
             gen_match_store(ctx, &match_expr, ptr);
         },
-        _ => store(ctx, e, &ptr),
+        _ => {
+            store(ctx, e, ptr)
+        },
     }
 }
 
@@ -911,7 +907,7 @@ pub fn gen_expression(ctx: &mut Context, e: &Expression) -> ValueRef
             Expression::Literal(Literal::Bool(_, v)) => gen_bool(ctx, v),
             Expression::Literal(Literal::Char(_, v)) => gen_char(ctx, v),
             Expression::StructInitializer(ref si) => gen_struct_initializer(ctx, si),
-            Expression::StructMemberAccess(ref sma) => gen_struct_member_access(ctx, sma),
+            Expression::MemberAccess(ref sma) => gen_member_access(ctx, sma),
         }
     }
 }
