@@ -19,7 +19,7 @@ pub struct StackFrame
 {
     pub symbols: SymbolTable,
     pub current_function: LLVMValueRef,
-    to_dec_ref: Vec<LLVMValueRef>,
+    to_dec_ref: Vec<ValueRef>,
 }
 
 impl StackFrame
@@ -33,19 +33,16 @@ impl StackFrame
         }
     }
 
-    pub fn add_dec_ref_target(&mut self, target: LLVMValueRef)
+    pub fn add_dec_ref_target(&mut self, target: ValueRef)
     {
         self.to_dec_ref.push(target);
     }
 
     pub fn cleanup(&self, ctx: &Context)
     {
-        let arc_dec_ref = ctx.get_builtin("arc_dec_ref");
         for object in &self.to_dec_ref {
             unsafe {
-                let void_ptr = LLVMBuildBitCast(ctx.builder, *object, ctx.resolve_type(&Type::VoidPtr), cstr!("cast_to_void_ptr"));
-                let mut args = vec![void_ptr];
-                LLVMBuildCall(ctx.builder, arc_dec_ref.function, args.as_mut_ptr(), 1, cstr!(""));
+                object.dec_ref(ctx);
             }
         }
     }
@@ -198,7 +195,7 @@ impl Context
         LLVMBuildBitCast(self.builder, void_ptr, LLVMPointerType(element_type, 0), cstr!("cast_to_ptr"))
     }
 
-    pub fn add_dec_ref_target(&mut self, target: LLVMValueRef)
+    pub fn add_dec_ref_target(&mut self, target: ValueRef)
     {
         self.stack.last_mut().expect("Stack is empty").add_dec_ref_target(target)
     }

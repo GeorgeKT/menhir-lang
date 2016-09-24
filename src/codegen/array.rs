@@ -16,7 +16,6 @@ unsafe fn heap_alloc_array(ctx: &mut Context, element_type: &Type, len: LLVMValu
 {
     let llvm_element_type = ctx.resolve_type(&element_type);
     let array = ctx.heap_alloc_array(llvm_element_type, len, "array_data");
-    ctx.add_dec_ref_target(array);
     array
 }
 
@@ -70,8 +69,6 @@ impl Array
         ];
 
         LLVMBuildCall(ctx.builder, concat_fn.function, args.as_mut_ptr(), 4, cstr!(""));
-        let storage_ptr = dst.get_data_ptr(ctx).load(ctx.builder);
-        ctx.add_dec_ref_target(storage_ptr);
     }
 
     pub unsafe fn empty(ctx: &Context) -> Array
@@ -228,5 +225,27 @@ impl Array
     pub unsafe fn gen_length(&self, ctx: &Context) -> ValueRef
     {
         ValueRef::Const(self.get_length_ptr(ctx).load(ctx.builder))
+    }
+
+    pub unsafe fn inc_ref(&self, ctx: &Context)
+    {
+        let arc_inc_ref = ctx.get_builtin("arc_inc_ref");
+        let array_data = self.get_data_ptr(ctx);
+        let void_ptr = LLVMBuildBitCast(ctx.builder, array_data.get(), ctx.resolve_type(&Type::VoidPtr), cstr!("cast_to_void_ptr"));
+        let mut args = vec![
+            void_ptr
+        ];
+        LLVMBuildCall(ctx.builder, arc_inc_ref.function, args.as_mut_ptr(), 1, cstr!(""));
+    }
+
+    pub unsafe fn dec_ref(&self, ctx: &Context)
+    {
+        let arc_dec_ref = ctx.get_builtin("arc_dec_ref");
+        let array_data = self.get_data_ptr(ctx);
+        let void_ptr = LLVMBuildBitCast(ctx.builder, array_data.get(), ctx.resolve_type(&Type::VoidPtr), cstr!("cast_to_void_ptr"));
+        let mut args = vec![
+            void_ptr
+        ];
+        LLVMBuildCall(ctx.builder, arc_dec_ref.function, args.as_mut_ptr(), 1, cstr!(""));
     }
 }

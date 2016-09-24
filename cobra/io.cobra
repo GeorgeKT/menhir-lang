@@ -1,0 +1,47 @@
+import result
+
+type File = {fd: int}
+type IOError = {error: int}
+type OpenMode = ReadOnly | ReadWrite | WriteOnly
+
+
+extern _rt_open(file: string, mode: string) -> int
+extern _rt_close(fd: int) -> int
+extern _rt_write(fd: int, data: string) -> int
+extern _rt_read(fd: int, data: string) -> int
+
+open(filename: string, mode: OpenMode) -> Result<File, IOError> = (
+    let mode_string =
+        match mode:
+            ReadOnly => "r",
+            WriteOnly => "w",
+            ReadWrite => "rw";
+    let fd = _rt_open(filename, mode_string);
+
+    if fd < 0:
+        Err{fd}
+    else
+        Ok{File{fd}}
+)
+
+close(f: File) -> int =
+    _rt_close(f.fd)
+
+write(f: File, data: string) -> Result<int, IOError> = (
+    let ret = _rt_write(f.fd, data);
+
+    if ret < 0:
+        Err{IOError{ret}}
+    else
+        Ok{ret}
+)
+
+read(f: File, len: int) -> Result<string, IOError> = (
+    let data = ['a'; len];
+    let ret = _rt_read(f.fd, data);
+
+    if ret < 0:
+        Err{IOError{ret}}
+    else
+        Ok{data}
+)

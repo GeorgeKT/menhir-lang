@@ -1,8 +1,1 @@
-import stdlib
-
-len(a: [$t]) -> int = a.len
-
-concat(a: [$t], b: [$t]) -> [$t] = a + b
-
-main() -> int =
-    let x = concat("Hello", " World") in println(x)
+main() -> int = 5 + 5 * 7 - 9 / 3

@@ -10,6 +10,8 @@ mod ast;
 #[macro_use]
 mod codegen;
 mod compileerror;
+#[allow(unused)]
+mod llrep;
 mod parser;
 mod typechecker;
 mod span;
@@ -20,6 +22,7 @@ use codegen::{CodeGenOptions, codegen, link, llvm_init};
 use docopt::Docopt;
 use parser::{ParserOptions, parse_file};
 use typechecker::{type_check_module};
+use llrep::compile_to_llrep;
 
 
 static USAGE: &'static str =  "
@@ -86,6 +89,11 @@ fn main()
         module.print(0);
         */
         try!(type_check_module(&mut module));
+
+        let llmod = compile_to_llrep(&module);
+        println!("llmod:\n");
+        println!("{}", llmod);
+
         llvm_init();
         let mut ctx = try!(codegen(&module));
         link(&mut ctx, &opts)

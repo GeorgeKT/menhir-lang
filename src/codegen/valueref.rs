@@ -123,4 +123,22 @@ impl ValueRef
             _ => panic!("Internal Compiler Error: Attempting to get a sum type case member from a non sum type"),
         }
     }
+
+    pub unsafe fn inc_ref(&self, ctx: &Context)
+    {
+        match *self
+        {
+            ValueRef::Array(ref a) => a.inc_ref(ctx),
+            _ => (),
+        }
+    }
+
+    pub unsafe fn dec_ref(&self, ctx: &Context)
+    {
+        match *self
+        {
+            ValueRef::Array(ref a) => a.dec_ref(ctx),
+            _ => (),
+        }
+    }
 }
