@@ -93,97 +93,137 @@ unsafe fn gen_unary_op(ctx: &mut Context, op: &UnaryOp) -> ValueRef
     }
 }
 
-
-
-unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> ValueRef
+unsafe fn gen_int_binary_op(ctx: &mut Context, op: &BinaryOp) -> ValueRef
 {
     let left_val = gen_expression(ctx, &op.left);
     let right_val = gen_expression(ctx, &op.right);
+    let l = left_val.load(ctx.builder);
+    let r = right_val.load(ctx.builder);
 
+    ValueRef::Const(match op.operator
+    {
+        Operator::Add => LLVMBuildAdd(ctx.builder, l, r, cstr!("add")),
+        Operator::Sub => LLVMBuildSub(ctx.builder, l, r, cstr!("sub")),
+        Operator::Mul => LLVMBuildMul(ctx.builder, l, r, cstr!("mul")),
+        Operator::Div => LLVMBuildUDiv(ctx.builder, l, r, cstr!("div")),
+        Operator::Mod => LLVMBuildURem(ctx.builder, l, r, cstr!("mod")),
+        Operator::LessThan => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, l, r, cstr!("cmp")),
+        Operator::LessThanEquals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLE, l, r, cstr!("cmp")),
+        Operator::GreaterThan => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, l, r, cstr!("cmp")),
+        Operator::GreaterThanEquals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGE, l, r, cstr!("cmp")),
+        Operator::Equals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, l, r, cstr!("cmp")),
+        Operator::NotEquals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, l, r, cstr!("cmp")),
+        _ => panic!("Internal Compiler Error: Operator {} is not supported on integers", op.operator),
+    })
+}
+
+unsafe fn gen_float_binary_op(ctx: &mut Context, op: &BinaryOp) -> ValueRef
+{
+    let left_val = gen_expression(ctx, &op.left);
+    let right_val = gen_expression(ctx, &op.right);
+    let l = left_val.load(ctx.builder);
+    let r = right_val.load(ctx.builder);
+
+    ValueRef::Const(match op.operator
+    {
+        Operator::Add => LLVMBuildFAdd(ctx.builder, l, r, cstr!("add")),
+        Operator::Sub => LLVMBuildFSub(ctx.builder, l, r, cstr!("sub")),
+        Operator::Mul => LLVMBuildFMul(ctx.builder, l, r, cstr!("mul")),
+        Operator::Div => LLVMBuildFDiv(ctx.builder, l, r, cstr!("div")),
+        Operator::Mod => LLVMBuildFRem(ctx.builder, l, r, cstr!("mod")),
+        Operator::LessThan => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLT, l, r, cstr!("cmp")),
+        Operator::LessThanEquals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLE, l, r, cstr!("cmp")),
+        Operator::GreaterThan => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGT, l, r, cstr!("cmp")),
+        Operator::GreaterThanEquals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGE, l, r, cstr!("cmp")),
+        Operator::Equals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, l, r, cstr!("cmp")),
+        Operator::NotEquals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealONE, l, r, cstr!("cmp")),
+        _ => panic!("Internal Compiler Error: Operator {} is not supported on floats", op.operator),
+    })
+}
+
+unsafe fn gen_bool_binary_op(ctx: &mut Context, op: &BinaryOp) -> ValueRef
+{
+    let left_val = gen_expression(ctx, &op.left);
+    let right_val = gen_expression(ctx, &op.right);
+    let l = left_val.load(ctx.builder);
+    let r = right_val.load(ctx.builder);
+
+    ValueRef::Const(match op.operator
+    {
+        Operator::And => LLVMBuildAnd(ctx.builder, l, r, cstr!("and")),
+        Operator::Or => LLVMBuildOr(ctx.builder, left_val.load(ctx.builder), right_val.load(ctx.builder), cstr!("or")),
+        _ => panic!("Internal Compiler Error: Operator {} is not supported on bools", op.operator),
+    })
+}
+
+unsafe fn gen_array_binary_op(ctx: &mut Context, op: &BinaryOp) -> ValueRef
+{
+    let left_val = gen_expression(ctx, &op.left);
+    let right_val = gen_expression(ctx, &op.right);
+    if let (ValueRef::Array(ref ar), ValueRef::Array(ref br)) = (left_val, right_val)
+    {
+        match op.operator
+        {
+            Operator::Add => {
+                ValueRef::Array(Array::concat(ctx, ar, br))
+            },
+
+            Operator::Equals | Operator::NotEquals => {
+                let dst = gen_array_equals(ctx, ar, br);
+                ValueRef::Const(
+                    if op.operator == Operator::Equals {dst} else {LLVMBuildNot(ctx.builder, dst, cstr!("not"))}
+                )
+            }
+
+            _ => panic!("Internal Compiler Error: Operator {} is not supported on arrays", op.operator),
+        }
+    }
+    else
+    {
+        panic!("Internal Compiler Error: Expecting array ValueRef's here");
+    }
+}
+
+unsafe fn gen_binary_op(ctx: &mut Context, op: &BinaryOp) -> ValueRef
+{
     match (op.left.get_type(), op.right.get_type())
     {
         (Type::Int, Type::Int) => {
-            let l = left_val.load(ctx.builder);
-            let r = right_val.load(ctx.builder);
-
-            ValueRef::Const(match op.operator
-            {
-                Operator::Add => LLVMBuildAdd(ctx.builder, l, r, cstr!("add")),
-                Operator::Sub => LLVMBuildSub(ctx.builder, l, r, cstr!("sub")),
-                Operator::Mul => LLVMBuildMul(ctx.builder, l, r, cstr!("mul")),
-                Operator::Div => LLVMBuildUDiv(ctx.builder, l, r, cstr!("div")),
-                Operator::Mod => LLVMBuildURem(ctx.builder, l, r, cstr!("mod")),
-                Operator::LessThan => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, l, r, cstr!("cmp")),
-                Operator::LessThanEquals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLE, l, r, cstr!("cmp")),
-                Operator::GreaterThan => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, l, r, cstr!("cmp")),
-                Operator::GreaterThanEquals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGE, l, r, cstr!("cmp")),
-                Operator::Equals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, l, r, cstr!("cmp")),
-                Operator::NotEquals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, l, r, cstr!("cmp")),
-                _ => panic!("Internal Compiler Error: Operator {} is not supported on integers", op.operator),
-            })
+            gen_int_binary_op(ctx, op)
         }
 
         (Type::Float, Type::Float) => {
-            let l = left_val.load(ctx.builder);
-            let r = right_val.load(ctx.builder);
-
-            ValueRef::Const(match op.operator
-            {
-                Operator::Add => LLVMBuildFAdd(ctx.builder, l, r, cstr!("add")),
-                Operator::Sub => LLVMBuildFSub(ctx.builder, l, r, cstr!("sub")),
-                Operator::Mul => LLVMBuildFMul(ctx.builder, l, r, cstr!("mul")),
-                Operator::Div => LLVMBuildFDiv(ctx.builder, l, r, cstr!("div")),
-                Operator::Mod => LLVMBuildFRem(ctx.builder, l, r, cstr!("mod")),
-                Operator::LessThan => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLT, l, r, cstr!("cmp")),
-                Operator::LessThanEquals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOLE, l, r, cstr!("cmp")),
-                Operator::GreaterThan => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGT, l, r, cstr!("cmp")),
-                Operator::GreaterThanEquals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOGE, l, r, cstr!("cmp")),
-                Operator::Equals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealOEQ, l, r, cstr!("cmp")),
-                Operator::NotEquals => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealONE, l, r, cstr!("cmp")),
-                _ => panic!("Internal Compiler Error: Operator {} is not supported on floats", op.operator),
-            })
+            gen_float_binary_op(ctx, op)
         },
 
         (Type::Bool, Type::Bool) => {
-            let l = left_val.load(ctx.builder);
-            let r = right_val.load(ctx.builder);
-
-            ValueRef::Const(match op.operator
-            {
-                Operator::And => LLVMBuildAnd(ctx.builder, l, r, cstr!("and")),
-                Operator::Or => LLVMBuildOr(ctx.builder, left_val.load(ctx.builder), right_val.load(ctx.builder), cstr!("or")),
-                _ => panic!("Internal Compiler Error: Operator {} is not supported on bools", op.operator),
-            })
+            gen_bool_binary_op(ctx, op)
         },
 
         (Type::Array(_), Type::Array(_)) => {
+            gen_array_binary_op(ctx, op)
+        }
+        _ => panic!("Internal Compiler Error: Operator {} is not a binary operator", op.operator),
+    }
+}
 
-            if let (ValueRef::Array(ref ar), ValueRef::Array(ref br)) = (left_val, right_val)
-            {
-                match op.operator
-                {
-                    Operator::Add => {
-                        ValueRef::Array(Array::concat(ctx, ar, br))
-                    },
-
-                    Operator::Equals | Operator::NotEquals => {
-                        let dst = gen_array_equals(ctx, ar, br);
-                        ValueRef::Const(
-                            if op.operator == Operator::Equals {dst} else {LLVMBuildNot(ctx.builder, dst, cstr!("not"))}
-                        )
-                    }
-
-                    _ => panic!("Internal Compiler Error: Operator {} is not supported on arrays", op.operator),
-                }
-            }
-            else
-            {
+unsafe fn gen_binary_op_store(ctx: &mut Context, op: &BinaryOp, dst: &ValueRef)
+{
+    match (op.left.get_type(), op.right.get_type(), op.operator, dst)
+    {
+        (Type::Array(_), Type::Array(_), Operator::Add, &ValueRef::Array(ref dst_array)) => {
+            let left_val = gen_expression(ctx, &op.left);
+            let right_val = gen_expression(ctx, &op.right);
+            if let (ValueRef::Array(ref ar), ValueRef::Array(ref br)) = (left_val, right_val) {
+                Array::concat_store(ctx, ar, br, dst_array);
+            } else {
                 panic!("Internal Compiler Error: Expecting array ValueRef's here");
             }
-
         }
-
-        _ => panic!("Internal Compiler Error: Operator {} is not a binary operator", op.operator),
+        _ => {
+            let v = gen_binary_op(ctx, op);
+            dst.store(ctx, v)
+        }
     }
 }
 
@@ -345,7 +385,7 @@ unsafe fn gen_call_args(ctx: &mut Context, c: &Call, func: &FunctionInstance) ->
     arg_vals
 }
 
-unsafe fn gen_call_store(ctx: &mut Context, c: &Call, ptr: &mut ValueRef)
+unsafe fn gen_call_store(ctx: &mut Context, c: &Call, ptr: &ValueRef)
 {
     let func = ctx.get_function(&c.callee.name).expect("Internal Compiler Error: Unknown function");
 
@@ -378,7 +418,7 @@ unsafe fn gen_call(ctx: &mut Context, c: &Call) -> ValueRef
     }
 }
 
-unsafe fn gen_name_ref_store(ctx: &Context, nr: &NameRef, ptr: &mut ValueRef)
+unsafe fn gen_name_ref_store(ctx: &Context, nr: &NameRef, ptr: &ValueRef)
 {
     let v = gen_name_ref(ctx, nr);
     ptr.store(ctx, v);
@@ -750,7 +790,7 @@ unsafe fn gen_array_literal_store(ctx: &mut Context, a: &ArrayLiteral, array: &m
     for (idx, element) in a.elements.iter().enumerate()
     {
         let index = const_int(ctx, idx as u64);
-        let mut el_ptr = array.get_element(ctx, index);
+        let el_ptr = array.get_element(ctx, index);
         let e_val = gen_expression(ctx, element);
         el_ptr.store(ctx, e_val);
     }
@@ -775,7 +815,7 @@ unsafe fn gen_array_literal(ctx: &mut Context, a: &ArrayLiteral) -> ValueRef
     }
 }
 
-unsafe fn store(ctx: &mut Context, e: &Expression, ptr: &mut ValueRef)
+unsafe fn store(ctx: &mut Context, e: &Expression, ptr: &ValueRef)
 {
     let v = gen_expression(ctx, e);
     ptr.store(ctx, v);
@@ -868,6 +908,7 @@ pub unsafe fn gen_expression_store(ctx: &mut Context, e: &Expression, ptr: &mut 
             let match_expr = i.to_match();
             gen_match_store(ctx, &match_expr, ptr);
         },
+        Expression::BinaryOp(ref b) => gen_binary_op_store(ctx, b, ptr),
         _ => {
             store(ctx, e, ptr)
         },

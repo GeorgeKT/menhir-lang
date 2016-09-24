@@ -1,8 +1,8 @@
 import stdlib
 
-len(a: string) -> int = a.len
+len(a: [$t]) -> int = a.len
 
-concat(a: string, b: string) -> string = a + b
+concat(a: [$t], b: [$t]) -> [$t] = a + b
 
 main() -> int =
     let x = concat("Hello", " World") in println(x)

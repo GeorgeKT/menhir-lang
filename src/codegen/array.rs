@@ -53,19 +53,25 @@ impl Array
             empty: false,
         };
 
+        Array::concat_store(ctx, left, right, &result);
+        result
+    }
+
+    pub unsafe fn concat_store(ctx: &mut Context, left: &Array, right: &Array, dst: &Array)
+    {
         let concat_fn = ctx.get_builtin("concat");
+        let element_type = if !left.empty {&left.element_type} else {&right.element_type};
         let size = ctx.size_of_type(element_type);
         let mut args = vec![
             left.array,
             right.array,
             const_int(ctx, size as u64),
-            result.array,
+            dst.array,
         ];
 
         LLVMBuildCall(ctx.builder, concat_fn.function, args.as_mut_ptr(), 4, cstr!(""));
-        let storage_ptr = result.get_data_ptr(ctx).load(ctx.builder);
+        let storage_ptr = dst.get_data_ptr(ctx).load(ctx.builder);
         ctx.add_dec_ref_target(storage_ptr);
-        result
     }
 
     pub unsafe fn empty(ctx: &Context) -> Array

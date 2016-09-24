@@ -85,28 +85,9 @@ impl ValueRef
         }
     }
 
-    pub unsafe fn store(&mut self, ctx: &Context, val: ValueRef)
+    pub unsafe fn store(&self, ctx: &Context, val: ValueRef)
     {
-        match *self
-        {
-            ValueRef::Ptr(av) => {
-                LLVMBuildStore(ctx.builder, val.load(ctx.builder), av);
-            },
-            ValueRef::Array(ref mut array) => {
-                match val
-                {
-                    ValueRef::Array(vr) => {
-                        *array = vr;
-                    }
-                    _ => {
-                        panic!("Internal Compiler Error: Store not allowed")
-                    },
-                }
-            },
-            _ => {
-                panic!("Internal Compiler Error: Store not allowed")
-            },
-        }
+        self.store_direct(ctx, val.load(ctx.builder))
     }
 
     pub unsafe fn member(&self, ctx: &Context, at: &MemberAccessType) -> ValueRef
