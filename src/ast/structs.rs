@@ -1,6 +1,6 @@
 use ast::{Expression, TreePrinter, Type, prefix};
 use span::{Span};
-use passes::GenericMapper;
+use typechecker::GenericMapper;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct StructMemberDeclaration

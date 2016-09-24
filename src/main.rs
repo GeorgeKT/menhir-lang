@@ -11,7 +11,7 @@ mod ast;
 mod codegen;
 mod compileerror;
 mod parser;
-mod passes;
+mod typechecker;
 mod span;
 
 
@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 use codegen::{CodeGenOptions, codegen, link, llvm_init};
 use docopt::Docopt;
 use parser::{ParserOptions, parse_file};
-use passes::{type_check_module};
+use typechecker::{type_check_module};
 
 
 static USAGE: &'static str =  "

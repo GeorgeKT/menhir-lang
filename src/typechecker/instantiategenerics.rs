@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use ast::*;
 use compileerror::{CompileResult, ErrorCode, err};
-use passes::GenericMapper;
+use typechecker::GenericMapper;
 
 fn subsitute_let_bindings(generic_args: &GenericMapper, lb: &Vec<LetBinding>) -> CompileResult<Vec<LetBinding>>
 {

@@ -8,7 +8,7 @@ use llvm::execution_engine::*;
 use compileerror::{ErrorCode, err, CompileResult};
 use parser::{ParserOptions, parse_module};
 use codegen::{codegen, llvm_init};
-use passes::{type_check_module};
+use typechecker::{type_check_module};
 use ast::{TreePrinter};
 use span::Span;
 

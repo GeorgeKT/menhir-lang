@@ -1,5 +1,5 @@
 use ast::*;
-use passes::TypeCheckerContext;
+use typechecker::TypeCheckerContext;
 use compileerror::{CompileResult, unknown_name};
 
 #[derive(Eq, PartialEq, Debug)]

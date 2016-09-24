@@ -1,6 +1,6 @@
 use ast::{Expression, Type, NameRef, TreePrinter, prefix};
 use span::{Span};
-use passes::GenericMapper;
+use typechecker::GenericMapper;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Call
