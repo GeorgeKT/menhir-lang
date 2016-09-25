@@ -65,7 +65,9 @@ fn let_to_llrep(func: &mut LLFunction, l: &LetExpression) -> LLVar
     }
 
     func.add(LLInstruction::StartScope);
+    func.push_scope();
     let result = expr_to_llrep(func, &l.expression).expect("Expression must return a var");
+    func.pop_scope();
     func.add(LLInstruction::EndScope{ret_var: result.clone()});
     result
 }
@@ -77,6 +79,48 @@ fn array_lit_to_llrep(func: &mut LLFunction, a: &ArrayLiteral) -> LLVar
         .collect();
     let var = func.new_var(a.array_type.clone());
     func.add(LLInstruction::set(var.clone(), LLExpr::Literal(LLLiteral::Array(vars))));
+    var
+}
+
+fn struct_initializer_to_llrep(func: &mut LLFunction, si: &StructInitializer) -> LLVar
+{
+    let var = func.new_var(si.typ.clone());
+    func.add(LLInstruction::StackAlloc(var.clone()));
+    for (idx, expr) in si.member_initializers.iter().enumerate() {
+        let v = expr_to_llrep(func, expr).expect("Expression must return a var");
+        func.add(LLInstruction::set_struct_member(var.clone(), idx, v));
+    }
+
+    var
+}
+
+fn member_access_to_llrep(func: &mut LLFunction, sma: &MemberAccess) -> LLVar
+{
+    let mut var = func.get_named_var(&sma.name).expect("Internal Compiler Error: Unknown variable");
+    for at in &sma.access_types
+    {
+        var = match (&var.typ, at)
+        {
+            (&Type::Struct(ref st), &MemberAccessType::StructMember(idx)) => {
+                let ma = func.new_var(st.members[idx].typ.clone());
+                let expr = LLExpr::StructMember{obj: var.clone(), index: idx};
+                func.add(LLInstruction::set_ptr(ma.clone(), expr));
+                ma
+            },
+
+            (&Type::Array(_), &MemberAccessType::ArrayProperty(ArrayProperty::Len)) => {
+                let len = func.new_var(Type::Int);
+                let expr = LLExpr::ArrayProperty{
+                    array: var.clone(),
+                    property: ArrayProperty::Len
+                };
+                func.add(LLInstruction::set_ptr(len.clone(), expr));
+                len
+            },
+
+            _ => panic!("Internal Compiler Error: Invalid member access"),
+        };
+    }
     var
 }
 
@@ -179,10 +223,16 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> Option<LLVar>
             }
             None
         },
+
+        Expression::StructInitializer(ref si) => {
+            Some(struct_initializer_to_llrep(func, si))
+        },
+
+        Expression::MemberAccess(ref sma) => {
+            Some(member_access_to_llrep(func, sma))
+        }
+
         /*
-
-
-
 
         Expression::ArrayGenerator(ref _a) => panic!("NYI"),
 
@@ -196,8 +246,8 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> Option<LLVar>
         },
         Expression::Block(ref b) => gen_block(ctx, b),
 
-        Expression::StructInitializer(ref si) => gen_struct_initializer(ctx, si),
-        Expression::MemberAccess(ref sma) => gen_member_access(ctx, sma),
+
+        ,
         */
 
         _ => panic!("NYI"),

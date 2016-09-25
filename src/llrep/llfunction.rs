@@ -37,14 +37,39 @@ impl fmt::Display for LLVar
     }
 }
 
+#[derive(Debug)]
+pub struct Scope
+{
+    named_vars: HashMap<String, LLVar>,
+}
 
-#[derive(Debug, Clone)]
+impl Scope
+{
+    pub fn new() -> Scope
+    {
+        Scope{
+            named_vars: HashMap::new()
+        }
+    }
+
+    pub fn add_named_var(&mut self, var: LLVar)
+    {
+        self.named_vars.insert(var.name.clone(), var);
+    }
+
+    pub fn get_named_var(&self, var: &str) -> Option<LLVar>
+    {
+        self.named_vars.get(var).map(|v| v.clone())
+    }
+}
+
+#[derive(Debug)]
 pub struct LLFunction
 {
     pub sig: FunctionSignature,
     pub instructions: Vec<LLInstruction>,
     var_counter: usize,
-    pub named_vars: HashMap<String, LLVar>,
+    scopes: Vec<Scope>
 }
 
 impl LLFunction
@@ -55,7 +80,7 @@ impl LLFunction
             sig: sig.clone(),
             instructions: Vec::new(),
             var_counter: 0,
-            named_vars: HashMap::new(),
+            scopes: vec![Scope::new()],
         };
 
         for arg in &sig.args {
@@ -76,9 +101,31 @@ impl LLFunction
         LLVar::new(idx, typ)
     }
 
+    pub fn push_scope(&mut self)
+    {
+        self.scopes.push(Scope::new());
+    }
+
+    pub fn pop_scope(&mut self)
+    {
+        self.scopes.pop();
+    }
+
     pub fn add_named_var(&mut self, var: LLVar)
     {
-        self.named_vars.insert(var.name.clone(), var);
+        let scope = self.scopes.last_mut().expect("Empty Scope Stack");
+        scope.add_named_var(var);
+    }
+
+    pub fn get_named_var(&self, var: &str) -> Option<LLVar>
+    {
+        for scope in self.scopes.iter().rev() {
+            if let Some(v) = scope.get_named_var(var) {
+                return Some(v)
+            }
+        }
+
+        None
     }
 }
 
@@ -87,9 +134,6 @@ impl fmt::Display for LLFunction
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
         try!(writeln!(f, "{}:", self.sig.name));
-        for var in self.named_vars.values() {
-            try!(writeln!(f, "  name {} ({})", var.name, var.typ));
-        }
         for inst in &self.instructions {
             try!(inst.fmt(f));
         }

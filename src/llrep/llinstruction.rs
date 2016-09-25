@@ -1,6 +1,6 @@
 use std::fmt;
 use itertools::free::join;
-use ast::{Type, Literal};
+use ast::{Type, Literal, ArrayProperty};
 use llrep::llfunction::LLVar;
 
 #[derive(Debug, Clone)]
@@ -34,7 +34,6 @@ impl fmt::Display for LLLiteral
 pub enum LLExpr
 {
     Literal(LLLiteral),
-    Ref(LLVar),
     Add(LLVar, LLVar),
     Sub(LLVar, LLVar),
     Mul(LLVar, LLVar),
@@ -52,6 +51,8 @@ pub enum LLExpr
     Not(LLVar),
     Load(String),
     Call{name: String, args: Vec<LLVar>},
+    StructMember{obj: LLVar, index: usize},
+    ArrayProperty{array: LLVar, property: ArrayProperty},
 }
 
 impl fmt::Display for LLExpr
@@ -61,7 +62,6 @@ impl fmt::Display for LLExpr
         match *self
         {
             LLExpr::Literal(ref l) => l.fmt(f),
-            LLExpr::Ref(ref v) => write!(f, "ref {}", v),
             LLExpr::Add(ref a, ref b) => write!(f, "{} + {}", a, b),
             LLExpr::Sub(ref a, ref b) => write!(f, "{} - {}", a, b),
             LLExpr::Mul(ref a, ref b) => write!(f, "{} * {}", a, b),
@@ -79,6 +79,8 @@ impl fmt::Display for LLExpr
             LLExpr::Not(ref v) => write!(f, "! {}", v),
             LLExpr::Load(ref name) => write!(f, "load {}", name),
             LLExpr::Call{ref name, ref args} => write!(f, "{}({})", name, join(args.iter(), ", ")),
+            LLExpr::StructMember{ref obj, index} => write!(f, "{}.{}", obj, index),
+            LLExpr::ArrayProperty{ref array, ref property} => write!(f, "{}.{:?}", array, property),
         }
     }
 }
@@ -88,13 +90,14 @@ impl fmt::Display for LLExpr
 #[derive(Debug, Clone)]
 pub enum LLInstruction
 {
-    //StackAlloc{var: LLVar, typ: Type},
     //SetArrayElement{var: LLVar, index: LLExpr, value: LLExpr},
-    //SetStructElement{var: LLVar, member_index: usize, value: LLExpr},
+    StackAlloc(LLVar),
+    SetStructMember{obj: LLVar, member_index: usize, value: LLVar},
     StartScope,
     EndScope{ret_var: LLVar},
     Bind{name: String, var: LLVar},
     Set{var: LLVar, expr: LLExpr},
+    SetPtr{var: LLVar, expr: LLExpr},
     Return(LLVar),
     ReturnVoid,
 }
@@ -106,6 +109,23 @@ impl LLInstruction
         LLInstruction::Set{
             var: var,
             expr: e,
+        }
+    }
+
+    pub fn set_ptr(var: LLVar, e: LLExpr) -> LLInstruction
+    {
+        LLInstruction::SetPtr{
+            var: var,
+            expr: e,
+        }
+    }
+
+    pub fn set_struct_member(obj: LLVar, index: usize, e: LLVar) -> LLInstruction
+    {
+        LLInstruction::SetStructMember{
+            obj: obj,
+            member_index: index,
+            value: e,
         }
     }
 
@@ -129,12 +149,33 @@ impl fmt::Display for LLInstruction
     {
         match *self
         {
-            LLInstruction::StartScope => writeln!(f, "  scope start"),
-            LLInstruction::EndScope{ref ret_var} => writeln!(f, "  scope end (ret: {})", ret_var.name),
-            LLInstruction::Bind{ref name, ref var} => writeln!(f, "  bind {} = {}", name, var.name),
-            LLInstruction::Set{ref var, ref expr} => writeln!(f, "  set {} = {}", var, expr),
-            LLInstruction::Return(ref var) => writeln!(f, "  ret {}", var),
-            LLInstruction::ReturnVoid => writeln!(f, "  ret void"),
+            LLInstruction::StackAlloc(ref var) => {
+                writeln!(f, "  stack alloc {}", var)
+            },
+            LLInstruction::SetStructMember{ref obj, ref member_index, ref value} => {
+                writeln!(f, "  set {}.{} = {}", obj, member_index, value)
+            },
+            LLInstruction::StartScope => {
+                writeln!(f, "  scope start")
+            },
+            LLInstruction::EndScope{ref ret_var} => {
+                writeln!(f, "  scope end (ret: {})", ret_var.name)
+            },
+            LLInstruction::Bind{ref name, ref var} => {
+                writeln!(f, "  bind {} = {}", name, var.name)
+            },
+            LLInstruction::Set{ref var, ref expr} => {
+                writeln!(f, "  set {} = {}", var, expr)
+            },
+            LLInstruction::SetPtr{ref var, ref expr} => {
+                writeln!(f, "  setptr {} = {}", var, expr)
+            },
+            LLInstruction::Return(ref var) => {
+                writeln!(f, "  ret {}", var)
+            },
+            LLInstruction::ReturnVoid => {
+                writeln!(f, "  ret void")
+            },
         }
     }
 }

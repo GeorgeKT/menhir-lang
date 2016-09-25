@@ -197,12 +197,18 @@ unsafe fn gen_call(ctx: &Context, name: &str, args: &Vec<LLVar>, dst: &ValueRef)
     }
 }
 
+unsafe fn gen_struct_member(ctx: &Context, obj: &LLVar, index: usize, dst: &mut ValueRef)
+{
+    let struct_object = ctx.get_variable(&obj.name).expect("Unknown variable");
+    let member_ptr = struct_object.value.member(ctx, &MemberAccessType::StructMember(index));
+    *dst = member_ptr;
+}
+
 unsafe fn gen_expr(ctx: &Context, typ: &Type, expr: &LLExpr, dst: &mut ValueRef)
 {
     match *expr
     {
         LLExpr::Literal(ref l) => gen_literal(ctx, l, dst),
-        LLExpr::Ref(ref v) => panic!("NYI"),
         LLExpr::Add(ref a, ref b) => gen_bin_op(ctx, a, b, Operator::Add, dst),
         LLExpr::Sub(ref a, ref b) => gen_bin_op(ctx, a, b, Operator::Sub, dst),
         LLExpr::Mul(ref a, ref b) => gen_bin_op(ctx, a, b, Operator::Mul, dst),
@@ -220,6 +226,8 @@ unsafe fn gen_expr(ctx: &Context, typ: &Type, expr: &LLExpr, dst: &mut ValueRef)
         LLExpr::Not(ref v) => gen_unary_op(ctx, v, Operator::Not, dst),
         LLExpr::Load(ref name) => gen_load(ctx, name, typ, dst),
         LLExpr::Call{ref name, ref args} => gen_call(ctx, name, args, dst),
+        LLExpr::StructMember{ref obj, index} => gen_struct_member(ctx, obj, index, dst),
+        LLExpr::ArrayProperty{ref array, ref property} => panic!("NYI"),
     }
 }
 
@@ -234,6 +242,29 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction)
             );
             gen_expr(ctx, &var.typ, expr, &mut v);
             ctx.add_variable(&var.name, v.clone());
+        },
+
+        LLInstruction::SetPtr{ref var, ref expr} => {
+            let mut v = ValueRef::new(
+                ptr::null_mut(),
+                &var.typ
+            );
+            gen_expr(ctx, &var.typ, expr, &mut v);
+            ctx.add_variable(&var.name, v.clone());
+        },
+
+        LLInstruction::SetStructMember{ref obj, member_index, ref value} => {
+            let struct_object = ctx.get_variable(&obj.name).expect("Unknown variable obj");
+            let member_ptr = struct_object.value.member(ctx, &MemberAccessType::StructMember(member_index));
+            member_ptr.store(ctx, &ctx.get_variable(&value.name).expect("Unknown variable value").value);
+        },
+
+        LLInstruction::StackAlloc(ref var) => {
+            let v = ValueRef::new(
+                ctx.stack_alloc(ctx.resolve_type(&var.typ), &var.name),
+                &var.typ
+            );
+            ctx.add_variable(&var.name, v);
         },
 
         LLInstruction::Return(ref var) => {
