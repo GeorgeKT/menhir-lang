@@ -1,5 +1,2 @@
-foo(a: int, b: int, c: int) -> int =
-    let x = a * b, y = b * c in
-        x + y
-
-main() -> int = foo(2, 3, 4)
+main() -> int =
+    let x = [2, 3, 4] in 5

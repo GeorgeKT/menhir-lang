@@ -10,7 +10,8 @@ pub enum LLLiteral
     Float(String),
     Char(u8),
     String(String),
-    Bool(bool)
+    Bool(bool),
+    Array(Vec<LLVar>),
 }
 
 impl fmt::Display for LLLiteral
@@ -23,7 +24,8 @@ impl fmt::Display for LLLiteral
             LLLiteral::Float(ref v) => write!(f, "float {}", v),
             LLLiteral::Char(v) => write!(f, "char {}", v),
             LLLiteral::String(ref v) => write!(f, "string {}", v),
-            LLLiteral::Bool(v) => write!(f, "bool {}", v)
+            LLLiteral::Bool(v) => write!(f, "bool {}", v),
+            LLLiteral::Array(ref elements) => write!(f, "[{}]", join(elements.iter(), ", ")),
         }
     }
 }

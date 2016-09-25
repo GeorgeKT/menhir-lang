@@ -12,7 +12,7 @@ pub struct Array
     empty: bool,
 }
 
-unsafe fn heap_alloc_array(ctx: &mut Context, element_type: &Type, len: LLVMValueRef) -> LLVMValueRef
+unsafe fn heap_alloc_array(ctx: &Context, element_type: &Type, len: LLVMValueRef) -> LLVMValueRef
 {
     let llvm_element_type = ctx.resolve_type(&element_type);
     let array = ctx.heap_alloc_array(llvm_element_type, len, "array_data");
@@ -88,7 +88,7 @@ impl Array
         slice
     }
 
-    pub unsafe fn init(&mut self, ctx: &mut Context, len: LLVMValueRef)
+    pub unsafe fn init(&mut self, ctx: &Context, len: LLVMValueRef)
     {
         // First allocate the storage
         let array_data = heap_alloc_array(ctx, &self.element_type, len);

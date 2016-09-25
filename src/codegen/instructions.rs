@@ -30,7 +30,21 @@ unsafe fn gen_float(ctx: &Context, num: &str, dst: &ValueRef)
     }
 }
 
-unsafe fn gen_literal(ctx: &Context, lit: &LLLiteral, dst: &ValueRef)
+unsafe fn gen_array_literal_store(ctx: &Context, elements: &Vec<LLVar>, array: &mut Array)
+{
+    let len = const_int(ctx, elements.len() as u64);
+    array.init(ctx, len);
+    for (idx, element) in elements.iter().enumerate()
+    {
+        let element_var = ctx.get_variable(&element.name).expect("Unknown variable").value.load(ctx.builder);
+        let index = const_int(ctx, idx as u64);
+        let el_ptr = array.get_element(ctx, index);
+        el_ptr.store_direct(ctx, element_var);
+    }
+}
+
+
+unsafe fn gen_literal(ctx: &Context, lit: &LLLiteral, dst: &mut ValueRef)
 {
     match *lit
     {
@@ -41,6 +55,13 @@ unsafe fn gen_literal(ctx: &Context, lit: &LLLiteral, dst: &ValueRef)
             panic!("NYI");
         },
         LLLiteral::Bool(v) => dst.store_direct(ctx, const_bool(ctx, v)),
+        LLLiteral::Array(ref vars) => {
+            if let ValueRef::Array(ref mut array) = *dst {
+                gen_array_literal_store(ctx, vars, array);
+            } else {
+                panic!("Internal Compiler Error: Expecting array ValueRef");
+            }
+        },
     }
 }
 

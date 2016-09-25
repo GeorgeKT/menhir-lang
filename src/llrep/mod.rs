@@ -70,6 +70,16 @@ fn let_to_llrep(func: &mut LLFunction, l: &LetExpression) -> LLVar
     result
 }
 
+fn array_lit_to_llrep(func: &mut LLFunction, a: &ArrayLiteral) -> LLVar
+{
+    let vars = a.elements.iter()
+        .map(|e| expr_to_llrep(func, e).expect("Expression must return a var"))
+        .collect();
+    let var = func.new_var(a.array_type.clone());
+    func.add(LLInstruction::set(var.clone(), LLExpr::Literal(LLLiteral::Array(vars))));
+    var
+}
+
 fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> Option<LLVar>
 {
     match *expr
@@ -147,6 +157,10 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> Option<LLVar>
             Some(var)
         },
 
+        Expression::Literal(Literal::Array(ref a)) => {
+            Some(array_lit_to_llrep(func, a))
+        },
+
         Expression::Call(ref c) => {
             Some(call_to_llrep(func, c))
         },
@@ -166,7 +180,7 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> Option<LLVar>
             None
         },
         /*
-        Expression::Literal(Literal::Array(ref a)) => gen_array_literal(ctx, a),
+
 
 
 
