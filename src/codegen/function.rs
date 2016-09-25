@@ -15,28 +15,23 @@ use llrep::*;
 unsafe fn make_function_instance(ctx: &Context, sig: &FunctionSignature) -> FunctionInstance
 {
     let mut ret_type = ctx.resolve_type(&sig.return_type);
-    let mut arg_types_with_passing_mode: Vec<_> = sig.args.iter().map(|arg| {
+    let mut arg_types: Vec<_> = sig.args.iter().map(|arg| {
         let arg_type = ctx.resolve_type(&arg.typ);
-        match arg.passing_mode
-        {
-            ArgumentPassingMode::ByValue => {
-                (arg_type, arg.passing_mode)
-            },
-            ArgumentPassingMode::ByPtr => {
-                let arg_ptr_type = LLVMPointerType(arg_type, 0);
-                (arg_ptr_type, arg.passing_mode)
-            }
+        if arg.typ.pass_by_ptr() {
+            LLVMPointerType(arg_type, 0)
+        } else {
+            arg_type
         }
     }).collect();
 
     if sig.return_type.return_by_ptr() {
-        arg_types_with_passing_mode.push((LLVMPointerType(ret_type, 0), ArgumentPassingMode::ByPtr));
+        arg_types.push(LLVMPointerType(ret_type, 0));
         ret_type = LLVMVoidTypeInContext(ctx.context);
     }
 
     FunctionInstance{
         name: sig.name.clone(),
-        args: arg_types_with_passing_mode,
+        args: arg_types,
         return_type: ret_type,
         function: ptr::null_mut(),
         sig: sig.clone(),
@@ -46,8 +41,7 @@ unsafe fn make_function_instance(ctx: &Context, sig: &FunctionSignature) -> Func
 pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature) -> FunctionInstance
 {
     let mut fi = make_function_instance(ctx, sig);
-    let mut arg_types: Vec<LLVMTypeRef> = fi.args.iter().map(|&(typ, _)| typ).collect();
-    let function_type = LLVMFunctionType(fi.return_type, arg_types.as_mut_ptr(), arg_types.len() as libc::c_uint, 0);
+    let function_type = LLVMFunctionType(fi.return_type, fi.args.as_mut_ptr(), fi.args.len() as libc::c_uint, 0);
     let name = CString::new(sig.name.as_bytes()).expect("Invalid string");
     fi.function = LLVMAddFunction(ctx.module, name.into_raw(), function_type);
     fi
@@ -71,22 +65,19 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &LLFunction)
 
     for (i, arg) in func.sig.args.iter().enumerate() {
         let var = LLVMGetParam(fi.function, i as libc::c_uint);
-        let (_, mode) = fi.args[i];
-        match mode
+        match arg.typ
         {
-            ArgumentPassingMode::ByPtr => {
-                match arg.typ
-                {
-                    Type::Func(ref ft) => {
-                        let func_sig = anon_sig(&arg.name, &ft.return_type, &ft.args);
-                        let fi = gen_function_ptr(ctx, var, func_sig);
-                        ctx.add_function(Rc::new(fi));
-                    },
-                    _ => ctx.add_variable(&arg.name, ValueRef::new(var, &arg.typ)),
-                }
+            Type::Func(ref ft) => {
+                let func_sig = anon_sig(&arg.name, &ft.return_type, &ft.args);
+                let fi = gen_function_ptr(ctx, var, func_sig);
+                ctx.add_function(Rc::new(fi));
             },
-            ArgumentPassingMode::ByValue => {
-                ctx.add_variable(&arg.name, ValueRef::Const(var));
+            _ => {
+                if arg.typ.pass_by_ptr() {
+                    ctx.add_variable(&arg.name, ValueRef::new(var, &arg.typ));
+                } else {
+                    ctx.add_variable(&arg.name, ValueRef::Const(var));
+                }
             },
         }
     }

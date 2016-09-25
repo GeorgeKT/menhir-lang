@@ -251,9 +251,6 @@ fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> Comp
     ctx.push_stack();
     for arg in fun.sig.args.iter_mut()
     {
-        if arg.typ.pass_by_ptr() {
-            arg.passing_mode = ArgumentPassingMode::ByPtr;
-        }
         try!(ctx.add(&arg.name, arg.typ.clone(), &arg.span));
     }
 
@@ -401,9 +398,6 @@ fn type_check_lambda_body(ctx: &mut TypeCheckerContext, m: &mut Lambda) -> Compi
 {
     ctx.push_stack();
     for arg in &mut m.sig.args {
-        if arg.typ.pass_by_ptr() {
-            arg.passing_mode = ArgumentPassingMode::ByPtr;
-        }
         try!(ctx.add(&arg.name, arg.typ.clone(), &arg.span));
     }
 
@@ -809,16 +803,6 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
     }
 }
 
-fn set_arg_passing_modes(fun: &mut ExternalFunction)
-{
-    for arg in fun.sig.args.iter_mut()
-    {
-        if arg.typ.pass_by_ptr() {
-            arg.passing_mode = ArgumentPassingMode::ByPtr;
-        }
-    }
-}
-
 /*
     Type check and infer all the unkown types
 */
@@ -840,10 +824,6 @@ pub fn type_check_module(module: &mut Module) -> CompileResult<()>
         if count == module.functions.len() {
             break;
         }
-    }
-
-    for ref mut f in module.externals.values_mut() {
-        set_arg_passing_modes(f);
     }
 
 /*

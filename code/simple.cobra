@@ -1,1 +1,2 @@
-main() -> int = 5 + 5 * 7 - 9 / 3
+add(a: int, b: int) -> int = a + b
+main() -> int = add(6, 7)

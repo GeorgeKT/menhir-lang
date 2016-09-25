@@ -43,9 +43,9 @@ pub fn add_builtin_functions(ctx: &mut Context)
             "concat",
             string_type(), // This is passed as an additional pointer argument
             vec![
-                Argument::with_passing_mode("a".into(), string_type(), ArgumentPassingMode::ByPtr),
-                Argument::with_passing_mode("b".into(), string_type(), ArgumentPassingMode::ByPtr),
-                Argument::with_passing_mode("element_len".into(), Type::Int, ArgumentPassingMode::ByValue),
+                Argument::new("a".into(), string_type(), Span::default()),
+                Argument::new("b".into(), string_type(), Span::default()),
+                Argument::new("element_len".into(), Type::Int, Span::default()),
             ],
             Span::default()
         )

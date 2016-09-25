@@ -2,14 +2,14 @@ use std::rc::Rc;
 use std::collections::HashMap;
 use llvm::prelude::*;
 
-use ast::{FunctionSignature, ArgumentPassingMode};
+use ast::{FunctionSignature};
 use codegen::ValueRef;
 
 pub struct FunctionInstance
 {
     pub function: LLVMValueRef,
     pub name: String,
-    pub args: Vec<(LLVMTypeRef, ArgumentPassingMode)>,
+    pub args: Vec<LLVMTypeRef>,
     pub return_type: LLVMTypeRef,
     pub sig: FunctionSignature,
 }

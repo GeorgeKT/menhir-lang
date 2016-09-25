@@ -27,7 +27,7 @@ impl fmt::Display for LLVar
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
-        write!(f, "{}; {}", self.name, self.typ)
+        write!(f, "({}: {})", self.name, self.typ)
     }
 }
 

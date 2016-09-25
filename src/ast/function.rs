@@ -1,19 +1,11 @@
 use ast::{Type, Expression, TreePrinter, prefix};
 use span::{Span};
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
-pub enum ArgumentPassingMode
-{
-    ByValue,
-    ByPtr,
-}
-
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Argument
 {
     pub name: String,
     pub typ: Type,
-    pub passing_mode: ArgumentPassingMode,
     pub span: Span,
 }
 
@@ -24,18 +16,7 @@ impl Argument
         Argument{
             name: name,
             typ: typ,
-            passing_mode: ArgumentPassingMode::ByValue, // Will be filled in during type checking
             span: span,
-        }
-    }
-
-    pub fn with_passing_mode(name: String, typ: Type, passing_mode: ArgumentPassingMode) -> Argument
-    {
-        Argument{
-            name: name,
-            typ: typ,
-            passing_mode: passing_mode,
-            span: Span::default(),
         }
     }
 }

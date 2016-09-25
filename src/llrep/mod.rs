@@ -26,6 +26,30 @@ impl fmt::Display for LLModule
     }
 }
 
+fn call_to_llrep(func: &mut LLFunction, c: &Call) -> LLVar
+{
+    let var = func.new_var(c.return_type.clone());
+    let args = c.args.iter().map(|arg| expr_to_llrep(func, arg)).collect();
+    func.add(LLInstruction::set(
+        var.clone(),
+        LLExpr::Call{
+            name: c.callee.name.clone(),
+            args: args,
+        }
+    ));
+    var
+}
+
+fn name_ref_to_llrep(func: &mut LLFunction, nr: &NameRef) -> LLVar
+{
+    let var = func.new_var(nr.typ.clone());
+    func.add(LLInstruction::set(
+        var.clone(),
+        LLExpr::Load(nr.name.clone()),
+    ));
+    var
+}
+
 fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> LLVar
 {
     match *expr
@@ -78,34 +102,45 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> LLVar
             func.add(LLInstruction::set(var.clone(), LLExpr::Literal(LLLiteral::Int(v))));
             var
         },
+
         Expression::Literal(Literal::Float(_, ref v_str)) => {
             let var = func.new_var(Type::Float);
             func.add(LLInstruction::set(var.clone(), LLExpr::Literal(LLLiteral::Float(v_str.clone()))));
             var
         },
+
         Expression::Literal(Literal::String(_, ref s))  => {
             let var = func.new_var(string_type());
             func.add(LLInstruction::set(var.clone(), LLExpr::Literal(LLLiteral::String(s.clone()))));
             var
         },
+
         Expression::Literal(Literal::Bool(_, v)) => {
             let var = func.new_var(Type::Bool);
             func.add(LLInstruction::set(var.clone(), LLExpr::Literal(LLLiteral::Bool(v))));
             var
         },
+
         Expression::Literal(Literal::Char(_, v)) => {
             let var = func.new_var(Type::Char);
             func.add(LLInstruction::set(var.clone(), LLExpr::Literal(LLLiteral::Char(v))));
             var
         },
 
+        Expression::Call(ref c) => {
+            call_to_llrep(func, c)
+        },
+
+        Expression::NameRef(ref nr) => {
+            name_ref_to_llrep(func, nr)
+        },
         /*
         Expression::Literal(Literal::Array(ref a)) => gen_array_literal(ctx, a),
 
 
 
         Expression::ArrayGenerator(ref _a) => panic!("NYI"),
-        Expression::Call(ref c) => gen_call(ctx, c),
+
         Expression::NameRef(ref nr) => gen_name_ref(ctx, nr),
         Expression::Match(ref m) => gen_match(ctx, m),
         Expression::Lambda(ref l) => gen_lambda(ctx, l),

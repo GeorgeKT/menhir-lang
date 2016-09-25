@@ -1,4 +1,5 @@
 use std::fmt;
+use itertools::free::join;
 use ast::{Type, Literal};
 use llrep::llfunction::LLVar;
 
@@ -47,6 +48,8 @@ pub enum LLExpr
     NEQ(LLVar, LLVar),
     USub(LLVar),
     Not(LLVar),
+    Load(String),
+    Call{name: String, args: Vec<LLVar>},
 }
 
 impl fmt::Display for LLExpr
@@ -72,6 +75,8 @@ impl fmt::Display for LLExpr
             LLExpr::NEQ(ref a, ref b) => write!(f, "{} != {}", a, b),
             LLExpr::USub(ref v) => write!(f, "- {}", v),
             LLExpr::Not(ref v) => write!(f, "! {}", v),
+            LLExpr::Load(ref name) => write!(f, "load {}", name),
+            LLExpr::Call{ref name, ref args} => write!(f, "{}({})", name, join(args.iter(), ", ")),
         }
     }
 }
@@ -84,7 +89,6 @@ pub enum LLInstruction
     //StackAlloc{var: LLVar, typ: Type},
     //SetArrayElement{var: LLVar, index: LLExpr, value: LLExpr},
     //SetStructElement{var: LLVar, member_index: usize, value: LLExpr},
-    //Call{var: LLVar, name: String, args: Vec<LLExpr>},
     Set{var: LLVar, expr: LLExpr},
     Return(LLVar),
     ReturnVoid,

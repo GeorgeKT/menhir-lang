@@ -85,7 +85,7 @@ impl ValueRef
         }
     }
 
-    pub unsafe fn store(&self, ctx: &Context, val: ValueRef)
+    pub unsafe fn store(&self, ctx: &Context, val: &ValueRef)
     {
         self.store_direct(ctx, val.load(ctx.builder))
     }

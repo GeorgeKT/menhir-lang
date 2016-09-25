@@ -120,8 +120,63 @@ unsafe fn gen_unary_op(ctx: &Context,  target: &LLVar, op: Operator, dst: &Value
     }
 }
 
+unsafe fn gen_load(ctx: &Context, name: &str, typ: &Type, dst: &mut ValueRef)
+{
+    if let Some(vi) = ctx.get_variable(&name) {
+        dst.store(ctx, &vi.value)
+    } else if let Some(fi) = ctx.get_function(&name) {
+        *dst = ValueRef::new(fi.function, typ);
+    } else {
+        match *typ
+        {
+            Type::Sum(ref st) => {
+                let case_type_ptr = dst.case_type(ctx);
+                let idx = st.index_of(&name).expect("Internal Compiler Error: cannot determine index of sum type case");
+                case_type_ptr.store_direct(ctx, const_int(ctx, idx as u64));
+            },
+            Type::Enum(ref et) => {
+                let idx = et.index_of(&name).expect("Internal Compiler Error: cannot determine index of sum type case");
+                dst.store_direct(ctx, const_int(ctx, idx as u64));
+            },
+            _ => {
+                panic!("Internal Compiler Error: Unknown name {}", name)
+            }
+        }
+    }
+}
 
-unsafe fn gen_expr(ctx: &Context, expr: &LLExpr, dst: &ValueRef)
+
+unsafe fn gen_call_args(ctx: &Context, args: &Vec<LLVar>, func: &FunctionInstance) -> Vec<LLVMValueRef>
+{
+    let mut arg_vals = Vec::with_capacity(func.args.len());
+    for arg in args.iter()
+    {
+        let var = ctx.get_variable(&arg.name).expect("Unknown variable");
+        if arg.typ.pass_by_ptr() {
+            arg_vals.push(var.value.get())
+        } else {
+            arg_vals.push(var.value.load(ctx.builder))
+        }
+    }
+    arg_vals
+}
+
+unsafe fn gen_call(ctx: &Context, name: &str, args: &Vec<LLVar>, dst: &ValueRef)
+{
+    let func = ctx.get_function(&name).expect("Internal Compiler Error: Unknown function");
+    let mut arg_vals = gen_call_args(ctx, args, &func);
+    let ret = LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr!("ret"));
+    if func.sig.return_type.return_by_ptr()
+    {
+        panic!("NYI");
+    }
+    else
+    {
+        dst.store_direct(ctx, ret);
+    }
+}
+
+unsafe fn gen_expr(ctx: &Context, typ: &Type, expr: &LLExpr, dst: &mut ValueRef)
 {
     match *expr
     {
@@ -142,6 +197,8 @@ unsafe fn gen_expr(ctx: &Context, expr: &LLExpr, dst: &ValueRef)
         LLExpr::NEQ(ref a, ref b) => gen_bin_op(ctx, a, b, Operator::NotEquals, dst),
         LLExpr::USub(ref v) => gen_unary_op(ctx, v, Operator::Sub, dst),
         LLExpr::Not(ref v) => gen_unary_op(ctx, v, Operator::Not, dst),
+        LLExpr::Load(ref name) => gen_load(ctx, name, typ, dst),
+        LLExpr::Call{ref name, ref args} => gen_call(ctx, name, args, dst),
     }
 }
 
@@ -150,11 +207,11 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction)
     match *instr
     {
         LLInstruction::Set{ref var, ref expr} => {
-            let v = ValueRef::new(
+            let mut v = ValueRef::new(
                 ctx.stack_alloc(ctx.resolve_type(&var.typ), &var.name),
                 &var.typ
             );
-            gen_expr(ctx, expr, &v);
+            gen_expr(ctx, &var.typ, expr, &mut v);
             ctx.add_variable(&var.name, v.clone());
         },
 
