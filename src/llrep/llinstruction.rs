@@ -32,7 +32,6 @@ pub enum LLExpr
 {
     Literal(LLLiteral),
     Ref(LLVar),
-    Ptr(LLVar),
     Add(LLVar, LLVar),
     Sub(LLVar, LLVar),
     Mul(LLVar, LLVar),
@@ -58,7 +57,6 @@ impl fmt::Display for LLExpr
         {
             LLExpr::Literal(ref l) => l.fmt(f),
             LLExpr::Ref(ref v) => write!(f, "ref {}", v),
-            LLExpr::Ptr(ref v) => write!(f, "ptr {}", v),
             LLExpr::Add(ref a, ref b) => write!(f, "{} + {}", a, b),
             LLExpr::Sub(ref a, ref b) => write!(f, "{} - {}", a, b),
             LLExpr::Mul(ref a, ref b) => write!(f, "{} * {}", a, b),
@@ -84,11 +82,12 @@ impl fmt::Display for LLExpr
 pub enum LLInstruction
 {
     //StackAlloc{var: LLVar, typ: Type},
-    Set{var: LLVar, expr: LLExpr},
     //SetArrayElement{var: LLVar, index: LLExpr, value: LLExpr},
     //SetStructElement{var: LLVar, member_index: usize, value: LLExpr},
     //Call{var: LLVar, name: String, args: Vec<LLExpr>},
-    Return(LLVar)
+    Set{var: LLVar, expr: LLExpr},
+    Return(LLVar),
+    ReturnVoid,
 }
 
 impl LLInstruction
@@ -115,6 +114,7 @@ impl fmt::Display for LLInstruction
         {
             LLInstruction::Set{ref var, ref expr} => writeln!(f, "\tset {} = {}", var, expr),
             LLInstruction::Return(ref var) => writeln!(f, "\tret {}", var),
+            LLInstruction::ReturnVoid => writeln!(f, "\tret void"),
         }
     }
 }

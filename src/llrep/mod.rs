@@ -4,13 +4,14 @@ mod llinstruction;
 use std::fmt;
 use ast::*;
 use parser::Operator;
-use self::llfunction::{LLFunction, LLVar};
-use self::llinstruction::{LLExpr, LLInstruction, LLLiteral};
+pub use self::llfunction::{LLFunction, LLVar};
+pub use self::llinstruction::{LLExpr, LLInstruction, LLLiteral};
 
 
 pub struct LLModule
 {
-    functions: Vec<LLFunction>,
+    pub name: String,
+    pub functions: Vec<LLFunction>,
 }
 
 impl fmt::Display for LLModule
@@ -63,6 +64,8 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> LLVar
                 Operator::GreaterThanEquals => LLExpr::GTE(l, r),
                 Operator::Equals => LLExpr::EQ(l, r),
                 Operator::NotEquals => LLExpr::NEQ(l, r),
+                Operator::And => LLExpr::And(l, r),
+                Operator::Or => LLExpr::Or(l, r),
                 _ => panic!("Internal Compiler Error: Invalid binary operator {}", op.operator),
             };
 
@@ -139,8 +142,13 @@ fn func_to_llrep(func: &Function) -> LLFunction
 pub fn compile_to_llrep(md: &Module) -> LLModule
 {
     let mut ll_mod = LLModule{
+        name: md.name.clone(),
         functions: Vec::new(),
     };
+
+    for func in md.externals.values() {
+        ll_mod.functions.push(LLFunction::new(&func.sig));
+    }
 
     for func in md.functions.values() {
         if !func.is_generic() {

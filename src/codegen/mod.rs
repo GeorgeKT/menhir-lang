@@ -12,7 +12,8 @@ macro_rules! cstr {
 mod array;
 mod builtin;
 mod context;
-mod expressions;
+mod instructions;
+mod function;
 mod linker;
 mod symboltable;
 mod structvalue;
@@ -29,17 +30,19 @@ use llvm::prelude::*;
 use llvm::core::*;
 
 use ast::*;
+use llrep::*;
 use compileerror::{CompileResult};
-use codegen::expressions::{gen_function, gen_function_sig};
+use codegen::function::{gen_function, gen_function_sig};
 use codegen::builtin::add_builtin_functions;
 
 
-pub use codegen::expressions::{const_bool, const_int};
+pub use codegen::instructions::{const_int, const_bool, gen_instruction};
 pub use codegen::context::{Context};
 pub use codegen::linker::link;
 pub use codegen::valueref::ValueRef;
 pub use codegen::array::Array;
 pub use codegen::structvalue::StructValue;
+pub use codegen::symboltable::{SymbolTable, FunctionInstance, VariableInstance};
 pub use codegen::sumtypevalue::SumTypeValue;
 pub use codegen::target::TargetMachine;
 
@@ -90,34 +93,23 @@ pub struct CodeGenOptions
     pub optimize: bool,
 }
 
-fn gen_module(ctx: &mut Context, module: &Module)
+fn gen_module(ctx: &mut Context, module: &LLModule)
 {
-    for ref func in module.functions.values() {
-        if !func.is_generic() {
-            unsafe {
-                let fi = Rc::new(gen_function_sig(ctx, &func.sig));
-                ctx.add_function(fi);
-            }
+    unsafe {
+        for func in &module.functions {
+            let fi = Rc::new(gen_function_sig(ctx, &func.sig));
+            ctx.add_function(fi);
         }
-    }
 
-    for ref func in module.externals.values() {
-        unsafe {
-            let fi = gen_function_sig(ctx, &func.sig);
-            ctx.add_function(Rc::new(fi));
-        }
-    }
-
-    for ref func in module.functions.values() {
-        if !func.is_generic() {
-            unsafe{
-                gen_function(ctx, &func.sig, &func.expression);
+        for func in &module.functions {
+            if !func.instructions.is_empty() {
+                gen_function(ctx, func);
             }
         }
     }
 }
 
-pub fn codegen(m: &Module) -> CompileResult<Context>
+pub fn codegen(m: &LLModule) -> CompileResult<Context>
 {
     unsafe {
         // Set up a context, module and builder in that context.

@@ -1,6 +1,6 @@
 use std::rc::Rc;
 use codegen::*;
-use codegen::expressions::gen_function_sig;
+use codegen::function::gen_function_sig;
 use ast::*;
 use span::*;
 

@@ -6,25 +6,39 @@ use llrep::llinstruction::LLInstruction;
 #[derive(Debug, Clone)]
 pub struct LLVar
 {
-    idx: usize,
-    typ: Type,
+    pub idx: usize,
+    pub name: String,
+    pub typ: Type,
+}
+
+impl LLVar
+{
+    pub fn new(idx: usize, typ: Type) -> LLVar
+    {
+        LLVar{
+            idx: idx,
+            name: format!("var{}", idx),
+            typ: typ
+        }
+    }
 }
 
 impl fmt::Display for LLVar
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
-        write!(f, "%{}: {}", self.idx, self.typ)
+        write!(f, "{}; {}", self.name, self.typ)
     }
 }
+
 
 #[derive(Debug, Clone)]
 pub struct LLFunction
 {
-    sig: FunctionSignature,
-    instructions: Vec<LLInstruction>,
+    pub sig: FunctionSignature,
+    pub instructions: Vec<LLInstruction>,
     var_counter: usize,
-    named_vars: HashMap<String, LLVar>,
+    pub named_vars: HashMap<String, LLVar>,
 }
 
 impl LLFunction
@@ -53,10 +67,7 @@ impl LLFunction
     {
         let idx = self.var_counter;
         self.var_counter += 1;
-        LLVar{
-            idx: idx,
-            typ: typ,
-        }
+        LLVar::new(idx, typ)
     }
 
     pub fn named_var(&mut self, name: &str, typ: Type) -> LLVar

@@ -8,6 +8,7 @@ extern crate uuid;
 
 mod ast;
 #[macro_use]
+#[allow(unused)]
 mod codegen;
 mod compileerror;
 #[allow(unused)]
@@ -95,7 +96,7 @@ fn main()
         println!("{}", llmod);
 
         llvm_init();
-        let mut ctx = try!(codegen(&module));
+        let mut ctx = try!(codegen(&llmod));
         link(&mut ctx, &opts)
     })
     {

@@ -11,6 +11,7 @@ use codegen::{codegen, llvm_init};
 use typechecker::{type_check_module};
 use ast::{TreePrinter};
 use span::Span;
+use llrep::*;
 
 #[link(name="cobraruntime")]
 extern {
@@ -40,8 +41,16 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
         println!("-----------------");
     }
 
+    let llmod = compile_to_llrep(&md);
+    if dump {
+        println!("LLREP");
+        println!("-----------------");
+        println!("{}", llmod);
+        println!("-----------------");
+    }
+
     llvm_init();
-    let mut ctx = try!(codegen(&md));
+    let mut ctx = try!(codegen(&llmod));
 
     unsafe {
         LLVMLinkInInterpreter();
