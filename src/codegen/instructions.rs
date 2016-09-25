@@ -222,6 +222,21 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction)
 
         LLInstruction::ReturnVoid => {
             LLVMBuildRetVoid(ctx.builder);
-        }
+        },
+
+        LLInstruction::StartScope => {
+            ctx.push_stack(ptr::null_mut());
+        },
+
+        LLInstruction::EndScope{ref ret_var} => {
+            let var = ctx.get_variable(&ret_var.name).expect("Unknown variable");
+            ctx.pop_stack();
+            ctx.add_variable_instance(var);
+        },
+
+        LLInstruction::Bind{ref name, ref var} => {
+            let var = ctx.get_variable(&var.name).expect("Unknown variable");
+            ctx.add_variable(name, var.value.clone());
+        },
     }
 }

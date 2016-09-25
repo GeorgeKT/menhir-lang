@@ -1,2 +1,5 @@
-add(a: int, b: int) -> int = a + b
-main() -> int = add(6, 7)
+foo(a: int, b: int, c: int) -> int =
+    let x = a * b, y = b * c in
+        x + y
+
+main() -> int = foo(2, 3, 4)

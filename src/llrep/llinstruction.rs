@@ -89,6 +89,9 @@ pub enum LLInstruction
     //StackAlloc{var: LLVar, typ: Type},
     //SetArrayElement{var: LLVar, index: LLExpr, value: LLExpr},
     //SetStructElement{var: LLVar, member_index: usize, value: LLExpr},
+    StartScope,
+    EndScope{ret_var: LLVar},
+    Bind{name: String, var: LLVar},
     Set{var: LLVar, expr: LLExpr},
     Return(LLVar),
     ReturnVoid,
@@ -108,6 +111,14 @@ impl LLInstruction
     {
         LLInstruction::Return(var)
     }
+
+    pub fn bind(name: &str, var: LLVar) -> LLInstruction
+    {
+        LLInstruction::Bind{
+            name: name.into(),
+            var: var,
+        }
+    }
 }
 
 impl fmt::Display for LLInstruction
@@ -116,9 +127,12 @@ impl fmt::Display for LLInstruction
     {
         match *self
         {
-            LLInstruction::Set{ref var, ref expr} => writeln!(f, "\tset {} = {}", var, expr),
-            LLInstruction::Return(ref var) => writeln!(f, "\tret {}", var),
-            LLInstruction::ReturnVoid => writeln!(f, "\tret void"),
+            LLInstruction::StartScope => writeln!(f, "  scope start"),
+            LLInstruction::EndScope{ref ret_var} => writeln!(f, "  scope end (ret: {})", ret_var.name),
+            LLInstruction::Bind{ref name, ref var} => writeln!(f, "  bind {} = {}", name, var.name),
+            LLInstruction::Set{ref var, ref expr} => writeln!(f, "  set {} = {}", var, expr),
+            LLInstruction::Return(ref var) => writeln!(f, "  ret {}", var),
+            LLInstruction::ReturnVoid => writeln!(f, "  ret void"),
         }
     }
 }

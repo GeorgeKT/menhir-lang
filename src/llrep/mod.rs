@@ -29,7 +29,7 @@ impl fmt::Display for LLModule
 fn call_to_llrep(func: &mut LLFunction, c: &Call) -> LLVar
 {
     let var = func.new_var(c.return_type.clone());
-    let args = c.args.iter().map(|arg| expr_to_llrep(func, arg)).collect();
+    let args = c.args.iter().map(|arg| expr_to_llrep(func, arg).expect("Expression must return a var")).collect();
     func.add(LLInstruction::set(
         var.clone(),
         LLExpr::Call{
@@ -50,12 +50,32 @@ fn name_ref_to_llrep(func: &mut LLFunction, nr: &NameRef) -> LLVar
     var
 }
 
-fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> LLVar
+
+fn add_binding(func: &mut LLFunction, b: &LetBinding)
+{
+    let v = expr_to_llrep(func, &b.init).expect("Expression must return a var");
+    func.add(LLInstruction::bind(&b.name, v));
+    func.add_named_var(LLVar::named(&b.name, b.typ.clone()));
+}
+
+fn let_to_llrep(func: &mut LLFunction, l: &LetExpression) -> LLVar
+{
+    for b in &l.bindings{
+        add_binding(func, b);
+    }
+
+    func.add(LLInstruction::StartScope);
+    let result = expr_to_llrep(func, &l.expression).expect("Expression must return a var");
+    func.add(LLInstruction::EndScope{ret_var: result.clone()});
+    result
+}
+
+fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> Option<LLVar>
 {
     match *expr
     {
         Expression::UnaryOp(ref u) => {
-            let v = expr_to_llrep(func, &u.expression);
+            let v = expr_to_llrep(func, &u.expression).expect("Expression must return a var");
             let var = func.new_var(u.typ.clone());
             match u.operator
             {
@@ -68,12 +88,12 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> LLVar
                 _ => panic!("Internal Compiler Error: Invalid unary operator {}", u.operator),
             }
 
-            var
+            Some(var)
         },
 
         Expression::BinaryOp(ref op) => {
-            let l = expr_to_llrep(func, &op.left);
-            let r = expr_to_llrep(func, &op.right);
+            let l = expr_to_llrep(func, &op.left).expect("Expression must return a var");
+            let r = expr_to_llrep(func, &op.right).expect("Expression must return a var");
             let var = func.new_var(op.typ.clone());
             let llexpr = match op.operator
             {
@@ -94,45 +114,56 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> LLVar
             };
 
             func.add(LLInstruction::set(var.clone(), llexpr));
-            var
+            Some(var)
         },
 
         Expression::Literal(Literal::Int(_, v)) => {
             let var = func.new_var(Type::Int);
             func.add(LLInstruction::set(var.clone(), LLExpr::Literal(LLLiteral::Int(v))));
-            var
+            Some(var)
         },
 
         Expression::Literal(Literal::Float(_, ref v_str)) => {
             let var = func.new_var(Type::Float);
             func.add(LLInstruction::set(var.clone(), LLExpr::Literal(LLLiteral::Float(v_str.clone()))));
-            var
+            Some(var)
         },
 
         Expression::Literal(Literal::String(_, ref s))  => {
             let var = func.new_var(string_type());
             func.add(LLInstruction::set(var.clone(), LLExpr::Literal(LLLiteral::String(s.clone()))));
-            var
+            Some(var)
         },
 
         Expression::Literal(Literal::Bool(_, v)) => {
             let var = func.new_var(Type::Bool);
             func.add(LLInstruction::set(var.clone(), LLExpr::Literal(LLLiteral::Bool(v))));
-            var
+            Some(var)
         },
 
         Expression::Literal(Literal::Char(_, v)) => {
             let var = func.new_var(Type::Char);
             func.add(LLInstruction::set(var.clone(), LLExpr::Literal(LLLiteral::Char(v))));
-            var
+            Some(var)
         },
 
         Expression::Call(ref c) => {
-            call_to_llrep(func, c)
+            Some(call_to_llrep(func, c))
         },
 
         Expression::NameRef(ref nr) => {
-            name_ref_to_llrep(func, nr)
+            Some(name_ref_to_llrep(func, nr))
+        },
+
+        Expression::Let(ref l) => {
+            Some(let_to_llrep(func, l))
+        },
+
+        Expression::LetBindings(ref l) => {
+            for b in &l.bindings {
+                add_binding(func, b);
+            }
+            None
         },
         /*
         Expression::Literal(Literal::Array(ref a)) => gen_array_literal(ctx, a),
@@ -144,14 +175,7 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> LLVar
         Expression::NameRef(ref nr) => gen_name_ref(ctx, nr),
         Expression::Match(ref m) => gen_match(ctx, m),
         Expression::Lambda(ref l) => gen_lambda(ctx, l),
-        Expression::Let(ref l) => gen_let(ctx, l),
-        Expression::LetBindings(ref l) => {
-            let mut v = None;
-            for b in &l.bindings {
-                v = Some(gen_let_binding(ctx, b));
-            }
-            v.expect("Empting binding list")
-        },
+
         Expression::If(ref i) => {
             let match_expr = i.to_match();
             gen_match(ctx, &match_expr)
@@ -169,7 +193,7 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> LLVar
 fn func_to_llrep(func: &Function) -> LLFunction
 {
     let mut llfunc = LLFunction::new(&func.sig);
-    let var = expr_to_llrep(&mut llfunc, &func.expression);
+    let var = expr_to_llrep(&mut llfunc, &func.expression).expect("Expression must return a var");
     llfunc.add(LLInstruction::ret(var));
     llfunc
 }

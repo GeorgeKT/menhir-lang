@@ -156,7 +156,7 @@ foo(a: int, b: int, c: int) -> int =
         x + y
 
 main() -> int = foo(2, 3, 4)
-    "#, false) == Ok(18));
+    "#, true) == Ok(18));
 }
 
 

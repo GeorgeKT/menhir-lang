@@ -6,7 +6,6 @@ use llrep::llinstruction::LLInstruction;
 #[derive(Debug, Clone)]
 pub struct LLVar
 {
-    pub idx: usize,
     pub name: String,
     pub typ: Type,
 }
@@ -16,9 +15,16 @@ impl LLVar
     pub fn new(idx: usize, typ: Type) -> LLVar
     {
         LLVar{
-            idx: idx,
             name: format!("var{}", idx),
-            typ: typ
+            typ: typ,
+        }
+    }
+
+    pub fn named(name: &str, typ: Type) -> LLVar
+    {
+        LLVar{
+            name: name.into(),
+            typ: typ,
         }
     }
 }
@@ -53,7 +59,7 @@ impl LLFunction
         };
 
         for arg in &sig.args {
-            let _ = f.named_var(&arg.name, arg.typ.clone());
+            f.add_named_var(LLVar::named(&arg.name, arg.typ.clone()));
         }
         f
     }
@@ -70,11 +76,9 @@ impl LLFunction
         LLVar::new(idx, typ)
     }
 
-    pub fn named_var(&mut self, name: &str, typ: Type) -> LLVar
+    pub fn add_named_var(&mut self, var: LLVar)
     {
-        let v = self.new_var(typ);
-        self.named_vars.insert(name.into(), v.clone());
-        v
+        self.named_vars.insert(var.name.clone(), var);
     }
 }
 
@@ -83,6 +87,9 @@ impl fmt::Display for LLFunction
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
         try!(writeln!(f, "{}:", self.sig.name));
+        for var in self.named_vars.values() {
+            try!(writeln!(f, "  name {} ({})", var.name, var.typ));
+        }
         for inst in &self.instructions {
             try!(inst.fmt(f));
         }

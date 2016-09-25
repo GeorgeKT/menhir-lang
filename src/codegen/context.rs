@@ -85,7 +85,12 @@ impl Context
             value: vr,
             name: name.into(),
         });
-        self.stack.last_mut().expect("Stack is empty").symbols.add_variable(var);
+        self.add_variable_instance(var);
+    }
+
+    pub fn add_variable_instance(&mut self, vi: Rc<VariableInstance>)
+    {
+        self.stack.last_mut().expect("Stack is empty").symbols.add_variable(vi);
     }
 
     pub fn get_variable(&self, name: &str) -> Option<Rc<VariableInstance>>
