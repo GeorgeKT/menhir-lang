@@ -55,6 +55,87 @@ pub enum LLExpr
     ArrayProperty{array: LLVar, property: ArrayProperty},
 }
 
+impl LLExpr
+{
+    pub fn replace_by_ret(&mut self, bad_name: &str)
+    {
+        match *self
+        {
+            LLExpr::Literal(_) => {},
+            LLExpr::Add(ref mut a, ref mut b) => {
+                a.replace_by_ret(bad_name);
+                b.replace_by_ret(bad_name);
+            },
+            LLExpr::Sub(ref mut a, ref mut b) => {
+                a.replace_by_ret(bad_name);
+                b.replace_by_ret(bad_name);
+            },
+            LLExpr::Mul(ref mut a, ref mut b) => {
+                a.replace_by_ret(bad_name);
+                b.replace_by_ret(bad_name);
+            },
+            LLExpr::Div(ref mut a, ref mut b) => {
+                a.replace_by_ret(bad_name);
+                b.replace_by_ret(bad_name);
+            },
+            LLExpr::Mod(ref mut a, ref mut b) => {
+                a.replace_by_ret(bad_name);
+                b.replace_by_ret(bad_name);
+            },
+            LLExpr::And(ref mut a, ref mut b) => {
+                a.replace_by_ret(bad_name);
+                b.replace_by_ret(bad_name);
+            },
+            LLExpr::Or(ref mut a, ref mut b) => {
+                a.replace_by_ret(bad_name);
+                b.replace_by_ret(bad_name);
+            },
+            LLExpr::LT(ref mut a, ref mut b) => {
+                a.replace_by_ret(bad_name);
+                b.replace_by_ret(bad_name);
+            },
+            LLExpr::LTE(ref mut a, ref mut b) => {
+                a.replace_by_ret(bad_name);
+                b.replace_by_ret(bad_name);
+            },
+            LLExpr::GT(ref mut a, ref mut b) => {
+                a.replace_by_ret(bad_name);
+                b.replace_by_ret(bad_name);
+            },
+            LLExpr::GTE(ref mut a, ref mut b) => {
+                a.replace_by_ret(bad_name);
+                b.replace_by_ret(bad_name);
+            },
+            LLExpr::EQ(ref mut a, ref mut b) => {
+                a.replace_by_ret(bad_name);
+                b.replace_by_ret(bad_name);
+            },
+            LLExpr::NEQ(ref mut a, ref mut b) => {
+                a.replace_by_ret(bad_name);
+                b.replace_by_ret(bad_name);
+            },
+            LLExpr::USub(ref mut v) => {
+                v.replace_by_ret(bad_name);
+            },
+            LLExpr::Not(ref mut v) => {
+                v.replace_by_ret(bad_name);
+            },
+            LLExpr::Load(_) => {},
+            LLExpr::Call{ref name, ref mut args} => {
+                for arg in args.iter_mut() {
+                    arg.replace_by_ret(bad_name);
+                }
+            },
+            LLExpr::StructMember{ref mut obj, index} => {
+                obj.replace_by_ret(bad_name);
+            },
+            LLExpr::ArrayProperty{ref mut array, ref property} => {
+                array.replace_by_ret(bad_name);
+            },
+        }
+    }
+}
+
 impl fmt::Display for LLExpr
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
@@ -97,9 +178,9 @@ pub enum LLInstruction
     EndScope{ret_var: LLVar},
     Bind{name: String, var: LLVar},
     Set{var: LLVar, expr: LLExpr},
-    SetPtr{var: LLVar, expr: LLExpr},
     Return(LLVar),
     ReturnVoid,
+    NOP,
 }
 
 impl LLInstruction
@@ -107,14 +188,6 @@ impl LLInstruction
     pub fn set(var: LLVar, e: LLExpr) -> LLInstruction
     {
         LLInstruction::Set{
-            var: var,
-            expr: e,
-        }
-    }
-
-    pub fn set_ptr(var: LLVar, e: LLExpr) -> LLInstruction
-    {
-        LLInstruction::SetPtr{
             var: var,
             expr: e,
         }
@@ -139,6 +212,43 @@ impl LLInstruction
         LLInstruction::Bind{
             name: name.into(),
             var: var,
+        }
+    }
+
+    pub fn replace_by_ret(&mut self, bad_name: &str)
+    {
+        match *self
+        {
+            LLInstruction::SetStructMember{ref mut obj, member_index, ref mut value} => {
+                obj.replace_by_ret(bad_name);
+                value.replace_by_ret(bad_name);
+            },
+
+            LLInstruction::EndScope{ref mut ret_var} => {
+                ret_var.replace_by_ret(bad_name);
+            },
+
+            LLInstruction::Bind{ref name, ref mut var} => {
+                var.replace_by_ret(bad_name);
+            },
+
+            LLInstruction::Set{ref mut var, ref mut expr} => {
+                var.replace_by_ret(bad_name);
+                expr.replace_by_ret(bad_name);
+            },
+
+            LLInstruction::Return(ref mut var) => {
+                var.replace_by_ret(bad_name);
+            },
+
+            LLInstruction::ReturnVoid => {},
+            LLInstruction::StartScope => {},
+            LLInstruction::NOP => {},
+            LLInstruction::StackAlloc(ref var) => {
+                if var.name == bad_name {
+                    panic!("Internal Compiler Error: StackAlloc cannot do replace_by_ret");
+                }
+            },
         }
     }
 }
@@ -167,14 +277,14 @@ impl fmt::Display for LLInstruction
             LLInstruction::Set{ref var, ref expr} => {
                 writeln!(f, "  set {} = {}", var, expr)
             },
-            LLInstruction::SetPtr{ref var, ref expr} => {
-                writeln!(f, "  setptr {} = {}", var, expr)
-            },
             LLInstruction::Return(ref var) => {
                 writeln!(f, "  ret {}", var)
             },
             LLInstruction::ReturnVoid => {
                 writeln!(f, "  ret void")
+            },
+            LLInstruction::NOP => {
+                writeln!(f, "  nop")
             },
         }
     }

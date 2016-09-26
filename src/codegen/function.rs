@@ -82,9 +82,14 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &LLFunction)
         }
     }
 
+    if func.sig.return_type.return_by_ptr()
+    {
+        let ret_var = LLVMGetParam(fi.function, func.sig.args.len() as libc::c_uint);
+        ctx.add_variable("$ret", ValueRef::new(ret_var, &func.sig.return_type));
+    }
+
     for instr in &func.instructions {
         gen_instruction(ctx, instr);
     }
-
     ctx.pop_stack();
 }

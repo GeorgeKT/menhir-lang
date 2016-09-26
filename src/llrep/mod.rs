@@ -42,12 +42,7 @@ fn call_to_llrep(func: &mut LLFunction, c: &Call) -> LLVar
 
 fn name_ref_to_llrep(func: &mut LLFunction, nr: &NameRef) -> LLVar
 {
-    let var = func.new_var(nr.typ.clone());
-    func.add(LLInstruction::set(
-        var.clone(),
-        LLExpr::Load(nr.name.clone()),
-    ));
-    var
+    LLVar::named(&nr.name, nr.typ.clone())
 }
 
 
@@ -104,7 +99,7 @@ fn member_access_to_llrep(func: &mut LLFunction, sma: &MemberAccess) -> LLVar
             (&Type::Struct(ref st), &MemberAccessType::StructMember(idx)) => {
                 let ma = func.new_var(st.members[idx].typ.clone());
                 let expr = LLExpr::StructMember{obj: var.clone(), index: idx};
-                func.add(LLInstruction::set_ptr(ma.clone(), expr));
+                func.add(LLInstruction::set(ma.clone(), expr));
                 ma
             },
 
@@ -114,7 +109,7 @@ fn member_access_to_llrep(func: &mut LLFunction, sma: &MemberAccess) -> LLVar
                     array: var.clone(),
                     property: ArrayProperty::Len
                 };
-                func.add(LLInstruction::set_ptr(len.clone(), expr));
+                func.add(LLInstruction::set(len.clone(), expr));
                 len
             },
 
@@ -258,7 +253,12 @@ fn func_to_llrep(func: &Function) -> LLFunction
 {
     let mut llfunc = LLFunction::new(&func.sig);
     let var = expr_to_llrep(&mut llfunc, &func.expression).expect("Expression must return a var");
-    llfunc.add(LLInstruction::ret(var));
+    if func.sig.return_type.return_by_ptr() {
+        llfunc.replace_by_ret(&var.name);
+        llfunc.add(LLInstruction::ReturnVoid);
+    } else {
+        llfunc.add(LLInstruction::ret(var));
+    }
     llfunc
 }
 

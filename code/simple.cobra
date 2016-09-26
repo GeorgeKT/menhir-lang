@@ -1,5 +1,6 @@
-type Vec2D = {x: int, y: int}
+len(a: string) -> int = a.len
 
-dot(a: Vec2D, b: Vec2D) -> int = a.x * b.x + a.y * b.y
+concat(a: string, b: string) -> string = a + b
 
-main() -> int = dot(Vec2D{4, 5}, Vec2D{5, 6})
+main() -> int =
+    let x = concat("Hello", " World"), y = 5, z = y in len(x) + z

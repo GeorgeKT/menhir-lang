@@ -21,16 +21,16 @@ pub unsafe fn const_bool(ctx: &Context, v: bool) -> LLVMValueRef
     LLVMConstInt(LLVMInt1TypeInContext(ctx.context), if v {1} else {0}, 0)
 }
 
-unsafe fn gen_float(ctx: &Context, num: &str, dst: &ValueRef)
+unsafe fn const_float(ctx: &Context, num: &str) -> LLVMValueRef
 {
     match num.parse::<f64>()
     {
-        Ok(f) => dst.store_direct(ctx, LLVMConstReal(LLVMDoubleTypeInContext(ctx.context), f)),
+        Ok(f) => LLVMConstReal(LLVMDoubleTypeInContext(ctx.context), f),
         Err(_) => panic!("Internal Compiler Error: {} is not a valid floating point number", num)
     }
 }
 
-unsafe fn gen_array_literal_store(ctx: &Context, elements: &Vec<LLVar>, array: &mut Array)
+unsafe fn gen_array_literal(ctx: &Context, elements: &Vec<LLVar>, array: &Array)
 {
     let len = const_int(ctx, elements.len() as u64);
     array.init(ctx, len);
@@ -43,21 +43,43 @@ unsafe fn gen_array_literal_store(ctx: &Context, elements: &Vec<LLVar>, array: &
     }
 }
 
-
-unsafe fn gen_literal(ctx: &Context, lit: &LLLiteral, dst: &mut ValueRef)
+unsafe fn gen_const_string_literal(ctx: &Context, s: &str) -> ValueRef
 {
+    ValueRef::Const(LLVMConstStringInContext(ctx.context, s.as_ptr() as *const i8, s.len() as u32, 1))
+}
+
+unsafe fn gen_string_literal(ctx: &Context, s: &str, array: &Array)
+{
+    let glob = LLVMAddGlobal(ctx.module, LLVMArrayType(LLVMInt8TypeInContext(ctx.context), s.len() as libc::c_uint),  cstr!("string"));
+
+    LLVMSetLinkage(glob, LLVMLinkage::LLVMInternalLinkage);
+    LLVMSetGlobalConstant(glob, 1);
+    let string_data = gen_const_string_literal(ctx, s);
+    LLVMSetInitializer(glob, string_data.get());
+    array.fill_with_string_literal(ctx, glob, s.len())
+}
+
+unsafe fn gen_literal(ctx: &mut Context, dst: &LLVar, lit: &LLLiteral)
+{
+    let dst_vr = get_value_ref(ctx, dst);
     match *lit
     {
-        LLLiteral::Int(v) => dst.store_direct(ctx, const_int(ctx, v)),
-        LLLiteral::Float(ref v) => gen_float(ctx, v, dst),
-        LLLiteral::Char(v) => dst.store_direct(ctx, LLVMConstInt(LLVMInt8TypeInContext(ctx.context), v as u64, 0)),
+        LLLiteral::Int(v) => dst_vr.store_direct(ctx, const_int(ctx, v)),
+        LLLiteral::Float(ref v) => dst_vr.store_direct(ctx, const_float(ctx, v)),
+        LLLiteral::Char(v) => dst_vr.store_direct(ctx, LLVMConstInt(LLVMInt8TypeInContext(ctx.context), v as u64, 0)),
+        LLLiteral::Bool(v) => dst_vr.store_direct(ctx, const_bool(ctx, v)),
+
         LLLiteral::String(ref v) => {
-            panic!("NYI");
+            if let ValueRef::Array(ref array) = dst_vr {
+                gen_string_literal(ctx, v, array)
+            } else {
+                panic!("Internal Compiler Error: Expecting array ValueRef");
+            }
         },
-        LLLiteral::Bool(v) => dst.store_direct(ctx, const_bool(ctx, v)),
+
         LLLiteral::Array(ref vars) => {
-            if let ValueRef::Array(ref mut array) = *dst {
-                gen_array_literal_store(ctx, vars, array);
+            if let ValueRef::Array(ref array) = dst_vr {
+                gen_array_literal(ctx, vars, array);
             } else {
                 panic!("Internal Compiler Error: Expecting array ValueRef");
             }
@@ -113,22 +135,53 @@ unsafe fn gen_bool_bin_op(ctx: &Context, l: LLVMValueRef, r: LLVMValueRef, op: O
     }
 }
 
-unsafe fn gen_bin_op(ctx: &Context, left: &LLVar, right: &LLVar, op: Operator, dst: &ValueRef)
+unsafe fn gen_array_bin_op(ctx: &mut Context, dst: &LLVar, left: &LLVar, right: &LLVar, op: Operator)
 {
-    let l = ctx.get_variable(&left.name).expect("Unknown variable").value.load(ctx.builder);
-    let r = ctx.get_variable(&right.name).expect("Unknown variable").value.load(ctx.builder);
-    match left.typ
-    {
-        Type::Int =>  dst.store_direct(ctx, gen_int_bin_op(ctx, l, r, op)),
-        Type::Float =>  dst.store_direct(ctx, gen_float_bin_op(ctx, l, r, op)),
-        Type::Bool => dst.store_direct(ctx, gen_bool_bin_op(ctx, l, r, op)),
-        _ => panic!("NYI"),
+    match op {
+        Operator::Add => {
+            let l = &ctx.get_variable(&left.name).expect("Unknown variable").value;
+            let r = &ctx.get_variable(&right.name).expect("Unknown variable").value;
+            let dst = get_value_ref(ctx, dst);
+            match (l, r, &dst)
+            {
+                (&ValueRef::Array(ref ar), &ValueRef::Array(ref br), &ValueRef::Array(ref dr)) => {
+                    Array::concat_store(ctx, ar, br, dr);
+                }
+                _ => panic!("Internal Compiler Error: Operator {} expects two arrays", op),
+            }
+        },
+        _ => panic!("Internal Compiler Error: Operator {} is not supported on arrays", op),
     }
 }
 
-unsafe fn gen_unary_op(ctx: &Context,  target: &LLVar, op: Operator, dst: &ValueRef)
+unsafe fn gen_bin_op(ctx: &mut Context, dst: &LLVar, left: &LLVar, right: &LLVar, op: Operator)
+{
+    if let Type::Array(_) = dst.typ {
+        return gen_array_bin_op(ctx, dst, left, right, op);
+    }
+
+    let l = ctx.get_variable(&left.name).expect("Unknown variable").value.load(ctx.builder);
+    let r = ctx.get_variable(&right.name).expect("Unknown variable").value.load(ctx.builder);
+    let dst_vr = get_value_ref(ctx, dst);
+    dst_vr.store_direct(ctx, match dst.typ
+    {
+        Type::Int =>  {
+            gen_int_bin_op(ctx, l, r, op)
+        },
+        Type::Float => {
+            gen_float_bin_op(ctx, l, r, op)
+        },
+        Type::Bool => {
+            gen_bool_bin_op(ctx, l, r, op)
+        }
+        _ => panic!("Internal Compiler Error: Binary operator {} not support on type {}", op, dst.typ),
+    });
+}
+
+unsafe fn gen_unary_op(ctx: &mut Context, dst: &LLVar, target: &LLVar, op: Operator)
 {
     let t = ctx.get_variable(&target.name).expect("Unknown variable").value.load(ctx.builder);
+    let dst = get_value_ref(ctx, dst);
     match op
     {
         Operator::Sub => {
@@ -141,6 +194,7 @@ unsafe fn gen_unary_op(ctx: &Context,  target: &LLVar, op: Operator, dst: &Value
     }
 }
 
+/*
 unsafe fn gen_load(ctx: &Context, name: &str, typ: &Type, dst: &mut ValueRef)
 {
     if let Some(vi) = ctx.get_variable(&name) {
@@ -165,7 +219,7 @@ unsafe fn gen_load(ctx: &Context, name: &str, typ: &Type, dst: &mut ValueRef)
         }
     }
 }
-
+*/
 
 unsafe fn gen_call_args(ctx: &Context, args: &Vec<LLVar>, func: &FunctionInstance) -> Vec<LLVMValueRef>
 {
@@ -182,52 +236,72 @@ unsafe fn gen_call_args(ctx: &Context, args: &Vec<LLVar>, func: &FunctionInstanc
     arg_vals
 }
 
-unsafe fn gen_call(ctx: &Context, name: &str, args: &Vec<LLVar>, dst: &ValueRef)
+unsafe fn gen_call(ctx: &mut Context, dst: &LLVar, name: &str, args: &Vec<LLVar>)
 {
     let func = ctx.get_function(&name).expect("Internal Compiler Error: Unknown function");
     let mut arg_vals = gen_call_args(ctx, args, &func);
-    let ret = LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr!("ret"));
+    let dst = get_value_ref(ctx, dst);
     if func.sig.return_type.return_by_ptr()
     {
-        panic!("NYI");
+        arg_vals.push(dst.get());
+        LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr!(""));
     }
     else
     {
+        let ret = LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr!("ret"));
         dst.store_direct(ctx, ret);
     }
 }
 
-unsafe fn gen_struct_member(ctx: &Context, obj: &LLVar, index: usize, dst: &mut ValueRef)
+unsafe fn gen_struct_member(ctx: &mut Context, dst: &LLVar, obj: &LLVar, index: usize)
 {
     let struct_object = ctx.get_variable(&obj.name).expect("Unknown variable");
     let member_ptr = struct_object.value.member(ctx, &MemberAccessType::StructMember(index));
-    *dst = member_ptr;
+    ctx.add_variable(&dst.name, member_ptr);
 }
 
-unsafe fn gen_expr(ctx: &Context, typ: &Type, expr: &LLExpr, dst: &mut ValueRef)
+unsafe fn gen_array_property(ctx: &mut Context, dst: &LLVar, array: &LLVar, property: ArrayProperty)
+{
+    let array_object = &ctx.get_variable(&array.name).expect("Unknown variable").value;
+    let prop_ptr = array_object.member(ctx, &MemberAccessType::ArrayProperty(property));
+    ctx.add_variable(&dst.name, prop_ptr);
+}
+
+unsafe fn get_value_ref(ctx: &mut Context, var: &LLVar) -> ValueRef
+{
+    if let Some(ref vr) = ctx.get_variable(&var.name) {
+        vr.value.clone()
+    } else {
+        let vr = ValueRef::alloc(ctx, &var.typ);
+        ctx.add_variable(&var.name, vr.clone());
+        vr
+    }
+}
+
+unsafe fn gen_expr(ctx: &mut Context, dst: &LLVar, expr: &LLExpr)
 {
     match *expr
     {
-        LLExpr::Literal(ref l) => gen_literal(ctx, l, dst),
-        LLExpr::Add(ref a, ref b) => gen_bin_op(ctx, a, b, Operator::Add, dst),
-        LLExpr::Sub(ref a, ref b) => gen_bin_op(ctx, a, b, Operator::Sub, dst),
-        LLExpr::Mul(ref a, ref b) => gen_bin_op(ctx, a, b, Operator::Mul, dst),
-        LLExpr::Div(ref a, ref b) => gen_bin_op(ctx, a, b, Operator::Div, dst),
-        LLExpr::Mod(ref a, ref b) => gen_bin_op(ctx, a, b, Operator::Mod, dst),
-        LLExpr::And(ref a, ref b) => gen_bin_op(ctx, a, b, Operator::And, dst),
-        LLExpr::Or(ref a, ref b) => gen_bin_op(ctx, a, b, Operator::Or, dst),
-        LLExpr::LT(ref a, ref b) => gen_bin_op(ctx, a, b, Operator::LessThan, dst),
-        LLExpr::LTE(ref a, ref b) => gen_bin_op(ctx, a, b, Operator::LessThanEquals, dst),
-        LLExpr::GT(ref a, ref b) => gen_bin_op(ctx, a, b, Operator::GreaterThan, dst),
-        LLExpr::GTE(ref a, ref b) => gen_bin_op(ctx, a, b, Operator::GreaterThanEquals, dst),
-        LLExpr::EQ(ref a, ref b) => gen_bin_op(ctx, a, b, Operator::Equals, dst),
-        LLExpr::NEQ(ref a, ref b) => gen_bin_op(ctx, a, b, Operator::NotEquals, dst),
-        LLExpr::USub(ref v) => gen_unary_op(ctx, v, Operator::Sub, dst),
-        LLExpr::Not(ref v) => gen_unary_op(ctx, v, Operator::Not, dst),
-        LLExpr::Load(ref name) => gen_load(ctx, name, typ, dst),
-        LLExpr::Call{ref name, ref args} => gen_call(ctx, name, args, dst),
-        LLExpr::StructMember{ref obj, index} => gen_struct_member(ctx, obj, index, dst),
-        LLExpr::ArrayProperty{ref array, ref property} => panic!("NYI"),
+        LLExpr::Literal(ref l) => gen_literal(ctx, dst, l),
+        LLExpr::Add(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::Add),
+        LLExpr::Sub(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::Sub),
+        LLExpr::Mul(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::Mul),
+        LLExpr::Div(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::Div),
+        LLExpr::Mod(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::Mod),
+        LLExpr::And(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::And),
+        LLExpr::Or(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::Or),
+        LLExpr::LT(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::LessThan),
+        LLExpr::LTE(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::LessThanEquals),
+        LLExpr::GT(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::GreaterThan),
+        LLExpr::GTE(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::GreaterThanEquals),
+        LLExpr::EQ(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::Equals),
+        LLExpr::NEQ(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::NotEquals),
+        LLExpr::USub(ref v) => gen_unary_op(ctx, dst, v, Operator::Sub),
+        LLExpr::Not(ref v) => gen_unary_op(ctx, dst, v, Operator::Not),
+        LLExpr::Load(ref name) => panic!("NYI"), //gen_load(ctx, name, typ, dst),
+        LLExpr::Call{ref name, ref args} => gen_call(ctx, dst, name, args),
+        LLExpr::StructMember{ref obj, index} => gen_struct_member(ctx, dst, obj, index),
+        LLExpr::ArrayProperty{ref array, ref property} => gen_array_property(ctx, dst, array, property.clone()),
     }
 }
 
@@ -235,22 +309,9 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction)
 {
     match *instr
     {
+        LLInstruction::NOP => {},
         LLInstruction::Set{ref var, ref expr} => {
-            let mut v = ValueRef::new(
-                ctx.stack_alloc(ctx.resolve_type(&var.typ), &var.name),
-                &var.typ
-            );
-            gen_expr(ctx, &var.typ, expr, &mut v);
-            ctx.add_variable(&var.name, v.clone());
-        },
-
-        LLInstruction::SetPtr{ref var, ref expr} => {
-            let mut v = ValueRef::new(
-                ptr::null_mut(),
-                &var.typ
-            );
-            gen_expr(ctx, &var.typ, expr, &mut v);
-            ctx.add_variable(&var.name, v.clone());
+            gen_expr(ctx, &var, expr);
         },
 
         LLInstruction::SetStructMember{ref obj, member_index, ref value} => {

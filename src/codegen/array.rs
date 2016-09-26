@@ -37,7 +37,7 @@ impl Array
         }
     }
 
-    pub unsafe fn concat(ctx: &mut Context, left: &Array, right: &Array) -> Array
+    pub unsafe fn concat(ctx: &Context, left: &Array, right: &Array) -> Array
     {
         if left.empty && right.empty {
             return Array::empty(ctx);
@@ -56,7 +56,7 @@ impl Array
         result
     }
 
-    pub unsafe fn concat_store(ctx: &mut Context, left: &Array, right: &Array, dst: &Array)
+    pub unsafe fn concat_store(ctx: &Context, left: &Array, right: &Array, dst: &Array)
     {
         let concat_fn = ctx.get_builtin("concat");
         let element_type = if !left.empty {&left.element_type} else {&right.element_type};
@@ -88,7 +88,7 @@ impl Array
         slice
     }
 
-    pub unsafe fn init(&mut self, ctx: &Context, len: LLVMValueRef)
+    pub unsafe fn init(&self, ctx: &Context, len: LLVMValueRef)
     {
         // First allocate the storage
         let array_data = heap_alloc_array(ctx, &self.element_type, len);

@@ -15,7 +15,7 @@ impl LLVar
     pub fn new(idx: usize, typ: Type) -> LLVar
     {
         LLVar{
-            name: format!("var{}", idx),
+            name: format!("$var{}", idx),
             typ: typ,
         }
     }
@@ -25,6 +25,13 @@ impl LLVar
         LLVar{
             name: name.into(),
             typ: typ,
+        }
+    }
+
+    pub fn replace_by_ret(&mut self, name: &str)
+    {
+        if self.name == name {
+            self.name = "$ret".into();
         }
     }
 }
@@ -126,6 +133,23 @@ impl LLFunction
         }
 
         None
+    }
+
+    pub fn replace_by_ret(&mut self, bad_name: &str)
+    {
+        for inst in &mut self.instructions {
+            let replace_by_nop = if let LLInstruction::StackAlloc(ref var) = *inst {
+                var.name == bad_name
+            } else {
+                false
+            };
+
+            if replace_by_nop {
+                *inst = LLInstruction::NOP;
+            } else {
+                inst.replace_by_ret(bad_name);
+            }
+        }
     }
 }
 
