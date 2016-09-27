@@ -11,7 +11,6 @@ mod ast;
 #[allow(unused)]
 mod codegen;
 mod compileerror;
-#[allow(unused)]
 mod llrep;
 mod parser;
 mod typechecker;

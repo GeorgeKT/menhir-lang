@@ -1,5 +1,5 @@
 use std::fmt;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use ast::{Type, FunctionSignature};
 use llrep::llinstruction::LLInstruction;
 
@@ -28,10 +28,10 @@ impl LLVar
         }
     }
 
-    pub fn replace_by_ret(&mut self, name: &str)
+    pub fn rename_if_equals(&mut self, name: &str, new_name: &str)
     {
         if self.name == name {
-            self.name = "$ret".into();
+            self.name = new_name.into();
         }
     }
 }
@@ -70,14 +70,50 @@ impl Scope
     }
 }
 
+
+pub type LLBasicBlockRef = usize;
+
+pub fn bb_name(bb: LLBasicBlockRef) -> String
+{
+    if bb == 0 {
+        "entry".into()
+    } else {
+        format!("block{}", bb)
+    }
+}
+
+#[derive(Debug)]
+pub struct LLBasicBlock
+{
+    pub name: String,
+    pub instructions: Vec<LLInstruction>
+}
+
+impl LLBasicBlock
+{
+    pub fn new(name: String) -> LLBasicBlock
+    {
+        LLBasicBlock{
+            name: name,
+            instructions: Vec::new(),
+        }
+    }
+}
+
+
+
 #[derive(Debug)]
 pub struct LLFunction
 {
     pub sig: FunctionSignature,
-    pub instructions: Vec<LLInstruction>,
+    pub blocks: BTreeMap<LLBasicBlockRef, LLBasicBlock>,
+    pub block_order: Vec<LLBasicBlockRef>,
+    current_bb: usize,
+    bb_counter: usize,
     var_counter: usize,
     scopes: Vec<Scope>
 }
+
 
 impl LLFunction
 {
@@ -85,10 +121,16 @@ impl LLFunction
     {
         let mut f = LLFunction{
             sig: sig.clone(),
-            instructions: Vec::new(),
+            blocks: BTreeMap::new(),
+            block_order: Vec::new(),
+            current_bb: 0,
+            bb_counter: 0,
             var_counter: 0,
             scopes: vec![Scope::new()],
         };
+
+        let entry = f.create_basic_block();
+        f.add_basic_block(entry);
 
         for arg in &sig.args {
             f.add_named_var(LLVar::named(&arg.name, arg.typ.clone()));
@@ -96,9 +138,35 @@ impl LLFunction
         f
     }
 
+    pub fn is_empty(&self) -> bool
+    {
+        self.blocks.get(&0).map(|bb| bb.instructions.is_empty()).unwrap_or(false)
+    }
+
     pub fn add(&mut self, inst: LLInstruction)
     {
-        self.instructions.push(inst);
+        let idx = self.current_bb;
+        self.blocks.get_mut(&idx).map(|bb| bb.instructions.push(inst));
+    }
+
+    pub fn create_basic_block(&mut self) -> LLBasicBlockRef
+    {
+        let bb_ref = self.bb_counter;
+        self.bb_counter += 1;
+        let name = bb_name(bb_ref);
+        self.blocks.insert(bb_ref, LLBasicBlock::new(name));
+        bb_ref
+    }
+
+    pub fn add_basic_block(&mut self, bb_ref: LLBasicBlockRef)
+    {
+        self.block_order.push(bb_ref);
+    }
+
+    pub fn set_current_bb(&mut self, bb_ref: LLBasicBlockRef)
+    {
+        assert!(bb_ref < self.blocks.len());
+        self.current_bb = bb_ref;
     }
 
     pub fn new_var(&mut self, typ: Type) -> LLVar
@@ -135,19 +203,21 @@ impl LLFunction
         None
     }
 
-    pub fn replace_by_ret(&mut self, bad_name: &str)
+    pub fn rename(&mut self, bad_name: &str, new_name: &str)
     {
-        for inst in &mut self.instructions {
-            let replace_by_nop = if let LLInstruction::StackAlloc(ref var) = *inst {
-                var.name == bad_name
-            } else {
-                false
-            };
+        for bb in self.blocks.values_mut() {
+            for inst in &mut bb.instructions {
+                let replace_by_nop = if let LLInstruction::StackAlloc(ref var) = *inst {
+                    var.name == bad_name
+                } else {
+                    false
+                };
 
-            if replace_by_nop {
-                *inst = LLInstruction::NOP;
-            } else {
-                inst.replace_by_ret(bad_name);
+                if replace_by_nop {
+                    *inst = LLInstruction::NOP;
+                } else {
+                    inst.rename(bad_name, new_name);
+                }
             }
         }
     }
@@ -158,9 +228,14 @@ impl fmt::Display for LLFunction
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
         try!(writeln!(f, "{}:", self.sig.name));
-        for inst in &self.instructions {
-            try!(inst.fmt(f));
+        for bb_ref in &self.block_order {
+            let bb = self.blocks.get(bb_ref).expect("Unknown basic block");
+            try!(writeln!(f, " {}:", bb.name));
+            for inst in &bb.instructions {
+                try!(inst.fmt(f));
+            }
         }
+
         Ok(())
     }
 }

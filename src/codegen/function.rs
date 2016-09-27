@@ -1,6 +1,7 @@
 use std::ptr;
 use std::ffi::CString;
 use std::rc::Rc;
+use std::collections::HashMap;
 use libc;
 
 use llvm::core::*;
@@ -57,9 +58,9 @@ pub unsafe fn gen_function_ptr(ctx: &Context, func_ptr: LLVMValueRef, sig: Funct
 pub unsafe fn gen_function(ctx: &mut Context, func: &LLFunction)
 {
     let fi = ctx.get_function(&func.sig.name).expect("Internal Compiler Error: Unknown function");
-    let bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, cstr!("entry"));
+    let entry_bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, cstr!("entry"));
     let current_bb = LLVMGetInsertBlock(ctx.builder);
-    LLVMPositionBuilderAtEnd(ctx.builder, bb);
+    LLVMPositionBuilderAtEnd(ctx.builder, entry_bb);
 
     ctx.push_stack(fi.function);
 
@@ -88,8 +89,24 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &LLFunction)
         ctx.add_variable("$ret", ValueRef::new(ret_var, &func.sig.return_type));
     }
 
-    for instr in &func.instructions {
-        gen_instruction(ctx, instr);
+    let mut blocks = HashMap::new();
+    blocks.insert(0, entry_bb);
+
+    for (bb_ref, bb) in func.blocks.iter() {
+        if bb.name != "entry" {
+            let bb_name = CString::new(bb.name.as_bytes()).expect("Invalid block name");
+            let new_bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, bb_name.as_ptr());
+            blocks.insert(*bb_ref, new_bb);
+        }
+    }
+
+    for bb_ref in func.block_order.iter() {
+        let bb = func.blocks.get(bb_ref).expect("Unknown basic block");
+        for instr in &bb.instructions {
+            let llvm_bb = blocks.get(bb_ref).expect("Unknown basic block");
+            LLVMPositionBuilderAtEnd(ctx.builder, *llvm_bb);
+            gen_instruction(ctx, instr, &blocks);
+        }
     }
     ctx.pop_stack();
 }

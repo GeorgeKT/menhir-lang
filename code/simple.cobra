@@ -1,6 +1,7 @@
-len(a: string) -> int = a.len
+foo(a: int) -> int =
+    match a:
+        0 => 100,
+        1 => 255,
+        _ => 0
 
-concat(a: string, b: string) -> string = a + b
-
-main() -> int =
-    let x = concat("Hello", " World"), y = 5, z = y in len(x) + z
+main() -> int = foo(1)

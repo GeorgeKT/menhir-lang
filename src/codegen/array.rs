@@ -37,25 +37,6 @@ impl Array
         }
     }
 
-    pub unsafe fn concat(ctx: &Context, left: &Array, right: &Array) -> Array
-    {
-        if left.empty && right.empty {
-            return Array::empty(ctx);
-        }
-
-        let element_type = if !left.empty {&left.element_type} else {&right.element_type};
-
-        let at = ctx.resolve_type(&array_type(element_type.clone()));
-        let result = Array{
-            array: ctx.stack_alloc(at, "array"),
-            element_type: element_type.clone(),
-            empty: false,
-        };
-
-        Array::concat_store(ctx, left, right, &result);
-        result
-    }
-
     pub unsafe fn concat_store(ctx: &Context, left: &Array, right: &Array, dst: &Array)
     {
         let concat_fn = ctx.get_builtin("concat");

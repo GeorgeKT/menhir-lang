@@ -1,6 +1,7 @@
 use std::ptr;
 use std::rc::Rc;
 use std::ffi::CString;
+use std::collections::HashMap;
 use libc;
 use llvm::core::*;
 use llvm::prelude::*;
@@ -131,6 +132,8 @@ unsafe fn gen_bool_bin_op(ctx: &Context, l: LLVMValueRef, r: LLVMValueRef, op: O
     {
         Operator::And => LLVMBuildAnd(ctx.builder, l, r, cstr!("and")),
         Operator::Or => LLVMBuildOr(ctx.builder, l, r, cstr!("or")),
+        Operator::Equals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, l, r, cstr!("cmp")),
+        Operator::NotEquals => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, l, r, cstr!("cmp")),
         _ => panic!("Internal Compiler Error: Operator {} is not supported on bools", op),
     }
 }
@@ -298,26 +301,30 @@ unsafe fn gen_expr(ctx: &mut Context, dst: &LLVar, expr: &LLExpr)
         LLExpr::NEQ(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::NotEquals),
         LLExpr::USub(ref v) => gen_unary_op(ctx, dst, v, Operator::Sub),
         LLExpr::Not(ref v) => gen_unary_op(ctx, dst, v, Operator::Not),
-        LLExpr::Load(ref name) => panic!("NYI"), //gen_load(ctx, name, typ, dst),
-        LLExpr::Call{ref name, ref args} => gen_call(ctx, dst, name, args),
-        LLExpr::StructMember{ref obj, index} => gen_struct_member(ctx, dst, obj, index),
-        LLExpr::ArrayProperty{ref array, ref property} => gen_array_property(ctx, dst, array, property.clone()),
+        LLExpr::Call(ref name, ref args) => gen_call(ctx, dst, name, args),
+        LLExpr::StructMember(ref obj, index) => gen_struct_member(ctx, dst, obj, index),
+        LLExpr::ArrayProperty(ref array, ref property) => gen_array_property(ctx, dst, array, property.clone()),
+        LLExpr::ArrayHead(ref array) => panic!("NYI"),
+        LLExpr::ArrayTail(ref array) => panic!("NYI"),
+        LLExpr::SumTypeIndex(ref obj) => panic!("NYI"),
+        LLExpr::SumTypeStruct(ref obj, index) => panic!("NYI"),
     }
 }
 
-pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction)
+pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: &HashMap<LLBasicBlockRef, LLVMBasicBlockRef>)
 {
     match *instr
     {
         LLInstruction::NOP => {},
-        LLInstruction::Set{ref var, ref expr} => {
-            gen_expr(ctx, &var, expr);
+
+        LLInstruction::Set(ref s) => {
+            gen_expr(ctx, &s.var, &s.expr);
         },
 
-        LLInstruction::SetStructMember{ref obj, member_index, ref value} => {
-            let struct_object = ctx.get_variable(&obj.name).expect("Unknown variable obj");
-            let member_ptr = struct_object.value.member(ctx, &MemberAccessType::StructMember(member_index));
-            member_ptr.store(ctx, &ctx.get_variable(&value.name).expect("Unknown variable value").value);
+        LLInstruction::SetStructMember(ref s) => {
+            let struct_object = ctx.get_variable(&s.obj.name).expect("Unknown variable obj");
+            let member_ptr = struct_object.value.member(ctx, &MemberAccessType::StructMember(s.member_index));
+            member_ptr.store(ctx, &ctx.get_variable(&s.value.name).expect("Unknown variable value").value);
         },
 
         LLInstruction::StackAlloc(ref var) => {
@@ -341,15 +348,27 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction)
             ctx.push_stack(ptr::null_mut());
         },
 
-        LLInstruction::EndScope{ref ret_var} => {
+        LLInstruction::EndScope(ref ret_var) => {
             let var = ctx.get_variable(&ret_var.name).expect("Unknown variable");
             ctx.pop_stack();
             ctx.add_variable_instance(var);
         },
 
-        LLInstruction::Bind{ref name, ref var} => {
-            let var = ctx.get_variable(&var.name).expect("Unknown variable");
-            ctx.add_variable(name, var.value.clone());
+        LLInstruction::Bind(ref b) => {
+            let var = ctx.get_variable(&b.var.name).expect("Unknown variable");
+            ctx.add_variable(&b.name, var.value.clone());
+        },
+
+        LLInstruction::Branch(ref bb) => {
+            let llvm_bb = blocks.get(bb).expect("Unknown basic block");
+            LLVMBuildBr(ctx.builder, *llvm_bb);
+        },
+
+        LLInstruction::BranchIf(ref b) => {
+            let on_true_bb = blocks.get(&b.on_true).expect("Unknown basic block");
+            let on_false_bb = blocks.get(&b.on_false).expect("Unknown basic block");
+            let cond = ctx.get_variable(&b.cond.name).expect("Unknown variable");
+            LLVMBuildCondBr(ctx.builder, cond.value.load(ctx.builder), *on_true_bb, *on_false_bb);
         },
     }
 }

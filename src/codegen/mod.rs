@@ -102,7 +102,7 @@ fn gen_module(ctx: &mut Context, module: &LLModule)
         }
 
         for func in &module.functions {
-            if !func.instructions.is_empty() {
+            if !func.is_empty() {
                 gen_function(ctx, func);
             }
         }
