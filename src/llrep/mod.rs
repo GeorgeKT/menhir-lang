@@ -127,7 +127,7 @@ fn member_access_to_llrep(func: &mut LLFunction, sma: &MemberAccess, dst: &LLVar
         {
             (&Type::Struct(ref st), &MemberAccessType::StructMember(idx)) => {
                 let expr = LLExpr::StructMember(obj.clone(), idx);
-                if access_idx == sma.access_types.len() {
+                if access_idx == sma.access_types.len() - 1 {
                     add_set(func, expr, dst);
                     return;
                 } else {
