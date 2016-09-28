@@ -56,98 +56,7 @@ pub enum LLExpr
     ArrayProperty(LLVar, ArrayProperty),
     ArrayHead(LLVar),
     ArrayTail(LLVar),
-}
-
-impl LLExpr
-{
-    pub fn rename(&mut self, bad_name: &str, new_name: &str)
-    {
-        match *self
-        {
-            LLExpr::Literal(_) => {},
-            LLExpr::Add(ref mut a, ref mut b) => {
-                a.rename_if_equals(bad_name, new_name);
-                b.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::Sub(ref mut a, ref mut b) => {
-                a.rename_if_equals(bad_name, new_name);
-                b.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::Mul(ref mut a, ref mut b) => {
-                a.rename_if_equals(bad_name, new_name);
-                b.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::Div(ref mut a, ref mut b) => {
-                a.rename_if_equals(bad_name, new_name);
-                b.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::Mod(ref mut a, ref mut b) => {
-                a.rename_if_equals(bad_name, new_name);
-                b.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::And(ref mut a, ref mut b) => {
-                a.rename_if_equals(bad_name, new_name);
-                b.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::Or(ref mut a, ref mut b) => {
-                a.rename_if_equals(bad_name, new_name);
-                b.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::LT(ref mut a, ref mut b) => {
-                a.rename_if_equals(bad_name, new_name);
-                b.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::LTE(ref mut a, ref mut b) => {
-                a.rename_if_equals(bad_name, new_name);
-                b.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::GT(ref mut a, ref mut b) => {
-                a.rename_if_equals(bad_name, new_name);
-                b.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::GTE(ref mut a, ref mut b) => {
-                a.rename_if_equals(bad_name, new_name);
-                b.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::EQ(ref mut a, ref mut b) => {
-                a.rename_if_equals(bad_name, new_name);
-                b.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::NEQ(ref mut a, ref mut b) => {
-                a.rename_if_equals(bad_name, new_name);
-                b.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::USub(ref mut v) => {
-                v.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::Not(ref mut v) => {
-                v.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::Call(_, ref mut args) => {
-                for arg in args.iter_mut() {
-                    arg.rename_if_equals(bad_name, new_name);
-                }
-            },
-            LLExpr::StructMember(ref mut obj, _) => {
-                obj.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::SumTypeIndex(ref mut obj) => {
-                obj.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::SumTypeStruct(ref mut obj, _) => {
-                obj.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::ArrayProperty(ref mut array, _) => {
-                array.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::ArrayHead(ref mut array) => {
-                array.rename_if_equals(bad_name, new_name);
-            },
-            LLExpr::ArrayTail(ref mut array) => {
-                array.rename_if_equals(bad_name, new_name);
-            },
-        }
-    }
+    Ref(LLVar),
 }
 
 impl fmt::Display for LLExpr
@@ -179,6 +88,7 @@ impl fmt::Display for LLExpr
             LLExpr::ArrayProperty(ref array, ref property) => write!(f, "{}.{:?}", array, property),
             LLExpr::ArrayHead(ref array) => write!(f, "head {}", array),
             LLExpr::ArrayTail(ref array) => write!(f, "tail {}", array),
+            LLExpr::Ref(ref obj) => write!(f, "ref {}", obj),
         }
     }
 }
@@ -206,13 +116,6 @@ pub struct LLSet
 }
 
 #[derive(Debug, Clone)]
-pub struct LLUpdate
-{
-    pub dst: LLVar,
-    pub src: LLVar,
-}
-
-#[derive(Debug, Clone)]
 pub struct LLBranchIf
 {
     pub cond: LLVar,
@@ -227,14 +130,13 @@ pub enum LLInstruction
     StackAlloc(LLVar),
     SetStructMember(LLSetStructMember),
     StartScope,
-    EndScope(LLVar),
+    EndScope,
     Bind(LLBind),
     Set(LLSet),
     Return(LLVar),
     ReturnVoid,
     Branch(LLBasicBlockRef),
     BranchIf(LLBranchIf),
-    NOP,
 }
 
 pub fn set_instr(var: LLVar, e: LLExpr) -> LLInstruction
@@ -276,50 +178,6 @@ pub fn branch_if_instr(cond: LLVar, on_true: LLBasicBlockRef, on_false: LLBasicB
     })
 }
 
-impl LLInstruction
-{
-    pub fn rename(&mut self, bad_name: &str, new_name: &str)
-    {
-        match *self
-        {
-            LLInstruction::SetStructMember(ref mut s)=> {
-                s.obj.rename_if_equals(bad_name, new_name);
-                s.value.rename_if_equals(bad_name, new_name);
-            },
-
-            LLInstruction::EndScope(ref mut ret_var) => {
-                ret_var.rename_if_equals(bad_name, new_name);
-            },
-
-            LLInstruction::Bind(ref mut b) => {
-                b.var.rename_if_equals(bad_name, new_name);
-            },
-
-            LLInstruction::Set(ref mut s) => {
-                s.var.rename_if_equals(bad_name, new_name);
-                s.expr.rename(bad_name, new_name);
-            },
-
-            LLInstruction::Return(ref mut var) => {
-                var.rename_if_equals(bad_name, new_name);
-            },
-
-            LLInstruction::ReturnVoid => {},
-            LLInstruction::StartScope => {},
-            LLInstruction::NOP => {},
-            LLInstruction::Branch(_) => {},
-            LLInstruction::BranchIf(ref mut b) => {
-                b.cond.rename_if_equals(bad_name, new_name);
-            },
-            LLInstruction::StackAlloc(ref var) => {
-                if var.name == bad_name {
-                    panic!("Internal Compiler Error: StackAlloc cannot do replace_by_ret");
-                }
-            },
-        }
-    }
-}
-
 impl fmt::Display for LLInstruction
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
@@ -335,8 +193,8 @@ impl fmt::Display for LLInstruction
             LLInstruction::StartScope => {
                 writeln!(f, "  scope start")
             },
-            LLInstruction::EndScope(ref ret_var) => {
-                writeln!(f, "  scope end (ret: {})", ret_var.name)
+            LLInstruction::EndScope => {
+                writeln!(f, "  scope end")
             },
             LLInstruction::Bind(ref b) => {
                 writeln!(f, "  bind {} = {}", b.name, b.var.name)
@@ -355,9 +213,6 @@ impl fmt::Display for LLInstruction
             },
             LLInstruction::BranchIf(ref b) => {
                 writeln!(f, "  brif {} ? {} : {} ", b.cond, b.on_true, b.on_false)
-            },
-            LLInstruction::NOP => {
-                writeln!(f, "  nop")
             },
         }
     }

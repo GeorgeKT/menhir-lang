@@ -27,13 +27,6 @@ impl LLVar
             typ: typ,
         }
     }
-
-    pub fn rename_if_equals(&mut self, name: &str, new_name: &str)
-    {
-        if self.name == name {
-            self.name = new_name.into();
-        }
-    }
 }
 
 impl fmt::Display for LLVar
@@ -201,25 +194,6 @@ impl LLFunction
         }
 
         None
-    }
-
-    pub fn rename(&mut self, bad_name: &str, new_name: &str)
-    {
-        for bb in self.blocks.values_mut() {
-            for inst in &mut bb.instructions {
-                let replace_by_nop = if let LLInstruction::StackAlloc(ref var) = *inst {
-                    var.name == bad_name
-                } else {
-                    false
-                };
-
-                if replace_by_nop {
-                    *inst = LLInstruction::NOP;
-                } else {
-                    inst.rename(bad_name, new_name);
-                }
-            }
-        }
     }
 }
 

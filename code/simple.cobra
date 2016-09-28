@@ -1,7 +1,4 @@
-foo(a: int) -> int =
-    match a:
-        0 => 100,
-        1 => 255,
-        _ => 0
+foo(v: [int]) -> int = 5
 
-main() -> int = foo(1)
+main() -> int =
+    let x = [2, 3, 4] in foo(x)

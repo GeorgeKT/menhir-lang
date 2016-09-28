@@ -159,14 +159,14 @@ unsafe fn gen_array_bin_op(ctx: &mut Context, dst: &LLVar, left: &LLVar, right: 
 
 unsafe fn gen_bin_op(ctx: &mut Context, dst: &LLVar, left: &LLVar, right: &LLVar, op: Operator)
 {
-    if let Type::Array(_) = dst.typ {
+    if let Type::Array(_) = left.typ {
         return gen_array_bin_op(ctx, dst, left, right, op);
     }
 
     let l = ctx.get_variable(&left.name).expect("Unknown variable").value.load(ctx.builder);
     let r = ctx.get_variable(&right.name).expect("Unknown variable").value.load(ctx.builder);
     let dst_vr = get_value_ref(ctx, dst);
-    dst_vr.store_direct(ctx, match dst.typ
+    dst_vr.store_direct(ctx, match left.typ
     {
         Type::Int =>  {
             gen_int_bin_op(ctx, l, r, op)
@@ -270,6 +270,20 @@ unsafe fn gen_array_property(ctx: &mut Context, dst: &LLVar, array: &LLVar, prop
     ctx.add_variable(&dst.name, prop_ptr);
 }
 
+unsafe fn gen_ref(ctx: &mut Context, dst: &LLVar, var: &LLVar)
+{
+    let var_object = ctx.get_variable(&var.name).expect("Unknown variable");
+    if dst.typ.pass_by_ptr() {
+        let ptr = ctx.stack_alloc(LLVMTypeOf(var_object.value.get()), "ptr");
+        LLVMBuildStore(ctx.builder, var_object.value.get(), ptr);
+        let vr = LLVMBuildLoad(ctx.builder, ptr, cstr!("ref"));
+        ctx.add_variable(&dst.name, ValueRef::new(vr, &dst.typ));
+    } else {
+        let dst_var = get_value_ref(ctx, dst);
+        dst_var.store(ctx, &var_object.value);
+    }
+}
+
 unsafe fn get_value_ref(ctx: &mut Context, var: &LLVar) -> ValueRef
 {
     if let Some(ref vr) = ctx.get_variable(&var.name) {
@@ -308,15 +322,15 @@ unsafe fn gen_expr(ctx: &mut Context, dst: &LLVar, expr: &LLExpr)
         LLExpr::ArrayTail(ref array) => panic!("NYI"),
         LLExpr::SumTypeIndex(ref obj) => panic!("NYI"),
         LLExpr::SumTypeStruct(ref obj, index) => panic!("NYI"),
+        LLExpr::Ref(ref obj) => gen_ref(ctx, dst, obj),
     }
 }
 
 pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: &HashMap<LLBasicBlockRef, LLVMBasicBlockRef>)
 {
+    println!("instr {:?}", instr);
     match *instr
     {
-        LLInstruction::NOP => {},
-
         LLInstruction::Set(ref s) => {
             gen_expr(ctx, &s.var, &s.expr);
         },
@@ -348,10 +362,8 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: 
             ctx.push_stack(ptr::null_mut());
         },
 
-        LLInstruction::EndScope(ref ret_var) => {
-            let var = ctx.get_variable(&ret_var.name).expect("Unknown variable");
+        LLInstruction::EndScope => {
             ctx.pop_stack();
-            ctx.add_variable_instance(var);
         },
 
         LLInstruction::Bind(ref b) => {
