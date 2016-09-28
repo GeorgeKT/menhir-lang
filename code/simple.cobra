@@ -1,7 +1,8 @@
-foo(c: char) -> int =
-    match c:
-        'b' => 5,
-        '\n' => 7,
-        _ => 3
+max(a: int, b: int) -> int =
+    if a > b: a
+    else b
 
-main() -> int = foo('b') + foo('c')
+main() -> int = (
+    let x = max(10, 11);
+    7 * x
+)

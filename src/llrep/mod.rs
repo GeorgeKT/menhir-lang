@@ -473,10 +473,20 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression, dst: &LLVar)
             match_to_llrep(func, &match_expr, dst);
         },
 
+        Expression::Block(ref b) => {
+            for (idx, e) in b.expressions.iter().enumerate() {
+                if idx == b.expressions.len() - 1 {
+                    expr_to_llrep(func, e, dst);
+                } else {
+                    expr_to_llrep_ret(func, e);
+                }
+            }
+        },
+
         /*
         Expression::ArrayGenerator(ref _a) => panic!("NYI"),
         Expression::Lambda(ref l) => gen_lambda(ctx, l),
-        Expression::Block(ref b) => gen_block(ctx, b),
+
         */
 
         _ => panic!("NYI"),

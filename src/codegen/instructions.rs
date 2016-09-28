@@ -328,7 +328,7 @@ unsafe fn gen_expr(ctx: &mut Context, dst: &LLVar, expr: &LLExpr)
 
 pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: &HashMap<LLBasicBlockRef, LLVMBasicBlockRef>)
 {
-    println!("instr {:?}", instr);
+    //println!("instr {:?}", instr);
     match *instr
     {
         LLInstruction::Set(ref s) => {
