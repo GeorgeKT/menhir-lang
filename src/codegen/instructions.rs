@@ -284,6 +284,29 @@ unsafe fn gen_ref(ctx: &mut Context, dst: &LLVar, var: &LLVar)
     }
 }
 
+unsafe fn gen_array_head(ctx: &mut Context, dst: &LLVar, array: &LLVar)
+{
+    let array_object = ctx.get_variable(&array.name).expect("Unknown variable");
+
+    if let ValueRef::Array(ref a) = array_object.value {
+        let dst_var = get_value_ref(ctx, dst);
+        dst_var.store(ctx, &a.head(ctx));
+    } else {
+        panic!("Expecting an array ValueRef");
+    }
+}
+
+unsafe fn gen_array_tail(ctx: &mut Context, dst: &LLVar, array: &LLVar)
+{
+    let array_object = ctx.get_variable(&array.name).expect("Unknown variable");
+    let dst_var = get_value_ref(ctx, dst);
+    if let (&ValueRef::Array(ref a), ValueRef::Array(ref da)) = (&array_object.value, dst_var) {
+        a.tail(ctx, da);
+    } else {
+        panic!("Expecting an array ValueRef");
+    }
+}
+
 unsafe fn get_value_ref(ctx: &mut Context, var: &LLVar) -> ValueRef
 {
     if let Some(ref vr) = ctx.get_variable(&var.name) {
@@ -318,8 +341,8 @@ unsafe fn gen_expr(ctx: &mut Context, dst: &LLVar, expr: &LLExpr)
         LLExpr::Call(ref name, ref args) => gen_call(ctx, dst, name, args),
         LLExpr::StructMember(ref obj, index) => gen_struct_member(ctx, dst, obj, index),
         LLExpr::ArrayProperty(ref array, ref property) => gen_array_property(ctx, dst, array, property.clone()),
-        LLExpr::ArrayHead(ref array) => panic!("NYI"),
-        LLExpr::ArrayTail(ref array) => panic!("NYI"),
+        LLExpr::ArrayHead(ref array) => gen_array_head(ctx, dst, array),
+        LLExpr::ArrayTail(ref array) => gen_array_tail(ctx, dst, array),
         LLExpr::SumTypeIndex(ref obj) => panic!("NYI"),
         LLExpr::SumTypeStruct(ref obj, index) => panic!("NYI"),
         LLExpr::Ref(ref obj) => gen_ref(ctx, dst, obj),
