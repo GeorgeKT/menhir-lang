@@ -1,4 +1,7 @@
-foo(v: [int]) -> int = 5
+foo(c: char) -> int =
+    match c:
+        'b' => 5,
+        '\n' => 7,
+        _ => 3
 
-main() -> int =
-    let x = [2, 3, 4] in foo(x)
+main() -> int = foo('b') + foo('c')

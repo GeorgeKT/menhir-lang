@@ -168,7 +168,7 @@ unsafe fn gen_bin_op(ctx: &mut Context, dst: &LLVar, left: &LLVar, right: &LLVar
     let dst_vr = get_value_ref(ctx, dst);
     dst_vr.store_direct(ctx, match left.typ
     {
-        Type::Int =>  {
+        Type::Int | Type::Char =>  {
             gen_int_bin_op(ctx, l, r, op)
         },
         Type::Float => {
@@ -176,8 +176,8 @@ unsafe fn gen_bin_op(ctx: &mut Context, dst: &LLVar, left: &LLVar, right: &LLVar
         },
         Type::Bool => {
             gen_bool_bin_op(ctx, l, r, op)
-        }
-        _ => panic!("Internal Compiler Error: Binary operator {} not support on type {}", op, dst.typ),
+        },
+        _ => panic!("Internal Compiler Error: Binary operator {} not support on type {}", op, left.typ),
     });
 }
 
