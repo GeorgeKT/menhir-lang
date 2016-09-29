@@ -1,7 +1,4 @@
-sum(v: [int]) -> int =
-    match v:
-        [] => 0,
-        [head | tail] => head + sum(tail)
+make_pair(a: int, b: int) -> {int, int} = {a, b}
 
 main() -> int =
-    let x = [2, 3, 4] in sum(x)
+    let p = make_pair(4, 5) in p.0 + p.1

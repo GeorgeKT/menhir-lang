@@ -98,7 +98,6 @@ fn array_lit_to_llrep(func: &mut LLFunction, a: &ArrayLiteral, dst: &LLVar)
 
 fn struct_initializer_to_llrep(func: &mut LLFunction, si: &StructInitializer, dst: &LLVar)
 {
-    func.add(LLInstruction::StackAlloc(dst.clone()));
     for (idx, expr) in si.member_initializers.iter().enumerate() {
         let v = expr_to_llrep_ret(func, expr);
         func.add(set_struct_member_instr(dst.clone(), idx, v));
@@ -366,6 +365,7 @@ fn match_to_llrep(func: &mut LLFunction, m: &MatchExpression, dst: &LLVar)
 fn expr_to_llrep_ret(func: &mut LLFunction, expr: &Expression) -> LLVar
 {
     let var = func.new_var(expr.get_type());
+    func.add(LLInstruction::StackAlloc(var.clone()));
     expr_to_llrep(func, expr, &var);
     var
 }
