@@ -1,4 +1,4 @@
-make_pair(a: int, b: int) -> {int, int} = {a, b}
+triple(x: int) -> int = x * 3
 
 main() -> int =
-    let p = make_pair(4, 5) in p.0 + p.1
+    let f = triple in f(5)

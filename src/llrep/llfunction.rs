@@ -101,6 +101,7 @@ pub struct LLFunction
     pub sig: FunctionSignature,
     pub blocks: BTreeMap<LLBasicBlockRef, LLBasicBlock>,
     pub block_order: Vec<LLBasicBlockRef>,
+    pub lambdas: Vec<LLFunction>,
     current_bb: usize,
     bb_counter: usize,
     var_counter: usize,
@@ -116,6 +117,7 @@ impl LLFunction
             sig: sig.clone(),
             blocks: BTreeMap::new(),
             block_order: Vec::new(),
+            lambdas: Vec::new(),
             current_bb: 0,
             bb_counter: 0,
             var_counter: 0,
@@ -201,6 +203,11 @@ impl fmt::Display for LLFunction
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
+        for lambda in &self.lambdas {
+            try!(lambda.fmt(f));
+            try!(writeln!(f, ""));
+        }
+
         try!(writeln!(f, "{}:", self.sig.name));
         for bb_ref in &self.block_order {
             let bb = self.blocks.get(bb_ref).expect("Unknown basic block");

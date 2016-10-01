@@ -186,7 +186,6 @@ impl Type
         match *self
         {
             Type::Array(_) => true,
-            Type::Func(_) => true,
             Type::Struct(_) => true,
             Type::Sum(_) => true,
             _ => false,

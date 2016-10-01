@@ -57,6 +57,7 @@ pub enum LLExpr
     ArrayHead(LLVar),
     ArrayTail(LLVar),
     Ref(LLVar),
+    Func(String),
 }
 
 impl fmt::Display for LLExpr
@@ -89,6 +90,7 @@ impl fmt::Display for LLExpr
             LLExpr::ArrayHead(ref array) => write!(f, "head {}", array),
             LLExpr::ArrayTail(ref array) => write!(f, "tail {}", array),
             LLExpr::Ref(ref obj) => write!(f, "ref {}", obj),
+            LLExpr::Func(ref func) => write!(f, "func {}", func),
         }
     }
 }

@@ -483,28 +483,32 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression, dst: &LLVar)
             }
         },
 
+        Expression::Lambda(ref l) => {
+            let lambda = func_to_llrep(&l.sig, &l.expr);
+            func.lambdas.push(lambda);
+            add_set(func, LLExpr::Func(l.sig.name.clone()), dst);
+        },
+
         /*
         Expression::ArrayGenerator(ref _a) => panic!("NYI"),
-        Expression::Lambda(ref l) => gen_lambda(ctx, l),
-
         */
 
         _ => panic!("NYI"),
     }
 }
 
-fn func_to_llrep(func: &Function) -> LLFunction
+fn func_to_llrep(sig: &FunctionSignature, expression: &Expression) -> LLFunction
 {
-    let mut llfunc = LLFunction::new(&func.sig);
+    let mut llfunc = LLFunction::new(&sig);
 
-    if func.sig.return_type.return_by_ptr() {
-        let ret = LLVar::named("$ret", func.sig.return_type.clone());
-        expr_to_llrep(&mut llfunc,  &func.expression, &ret);
+    if sig.return_type.return_by_ptr() {
+        let ret = LLVar::named("$ret", sig.return_type.clone());
+        expr_to_llrep(&mut llfunc,  &expression, &ret);
         llfunc.add(LLInstruction::ReturnVoid);
     } else {
-        let var = llfunc.new_var(func.sig.return_type.clone());
+        let var = llfunc.new_var(sig.return_type.clone());
         llfunc.add(LLInstruction::StackAlloc(var.clone()));
-        expr_to_llrep(&mut llfunc, &func.expression, &var);
+        expr_to_llrep(&mut llfunc, &expression, &var);
         llfunc.add(ret_instr(var));
     }
     llfunc
@@ -523,7 +527,7 @@ pub fn compile_to_llrep(md: &Module) -> LLModule
 
     for func in md.functions.values() {
         if !func.is_generic() {
-            ll_mod.functions.push(func_to_llrep(func));
+            ll_mod.functions.push(func_to_llrep(&func.sig, &func.expression));
         }
     }
 

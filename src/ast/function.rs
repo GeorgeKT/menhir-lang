@@ -1,4 +1,4 @@
-use ast::{Type, Expression, TreePrinter, prefix};
+use ast::{Type, Expression, TreePrinter, prefix, func_type};
 use span::{Span};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -38,6 +38,17 @@ pub struct FunctionSignature
     pub args: Vec<Argument>,
     pub span: Span,
     pub typ: Type,
+}
+
+impl FunctionSignature
+{
+    pub fn get_type(&self) -> Type
+    {
+        func_type(
+            self.args.iter().map(|arg| arg.typ.clone()).collect(),
+            self.return_type.clone()
+        )
+    }
 }
 
 impl TreePrinter for FunctionSignature

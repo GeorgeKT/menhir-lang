@@ -224,9 +224,9 @@ unsafe fn gen_load(ctx: &Context, name: &str, typ: &Type, dst: &mut ValueRef)
 }
 */
 
-unsafe fn gen_call_args(ctx: &Context, args: &Vec<LLVar>, func: &FunctionInstance) -> Vec<LLVMValueRef>
+unsafe fn gen_call_args(ctx: &Context, args: &Vec<LLVar>) -> Vec<LLVMValueRef>
 {
-    let mut arg_vals = Vec::with_capacity(func.args.len());
+    let mut arg_vals = Vec::with_capacity(args.len());
     for arg in args.iter()
     {
         let var = ctx.get_variable(&arg.name).expect("Unknown variable");
@@ -241,18 +241,18 @@ unsafe fn gen_call_args(ctx: &Context, args: &Vec<LLVar>, func: &FunctionInstanc
 
 unsafe fn gen_call(ctx: &mut Context, dst: &LLVar, name: &str, args: &Vec<LLVar>)
 {
-    let func = ctx.get_function(&name).expect("Internal Compiler Error: Unknown function");
-    let mut arg_vals = gen_call_args(ctx, args, &func);
-    let dst = get_value_ref(ctx, dst);
+    let func = ctx.get_function(name).expect("Internal Compiler Error: Unknown function");
+    let mut arg_vals = gen_call_args(ctx, args);
+    let dst_val = get_value_ref(ctx, dst);
     if func.sig.return_type.return_by_ptr()
     {
-        arg_vals.push(dst.get());
+        arg_vals.push(dst_val.get());
         LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr!(""));
     }
     else
     {
         let ret = LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr!("ret"));
-        dst.store_direct(ctx, ret);
+        dst_val.store_direct(ctx, ret);
     }
 }
 
@@ -272,13 +272,24 @@ unsafe fn gen_array_property(ctx: &mut Context, dst: &LLVar, array: &LLVar, prop
 
 unsafe fn gen_ref(ctx: &mut Context, dst: &LLVar, var: &LLVar)
 {
-    let var_object = ctx.get_variable(&var.name).expect("Unknown variable");
-    if dst.typ.pass_by_ptr() {
-        let ptr = ctx.stack_alloc(LLVMTypeOf(var_object.value.get()), "ptr");
-        LLVMBuildStore(ctx.builder, var_object.value.get(), ptr);
+    if dst.typ.pass_by_ptr()
+    {
+        let value_ref = ctx.get_variable(&var.name).expect("Unknown variable").value.get();
+        let ptr = ctx.stack_alloc(LLVMTypeOf(value_ref), "ptr");
+        LLVMBuildStore(ctx.builder, value_ref, ptr);
         let vr = LLVMBuildLoad(ctx.builder, ptr, cstr!("ref"));
         ctx.add_variable(&dst.name, ValueRef::new(vr, &dst.typ));
-    } else {
+    }
+    else if let Type::Func(_) = dst.typ
+    {
+        let func = ctx.get_function(&var.name).expect("Unknown function");
+        let dst_var = get_value_ref(ctx, dst);
+        dst_var.store_direct(ctx, func.function);
+        ctx.add_function_alias(&dst.name, func);
+    }
+    else
+    {
+        let var_object = ctx.get_variable(&var.name).expect("Unknown variable");
         let dst_var = get_value_ref(ctx, dst);
         dst_var.store(ctx, &var_object.value);
     }
@@ -305,6 +316,13 @@ unsafe fn gen_array_tail(ctx: &mut Context, dst: &LLVar, array: &LLVar)
     } else {
         panic!("Expecting an array ValueRef");
     }
+}
+
+fn gen_func_expr(ctx: &mut Context, dst: &LLVar, name: &str)
+{
+    let func = ctx.get_function(&name).expect("Internal Compiler Error: Unknown function");
+    ctx.add_variable(&dst.name, ValueRef::Const(func.function));
+    ctx.add_function_alias(&dst.name, func);
 }
 
 unsafe fn get_value_ref(ctx: &mut Context, var: &LLVar) -> ValueRef
@@ -346,12 +364,12 @@ unsafe fn gen_expr(ctx: &mut Context, dst: &LLVar, expr: &LLExpr)
         LLExpr::SumTypeIndex(ref obj) => panic!("NYI"),
         LLExpr::SumTypeStruct(ref obj, index) => panic!("NYI"),
         LLExpr::Ref(ref obj) => gen_ref(ctx, dst, obj),
+        LLExpr::Func(ref func) => gen_func_expr(ctx, dst, func),
     }
 }
 
 pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: &HashMap<LLBasicBlockRef, LLVMBasicBlockRef>)
 {
-    println!("instr {:?}", instr);
     match *instr
     {
         LLInstruction::Set(ref s) => {
@@ -390,8 +408,13 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: 
         },
 
         LLInstruction::Bind(ref b) => {
-            let var = ctx.get_variable(&b.var.name).expect("Unknown variable");
-            ctx.add_variable(&b.name, var.value.clone());
+            if let Type::Func(_) = b.var.typ {
+                let func = ctx.get_function(&b.var.name).expect("Unknown function");
+                ctx.add_function_alias(&b.name, func);
+            } else {
+                let var = ctx.get_variable(&b.var.name).expect("Unknown variable");
+                ctx.add_variable(&b.name, var.value.clone());
+            }
         },
 
         LLInstruction::Branch(ref bb) => {

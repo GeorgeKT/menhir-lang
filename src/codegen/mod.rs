@@ -99,12 +99,17 @@ fn gen_module(ctx: &mut Context, module: &LLModule)
         for func in &module.functions {
             let fi = Rc::new(gen_function_sig(ctx, &func.sig));
             ctx.add_function(fi);
+            for lambda in &func.lambdas {
+                let li = Rc::new(gen_function_sig(ctx, &lambda.sig));
+                ctx.add_function(li);
+            }
         }
 
-        for func in &module.functions {
-            if !func.is_empty() {
-                gen_function(ctx, func);
+        for func in module.functions.iter().filter(|f| !f.is_empty()) {
+            for lambda in &func.lambdas {
+                gen_function(ctx, lambda);
             }
+            gen_function(ctx, func);
         }
     }
 }

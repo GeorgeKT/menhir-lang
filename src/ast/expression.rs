@@ -83,7 +83,7 @@ impl Expression
             Expression::Call(ref c) => c.return_type.clone(),
             Expression::NameRef(ref nr) => nr.typ.clone(),
             Expression::Match(ref m) => m.typ.clone(),
-            Expression::Lambda(ref l) => l.sig.return_type.clone(),
+            Expression::Lambda(ref l) => l.sig.get_type(),
             Expression::Let(ref l) => l.typ.clone(),
             Expression::LetBindings(ref l) => l.bindings.last().map(|b| b.typ.clone()).expect("Binding types are not known"),
             Expression::If(ref i) => i.typ.clone(),

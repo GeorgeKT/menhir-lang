@@ -123,6 +123,11 @@ impl Context
         self.stack.last_mut().expect("Stack is empty").symbols.add_function(f)
     }
 
+    pub fn add_function_alias(&mut self, alias: &str, f: Rc<FunctionInstance>)
+    {
+        self.stack.last_mut().expect("Stack is empty").symbols.add_function_alias(alias, f)
+    }
+
     pub fn get_function(&self, name: &str) -> Option<Rc<FunctionInstance>>
     {
         for sf in self.stack.iter().rev()
@@ -324,7 +329,14 @@ impl Context
                     llvm_arg_types.push(self.resolve_type(arg));
                 }
 
-                LLVMFunctionType(self.resolve_type(&ft.return_type), llvm_arg_types.as_mut_ptr(),ft.args.len() as c_uint, 0)
+                LLVMPointerType(
+                    LLVMFunctionType(
+                        self.resolve_type(&ft.return_type),
+                        llvm_arg_types.as_mut_ptr(),
+                        ft.args.len() as c_uint, 0
+                    ),
+                    0
+                )
             },
             Type::Struct(ref st) => {
                 let mut llvm_member_types = Vec::with_capacity(st.members.len());

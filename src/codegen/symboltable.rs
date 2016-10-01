@@ -54,6 +54,11 @@ impl SymbolTable
         self.funcs.insert(name, f);
     }
 
+    pub fn add_function_alias(&mut self, alias: &str, f: Rc<FunctionInstance>)
+    {
+        self.funcs.insert(alias.into(), f);
+    }
+
     pub fn get_function(&self, name: &str) -> Option<Rc<FunctionInstance>>
     {
         self.funcs.get(name).map(|fi_rc| fi_rc.clone())
