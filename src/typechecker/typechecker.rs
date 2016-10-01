@@ -105,6 +105,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> Compi
             if left_type != right_type {
                 err(&b.span, ErrorCode::TypeError, format!("Operator {} expects two expressions of the same type as operands", b.operator))
             } else {
+                b.typ = Type::Bool;
                 Ok(Type::Bool)
             },
 

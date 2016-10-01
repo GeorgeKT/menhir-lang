@@ -1,4 +1,12 @@
-triple(x: int) -> int = x * 3
+type PairOrSingle = Pair{int, int} | Single{int}
+
+pair_or_single(a: int, b: int) -> PairOrSingle =
+    if a != b: Pair{a, b} else Single{a}
+
+value_of(v: PairOrSingle) -> int =
+    match v:
+        Pair{a, b} => a + b,
+        Single{a} => a
 
 main() -> int =
-    let f = triple in f(5)
+    value_of(pair_or_single(4, 5)) + value_of(pair_or_single(3, 3))

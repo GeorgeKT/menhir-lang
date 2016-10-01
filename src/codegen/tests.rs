@@ -25,22 +25,23 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
     let mut cursor = Cursor::new(prog);
     let parser_options = ParserOptions::default();
     let mut md = try!(parse_module(&parser_options, &mut cursor, "test", ""));
-    /*if dump {
+
+    if dump {
         println!("Before type check");
         println!("-----------------");
         md.print(0);
         println!("-----------------");
-    }*/
+    }
 
     try!(type_check_module(&mut md));
-/*
+
     if dump {
         println!("After type check");
         println!("-----------------");
         md.print(0);
         println!("-----------------");
     }
-*/
+
     let llmod = compile_to_llrep(&md);
     if dump {
         println!("LLREP");
@@ -364,7 +365,7 @@ value_of(v: PairOrSingle) -> int =
 
 main() -> int =
     value_of(pair_or_single(4, 5)) + value_of(pair_or_single(3, 3))
-    "#, false);
+    "#, true);
     println!("r: {:?}", r);
     assert!(r == Ok(12));
 }

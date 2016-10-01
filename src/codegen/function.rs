@@ -6,7 +6,6 @@ use libc;
 
 use llvm::core::*;
 use llvm::prelude::*;
-use llvm::*;
 
 use ast::*;
 use codegen::*;
@@ -59,7 +58,6 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &LLFunction)
 {
     let fi = ctx.get_function(&func.sig.name).expect("Internal Compiler Error: Unknown function");
     let entry_bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, cstr!("entry"));
-    let current_bb = LLVMGetInsertBlock(ctx.builder);
     LLVMPositionBuilderAtEnd(ctx.builder, entry_bb);
 
     ctx.push_stack(fi.function);

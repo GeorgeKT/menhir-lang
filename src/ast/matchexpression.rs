@@ -42,7 +42,7 @@ impl TreePrinter for MatchExpression
     fn print(&self, level: usize)
     {
         let p = prefix(level);
-        println!("{}match ({})", p, self.span);
+        println!("{}match ({}) (type {})", p, self.span, self.typ);
         self.target.print(level + 1);
         for c in &self.cases {
             println!("{} case", p);

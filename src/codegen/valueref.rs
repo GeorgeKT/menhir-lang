@@ -124,6 +124,7 @@ impl ValueRef
         }
     }
 
+/*
     pub unsafe fn inc_ref(&self, ctx: &Context)
     {
         match *self
@@ -141,4 +142,5 @@ impl ValueRef
             _ => (),
         }
     }
+    */
 }

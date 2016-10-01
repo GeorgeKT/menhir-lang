@@ -98,9 +98,20 @@ fn array_lit_to_llrep(func: &mut LLFunction, a: &ArrayLiteral, dst: &LLVar)
 
 fn struct_initializer_to_llrep(func: &mut LLFunction, si: &StructInitializer, dst: &LLVar)
 {
-    for (idx, expr) in si.member_initializers.iter().enumerate() {
-        let v = expr_to_llrep_ret(func, expr);
-        func.add(set_struct_member_instr(dst.clone(), idx, v));
+    let init_members = |func: &mut LLFunction, si: &StructInitializer, dst: &LLVar| {
+        for (idx, expr) in si.member_initializers.iter().enumerate() {
+            let v = expr_to_llrep_ret(func, expr);
+            func.add(set_struct_member_instr(dst.clone(), idx, v));
+        }
+    };
+
+    if let Type::Sum(ref st) = dst.typ {
+        let idx = st.index_of(&si.struct_name).expect("Internal Compiler Error: cannot determine index of sum type case");
+        add_set(func, LLExpr::SumTypeCase(idx), dst);
+        let struct_ptr = make_var(func, LLExpr::SumTypeStruct(dst.clone(), idx), st.cases[idx].typ.clone());
+        init_members(func, si, &struct_ptr);
+    } else {
+        init_members(func, si, dst);
     }
 }
 
@@ -250,6 +261,7 @@ fn struct_pattern_match_to_llrep(
             let cond = make_var(func, LLExpr::EQ(target_sum_type_index, sum_type_index), Type::Bool);
             func.add(branch_if_instr(cond, match_case_bb, next_bb));
 
+            func.set_current_bb(match_case_bb);
             let struct_ptr = make_var(func, LLExpr::SumTypeStruct(target.clone(), idx), st.cases[idx].typ.clone());
             add_bindings(&struct_ptr, func);
         },
@@ -362,9 +374,40 @@ fn match_to_llrep(func: &mut LLFunction, m: &MatchExpression, dst: &LLVar)
     func.set_current_bb(match_end_bb);
 }
 
+fn name_ref_to_llrep(func: &mut LLFunction, nr: &NameRef, dst: &LLVar)
+{
+    let add_name_ref = |func: &mut LLFunction, nr: &NameRef,  dst: &LLVar| {
+        let v = LLVar::named(&nr.name, nr.typ.clone());
+        add_set(func, LLExpr::Ref(v), dst);
+    };
+
+    match dst.typ
+    {
+        Type::Sum(ref st) => {
+            if let Some(idx) = st.index_of(&nr.name) {
+                add_set(func, LLExpr::SumTypeCase(idx), dst);
+            } else {
+                add_name_ref(func, nr, dst);
+            }
+        },
+        Type::Enum(ref et) => {
+            if let Some(idx) = et.index_of(&nr.name) {
+                // enums are integers
+                add_lit(func, LLLiteral::Int(idx as u64), dst);
+            } else {
+                add_name_ref(func, nr, dst);
+            }
+        },
+        _ => {
+            add_name_ref(func, nr, dst);
+        }
+    }
+}
+
 fn expr_to_llrep_ret(func: &mut LLFunction, expr: &Expression) -> LLVar
 {
     let var = func.new_var(expr.get_type());
+    assert!(var.typ != Type::Unknown);
     func.add(LLInstruction::StackAlloc(var.clone()));
     expr_to_llrep(func, expr, &var);
     var
@@ -442,8 +485,7 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression, dst: &LLVar)
         },
 
         Expression::NameRef(ref nr) => {
-            let v = LLVar::named(&nr.name, nr.typ.clone());
-            add_set(func, LLExpr::Ref(v), dst);
+            name_ref_to_llrep(func, nr, dst);
         },
 
         Expression::Let(ref l) => {

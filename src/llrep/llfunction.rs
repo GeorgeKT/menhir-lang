@@ -1,5 +1,6 @@
 use std::fmt;
 use std::collections::{BTreeMap, HashMap};
+use itertools::free::join;
 use ast::{Type, FunctionSignature};
 use llrep::llinstruction::LLInstruction;
 
@@ -208,7 +209,11 @@ impl fmt::Display for LLFunction
             try!(writeln!(f, ""));
         }
 
-        try!(writeln!(f, "{}:", self.sig.name));
+        try!(writeln!(f, "{}({}) -> {}:",
+            self.sig.name,
+            join(self.sig.args.iter().map(|arg| format!("{}: {}", arg.name, arg.typ)), ", "),
+            self.sig.return_type)
+        );
         for bb_ref in &self.block_order {
             let bb = self.blocks.get(bb_ref).expect("Unknown basic block");
             try!(writeln!(f, " {}:", bb.name));

@@ -1,7 +1,7 @@
 use llvm::prelude::*;
 use llvm::core::*;
 
-use ast::{Type, array_type};
+use ast::{Type};
 use codegen::{const_int, const_bool, ValueRef, Context};
 
 #[derive(Debug, Clone)]
@@ -52,23 +52,6 @@ impl Array
         LLVMBuildCall(ctx.builder, concat_fn.function, args.as_mut_ptr(), 4, cstr!(""));
     }
 
-    pub unsafe fn empty(ctx: &Context) -> Array
-    {
-        let slice_type = ctx.resolve_type(&array_type(Type::Int));
-        let slice = Array{
-            element_type: Type::Int,
-            array: ctx.stack_alloc(slice_type, "array"),
-            empty: true,
-        };
-
-        let zero = const_int(ctx, 0);
-        slice.set_length(ctx, zero);
-        slice.set_offset(ctx, zero);
-        slice.set_heap_allocated_flag(ctx, const_bool(ctx, false));
-        slice.set_data_ptr(ctx, LLVMConstPointerNull(LLVMPointerType(LLVMVoidTypeInContext(ctx.context), 0)));
-        slice
-    }
-
     pub unsafe fn init(&self, ctx: &Context, len: LLVMValueRef)
     {
         // First allocate the storage
@@ -80,19 +63,6 @@ impl Array
 
         let first = get_array_element(ctx, array_data, const_int(ctx, 0), &self.element_type);
         self.set_data_ptr(ctx, first.get());
-    }
-
-    pub unsafe fn alloc(ctx: &mut Context, array_type: LLVMTypeRef, element_type: Type, len: usize) -> Array
-    {
-        let mut slice = Array{
-            array: ctx.stack_alloc(array_type, "array"),
-            element_type: element_type,
-            empty: false,
-        };
-
-        let len_value = const_int(ctx, len as u64);
-        slice.init(ctx, len_value);
-        slice
     }
 
     pub unsafe fn fill_with_string_literal(&self, ctx: &Context, glob: LLVMValueRef, len: usize)
@@ -194,11 +164,7 @@ impl Array
         ValueRef::new(element, &self.element_type)
     }
 
-    pub unsafe fn gen_length(&self, ctx: &Context) -> ValueRef
-    {
-        ValueRef::Const(self.get_length_ptr(ctx).load(ctx.builder))
-    }
-
+    /*
     pub unsafe fn inc_ref(&self, ctx: &Context)
     {
         let arc_inc_ref = ctx.get_builtin("arc_inc_ref");
@@ -210,6 +176,7 @@ impl Array
         LLVMBuildCall(ctx.builder, arc_inc_ref.function, args.as_mut_ptr(), 1, cstr!(""));
     }
 
+
     pub unsafe fn dec_ref(&self, ctx: &Context)
     {
         let arc_dec_ref = ctx.get_builtin("arc_dec_ref");
@@ -220,4 +187,5 @@ impl Array
         ];
         LLVMBuildCall(ctx.builder, arc_dec_ref.function, args.as_mut_ptr(), 1, cstr!(""));
     }
+        */
 }

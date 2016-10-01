@@ -51,7 +51,7 @@ impl TreePrinter for IfExpression
     fn print(&self, level: usize)
     {
         let p = prefix(level);
-        println!("{}if ({})", p, self.span);
+        println!("{}if ({}) (type {})", p, self.span, self.typ);
         self.condition.print(level + 1);
         println!("{} then", p);
         self.on_true.print(level + 2);

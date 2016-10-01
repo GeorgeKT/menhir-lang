@@ -29,7 +29,6 @@ use std::rc::Rc;
 use llvm::prelude::*;
 use llvm::core::*;
 
-use ast::*;
 use llrep::*;
 use compileerror::{CompileResult};
 use codegen::function::{gen_function, gen_function_sig};

@@ -1,6 +1,4 @@
 use std::ptr;
-use std::rc::Rc;
-use std::ffi::CString;
 use std::collections::HashMap;
 use libc;
 use llvm::core::*;
@@ -177,6 +175,9 @@ unsafe fn gen_bin_op(ctx: &mut Context, dst: &LLVar, left: &LLVar, right: &LLVar
         Type::Bool => {
             gen_bool_bin_op(ctx, l, r, op)
         },
+        Type::Enum(_) => {
+            gen_int_bin_op(ctx, l, r, op)
+        },
         _ => panic!("Internal Compiler Error: Binary operator {} not support on type {}", op, left.typ),
     });
 }
@@ -196,33 +197,6 @@ unsafe fn gen_unary_op(ctx: &mut Context, dst: &LLVar, target: &LLVar, op: Opera
         _ => panic!("Internal Compiler Error: Operator {} is not a unary operator", op),
     }
 }
-
-/*
-unsafe fn gen_load(ctx: &Context, name: &str, typ: &Type, dst: &mut ValueRef)
-{
-    if let Some(vi) = ctx.get_variable(&name) {
-        dst.store(ctx, &vi.value)
-    } else if let Some(fi) = ctx.get_function(&name) {
-        *dst = ValueRef::new(fi.function, typ);
-    } else {
-        match *typ
-        {
-            Type::Sum(ref st) => {
-                let case_type_ptr = dst.case_type(ctx);
-                let idx = st.index_of(&name).expect("Internal Compiler Error: cannot determine index of sum type case");
-                case_type_ptr.store_direct(ctx, const_int(ctx, idx as u64));
-            },
-            Type::Enum(ref et) => {
-                let idx = et.index_of(&name).expect("Internal Compiler Error: cannot determine index of sum type case");
-                dst.store_direct(ctx, const_int(ctx, idx as u64));
-            },
-            _ => {
-                panic!("Internal Compiler Error: Unknown name {}", name)
-            }
-        }
-    }
-}
-*/
 
 unsafe fn gen_call_args(ctx: &Context, args: &Vec<LLVar>) -> Vec<LLVMValueRef>
 {
@@ -325,6 +299,27 @@ fn gen_func_expr(ctx: &mut Context, dst: &LLVar, name: &str)
     ctx.add_function_alias(&dst.name, func);
 }
 
+unsafe fn gen_sum_type_index(ctx: &mut Context, dst: &LLVar, obj: &LLVar)
+{
+    let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
+    let case_type_ptr = obj_var.value.case_type(ctx);
+    ctx.add_variable(&dst.name, case_type_ptr);
+}
+
+unsafe fn gen_sum_type_struct(ctx: &mut Context, dst: &LLVar, obj: &LLVar, index: usize)
+{
+    let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
+    let case_struct = obj_var.value.case_struct(ctx, index);
+    ctx.add_variable(&dst.name, case_struct);
+}
+
+unsafe fn gen_sum_type_case(ctx: &mut Context, dst: &LLVar, index: usize)
+{
+    let dst_vr = get_value_ref(ctx, dst);
+    let case_type_ptr = dst_vr.case_type(ctx);
+    case_type_ptr.store_direct(ctx, const_int(ctx, index as u64));
+}
+
 unsafe fn get_value_ref(ctx: &mut Context, var: &LLVar) -> ValueRef
 {
     if let Some(ref vr) = ctx.get_variable(&var.name) {
@@ -361,8 +356,9 @@ unsafe fn gen_expr(ctx: &mut Context, dst: &LLVar, expr: &LLExpr)
         LLExpr::ArrayProperty(ref array, ref property) => gen_array_property(ctx, dst, array, property.clone()),
         LLExpr::ArrayHead(ref array) => gen_array_head(ctx, dst, array),
         LLExpr::ArrayTail(ref array) => gen_array_tail(ctx, dst, array),
-        LLExpr::SumTypeIndex(ref obj) => panic!("NYI"),
-        LLExpr::SumTypeStruct(ref obj, index) => panic!("NYI"),
+        LLExpr::SumTypeIndex(ref obj) => gen_sum_type_index(ctx, dst, obj),
+        LLExpr::SumTypeStruct(ref obj, index) => gen_sum_type_struct(ctx, dst, obj, index),
+        LLExpr::SumTypeCase(index) => gen_sum_type_case(ctx, dst, index),
         LLExpr::Ref(ref obj) => gen_ref(ctx, dst, obj),
         LLExpr::Func(ref func) => gen_func_expr(ctx, dst, func),
     }

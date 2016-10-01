@@ -110,7 +110,7 @@ impl TreePrinter for Expression
                 op.expression.print(level + 1)
             },
             Expression::BinaryOp(ref op) => {
-                println!("{}binary {} ({})", p, op.operator, op.span);
+                println!("{}binary {} ({}) (type: {})", p, op.operator, op.span, op.typ);
                 op.left.print(level + 1);
                 op.right.print(level + 1)
             },

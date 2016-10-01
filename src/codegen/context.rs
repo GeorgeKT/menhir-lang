@@ -19,7 +19,6 @@ pub struct StackFrame
 {
     pub symbols: SymbolTable,
     pub current_function: LLVMValueRef,
-    to_dec_ref: Vec<ValueRef>,
 }
 
 impl StackFrame
@@ -29,21 +28,6 @@ impl StackFrame
         StackFrame{
             symbols: SymbolTable::new(),
             current_function: current_function,
-            to_dec_ref: Vec::new(),
-        }
-    }
-
-    pub fn add_dec_ref_target(&mut self, target: ValueRef)
-    {
-        self.to_dec_ref.push(target);
-    }
-
-    pub fn cleanup(&self, ctx: &Context)
-    {
-        for object in &self.to_dec_ref {
-            unsafe {
-                object.dec_ref(ctx);
-            }
         }
     }
 }
@@ -148,10 +132,7 @@ impl Context
 
     pub fn pop_stack(&mut self)
     {
-        let sf = self.stack.pop();
-        if let Some(stack_frame) = sf {
-            stack_frame.cleanup(self);
-        }
+        self.stack.pop();
     }
 
     pub fn get_current_function(&self) -> LLVMValueRef
@@ -203,11 +184,6 @@ impl Context
         let name = CString::new(name).expect("Invalid string");
         let void_ptr = LLVMBuildCall(self.builder, arc_alloc.function, args.as_mut_ptr(), 1, name.as_ptr());
         LLVMBuildBitCast(self.builder, void_ptr, LLVMPointerType(element_type, 0), cstr!("cast_to_ptr"))
-    }
-
-    pub fn add_dec_ref_target(&mut self, target: ValueRef)
-    {
-        self.stack.last_mut().expect("Stack is empty").add_dec_ref_target(target)
     }
 
     pub unsafe fn gen_object_file(&self, opts: &CodeGenOptions) -> CompileResult<String>

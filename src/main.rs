@@ -8,7 +8,6 @@ extern crate uuid;
 
 mod ast;
 #[macro_use]
-#[allow(unused)]
 mod codegen;
 mod compileerror;
 mod llrep;
