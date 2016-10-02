@@ -203,6 +203,7 @@ unsafe fn gen_call_args(ctx: &Context, args: &Vec<LLVar>) -> Vec<LLVMValueRef>
     let mut arg_vals = Vec::with_capacity(args.len());
     for arg in args.iter()
     {
+        println!("call arg: {}", arg.name);
         let var = ctx.get_variable(&arg.name).expect("Unknown variable");
         if arg.typ.pass_by_ptr() {
             arg_vals.push(var.value.get())
@@ -364,8 +365,30 @@ unsafe fn gen_expr(ctx: &mut Context, dst: &LLVar, expr: &LLExpr)
     }
 }
 
+unsafe fn inc_ref(vr: &ValueRef, ctx: &Context)
+{
+    let arc_inc_ref = ctx.get_builtin("arc_inc_ref");
+    let void_ptr = LLVMBuildBitCast(ctx.builder, vr.get(), ctx.resolve_type(&Type::VoidPtr), cstr!("cast_to_void_ptr"));
+    let mut args = vec![
+        void_ptr
+    ];
+    LLVMBuildCall(ctx.builder, arc_inc_ref.function, args.as_mut_ptr(), 1, cstr!(""));
+}
+
+
+unsafe fn dec_ref(vr: &ValueRef, ctx: &Context)
+{
+    let arc_dec_ref = ctx.get_builtin("arc_dec_ref");
+    let void_ptr = LLVMBuildBitCast(ctx.builder, vr.get(), ctx.resolve_type(&Type::VoidPtr), cstr!("cast_to_void_ptr"));
+    let mut args = vec![
+        void_ptr
+    ];
+    LLVMBuildCall(ctx.builder, arc_dec_ref.function, args.as_mut_ptr(), 1, cstr!(""));
+}
+
 pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: &HashMap<LLBasicBlockRef, LLVMBasicBlockRef>)
 {
+    print!(">> {}", instr);
     match *instr
     {
         LLInstruction::Set(ref s) => {
@@ -378,9 +401,13 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: 
             member_ptr.store(ctx, &ctx.get_variable(&s.value.name).expect("Unknown variable value").value);
         },
 
-        LLInstruction::StackAlloc(ref var) => {
+        LLInstruction::Alloc(ref var) => {
             let v = ValueRef::new(
-                ctx.stack_alloc(ctx.resolve_type(&var.typ), &var.name),
+                if var.typ.pass_by_ptr() {
+                    ctx.heap_alloc(ctx.resolve_type(&var.typ), &var.name)
+                } else {
+                    ctx.stack_alloc(ctx.resolve_type(&var.typ), &var.name)
+                },
                 &var.typ
             );
             ctx.add_variable(&var.name, v);
@@ -406,6 +433,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: 
         LLInstruction::Bind(ref b) => {
             if let Type::Func(_) = b.var.typ {
                 let func = ctx.get_function(&b.var.name).expect("Unknown function");
+                ctx.add_variable(&b.name, ValueRef::new(func.function, &b.var.typ));
                 ctx.add_function_alias(&b.name, func);
             } else {
                 let var = ctx.get_variable(&b.var.name).expect("Unknown variable");
@@ -423,6 +451,16 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: 
             let on_false_bb = blocks.get(&b.on_false).expect("Unknown basic block");
             let cond = ctx.get_variable(&b.cond.name).expect("Unknown variable");
             LLVMBuildCondBr(ctx.builder, cond.value.load(ctx.builder), *on_true_bb, *on_false_bb);
+        },
+
+        LLInstruction::IncRef(ref v) => {
+            let var = ctx.get_variable(&v.name).expect("Unknown variable");
+            inc_ref(&var.value, ctx);
+        },
+
+        LLInstruction::DecRef(ref v) => {
+            let var = ctx.get_variable(&v.name).expect("Unknown variable");
+            dec_ref(&var.value, ctx);
         },
     }
 }

@@ -131,7 +131,7 @@ pub struct LLBranchIf
 pub enum LLInstruction
 {
     //SetArrayElement{var: LLVar, index: LLExpr, value: LLExpr},
-    StackAlloc(LLVar),
+    Alloc(LLVar),
     SetStructMember(LLSetStructMember),
     StartScope,
     EndScope,
@@ -141,6 +141,8 @@ pub enum LLInstruction
     ReturnVoid,
     Branch(LLBasicBlockRef),
     BranchIf(LLBranchIf),
+    IncRef(LLVar),
+    DecRef(LLVar),
 }
 
 pub fn set_instr(var: LLVar, e: LLExpr) -> LLInstruction
@@ -188,8 +190,8 @@ impl fmt::Display for LLInstruction
     {
         match *self
         {
-            LLInstruction::StackAlloc(ref var) => {
-                writeln!(f, "  stack alloc {}", var)
+            LLInstruction::Alloc(ref var) => {
+                writeln!(f, "  alloc {}", var)
             },
             LLInstruction::SetStructMember(ref s) => {
                 writeln!(f, "  set {}.{} = {}", s.obj, s.member_index, s.value)
@@ -217,6 +219,12 @@ impl fmt::Display for LLInstruction
             },
             LLInstruction::BranchIf(ref b) => {
                 writeln!(f, "  brif {} ? {} : {} ", b.cond, b.on_true, b.on_false)
+            },
+            LLInstruction::IncRef(ref v) => {
+                writeln!(f, "  incref {}", v.name)
+            },
+            LLInstruction::DecRef(ref v) => {
+                writeln!(f, "  decref {}", v.name)
             },
         }
     }

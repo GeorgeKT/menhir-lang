@@ -42,6 +42,7 @@ impl fmt::Display for LLVar
 pub struct Scope
 {
     named_vars: HashMap<String, LLVar>,
+    to_dec_ref: Vec<LLVar>,
 }
 
 impl Scope
@@ -49,7 +50,8 @@ impl Scope
     pub fn new() -> Scope
     {
         Scope{
-            named_vars: HashMap::new()
+            named_vars: HashMap::new(),
+            to_dec_ref: Vec::new(),
         }
     }
 
@@ -61,6 +63,19 @@ impl Scope
     pub fn get_named_var(&self, var: &str) -> Option<LLVar>
     {
         self.named_vars.get(var).map(|v| v.clone())
+    }
+
+    pub fn add_dec_ref_target(&mut self, v: LLVar)
+    {
+        self.to_dec_ref.push(v);
+    }
+
+    pub fn cleanup(&self, func: &mut LLFunction)
+    {
+        // Cleanup in reverse construction order
+        for v in self.to_dec_ref.iter().rev() {
+            func.add(LLInstruction::DecRef(v.clone()));
+        }
     }
 }
 
@@ -141,6 +156,14 @@ impl LLFunction
 
     pub fn add(&mut self, inst: LLInstruction)
     {
+        // Pop final scope before returning
+        match inst
+        {
+            LLInstruction::Return(_) => self.pop_scope(),
+            LLInstruction::ReturnVoid => self.pop_scope(),
+            _ => (),
+        }
+
         let idx = self.current_bb;
         self.blocks.get_mut(&idx).map(|bb| bb.instructions.push(inst));
     }
@@ -179,7 +202,8 @@ impl LLFunction
 
     pub fn pop_scope(&mut self)
     {
-        self.scopes.pop();
+        let s = self.scopes.pop().expect("Empty Scope Stack");
+        s.cleanup(self);
     }
 
     pub fn add_named_var(&mut self, var: LLVar)
@@ -197,6 +221,12 @@ impl LLFunction
         }
 
         None
+    }
+
+    pub fn add_dec_ref_target(&mut self, v: LLVar)
+    {
+        let scope = self.scopes.last_mut().expect("Empty Scope Stack");
+        scope.add_dec_ref_target(v);
     }
 }
 

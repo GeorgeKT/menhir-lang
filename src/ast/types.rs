@@ -406,7 +406,11 @@ impl fmt::Display for StructMember
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
-        write!(f, "{}: {}", self.name, self.typ)
+        if self.name.is_empty() {
+            write!(f, "{}", self.typ)
+        } else {
+            write!(f, "{}: {}", self.name, self.typ)
+        }
     }
 }
 

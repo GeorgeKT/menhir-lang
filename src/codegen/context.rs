@@ -161,7 +161,6 @@ impl Context
         alloc
     }
 
-/*
     pub unsafe fn heap_alloc(&self, typ: LLVMTypeRef, name: &str) -> LLVMValueRef
     {
         let arc_alloc = self.get_builtin("arc_alloc");
@@ -169,10 +168,10 @@ impl Context
         let mut args = vec![
             const_int(self, size as u64)
         ];
-        let void_ptr = LLVMBuildCall(self.builder, arc_alloc.function, args.as_mut_ptr(), 1, cstr!(name));
+        let name = CString::new(name).expect("Invalid string");
+        let void_ptr = LLVMBuildCall(self.builder, arc_alloc.function, args.as_mut_ptr(), 1, name.as_ptr());
         LLVMBuildBitCast(self.builder, void_ptr, LLVMPointerType(typ, 0), cstr!("cast_to_ptr"))
     }
-    */
 
     pub unsafe fn heap_alloc_array(&self, element_type: LLVMTypeRef, len: LLVMValueRef, name: &str) -> LLVMValueRef
     {

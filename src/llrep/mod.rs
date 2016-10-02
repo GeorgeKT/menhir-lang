@@ -57,7 +57,7 @@ fn bind(func: &mut LLFunction, name: &str, var: LLVar)
 
 fn call_to_llrep(func: &mut LLFunction, c: &Call, dst: &LLVar)
 {
-    let args = c.args.iter().map(|arg| expr_to_llrep_ret(func, arg)).collect();
+    let args = c.args.iter().map(|arg| to_llrep(func, arg)).collect();
     func.add(set_instr(
         dst.clone(),
         LLExpr::Call(
@@ -69,7 +69,7 @@ fn call_to_llrep(func: &mut LLFunction, c: &Call, dst: &LLVar)
 
 fn add_binding(func: &mut LLFunction, b: &LetBinding)
 {
-    let e = expr_to_llrep_ret(func, &b.init);
+    let e = to_llrep(func, &b.init);
     bind(func, &b.name, e);
     func.add_named_var(LLVar::named(&b.name, b.typ.clone()));
 }
@@ -82,7 +82,7 @@ fn let_to_llrep(func: &mut LLFunction, l: &LetExpression, dst: &LLVar)
 
     func.add(LLInstruction::StartScope);
     func.push_scope();
-    expr_to_llrep(func, &l.expression, dst);
+    expr_to_llrep_dst(func, &l.expression, dst);
     func.pop_scope();
     func.add(LLInstruction::EndScope);
 }
@@ -90,7 +90,7 @@ fn let_to_llrep(func: &mut LLFunction, l: &LetExpression, dst: &LLVar)
 fn array_lit_to_llrep(func: &mut LLFunction, a: &ArrayLiteral, dst: &LLVar)
 {
     let vars = a.elements.iter()
-        .map(|e| expr_to_llrep_ret(func, e))
+        .map(|e| to_llrep(func, e))
         .collect();
 
     add_lit(func, LLLiteral::Array(vars), dst);
@@ -100,7 +100,7 @@ fn struct_initializer_to_llrep(func: &mut LLFunction, si: &StructInitializer, ds
 {
     let init_members = |func: &mut LLFunction, si: &StructInitializer, dst: &LLVar| {
         for (idx, expr) in si.member_initializers.iter().enumerate() {
-            let v = expr_to_llrep_ret(func, expr);
+            let v = to_llrep(func, expr);
             func.add(set_struct_member_instr(dst.clone(), idx, v));
         }
     };
@@ -202,7 +202,7 @@ fn match_case_body_to_llrep(
     dst: &LLVar)
 {
     func.set_current_bb(match_case_bb);
-    expr_to_llrep(func, &mc.to_execute, dst);
+    expr_to_llrep_dst(func, &mc.to_execute, dst);
     func.add(LLInstruction::Branch(match_end_bb));
     func.set_current_bb(next_bb);
 }
@@ -362,7 +362,7 @@ fn match_case_to_llrep(func: &mut LLFunction, mc: &MatchCase, target: &LLVar, ma
 
 fn match_to_llrep(func: &mut LLFunction, m: &MatchExpression, dst: &LLVar)
 {
-    let target_var = expr_to_llrep_ret(func, &m.target);
+    let target_var = to_llrep(func, &m.target);
     let match_end_bb = func.create_basic_block();
 
     for mc in &m.cases {
@@ -374,7 +374,7 @@ fn match_to_llrep(func: &mut LLFunction, m: &MatchExpression, dst: &LLVar)
     func.set_current_bb(match_end_bb);
 }
 
-fn name_ref_to_llrep(func: &mut LLFunction, nr: &NameRef, dst: &LLVar)
+fn name_ref_to_llrep_dst(func: &mut LLFunction, nr: &NameRef, dst: &LLVar)
 {
     let add_name_ref = |func: &mut LLFunction, nr: &NameRef,  dst: &LLVar| {
         let v = LLVar::named(&nr.name, nr.typ.clone());
@@ -404,16 +404,33 @@ fn name_ref_to_llrep(func: &mut LLFunction, nr: &NameRef, dst: &LLVar)
     }
 }
 
-fn expr_to_llrep_ret(func: &mut LLFunction, expr: &Expression) -> LLVar
+
+fn name_ref_to_llrep(nr: &NameRef) -> Option<LLVar>
 {
-    let var = func.new_var(expr.get_type());
-    assert!(var.typ != Type::Unknown);
-    func.add(LLInstruction::StackAlloc(var.clone()));
-    expr_to_llrep(func, expr, &var);
-    var
+    match nr.typ
+    {
+        Type::Sum(ref st) => {
+            if let Some(_) = st.index_of(&nr.name) {
+                None
+            } else {
+                Some(LLVar::named(&nr.name, nr.typ.clone()))
+            }
+        },
+        Type::Enum(ref et) => {
+            if let Some(_) = et.index_of(&nr.name) {
+                None
+            } else {
+                Some(LLVar::named(&nr.name, nr.typ.clone()))
+            }
+        },
+        _ => {
+            Some(LLVar::named(&nr.name, nr.typ.clone()))
+        }
+    }
 }
 
-fn expr_to_llrep(func: &mut LLFunction, expr: &Expression, dst: &LLVar)
+
+fn expr_to_llrep_dst(func: &mut LLFunction, expr: &Expression, dst: &LLVar)
 {
     match *expr
     {
@@ -421,11 +438,11 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression, dst: &LLVar)
             match u.operator
             {
                 Operator::Sub => {
-                    let v = expr_to_llrep_ret(func, &u.expression);
+                    let v = to_llrep(func, &u.expression);
                     func.add(set_instr(dst.clone(), LLExpr::USub(v)));
                 },
                 Operator::Not => {
-                    let v = expr_to_llrep_ret(func, &u.expression);
+                    let v = to_llrep(func, &u.expression);
                     func.add(set_instr(dst.clone(), LLExpr::Not(v)));
                 },
                 _ => panic!("Internal Compiler Error: Invalid unary operator {}", u.operator),
@@ -433,8 +450,8 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression, dst: &LLVar)
         },
 
         Expression::BinaryOp(ref op) => {
-            let l = expr_to_llrep_ret(func, &op.left);
-            let r = expr_to_llrep_ret(func, &op.right);
+            let l = to_llrep(func, &op.left);
+            let r = to_llrep(func, &op.right);
             let llexpr = match op.operator
             {
                 Operator::Add => LLExpr::Add(l, r),
@@ -485,7 +502,7 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression, dst: &LLVar)
         },
 
         Expression::NameRef(ref nr) => {
-            name_ref_to_llrep(func, nr, dst);
+            name_ref_to_llrep_dst(func, nr, dst);
         },
 
         Expression::Let(ref l) => {
@@ -518,9 +535,9 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression, dst: &LLVar)
         Expression::Block(ref b) => {
             for (idx, e) in b.expressions.iter().enumerate() {
                 if idx == b.expressions.len() - 1 {
-                    expr_to_llrep(func, e, dst);
+                    expr_to_llrep_dst(func, e, dst);
                 } else {
-                    expr_to_llrep_ret(func, e);
+                    to_llrep(func, e);
                 }
             }
         },
@@ -531,12 +548,68 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression, dst: &LLVar)
             add_set(func, LLExpr::Func(l.sig.name.clone()), dst);
         },
 
+        _ => panic!("NYI"),
+    }
+
+}
+
+fn to_llrep(func: &mut LLFunction, expr: &Expression) -> LLVar
+{
+    match expr_to_llrep(func, expr)
+    {
+        Some(v) => v,
+        None=> {
+            let var = alloc(func, expr.get_type());
+            if var.typ.return_by_ptr() {
+                func.add_dec_ref_target(var.clone());
+            }
+            expr_to_llrep_dst(func, expr, &var);
+            var
+        }
+    }
+}
+
+fn expr_to_llrep(_func: &mut LLFunction, expr: &Expression) -> Option<LLVar>
+{
+    match *expr
+    {
+        Expression::NameRef(ref nr) => {
+            name_ref_to_llrep(nr)
+        },
+
+/*£
+        Expression::Let(ref l) => {
+            let_to_llrep(func, l, dst);
+        },
+
+        Expression::StructInitializer(ref si) => {
+            struct_initializer_to_llrep(func, si, dst);
+        },
+
+        Expression::Block(ref b) => {
+            for (idx, e) in b.expressions.iter().enumerate() {
+                if idx == b.expressions.len() - 1 {
+                    expr_to_llrep_dst(func, e, dst);
+                } else {
+                    to_llrep(func, e);
+                }
+            }
+        },
+*/
         /*
         Expression::ArrayGenerator(ref _a) => panic!("NYI"),
         */
 
-        _ => panic!("NYI"),
+        _ => None,
     }
+}
+
+fn alloc(func: &mut LLFunction, typ: Type) -> LLVar
+{
+    assert!(typ != Type::Unknown);
+    let var = func.new_var(typ);
+    func.add(LLInstruction::Alloc(var.clone()));
+    var
 }
 
 fn func_to_llrep(sig: &FunctionSignature, expression: &Expression) -> LLFunction
@@ -545,12 +618,10 @@ fn func_to_llrep(sig: &FunctionSignature, expression: &Expression) -> LLFunction
 
     if sig.return_type.return_by_ptr() {
         let ret = LLVar::named("$ret", sig.return_type.clone());
-        expr_to_llrep(&mut llfunc,  &expression, &ret);
+        expr_to_llrep_dst(&mut llfunc,  &expression, &ret);
         llfunc.add(LLInstruction::ReturnVoid);
     } else {
-        let var = llfunc.new_var(sig.return_type.clone());
-        llfunc.add(LLInstruction::StackAlloc(var.clone()));
-        expr_to_llrep(&mut llfunc, &expression, &var);
+        let var = to_llrep(&mut llfunc, &expression);
         llfunc.add(ret_instr(var));
     }
     llfunc

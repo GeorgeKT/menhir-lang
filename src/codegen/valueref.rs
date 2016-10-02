@@ -42,6 +42,9 @@ impl ValueRef
             Type::Sum(ref st) => {
                 ValueRef::Sum(SumTypeValue::new(value, st.clone()))
             },
+            Type::Func(_) => {
+                ValueRef::Const(value)
+            },
             _ => {
                 ValueRef::Ptr(value)
             },

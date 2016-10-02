@@ -69,6 +69,7 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &LLFunction)
             Type::Func(ref ft) => {
                 let func_sig = anon_sig(&arg.name, &ft.return_type, &ft.args);
                 let fi = gen_function_ptr(ctx, var, func_sig);
+                ctx.add_variable(&arg.name, ValueRef::new(fi.function, &arg.typ));
                 ctx.add_function(Rc::new(fi));
             },
             _ => {
