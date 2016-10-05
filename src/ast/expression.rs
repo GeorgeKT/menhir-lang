@@ -71,6 +71,7 @@ impl Expression
         }
     }
 
+/*
     pub fn get_type(&self) -> Type
     {
         match *self
@@ -91,7 +92,7 @@ impl Expression
             Expression::MemberAccess(ref sma) => sma.typ.clone(),
         }
     }
-
+*/
 }
 
 

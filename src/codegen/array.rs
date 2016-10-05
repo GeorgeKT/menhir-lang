@@ -9,7 +9,6 @@ pub struct Array
 {
     array: LLVMValueRef,
     pub element_type: Type,
-    empty: bool,
 }
 
 unsafe fn heap_alloc_array(ctx: &Context, element_type: &Type, len: LLVMValueRef) -> LLVMValueRef
@@ -28,28 +27,26 @@ unsafe fn get_array_element(ctx: &Context, array: LLVMValueRef, index: LLVMValue
 
 impl Array
 {
-    pub unsafe fn new(arr: LLVMValueRef, element_type: Type, empty: bool) -> Array
+    pub unsafe fn new(arr: LLVMValueRef, element_type: Type) -> Array
     {
         Array{
             array: arr,
             element_type: element_type,
-            empty: empty,
         }
     }
 
-    pub unsafe fn concat_store(ctx: &Context, left: &Array, right: &Array, dst: &Array)
+    pub unsafe fn concat(ctx: &Context, left: &Array, right: &Array) -> Array
     {
         let concat_fn = ctx.get_builtin("concat");
-        let element_type = if !left.empty {&left.element_type} else {&right.element_type};
-        let size = ctx.size_of_type(element_type);
+        let size = ctx.size_of_type(&left.element_type);
         let mut args = vec![
             left.array,
             right.array,
             const_int(ctx, size as u64),
-            dst.array,
         ];
 
-        LLVMBuildCall(ctx.builder, concat_fn.function, args.as_mut_ptr(), 4, cstr!(""));
+        let arr = LLVMBuildCall(ctx.builder, concat_fn.function, args.as_mut_ptr(), args.len() as u32, cstr!(""));
+        Array::new(arr, left.element_type.clone())
     }
 
     pub unsafe fn init(&self, ctx: &Context, len: LLVMValueRef)

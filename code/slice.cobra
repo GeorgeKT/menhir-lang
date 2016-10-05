@@ -1,10 +1,6 @@
-fold(v: [$a], accu: $b, fn: ($b, $a) -> $b) -> $b =
-    match v:
-        [] => accu,
-        [hd | tail] => fold(tail, fn(accu, hd), fn)
+len(a: string) -> int = a.len
 
-sum(v: [int]) -> int =
-    fold(v, 0, @(s, el) -> s + el)
+concat(a: string, b: string) -> string = a + b
 
 main() -> int =
-    sum([4, 5, 6, 7])
+    let x = concat("Hello", " World") in len(x)

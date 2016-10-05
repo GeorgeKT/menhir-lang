@@ -1,10 +1,7 @@
 type PairOrSingle = Pair{int, int} | Single{int}
 
 pair_or_single(a: int, b: int) -> PairOrSingle =
-    if a != b:
-        Pair{a, b}
-    else
-        Single{a}
+    if a != b: Pair{a, b} else Single{a}
 
 value_of(v: PairOrSingle) -> int =
     match v:

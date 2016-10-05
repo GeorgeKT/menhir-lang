@@ -90,8 +90,13 @@ fn main()
         try!(type_check_module(&mut module));
 
         let llmod = compile_to_llrep(&module);
-        println!("llmod:\n");
-        println!("{}", llmod);
+
+        if debug_compiler {
+            println!("llmod:\n");
+            println!("------\n");
+            println!("{}", llmod);
+        }
+
 
         llvm_init();
         let mut ctx = try!(codegen(&llmod));

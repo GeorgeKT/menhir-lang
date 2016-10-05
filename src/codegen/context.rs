@@ -296,7 +296,7 @@ impl Context
                     LLVMInt64TypeInContext(self.context),  // Offset in data pointer
                     LLVMInt1TypeInContext(self.context),   // Heap allocated flag
                 ];
-                LLVMStructType(member_types.as_mut_ptr(), member_types.len() as c_uint, 0)
+                LLVMStructTypeInContext(self.context, member_types.as_mut_ptr(), member_types.len() as c_uint, 0)
             },
             Type::Func(ref ft) => {
                 let mut llvm_arg_types = Vec::with_capacity(ft.args.len());
@@ -304,12 +304,10 @@ impl Context
                     llvm_arg_types.push(self.resolve_type(arg));
                 }
 
-                LLVMPointerType(
-                    LLVMFunctionType(
-                        self.resolve_type(&ft.return_type),
-                        llvm_arg_types.as_mut_ptr(),
-                        ft.args.len() as c_uint, 0
-                    ),
+                LLVMFunctionType(
+                    self.resolve_type(&ft.return_type),
+                    llvm_arg_types.as_mut_ptr(),
+                    ft.args.len() as c_uint,
                     0
                 )
             },
@@ -318,7 +316,7 @@ impl Context
                 for m in &st.members {
                     llvm_member_types.push(self.resolve_type(&m.typ));
                 }
-                LLVMStructType(llvm_member_types.as_mut_ptr(), llvm_member_types.len() as c_uint, 0)
+                LLVMStructTypeInContext(self.context, llvm_member_types.as_mut_ptr(), llvm_member_types.len() as c_uint, 0)
             },
             Type::Sum(ref st) => {
                 let mut member_types = vec![LLVMInt64TypeInContext(self.context)]; // first entry is the tag
@@ -334,7 +332,7 @@ impl Context
 
                 // Use the largest type, we will cast to the other case types
                 member_types.push(largest_type);
-                LLVMStructType(member_types.as_mut_ptr(), member_types.len() as c_uint, 0)
+                LLVMStructTypeInContext(self.context, member_types.as_mut_ptr(), member_types.len() as c_uint, 0)
             },
             Type::Enum(_) => {
                 LLVMInt64TypeInContext(self.context)

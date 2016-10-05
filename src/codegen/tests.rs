@@ -510,3 +510,27 @@ main() -> int = foo('b') + foo('c')
     println!("r: {:?}", r);
     assert!(r == Ok(8));
 }
+
+#[test]
+fn test_var_escape()
+{
+let r = run(r#"
+    type Foo = {
+        bar: int
+    }
+
+    choose(num: int) -> Foo = (
+        let a = Foo{6};
+        let b = Foo{7};
+        if num > 6:
+            a
+        else
+            b
+    )
+
+    main() -> int =
+        let c = choose(10) in c.bar
+    "#, true);
+    println!("r: {:?}", r);
+    assert!(r == Ok(6));
+}

@@ -61,6 +61,8 @@ unsafe fn gen_string_literal(ctx: &Context, s: &str, array: &Array)
 unsafe fn gen_literal(ctx: &mut Context, dst: &LLVar, lit: &LLLiteral)
 {
     let dst_vr = get_value_ref(ctx, dst);
+
+
     match *lit
     {
         LLLiteral::Int(v) => dst_vr.store_direct(ctx, const_int(ctx, v)),
@@ -69,18 +71,36 @@ unsafe fn gen_literal(ctx: &mut Context, dst: &LLVar, lit: &LLLiteral)
         LLLiteral::Bool(v) => dst_vr.store_direct(ctx, const_bool(ctx, v)),
 
         LLLiteral::String(ref v) => {
-            if let ValueRef::Array(ref array) = dst_vr {
-                gen_string_literal(ctx, v, array)
-            } else {
-                panic!("Internal Compiler Error: Expecting array ValueRef");
+            let fill_string_literal = |dst_vr: &ValueRef| {
+                if let &ValueRef::Array(ref array) = dst_vr {
+                    gen_string_literal(ctx, v, array)
+                } else {
+                    panic!("Internal Compiler Error: Expecting array ValueRef")
+                }
+            };
+
+            match dst_vr
+            {
+                ValueRef::Array(_) => fill_string_literal(&dst_vr),
+                ValueRef::HeapPtr(_, _) => fill_string_literal(&dst_vr.deref(ctx)),
+                _ => panic!("Internal Compiler Error: Expecting array ValueRef"),
             }
         },
 
         LLLiteral::Array(ref vars) => {
-            if let ValueRef::Array(ref array) = dst_vr {
-                gen_array_literal(ctx, vars, array);
-            } else {
-                panic!("Internal Compiler Error: Expecting array ValueRef");
+            let fill_array_literal = |dst_vr: &ValueRef| {
+                if let &ValueRef::Array(ref array) = dst_vr {
+                    gen_array_literal(ctx, vars, array)
+                } else {
+                    panic!("Internal Compiler Error: Expecting array ValueRef")
+                }
+            };
+
+            match dst_vr
+            {
+                ValueRef::Array(_) => fill_array_literal(&dst_vr),
+                ValueRef::HeapPtr(_, _) => fill_array_literal(&dst_vr.deref(ctx)),
+                _ => panic!("Internal Compiler Error: Expecting array ValueRef"),
             }
         },
     }
@@ -140,13 +160,14 @@ unsafe fn gen_array_bin_op(ctx: &mut Context, dst: &LLVar, left: &LLVar, right: 
 {
     match op {
         Operator::Add => {
-            let l = &ctx.get_variable(&left.name).expect("Unknown variable").value;
-            let r = &ctx.get_variable(&right.name).expect("Unknown variable").value;
+            let l = ctx.get_variable(&left.name).expect("Unknown variable").value.deref(ctx);
+            let r = ctx.get_variable(&right.name).expect("Unknown variable").value.deref(ctx);
             let dst = get_value_ref(ctx, dst);
-            match (l, r, &dst)
+            match (l, r)
             {
-                (&ValueRef::Array(ref ar), &ValueRef::Array(ref br), &ValueRef::Array(ref dr)) => {
-                    Array::concat_store(ctx, ar, br, dr);
+                (ValueRef::Array(ref ar), ValueRef::Array(ref br)) => {
+                    let dst_val = ValueRef::Array(Array::concat(ctx, ar, br));
+                    dst.store(ctx, &dst_val);
                 }
                 _ => panic!("Internal Compiler Error: Operator {} expects two arrays", op),
             }
@@ -203,13 +224,8 @@ unsafe fn gen_call_args(ctx: &Context, args: &Vec<LLVar>) -> Vec<LLVMValueRef>
     let mut arg_vals = Vec::with_capacity(args.len());
     for arg in args.iter()
     {
-        println!("call arg: {}", arg.name);
         let var = ctx.get_variable(&arg.name).expect("Unknown variable");
-        if arg.typ.pass_by_ptr() {
-            arg_vals.push(var.value.get())
-        } else {
-            arg_vals.push(var.value.load(ctx.builder))
-        }
+        arg_vals.push(var.value.load(ctx.builder))
     }
     arg_vals
 }
@@ -218,15 +234,11 @@ unsafe fn gen_call(ctx: &mut Context, dst: &LLVar, name: &str, args: &Vec<LLVar>
 {
     let func = ctx.get_function(name).expect("Internal Compiler Error: Unknown function");
     let mut arg_vals = gen_call_args(ctx, args);
-    let dst_val = get_value_ref(ctx, dst);
-    if func.sig.return_type.return_by_ptr()
-    {
-        arg_vals.push(dst_val.get());
-        LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr!(""));
-    }
-    else
-    {
-        let ret = LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr!("ret"));
+    let ret = LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr!("ret"));
+    if dst.typ.allocate_on_heap() {
+        ctx.add_variable(&dst.name, ValueRef::new(ret, &dst.typ));
+    } else {
+        let dst_val = get_value_ref(ctx, dst);
         dst_val.store_direct(ctx, ret);
     }
 }
@@ -235,7 +247,12 @@ unsafe fn gen_struct_member(ctx: &mut Context, dst: &LLVar, obj: &LLVar, index: 
 {
     let struct_object = ctx.get_variable(&obj.name).expect("Unknown variable");
     let member_ptr = struct_object.value.member(ctx, &MemberAccessType::StructMember(index));
-    ctx.add_variable(&dst.name, member_ptr);
+    if dst.typ.allocate_on_heap() {
+        ctx.add_variable(&dst.name, member_ptr);
+    } else {
+        let dst_var = get_value_ref(ctx, dst);
+        dst_var.store(ctx, &member_ptr);
+    }
 }
 
 unsafe fn gen_array_property(ctx: &mut Context, dst: &LLVar, array: &LLVar, property: ArrayProperty)
@@ -247,15 +264,7 @@ unsafe fn gen_array_property(ctx: &mut Context, dst: &LLVar, array: &LLVar, prop
 
 unsafe fn gen_ref(ctx: &mut Context, dst: &LLVar, var: &LLVar)
 {
-    if dst.typ.pass_by_ptr()
-    {
-        let value_ref = ctx.get_variable(&var.name).expect("Unknown variable").value.get();
-        let ptr = ctx.stack_alloc(LLVMTypeOf(value_ref), "ptr");
-        LLVMBuildStore(ctx.builder, value_ref, ptr);
-        let vr = LLVMBuildLoad(ctx.builder, ptr, cstr!("ref"));
-        ctx.add_variable(&dst.name, ValueRef::new(vr, &dst.typ));
-    }
-    else if let Type::Func(_) = dst.typ
+    if let Type::Func(_) = dst.typ
     {
         let func = ctx.get_function(&var.name).expect("Unknown function");
         let dst_var = get_value_ref(ctx, dst);
@@ -321,6 +330,14 @@ unsafe fn gen_sum_type_case(ctx: &mut Context, dst: &LLVar, index: usize)
     case_type_ptr.store_direct(ctx, const_int(ctx, index as u64));
 }
 
+unsafe fn gen_heap_alloc(ctx: &mut Context, var: &LLVar, typ: &Type)
+{
+    let vr = get_value_ref(ctx, var);
+    let typ = ctx.resolve_type(typ);
+    let ptr = ctx.heap_alloc(typ, &var.name);
+    vr.store_direct(ctx, ptr);
+}
+
 unsafe fn get_value_ref(ctx: &mut Context, var: &LLVar) -> ValueRef
 {
     if let Some(ref vr) = ctx.get_variable(&var.name) {
@@ -337,21 +354,8 @@ unsafe fn gen_expr(ctx: &mut Context, dst: &LLVar, expr: &LLExpr)
     match *expr
     {
         LLExpr::Literal(ref l) => gen_literal(ctx, dst, l),
-        LLExpr::Add(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::Add),
-        LLExpr::Sub(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::Sub),
-        LLExpr::Mul(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::Mul),
-        LLExpr::Div(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::Div),
-        LLExpr::Mod(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::Mod),
-        LLExpr::And(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::And),
-        LLExpr::Or(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::Or),
-        LLExpr::LT(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::LessThan),
-        LLExpr::LTE(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::LessThanEquals),
-        LLExpr::GT(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::GreaterThan),
-        LLExpr::GTE(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::GreaterThanEquals),
-        LLExpr::EQ(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::Equals),
-        LLExpr::NEQ(ref a, ref b) => gen_bin_op(ctx, dst, a, b, Operator::NotEquals),
-        LLExpr::USub(ref v) => gen_unary_op(ctx, dst, v, Operator::Sub),
-        LLExpr::Not(ref v) => gen_unary_op(ctx, dst, v, Operator::Not),
+        LLExpr::UnaryOp(op, ref v) => gen_unary_op(ctx, dst, v, op),
+        LLExpr::BinaryOp(op, ref a, ref b) => gen_bin_op(ctx, dst, a, b, op),
         LLExpr::Call(ref name, ref args) => gen_call(ctx, dst, name, args),
         LLExpr::StructMember(ref obj, index) => gen_struct_member(ctx, dst, obj, index),
         LLExpr::ArrayProperty(ref array, ref property) => gen_array_property(ctx, dst, array, property.clone()),
@@ -362,33 +366,13 @@ unsafe fn gen_expr(ctx: &mut Context, dst: &LLVar, expr: &LLExpr)
         LLExpr::SumTypeCase(index) => gen_sum_type_case(ctx, dst, index),
         LLExpr::Ref(ref obj) => gen_ref(ctx, dst, obj),
         LLExpr::Func(ref func) => gen_func_expr(ctx, dst, func),
+        LLExpr::HeapAlloc(ref typ) => gen_heap_alloc(ctx, dst, typ),
     }
-}
-
-unsafe fn inc_ref(vr: &ValueRef, ctx: &Context)
-{
-    let arc_inc_ref = ctx.get_builtin("arc_inc_ref");
-    let void_ptr = LLVMBuildBitCast(ctx.builder, vr.get(), ctx.resolve_type(&Type::VoidPtr), cstr!("cast_to_void_ptr"));
-    let mut args = vec![
-        void_ptr
-    ];
-    LLVMBuildCall(ctx.builder, arc_inc_ref.function, args.as_mut_ptr(), 1, cstr!(""));
-}
-
-
-unsafe fn dec_ref(vr: &ValueRef, ctx: &Context)
-{
-    let arc_dec_ref = ctx.get_builtin("arc_dec_ref");
-    let void_ptr = LLVMBuildBitCast(ctx.builder, vr.get(), ctx.resolve_type(&Type::VoidPtr), cstr!("cast_to_void_ptr"));
-    let mut args = vec![
-        void_ptr
-    ];
-    LLVMBuildCall(ctx.builder, arc_dec_ref.function, args.as_mut_ptr(), 1, cstr!(""));
 }
 
 pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: &HashMap<LLBasicBlockRef, LLVMBasicBlockRef>)
 {
-    print!(">> {}", instr);
+    //print!(">> {}", instr);
     match *instr
     {
         LLInstruction::Set(ref s) => {
@@ -402,24 +386,22 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: 
         },
 
         LLInstruction::Alloc(ref var) => {
-            let v = ValueRef::new(
-                if var.typ.pass_by_ptr() {
-                    ctx.heap_alloc(ctx.resolve_type(&var.typ), &var.name)
-                } else {
-                    ctx.stack_alloc(ctx.resolve_type(&var.typ), &var.name)
-                },
-                &var.typ
-            );
+            let typ = match var.typ
+            {
+                Type::Func(_) => LLVMPointerType(ctx.resolve_type(&var.typ), 0),
+                Type::Struct(_) => LLVMPointerType(ctx.resolve_type(&var.typ), 0),
+                Type::Sum(_) => LLVMPointerType(ctx.resolve_type(&var.typ), 0),
+                Type::Array(_) => LLVMPointerType(ctx.resolve_type(&var.typ), 0),
+                _ => ctx.resolve_type(&var.typ),
+            };
+
+            let v = ValueRef::HeapPtr(ctx.stack_alloc(typ, &var.name), var.typ.clone());
             ctx.add_variable(&var.name, v);
         },
 
         LLInstruction::Return(ref var) => {
             let ret = ctx.get_variable(&var.name).expect("Unknown variable");
             LLVMBuildRet(ctx.builder, ret.value.load(ctx.builder));
-        },
-
-        LLInstruction::ReturnVoid => {
-            LLVMBuildRetVoid(ctx.builder);
         },
 
         LLInstruction::StartScope => {
@@ -455,12 +437,12 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: 
 
         LLInstruction::IncRef(ref v) => {
             let var = ctx.get_variable(&v.name).expect("Unknown variable");
-            inc_ref(&var.value, ctx);
+            var.value.inc_ref(ctx);
         },
 
         LLInstruction::DecRef(ref v) => {
             let var = ctx.get_variable(&v.name).expect("Unknown variable");
-            dec_ref(&var.value, ctx);
+            var.value.dec_ref(ctx);
         },
     }
 }

@@ -1,6 +1,7 @@
 use std::fmt;
 use itertools::free::join;
-use ast::{ArrayProperty};
+use ast::{ArrayProperty, Type};
+use parser::Operator;
 use llrep::llfunction::{LLBasicBlockRef, LLVar};
 
 #[derive(Debug, Clone)]
@@ -34,21 +35,8 @@ impl fmt::Display for LLLiteral
 pub enum LLExpr
 {
     Literal(LLLiteral),
-    Add(LLVar, LLVar),
-    Sub(LLVar, LLVar),
-    Mul(LLVar, LLVar),
-    Div(LLVar, LLVar),
-    Mod(LLVar, LLVar),
-    And(LLVar, LLVar),
-    Or(LLVar, LLVar),
-    LT(LLVar, LLVar),
-    LTE(LLVar, LLVar),
-    GT(LLVar, LLVar),
-    GTE(LLVar, LLVar),
-    EQ(LLVar, LLVar),
-    NEQ(LLVar, LLVar),
-    USub(LLVar),
-    Not(LLVar),
+    UnaryOp(Operator, LLVar),
+    BinaryOp(Operator, LLVar, LLVar),
     Call(String, Vec<LLVar>),
     StructMember(LLVar, usize),
     SumTypeIndex(LLVar),
@@ -59,6 +47,7 @@ pub enum LLExpr
     ArrayTail(LLVar),
     Ref(LLVar),
     Func(String),
+    HeapAlloc(Type),
 }
 
 impl fmt::Display for LLExpr
@@ -68,21 +57,8 @@ impl fmt::Display for LLExpr
         match *self
         {
             LLExpr::Literal(ref l) => l.fmt(f),
-            LLExpr::Add(ref a, ref b) => write!(f, "{} + {}", a, b),
-            LLExpr::Sub(ref a, ref b) => write!(f, "{} - {}", a, b),
-            LLExpr::Mul(ref a, ref b) => write!(f, "{} * {}", a, b),
-            LLExpr::Div(ref a, ref b) => write!(f, "{} / {}", a, b),
-            LLExpr::Mod(ref a, ref b) => write!(f, "{} % {}", a, b),
-            LLExpr::And(ref a, ref b) => write!(f, "{} && {}", a, b),
-            LLExpr::Or(ref a, ref b) => write!(f, "{} || {}", a, b),
-            LLExpr::LT(ref a, ref b) => write!(f, "{} < {}", a, b),
-            LLExpr::LTE(ref a, ref b) => write!(f, "{} <= {}", a, b),
-            LLExpr::GT(ref a, ref b) => write!(f, "{} > {}", a, b),
-            LLExpr::GTE(ref a, ref b) => write!(f, "{} >= {}", a, b),
-            LLExpr::EQ(ref a, ref b) => write!(f, "{} == {}", a, b),
-            LLExpr::NEQ(ref a, ref b) => write!(f, "{} != {}", a, b),
-            LLExpr::USub(ref v) => write!(f, "- {}", v),
-            LLExpr::Not(ref v) => write!(f, "! {}", v),
+            LLExpr::UnaryOp(op, ref v) => write!(f, "{} {}", op, v),
+            LLExpr::BinaryOp(op, ref a, ref b) => write!(f, "{} {} {}", a, op, b),
             LLExpr::Call(ref name, ref args) => write!(f, "{}({})", name, join(args.iter(), ", ")),
             LLExpr::StructMember(ref obj, index) => write!(f, "{}.{}", obj, index),
             LLExpr::SumTypeIndex(ref obj) => write!(f, "sum type index {}", obj),
@@ -93,6 +69,7 @@ impl fmt::Display for LLExpr
             LLExpr::ArrayTail(ref array) => write!(f, "tail {}", array),
             LLExpr::Ref(ref obj) => write!(f, "ref {}", obj),
             LLExpr::Func(ref func) => write!(f, "func {}", func),
+            LLExpr::HeapAlloc(ref typ) => write!(f, "heap_alloc {}", typ),
         }
     }
 }
@@ -138,47 +115,46 @@ pub enum LLInstruction
     Bind(LLBind),
     Set(LLSet),
     Return(LLVar),
-    ReturnVoid,
     Branch(LLBasicBlockRef),
     BranchIf(LLBranchIf),
     IncRef(LLVar),
     DecRef(LLVar),
 }
 
-pub fn set_instr(var: LLVar, e: LLExpr) -> LLInstruction
+pub fn set_instr(var: &LLVar, e: LLExpr) -> LLInstruction
 {
     LLInstruction::Set(LLSet{
-        var: var,
+        var: var.clone(),
         expr: e,
     })
 }
 
-pub fn set_struct_member_instr(obj: LLVar, index: usize, e: LLVar) -> LLInstruction
+pub fn set_struct_member_instr(obj: &LLVar, index: usize, e: &LLVar) -> LLInstruction
 {
     LLInstruction::SetStructMember(LLSetStructMember{
-        obj: obj,
+        obj: obj.clone(),
         member_index: index,
-        value: e,
+        value: e.clone(),
     })
 }
 
-pub fn ret_instr(var: LLVar) -> LLInstruction
+pub fn ret_instr(var: &LLVar) -> LLInstruction
 {
-    LLInstruction::Return(var)
+    LLInstruction::Return(var.clone())
 }
 
-pub fn bind_instr(name: &str, var: LLVar) -> LLInstruction
+pub fn bind_instr(name: &str, var: &LLVar) -> LLInstruction
 {
     LLInstruction::Bind(LLBind{
         name: name.into(),
-        var: var,
+        var: var.clone(),
     })
 }
 
-pub fn branch_if_instr(cond: LLVar, on_true: LLBasicBlockRef, on_false: LLBasicBlockRef) -> LLInstruction
+pub fn branch_if_instr(cond: &LLVar, on_true: LLBasicBlockRef, on_false: LLBasicBlockRef) -> LLInstruction
 {
     LLInstruction::BranchIf(LLBranchIf{
-        cond: cond,
+        cond: cond.clone(),
         on_true: on_true,
         on_false: on_false,
     })
@@ -210,9 +186,6 @@ impl fmt::Display for LLInstruction
             },
             LLInstruction::Return(ref var) => {
                 writeln!(f, "  ret {}", var)
-            },
-            LLInstruction::ReturnVoid => {
-                writeln!(f, "  ret void")
             },
             LLInstruction::Branch(ref name) => {
                 writeln!(f, "  br {}", name)

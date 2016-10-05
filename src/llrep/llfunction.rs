@@ -4,7 +4,7 @@ use itertools::free::join;
 use ast::{Type, FunctionSignature};
 use llrep::llinstruction::LLInstruction;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct LLVar
 {
     pub name: String,
@@ -65,9 +65,21 @@ impl Scope
         self.named_vars.get(var).map(|v| v.clone())
     }
 
-    pub fn add_dec_ref_target(&mut self, v: LLVar)
+    pub fn add_dec_ref_target(&mut self, v: &LLVar) -> bool
     {
-        self.to_dec_ref.push(v);
+        if self.named_vars.get(&v.name).is_none() {
+            false
+        } else {
+            self.to_dec_ref.push(v.clone());
+            true
+        }
+    }
+
+    pub fn remove_dec_ref_target(&mut self, v: &LLVar) -> bool
+    {
+        let len = self.to_dec_ref.len();
+        self.to_dec_ref.retain(|e| e != v);
+        self.to_dec_ref.len() < len
     }
 
     pub fn cleanup(&self, func: &mut LLFunction)
@@ -121,7 +133,8 @@ pub struct LLFunction
     current_bb: usize,
     bb_counter: usize,
     var_counter: usize,
-    scopes: Vec<Scope>
+    scopes: Vec<Scope>,
+    destinations: Vec<Option<LLVar>>,
 }
 
 
@@ -138,6 +151,7 @@ impl LLFunction
             bb_counter: 0,
             var_counter: 0,
             scopes: vec![Scope::new()],
+            destinations: Vec::new(),
         };
 
         let entry = f.create_basic_block();
@@ -160,7 +174,6 @@ impl LLFunction
         match inst
         {
             LLInstruction::Return(_) => self.pop_scope(),
-            LLInstruction::ReturnVoid => self.pop_scope(),
             _ => (),
         }
 
@@ -192,18 +205,43 @@ impl LLFunction
     {
         let idx = self.var_counter;
         self.var_counter += 1;
-        LLVar::new(idx, typ)
+        let v = LLVar::new(idx, typ);
+        self.add_named_var(v.clone());
+        v
     }
 
     pub fn push_scope(&mut self)
     {
         self.scopes.push(Scope::new());
+        self.add(LLInstruction::StartScope);
     }
 
     pub fn pop_scope(&mut self)
     {
         let s = self.scopes.pop().expect("Empty Scope Stack");
         s.cleanup(self);
+        if !self.scopes.is_empty() {
+            // Add an endscope instruction, but not at function exit
+            self.add(LLInstruction::EndScope);
+        }
+    }
+
+    pub fn push_destination(&mut self, var: Option<LLVar>)
+    {
+        self.destinations.push(var);
+    }
+
+    pub fn pop_destination(&mut self)
+    {
+        let _ = self.destinations.pop();
+    }
+
+    pub fn get_destination(&self) -> Option<LLVar>
+    {
+        match self.destinations.last() {
+            Some(&Some(ref var)) => Some(var.clone()),
+            _ => None
+        }
     }
 
     pub fn add_named_var(&mut self, var: LLVar)
@@ -223,10 +261,19 @@ impl LLFunction
         None
     }
 
-    pub fn add_dec_ref_target(&mut self, v: LLVar)
+    pub fn add_dec_ref_target(&mut self, v: &LLVar)
+    {
+        for scope in self.scopes.iter_mut().rev() {
+            if scope.add_dec_ref_target(v) {
+                break;
+            }
+        }
+    }
+
+    pub fn remove_dec_ref_target(&mut self, v: &LLVar) -> bool
     {
         let scope = self.scopes.last_mut().expect("Empty Scope Stack");
-        scope.add_dec_ref_target(v);
+        scope.remove_dec_ref_target(v)
     }
 }
 

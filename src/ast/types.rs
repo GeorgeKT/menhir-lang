@@ -188,11 +188,12 @@ impl Type
             Type::Array(_) => true,
             Type::Struct(_) => true,
             Type::Sum(_) => true,
+            Type::Func(_) => true,
             _ => false,
         }
     }
 
-    pub fn return_by_ptr(&self) -> bool
+    pub fn allocate_on_heap(&self) -> bool
     {
         match *self
         {

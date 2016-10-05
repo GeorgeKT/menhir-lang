@@ -24,7 +24,7 @@ impl IfExpression
                     span: self.on_true.span(),
                 },
                 MatchCase{
-                    pattern: Pattern::Literal(Literal::Bool(Span::default(), false)),
+                    pattern: Pattern::Any(Span::default()),
                     to_execute: self.on_false.clone(),
                     span: self.on_false.span(),
                 },

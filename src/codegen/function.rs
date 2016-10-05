@@ -14,20 +14,17 @@ use llrep::*;
 
 unsafe fn make_function_instance(ctx: &Context, sig: &FunctionSignature) -> FunctionInstance
 {
-    let mut ret_type = ctx.resolve_type(&sig.return_type);
-    let mut arg_types: Vec<_> = sig.args.iter().map(|arg| {
-        let arg_type = ctx.resolve_type(&arg.typ);
-        if arg.typ.pass_by_ptr() {
-            LLVMPointerType(arg_type, 0)
+    let arg_type = |typ: &Type| {
+        let rt = ctx.resolve_type(typ);
+        if typ.pass_by_ptr() {
+            LLVMPointerType(rt, 0)
         } else {
-            arg_type
+            rt
         }
-    }).collect();
+    };
 
-    if sig.return_type.return_by_ptr() {
-        arg_types.push(LLVMPointerType(ret_type, 0));
-        ret_type = LLVMVoidTypeInContext(ctx.context);
-    }
+    let ret_type = arg_type(&sig.return_type);
+    let arg_types: Vec<_> = sig.args.iter().map(|arg| arg_type(&arg.typ)).collect();
 
     FunctionInstance{
         name: sig.name.clone(),
@@ -73,19 +70,13 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &LLFunction)
                 ctx.add_function(Rc::new(fi));
             },
             _ => {
-                if arg.typ.pass_by_ptr() {
+                if arg.typ.allocate_on_heap() {
                     ctx.add_variable(&arg.name, ValueRef::new(var, &arg.typ));
                 } else {
                     ctx.add_variable(&arg.name, ValueRef::Const(var));
                 }
             },
         }
-    }
-
-    if func.sig.return_type.return_by_ptr()
-    {
-        let ret_var = LLVMGetParam(fi.function, func.sig.args.len() as libc::c_uint);
-        ctx.add_variable("$ret", ValueRef::new(ret_var, &func.sig.return_type));
     }
 
     let mut blocks = HashMap::new();
