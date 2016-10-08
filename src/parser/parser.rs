@@ -287,8 +287,14 @@ fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, name: &str, 
     };
 
     let sig_span_end = tq.pos();
-    try!(tq.expect(TokenKind::Assign));
-    let expr = try!(parse_expression(tq));
+
+    let expr = if tq.is_next(TokenKind::OpenCurly) {
+        let tok = try!(tq.pop());
+        try!(parse_block(tq, &tok.span))
+    } else {
+        try!(tq.expect(TokenKind::Assign));
+        try!(parse_expression(tq))
+    };
 
     let full_name = if name != "main" {
         namespaced(namespace, name)
@@ -526,6 +532,7 @@ fn parse_struct_type(tq: &mut TokenQueue, namespace: &str, name: &str, span: &Sp
 
 fn parse_struct_initializer(tq: &mut TokenQueue, name: &str, name_span: &Span) -> CompileResult<Expression>
 {
+    try!(tq.expect(TokenKind::OpenCurly));
     let expressions = try!(parse_comma_separated_list(tq, TokenKind::CloseCurly, parse_expression));
     Ok(Expression::StructInitializer(
         struct_initializer(name, expressions, name_span.expanded(tq.pos()))
@@ -570,7 +577,7 @@ fn parse_struct_member_access(tq: &mut TokenQueue, name: NameRef) -> CompileResu
 
 fn parse_block(tq: &mut TokenQueue, start: &Span) -> CompileResult<Expression>
 {
-    let expressions = try!(parse_list(tq, TokenKind::SemiColon, TokenKind::CloseParen, parse_expression));
+    let expressions = try!(parse_list(tq, TokenKind::SemiColon, TokenKind::CloseCurly, parse_expression));
     Ok(block(expressions, start.expanded(tq.pos())))
 }
 
@@ -606,7 +613,7 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
             parse_if(tq, &tok.span)
         },
 
-        TokenKind::OpenParen => {
+        TokenKind::OpenCurly => {
             parse_block(tq, &tok.span)
         },
 
@@ -614,7 +621,13 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
             parse_array_literal(tq, &tok.span).map(|al| Expression::Literal(al))
         },
 
-        TokenKind::OpenCurly => {
+        TokenKind::OpenParen => {
+            let inner = try!(parse_expression(tq));
+            try!(tq.expect(TokenKind::CloseParen));
+            Ok(inner)
+        },
+
+        TokenKind::Dollar => {
             parse_struct_initializer(tq, "", &tok.span)
         },
 
@@ -627,7 +640,6 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
             }
             else if tq.is_next(TokenKind::OpenCurly)
             {
-                try!(tq.expect(TokenKind::OpenCurly));
                 parse_struct_initializer(tq, &nr.name, &nr.span)
             }
             else if tq.is_next(TokenKind::Operator(Operator::Dot))

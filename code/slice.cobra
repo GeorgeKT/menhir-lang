@@ -1,6 +1,15 @@
-len(a: string) -> int = a.len
+type Foo = {
+    bar: int
+}
 
-concat(a: string, b: string) -> string = a + b
+choose(num: int) -> Foo {
+    let a = Foo{6};
+    let b = Foo{7};
+    if num > 6:
+        a
+    else
+        b
+}
 
 main() -> int =
-    let x = concat("Hello", " World") in len(x)
+    let c = choose(10) in c.bar

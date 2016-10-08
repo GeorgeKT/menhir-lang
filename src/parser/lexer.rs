@@ -85,6 +85,7 @@ impl Lexer
             '@' => {self.add(TokenKind::Lambda, span); Ok(())},
             '$' => {self.add(TokenKind::Dollar, span); Ok(())},
             ';' => {self.add(TokenKind::SemiColon, span); Ok(())},
+            '~' => {self.add(TokenKind::Tilde, span); Ok(())},
             '0'...'9' => {self.start(c, LexState::Number); Ok(())},
             '\"' => {self.start(c, LexState::InString); Ok(())},
             '\'' => {self.start(c, LexState::InChar); Ok(())},

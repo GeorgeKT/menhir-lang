@@ -323,11 +323,11 @@ main() -> int =
 #[test]
 fn test_anonymous_structs() {
     let r = run(r#"
-make_pair(a: int, b: int) -> {int, int} = {a, b}
+make_pair(a: int, b: int) -> {int, int} = ${a, b}
 
 main() -> int =
     let p = make_pair(4, 5) in p.0 + p.1
-    "#, false);
+    "#, true);
     println!("r: {:?}", r);
     assert!(r == Ok(9));
 }
@@ -486,10 +486,10 @@ max(a: int, b: int) -> int =
     if a > b: a
     else b
 
-main() -> int = (
+main() -> int {
     let x = max(10, 11);
     7 * x
-)
+}
     "#, true);
     println!("r: {:?}", r);
     assert!(r == Ok(77));
@@ -519,14 +519,14 @@ let r = run(r#"
         bar: int
     }
 
-    choose(num: int) -> Foo = (
+    choose(num: int) -> Foo {
         let a = Foo{6};
         let b = Foo{7};
         if num > 6:
             a
         else
             b
-    )
+    }
 
     main() -> int =
         let c = choose(10) in c.bar

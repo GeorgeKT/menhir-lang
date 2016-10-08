@@ -1,12 +1,21 @@
-type PairOrSingle = Pair{int, int} | Single{int}
+extern print(s: string) -> int
+extern println(s: string) -> int
+extern close(fd: int) -> int
 
-pair_or_single(a: int, b: int) -> PairOrSingle =
-    if a != b: Pair{a, b} else Single{a}
+type Result = Ok{$a} | Err{$b}
 
-value_of(v: PairOrSingle) -> int =
-    match v:
-        Pair{a, b} => a + b,
-        Single{a} => a
+type File = {fd: int}
 
-main() -> int =
-    value_of(pair_or_single(4, 5)) + value_of(pair_or_single(3, 3))
+
+~(self: File) {
+    println("I'm a destructor");
+    close(self.fd);
+}
+
+
+main() -> int {
+    let f = File{1};
+    f.fd
+}
+
+foo() -> int = 6

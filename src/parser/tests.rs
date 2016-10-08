@@ -49,12 +49,6 @@ pub fn number_pattern(v: u64, span: Span) -> Pattern
     Pattern::Literal(Literal::Int(span, v))
 }
 
-
-fn enclosed(span: Span, left: Expression) -> Expression
-{
-    block(vec![left], span)
-}
-
 pub fn name_ref(name: &str, span: Span) -> Expression
 {
     Expression::NameRef(NameRef{
@@ -181,10 +175,8 @@ fn test_precedence_6()
     assert!(e == bin_op(
         Operator::Mul,
         name_ref("a", span(1, 1, 1, 1)),
-        enclosed(
-            span(1, 5, 1, 11),
-            bin_op(Operator::Add, name_ref("b", span(1, 6, 1, 6)), name_ref("c", span(1, 10, 1, 10)), span(1, 6, 1, 10))),
-        span(1, 1, 1, 11),
+        bin_op(Operator::Add, name_ref("b", span(1, 6, 1, 6)), name_ref("c", span(1, 10, 1, 10)), span(1, 6, 1, 10)),
+        span(1, 1, 1, 10),
     ));
 }
 
@@ -669,7 +661,7 @@ if true: 5 else 10"#);
 fn test_block()
 {
     let e = th_expr(r#"
-(a; b; c; 7)"#);
+{a; b; c; 7}"#);
     assert!(e == block(
         vec![
             name_ref("a", span(2, 2, 2, 2)),
