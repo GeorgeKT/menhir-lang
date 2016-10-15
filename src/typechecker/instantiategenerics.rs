@@ -50,6 +50,16 @@ fn substitute_array_literal(generic_args: &GenericMapper, al: &ArrayLiteral) -> 
     Ok(array_lit(new_elements, al.span.clone()))
 }
 
+fn substitute_call(generic_args: &GenericMapper, c: &Call) -> CompileResult<Call>
+{
+    let mut new_args = Vec::with_capacity(c.args.len());
+    for a in c.args.iter() {
+        new_args.push(try!(substitute_expr(generic_args, a)));
+    }
+
+    Ok(Call::new(c.callee.clone(), new_args, c.span.clone()))
+}
+
 fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResult<Expression>
 {
     match *e
@@ -76,12 +86,8 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
         },
 
         Expression::Call(ref c) => {
-            let mut new_args = Vec::with_capacity(c.args.len());
-            for a in c.args.iter() {
-                new_args.push(try!(substitute_expr(generic_args, a)));
-            }
-
-            Ok(Expression::Call(Call::new(c.callee.clone(), new_args, c.span.clone())))
+            let new_c = try!(substitute_call(generic_args, c));
+            Ok(Expression::Call(new_c))
         },
 
         Expression::Lambda(ref l) => {
@@ -148,7 +154,17 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             Ok(Expression::StructInitializer(struct_initializer(&si.struct_name, nmi, si.span.clone())))
         },
         Expression::MemberAccess(ref sma) => {
-            Ok(Expression::MemberAccess(sma.clone()))
+            let left = try!(substitute_expr(generic_args, &sma.left));
+            let right = match sma.right
+            {
+                MemberAccessType::Call(ref c) => {
+                    let new_c = try!(substitute_call(generic_args, c));
+                    MemberAccessType::Call(new_c)
+                },
+                _ => sma.right.clone(),
+            };
+
+            Ok(member_access(left, right, sma.span.clone()))
         },
     }
 }

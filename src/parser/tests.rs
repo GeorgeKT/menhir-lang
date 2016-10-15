@@ -536,22 +536,47 @@ Point{6, 7}
 }
 
 #[test]
-fn test_struct_member_access()
+fn test_member_access()
 {
     let e = th_expr(r#"
-a.b.0.d
+a.b.c.d
 "#);
-    assert!(e == Expression::MemberAccess(
+    assert!(e ==
         member_access(
-            "a",
-            vec![
-                MemberAccessMethod::ByName("b".into()),
-                MemberAccessMethod::ByIndex(0),
-                MemberAccessMethod::ByName("d".into()),
-            ],
+            member_access(
+                member_access(
+                    name_ref("a", span(2, 1, 2, 1)),
+                    MemberAccessType::Name(field("b", 0)),
+                    span(2, 1, 2, 3)
+                ),
+                MemberAccessType::Name(field("c", 0)),
+                span(2, 1, 2, 5)
+            ),
+            MemberAccessType::Name(field("d", 0)),
             span(2, 1, 2, 7)
         )
-    ))
+    )
+}
+
+#[test]
+fn test_member_access_call()
+{
+    let e = th_expr(r#"
+a.b()
+"#);
+    assert!(e ==
+        member_access(
+            name_ref("a", span(2, 1, 2, 1)),
+            MemberAccessType::Call(
+                Call::new(
+                    name_ref2("b", span(2, 3, 2, 3)),
+                    Vec::new(),
+                    span(2, 3, 2, 5)
+                ),
+            ),
+            span(2, 1, 2, 5)
+        )
+    )
 }
 
 #[test]

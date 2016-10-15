@@ -55,11 +55,16 @@ fn bind(func: &mut LLFunction, name: &str, var: &LLVar)
     func.add(bind_instr(name, var))
 }
 
-fn call_to_llrep(func: &mut LLFunction, c: &Call) -> LLVar
+fn call_to_llrep(func: &mut LLFunction, c: &Call, self_arg: Option<LLVar>) -> LLVar
 {
     let dst = get_dst(func, &c.return_type);
     func.push_destination(None);
-    let args = c.args.iter().map(|arg| to_llrep(func, arg)).collect();
+    let mut args = Vec::new();
+    if let Some(s) = self_arg {
+        args.push(s);
+    }
+
+    args.extend(c.args.iter().map(|arg| to_llrep(func, arg)));
     func.pop_destination();
 
     func.add(set_instr(
@@ -141,31 +146,30 @@ fn make_array_len(func: &mut LLFunction, array: LLVar) -> LLVar
 
 fn member_access_to_llrep(func: &mut LLFunction, sma: &MemberAccess, dst: &LLVar)
 {
-    let mut obj = func.get_named_var(&sma.name).expect("Internal Compiler Error: Unknown variable");
-    for (access_idx, at) in sma.access_types.iter().enumerate()
+    func.push_destination(None);
+    let var = to_llrep(func, &sma.left);
+    func.pop_destination();
+
+    match (&var.typ, &sma.right)
     {
-        obj = match (&obj.typ, at)
-        {
-            (&Type::Struct(ref st), &MemberAccessType::StructMember(idx)) => {
-                let expr = LLExpr::StructMember(obj.clone(), idx);
-                if access_idx == sma.access_types.len() - 1 {
-                    add_set(func, expr, dst);
-                    return;
-                } else {
-                    let mtyp = st.members[idx].typ.clone();
-                    let mvar = func.new_var(mtyp);
-                    add_set(func, expr, &mvar);
-                    mvar
-                }
-            },
+        (&Type::Struct(_), &MemberAccessType::Name(ref field)) => {
+            let expr = LLExpr::StructMember(var.clone(), field.index);
+            add_set(func, expr, dst);
+        },
 
-            (&Type::Array(_), &MemberAccessType::ArrayProperty(ArrayProperty::Len)) => {
-                add_array_len(func, obj.clone(), dst);
-                return;
-            },
+        (&Type::Array(_), &MemberAccessType::ArrayProperty(ArrayProperty::Len)) => {
+            add_array_len(func, var.clone(), dst);
+        },
 
-            _ => panic!("Internal Compiler Error: Invalid member access"),
-        };
+        (_, &MemberAccessType::Call(ref call)) => {
+            func.push_destination(Some(dst.clone()));
+            call_to_llrep(func, call, Some(var.clone()));
+            func.pop_destination();
+        },
+
+        _ => {
+            panic!("Internal Compiler Error: Invalid member access")
+        },
     }
 }
 
@@ -408,6 +412,7 @@ fn name_ref_to_llrep(func: &mut LLFunction, nr: &NameRef) -> Option<LLVar>
         match func.get_destination()
         {
             Some(var) => {
+                assert!(var.typ == v.typ);
                 if var.typ.allocate_on_heap() {
                     func.add(LLInstruction::IncRef(v.clone()));
                 }
@@ -525,7 +530,7 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> Option<LLVar>
         },
 
         Expression::Call(ref c) => {
-            Some(call_to_llrep(func, c))
+            Some(call_to_llrep(func, c, None))
         },
 
         Expression::Let(ref l) => {

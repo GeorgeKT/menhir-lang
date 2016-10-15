@@ -53,6 +53,7 @@ impl GenericMapper
             },
             Type::Struct(ref st) => {
                 struct_type(
+                    &st.name,
                     st.members.iter()
                         .map(|m| struct_member(&m.name, self.substitute(&m.typ)))
                         .collect()
@@ -60,6 +61,7 @@ impl GenericMapper
             },
             Type::Sum(ref st) => {
                 sum_type(
+                    &st.name,
                     st.cases.iter()
                         .map(|c| sum_type_case(&c.name, self.substitute(&c.typ)))
                         .collect()
@@ -149,7 +151,7 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
                         new_members.push(struct_member(&aa.name, nt));
                     }
 
-                    Ok(struct_type(new_members))
+                    Ok(struct_type(&actual_st.name, new_members))
                 },
                 _ => map_err(),
             }
@@ -171,7 +173,7 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
                         new_cases.push(sum_type_case(&aa.name, nt));
                     }
 
-                    Ok(sum_type(new_cases))
+                    Ok(sum_type(&actual_st.name, new_cases))
                 },
                 _ => map_err(),
             }

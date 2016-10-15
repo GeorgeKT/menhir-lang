@@ -214,6 +214,7 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
         // Anonymous struct
         let members = try!(parse_struct_members(tq));
         Ok(struct_type(
+            "",
             members.into_iter().map(|m| StructMember{
                 name: m.name,
                 typ: m.typ
@@ -234,13 +235,20 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
     }
 }
 
-fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool) -> CompileResult<Argument>
+fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool, self_type: &Option<Type>) -> CompileResult<Argument>
 {
     let (name, span) = try!(tq.expect_identifier());
     let typ = if tq.is_next(TokenKind::Colon) {
         try!(tq.expect(TokenKind::Colon));
         try!(parse_type(tq))
-    } else if type_is_optional{
+    } else if name == "self" {
+        if let Some(ref t) = *self_type {
+            t.clone()
+        } else {
+            return err(&span, ErrorCode::SelfTypeUnknown,
+                format!("Cannot determine type of self argument"));
+        }
+    } else if type_is_optional {
         Type::Generic(name.clone()) // If the type is not known threat it as generic arg
     } else {
         return err(&span, ErrorCode::MissingType, format!("Type not specified of function argument {}", name));
@@ -249,9 +257,9 @@ fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool) -> Compi
     Ok(Argument::new(name, typ, span.expanded(tq.pos())))
 }
 
-fn parse_function_arguments(tq: &mut TokenQueue, type_is_optional: bool) -> CompileResult<Vec<Argument>>
+fn parse_function_arguments(tq: &mut TokenQueue, type_is_optional: bool, self_type: &Option<Type>) -> CompileResult<Vec<Argument>>
 {
-    parse_comma_separated_list(tq, TokenKind::CloseParen, |tq| parse_function_argument(tq, type_is_optional))
+    parse_comma_separated_list(tq, TokenKind::CloseParen, |tq| parse_function_argument(tq, type_is_optional, self_type))
 }
 
 fn parse_external_function(tq: &mut TokenQueue, span: &Span) -> CompileResult<ExternalFunction>
@@ -259,7 +267,7 @@ fn parse_external_function(tq: &mut TokenQueue, span: &Span) -> CompileResult<Ex
     let (name, name_span) = try!(tq.expect_identifier());
 
     try!(tq.expect(TokenKind::OpenParen));
-    let args = try!(parse_function_arguments(tq, false));
+    let args = try!(parse_function_arguments(tq, false, &None));
     let ret_type = if tq.is_next(TokenKind::Arrow) {
         try!(tq.pop());
         try!(parse_type(tq))
@@ -276,8 +284,20 @@ fn parse_external_function(tq: &mut TokenQueue, span: &Span) -> CompileResult<Ex
 
 fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, name: &str, span: &Span) -> CompileResult<Function>
 {
+    let (full_name, self_type) = if name != "main" {
+        if tq.is_next(TokenKind::Operator(Operator::Dot)) {
+            try!(tq.pop());
+            let (member_function_name, _) = try!(tq.expect_identifier());
+            (namespaced(namespace, &format!("{}.{}", name, member_function_name)), Some(unresolved_type(name, Vec::new())))
+        } else {
+            (namespaced(namespace, name), None)
+        }
+    } else {
+        (name.into(), None)
+    };
+
     try!(tq.expect(TokenKind::OpenParen));
-    let args = try!(parse_function_arguments(tq, false));
+    let args = try!(parse_function_arguments(tq, false, &self_type));
 
     let ret_type = if tq.is_next(TokenKind::Arrow) {
         try!(tq.pop());
@@ -294,12 +314,6 @@ fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, name: &str, 
     } else {
         try!(tq.expect(TokenKind::Assign));
         try!(parse_expression(tq))
-    };
-
-    let full_name = if name != "main" {
-        namespaced(namespace, name)
-    } else {
-        name.into()
     };
 
     let func_span = span.expanded(expr.span().end);
@@ -395,7 +409,7 @@ fn parse_match(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 fn parse_lambda(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 {
     try!(tq.expect(TokenKind::OpenParen));
-    let args = try!(parse_function_arguments(tq, true));
+    let args = try!(parse_function_arguments(tq, true, &None));
     try!(tq.expect(TokenKind::Arrow));
     let expr = try!(parse_expression(tq));
     Ok(lambda(args, expr, span.expanded(tq.pos())))
@@ -539,40 +553,27 @@ fn parse_struct_initializer(tq: &mut TokenQueue, name: &str, name_span: &Span) -
     ))
 }
 
-fn parse_struct_member_access(tq: &mut TokenQueue, name: NameRef) -> CompileResult<Expression>
+fn parse_member_access(tq: &mut TokenQueue, left_expr: Expression) -> CompileResult<Expression>
 {
-    let mut methods = Vec::new();
+    let mut left = left_expr;
     while tq.is_next(TokenKind::Operator(Operator::Dot))
     {
         try!(tq.pop());
-        let next = try!(tq.pop());
-        match next.kind
-        {
-            TokenKind::Identifier(name) => {
-                methods.push(MemberAccessMethod::ByName(name));
-            },
+        let (name, name_span) = try!(tq.expect_identifier());
 
-            TokenKind::Number(idx) => {
-                let index = if idx.ends_with(".") {
-                    // a.5.b
-                    // We have something mistaken as a float number
-                    // This is really a problem in the lexer,
-                    // but the lexer hasn't got enough information to disambiguate between a float number
-                    // and a struct member access with a number
-                    tq.push_front(Token::new(TokenKind::Operator(Operator::Dot), next.span.clone()));
-                    let real_idx = &idx[0..idx.len() - 1];
-                    real_idx.parse::<usize>().expect("Internal Compiler Error: Parsed number is not valid")
-                } else {
-                    idx.parse::<usize>().expect("Internal Compiler Error: Parsed number is not valid")
-                };
-                methods.push(MemberAccessMethod::ByIndex(index));
-            }
+        let (ma, span) = if tq.is_next(TokenKind::OpenParen) {
+            try!(tq.pop());
+            let call = try!(parse_function_call(tq, NameRef::new(name, name_span)));
+            let span = left.span().expanded(call.span.end);
+            (MemberAccessType::Call(call), span)
+        } else {
+            (MemberAccessType::Name(field(&name, 0)), left.span().expanded(name_span.end))
+        };
 
-            _ => return err(&next.span, ErrorCode::UnexpectedToken, format!("Expecting integer or an identifier")),
-        }
+        left = member_access(left, ma, span);
     }
 
-    Ok(Expression::MemberAccess(member_access(&name.name, methods, name.span.expanded(tq.pos()))))
+    Ok(left)
 }
 
 fn parse_block(tq: &mut TokenQueue, start: &Span) -> CompileResult<Expression>
@@ -636,7 +637,12 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
             if tq.is_next(TokenKind::OpenParen)
             {
                 try!(tq.pop());
-                parse_function_call(tq, nr).map(|c| Expression::Call(c))
+                let call = try!(parse_function_call(tq, nr).map(|c| Expression::Call(c)));
+                if tq.is_next(TokenKind::Operator(Operator::Dot)) {
+                    parse_member_access(tq, call)
+                } else {
+                    Ok(call)
+                }
             }
             else if tq.is_next(TokenKind::OpenCurly)
             {
@@ -644,7 +650,7 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
             }
             else if tq.is_next(TokenKind::Operator(Operator::Dot))
             {
-                parse_struct_member_access(tq, nr)
+                parse_member_access(tq, Expression::NameRef(nr))
             }
             else
             {
@@ -675,6 +681,11 @@ fn parse_expression_continued(tq: &mut TokenQueue, lhs: Expression) -> CompileRe
     let next = try!(tq.pop());
     match next.kind
     {
+        TokenKind::Operator(Operator::Dot) => {
+            tq.push_front(next);
+            parse_member_access(tq, lhs)
+        },
+
         TokenKind::Operator(op) if op.is_binary_operator() => {
             tq.push_front(next);
             parse_binary_op_rhs(tq, lhs)
@@ -769,8 +780,8 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
                 module.functions.insert(func.sig.name.clone(), func);
             }
             _ => {
-                println!("tok: {:?}", tok);
-                return err(&tok.span, ErrorCode::ExpressionNotAllowedAtTopLevel, format!("Expression is not allowed at toplevel"));
+                return err(&tok.span, ErrorCode::ExpressionNotAllowedAtTopLevel,
+                    format!("Expected a function declaration, import statement, extern function declaration or type declaration, found token {}", tok));
             }
         }
     }

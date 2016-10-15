@@ -2,20 +2,18 @@ extern print(s: string) -> int
 extern println(s: string) -> int
 extern close(fd: int) -> int
 
-type Result = Ok{$a} | Err{$b}
-
 type File = {fd: int}
 
-
-~(self: File) {
+File.destroy(self) {
     println("I'm a destructor");
     close(self.fd);
 }
 
+File.read(self, bytes: int) -> string {
+    "data"
+}
 
 main() -> int {
     let f = File{1};
-    f.fd
+    println(f.read())
 }
-
-foo() -> int = 6

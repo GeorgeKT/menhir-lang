@@ -1,61 +1,52 @@
-use std::fmt::{Formatter, Display, Error};
-use itertools::free::join;
 use ast::*;
 use span::Span;
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum ArrayProperty
 {
     Len,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub enum MemberAccessType
+pub struct Field
 {
-    StructMember(usize),
-    ArrayProperty(ArrayProperty),
+    pub name: String,
+    pub index: usize,
 }
 
-
+pub fn field(name: &str, index: usize) -> Field
+{
+    Field{
+        name: name.into(),
+        index: index,
+    }
+}
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub enum MemberAccessMethod
+pub enum MemberAccessType
 {
-    ByName(String),
-    ByIndex(usize),
-}
-
-impl Display for MemberAccessMethod
-{
-    fn fmt(&self, f: &mut Formatter) -> Result<(), Error>
-    {
-        match *self
-        {
-            MemberAccessMethod::ByName(ref name) => write!(f, "{}", name),
-            MemberAccessMethod::ByIndex(index) => write!(f, "{}", index),
-        }
-    }
+    Call(Call),
+    Name(Field),
+    ArrayProperty(ArrayProperty),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct MemberAccess
 {
-    pub name: String,
-    pub access_methods: Vec<MemberAccessMethod>,
-    pub access_types: Vec<MemberAccessType>,
+    pub left: Box<Expression>,
+    pub right: MemberAccessType,
     pub span: Span,
     pub typ: Type,
 }
 
-pub fn member_access(name: &str, methods: Vec<MemberAccessMethod>, span: Span) -> MemberAccess
+pub fn member_access(left: Expression, right: MemberAccessType, span: Span) -> Expression
 {
-    MemberAccess{
-        name: name.into(),
-        access_types: Vec::with_capacity(methods.len()),
-        access_methods: methods,
+    Expression::MemberAccess(MemberAccess{
+        left: Box::new(left),
+        right: right,
         span: span,
         typ: Type::Unknown,
-    }
+    })
 }
 
 
@@ -64,6 +55,18 @@ impl TreePrinter for MemberAccess
     fn print(&self, level: usize)
     {
         let p = prefix(level);
-        println!("{}{}.{} ({})", p, self.name, join(self.access_methods.iter(), "."), self.span);
+        println!("{}member access (span: {}, type: {})", p, self.span, self.typ);
+        self.left.print(level + 1);
+        match self.right
+        {
+            MemberAccessType::Call(ref call) => call.print(level + 1),
+            MemberAccessType::Name(ref field) => println!("{} .{} (idx {})", p, field.name, field.index),
+            MemberAccessType::ArrayProperty(ref prop) => {
+                match prop
+                {
+                    &ArrayProperty::Len => println!("{} .len", p),
+                }
+            }
+        }
     }
 }

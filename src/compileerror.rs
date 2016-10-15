@@ -42,6 +42,7 @@ pub enum ErrorCode
     UnknownType(String, Type), // Name and expected type
     UnknownStructMember,
     FileNotFound,
+    SelfTypeUnknown,
 }
 
 

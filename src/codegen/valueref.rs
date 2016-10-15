@@ -1,7 +1,7 @@
 use llvm::prelude::*;
 use llvm::core::*;
 
-use ast::{Type, MemberAccessType, ArrayProperty};
+use ast::{Type, ArrayProperty};
 use codegen::{Context, Array, StructValue, SumTypeValue};
 
 
@@ -112,26 +112,33 @@ impl ValueRef
         }
     }
 
-    pub unsafe fn member(&self, ctx: &Context, at: &MemberAccessType) -> ValueRef
+    pub unsafe fn member(&self, ctx: &Context, idx: usize) -> ValueRef
     {
-        match (self, at)
+        match *self
         {
-            (&ValueRef::Struct(ref vr), &MemberAccessType::StructMember(idx)) => {
+            ValueRef::Struct(ref vr) => {
                 vr.get_member_ptr(ctx, idx)
             },
 
-            (&ValueRef::HeapPtr(_, Type::Struct(_)), &MemberAccessType::StructMember(_)) => {
-                self.deref(ctx).member(ctx, at)
+            ValueRef::HeapPtr(_, Type::Struct(_)) => {
+                self.deref(ctx).member(ctx, idx)
             },
+            _ => panic!("Internal Compiler Error: Invalid member access"),
+        }
+    }
 
-            (&ValueRef::Array(ref ar), &MemberAccessType::ArrayProperty(ArrayProperty::Len)) => {
+    pub unsafe fn array_property(&self, ctx: &Context, prop: ArrayProperty) -> ValueRef
+    {
+        match (self, prop)
+        {
+            (&ValueRef::Array(ref ar), ArrayProperty::Len) => {
                 ar.get_length_ptr(ctx)
             },
 
-            (&ValueRef::HeapPtr(_, Type::Array(_)), &MemberAccessType::ArrayProperty(ArrayProperty::Len)) => {
-                self.deref(ctx).member(ctx, at)
+            (&ValueRef::HeapPtr(_, Type::Array(_)), ArrayProperty::Len) => {
+                self.deref(ctx).array_property(ctx, prop)
             },
-            _ => panic!("Internal Compiler Error: Invalid member access"),
+            _ => panic!("Internal Compiler Error: Invalid array property access"),
         }
     }
 

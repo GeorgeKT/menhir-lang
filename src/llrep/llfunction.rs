@@ -60,11 +60,6 @@ impl Scope
         self.named_vars.insert(var.name.clone(), var);
     }
 
-    pub fn get_named_var(&self, var: &str) -> Option<LLVar>
-    {
-        self.named_vars.get(var).map(|v| v.clone())
-    }
-
     pub fn add_dec_ref_target(&mut self, v: &LLVar) -> bool
     {
         if self.named_vars.get(&v.name).is_none() {
@@ -248,17 +243,6 @@ impl LLFunction
     {
         let scope = self.scopes.last_mut().expect("Empty Scope Stack");
         scope.add_named_var(var);
-    }
-
-    pub fn get_named_var(&self, var: &str) -> Option<LLVar>
-    {
-        for scope in self.scopes.iter().rev() {
-            if let Some(v) = scope.get_named_var(var) {
-                return Some(v)
-            }
-        }
-
-        None
     }
 
     pub fn add_dec_ref_target(&mut self, v: &LLVar)

@@ -75,7 +75,7 @@ fn resolve_struct_member_types(ctx: &mut TypeCheckerContext, sd: &mut StructDecl
         member_types.push(struct_member(&m.name, m.typ.clone()));
     }
 
-    sd.typ = struct_type(member_types);
+    sd.typ = struct_type(&sd.name, member_types);
     Ok(TypeResolved::Yes)
 }
 
@@ -108,11 +108,11 @@ fn resolve_sum_case_types(ctx: &mut TypeCheckerContext, st: &mut SumTypeDeclarat
     if case_types.iter().all(|ct| ct.typ == Type::Int)
     {
         let case_names: Vec<String> = st.cases.iter().map(|c| c.name.clone()).collect();
-        st.typ = enum_type(case_names);
+        st.typ = enum_type(&st.name, case_names);
     }
     else
     {
-        st.typ = sum_type(case_types);
+        st.typ = sum_type(&st.name, case_types);
     }
 
     Ok(TypeResolved::Yes)

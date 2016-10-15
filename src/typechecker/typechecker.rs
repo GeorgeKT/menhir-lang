@@ -22,7 +22,7 @@ fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> Compile
         u.typ = e_type.clone();
         return Ok(e_type)
     }
-
+    
     match u.operator
     {
         Operator::Sub => {
@@ -574,16 +574,16 @@ fn type_check_if(ctx: &mut TypeCheckerContext, i: &mut IfExpression) -> CompileR
     Ok(on_false_type)
 }
 
-fn type_check_struct_members_in_initializer(ctx: &mut TypeCheckerContext, members: &Vec<StructMember>, si: &mut StructInitializer) -> CompileResult<Type>
+fn type_check_struct_members_in_initializer(ctx: &mut TypeCheckerContext, st: &StructType, si: &mut StructInitializer) -> CompileResult<Type>
 {
-    if members.len() != si.member_initializers.len() {
+    if st.members.len() != si.member_initializers.len() {
         return err(&si.span, ErrorCode::WrongArgumentCount,
-            format!("Type {} has {} members, but attempting to initialize {} members", si.struct_name, members.len(), si.member_initializers.len()));
+            format!("Type {} has {} members, but attempting to initialize {} members", si.struct_name, st.members.len(), si.member_initializers.len()));
     }
 
-    let mut new_members = Vec::with_capacity(members.len());
+    let mut new_members = Vec::with_capacity(st.members.len());
 
-    for (idx, (member, mi)) in members.iter().zip(si.member_initializers.iter_mut()).enumerate()
+    for (idx, (member, mi)) in st.members.iter().zip(si.member_initializers.iter_mut()).enumerate()
     {
         let t = try!(type_check_expression(ctx, mi, Some(member.typ.clone())));
         let expected_type = if member.typ.is_generic() {
@@ -602,7 +602,7 @@ fn type_check_struct_members_in_initializer(ctx: &mut TypeCheckerContext, member
         new_members.push(struct_member(&member.name, t));
     }
 
-    Ok(struct_type(new_members))
+    Ok(struct_type(&st.name, new_members))
 }
 
 fn type_check_anonymous_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructInitializer) -> CompileResult<Type>
@@ -613,7 +613,7 @@ fn type_check_anonymous_struct_initializer(ctx: &mut TypeCheckerContext, si: &mu
         let t = try!(type_check_expression(ctx, mi, None));
         new_members.push(struct_member("", t));
     }
-    si.typ = struct_type(new_members);
+    si.typ = struct_type("", new_members);
     Ok(si.typ.clone())
 }
 
@@ -627,11 +627,11 @@ fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructIn
     si.struct_name = resolved.full_name;
     match resolved.typ
     {
-        Type::Struct(st) => {
-            si.typ = try!(type_check_struct_members_in_initializer(ctx, &st.members, si));
+        Type::Struct(ref st) => {
+            si.typ = try!(type_check_struct_members_in_initializer(ctx, st, si));
             Ok(si.typ.clone())
         },
-        Type::Sum(st) => {
+        Type::Sum(ref st) => {
             let idx = st.index_of(&si.struct_name).expect("Internal Compiler Error: cannot determine index of sum type case");
             let mut sum_type_cases = Vec::with_capacity(st.cases.len());
             for (i, case) in st.cases.iter().enumerate()
@@ -640,7 +640,7 @@ fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructIn
                 {
                     match case.typ
                     {
-                        Type::Struct(ref s) => try!(type_check_struct_members_in_initializer(ctx, &s.members, si)),
+                        Type::Struct(ref s) => try!(type_check_struct_members_in_initializer(ctx, s, si)),
                         Type::Int => Type::Int,
                         _ => return err(&si.span, ErrorCode::TypeError, format!("Invalid sum type case")),
                     }
@@ -650,7 +650,7 @@ fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructIn
                 sum_type_cases.push(sum_type_case(&case.name, typ))
             }
 
-            si.typ = sum_type(sum_type_cases);
+            si.typ = sum_type(&st.name, sum_type_cases);
             Ok(si.typ.clone())
         },
         _ => err(&si.span, ErrorCode::TypeError, format!("{} is not a struct", si.struct_name)),
@@ -659,66 +659,57 @@ fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructIn
 
 
 
-fn find_member_type(members: &Vec<StructMember>, member_access: &MemberAccessMethod, span: &Span) -> CompileResult<(usize, Type)>
+fn find_member_type(members: &Vec<StructMember>, member_name: &str, span: &Span) -> CompileResult<(usize, Type)>
 {
-    match member_access
-    {
-        &MemberAccessMethod::ByName(ref member_name) => {
-            members.iter()
-                .enumerate()
-                .find(|&(_, m)| m.name == *member_name)
-                .map(|(idx, m)| (idx, m.typ.clone()))
-                .ok_or(CompileError::new(span, ErrorCode::UnknownStructMember, format!("Unknown struct member {}", member_name)))
-        },
-
-        &MemberAccessMethod::ByIndex(index) => {
-            if index > members.len() {
-                return err(span, ErrorCode::UnknownStructMember, format!("Attempting to access member {} of struct, but it only has {} members",
-                    index, members.len()));
-            }
-
-            Ok((index, members[index].typ.clone()))
-        },
-    }
-
+    members.iter()
+        .enumerate()
+        .find(|&(_, m)| m.name == *member_name)
+        .map(|(idx, m)| (idx, m.typ.clone()))
+        .ok_or(CompileError::new(span, ErrorCode::UnknownStructMember, format!("Unknown struct member {}", member_name)))
 }
 
 fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess) -> CompileResult<Type>
 {
-    let resolved = try!(ctx.resolve_type(&sma.name).ok_or(unknown_name(&sma.span, &sma.name)));
-    sma.name = resolved.full_name;
-    let mut st = resolved.typ;
-    sma.access_types.clear();
-    for access_method in &sma.access_methods
-    {
-        st = match st
-        {
-            Type::Struct(ref st) => {
-                let (member_idx, member_type) = try!(find_member_type(&st.members, access_method, &sma.span));
-                sma.access_types.push(MemberAccessType::StructMember(member_idx));
-                member_type
-            },
-            _ => {
-                match *access_method
-                {
-                    MemberAccessMethod::ByName(ref member_name) => {
-                        if let Some((prop_type, prop_access_type)) = st.get_property_type(member_name) {
-                            sma.access_types.push(prop_access_type);
-                            prop_type
-                        } else {
-                            return err(&sma.span, ErrorCode::TypeError, format!("Type '{}' has no property named '{}'", st, member_name));
-                        }
-                    },
-                    MemberAccessMethod::ByIndex(idx) => {
-                        return err(&sma.span, ErrorCode::TypeError, format!("Type '{}' has no property named '{}'", st, idx));
-                    }
-                }
-            },
-        };
-    }
+    let left_type = try!(type_check_expression(ctx, &mut sma.left, None));
 
-    sma.typ = st.clone();
-    Ok(st)
+    let (typ, new_right) = match (&mut sma.right, &left_type)
+    {
+        (&mut MemberAccessType::Name(ref mut field), &Type::Struct(ref st)) => {
+            let (member_idx, member_type) = try!(find_member_type(&st.members, &field.name, &sma.span));
+            field.index = member_idx;
+            (member_type, None)
+        },
+
+        (&mut MemberAccessType::Name(ref mut field), &Type::Array(_)) => {
+            if let Some((typ, member_access_type)) = left_type.get_property_type(&field.name) {
+                (typ, Some(member_access_type))
+            } else {
+                return err(&sma.span, ErrorCode::TypeError, format!("Type '{}' has no property named '{}'", left_type, field.name));
+            }
+        },
+
+        (&mut MemberAccessType::Call(ref mut call), &Type::Struct(ref st)) => {
+            let call_name = format!("{}.{}", st.name, call.callee.name);
+            call.callee.name = call_name;
+            (try!(type_check_call(ctx, call)), None)
+        },
+
+        (&mut MemberAccessType::Call(ref mut call), &Type::Sum(ref st)) => {
+            let call_name = format!("{}.{}", st.name, call.callee.name);
+            call.callee.name = call_name;
+            (try!(type_check_call(ctx, call)), None)
+        },
+
+        _ => {
+            return err(&sma.span, ErrorCode::TypeError, format!("Cannot determine type of member access"));
+        }
+    };
+
+    sma.typ = typ;
+    if let Some(nr) = new_right {
+        sma.right = nr;
+    }
+    Ok(sma.typ.clone())
 }
 
 fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern) -> CompileResult<Type>

@@ -246,7 +246,7 @@ unsafe fn gen_call(ctx: &mut Context, dst: &LLVar, name: &str, args: &Vec<LLVar>
 unsafe fn gen_struct_member(ctx: &mut Context, dst: &LLVar, obj: &LLVar, index: usize)
 {
     let struct_object = ctx.get_variable(&obj.name).expect("Unknown variable");
-    let member_ptr = struct_object.value.member(ctx, &MemberAccessType::StructMember(index));
+    let member_ptr = struct_object.value.member(ctx, index);
     if dst.typ.allocate_on_heap() {
         ctx.add_variable(&dst.name, member_ptr);
     } else {
@@ -258,7 +258,7 @@ unsafe fn gen_struct_member(ctx: &mut Context, dst: &LLVar, obj: &LLVar, index: 
 unsafe fn gen_array_property(ctx: &mut Context, dst: &LLVar, array: &LLVar, property: ArrayProperty)
 {
     let array_object = &ctx.get_variable(&array.name).expect("Unknown variable").value;
-    let prop_ptr = array_object.member(ctx, &MemberAccessType::ArrayProperty(property));
+    let prop_ptr = array_object.array_property(ctx, property);
     ctx.add_variable(&dst.name, prop_ptr);
 }
 
@@ -381,7 +381,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: 
 
         LLInstruction::SetStructMember(ref s) => {
             let struct_object = ctx.get_variable(&s.obj.name).expect("Unknown variable obj");
-            let member_ptr = struct_object.value.member(ctx, &MemberAccessType::StructMember(s.member_index));
+            let member_ptr = struct_object.value.member(ctx, s.member_index);
             member_ptr.store(ctx, &ctx.get_variable(&s.value.name).expect("Unknown variable value").value);
         },
 

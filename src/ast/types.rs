@@ -21,6 +21,7 @@ pub trait SumTypeCaseIndexOf
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct SumType
 {
+    pub name: String,
     pub cases: Vec<SumTypeCase>,
 }
 
@@ -40,6 +41,7 @@ impl SumTypeCaseIndexOf for SumType
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct EnumType
 {
+    pub name: String,
     pub cases: Vec<String>,
 }
 
@@ -66,6 +68,7 @@ pub struct StructMember
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct StructType
 {
+    pub name: String,
     pub members: Vec<StructMember>,
 }
 
@@ -284,23 +287,26 @@ pub fn sum_type_case(name: &str, typ: Type) -> SumTypeCase
     }
 }
 
-pub fn sum_type(cases: Vec<SumTypeCase>) -> Type
+pub fn sum_type(name: &str, cases: Vec<SumTypeCase>) -> Type
 {
     Type::Sum(Rc::new(SumType{
+        name: name.into(),
         cases: cases,
     }))
 }
 
-pub fn enum_type(cases: Vec<String>) -> Type
+pub fn enum_type(name: &str, cases: Vec<String>) -> Type
 {
     Type::Enum(Rc::new(EnumType{
+        name: name.into(),
         cases: cases,
     }))
 }
 
-pub fn struct_type(members: Vec<StructMember>) -> Type
+pub fn struct_type(name: &str, members: Vec<StructMember>) -> Type
 {
     Type::Struct(Rc::new(StructType{
+        name: name.into(),
         members: members,
     }))
 }

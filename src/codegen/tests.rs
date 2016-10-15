@@ -326,7 +326,7 @@ fn test_anonymous_structs() {
 make_pair(a: int, b: int) -> {int, int} = ${a, b}
 
 main() -> int =
-    let p = make_pair(4, 5) in p.0 + p.1
+    let {left, right} = make_pair(4, 5) in left + right
     "#, true);
     println!("r: {:?}", r);
     assert!(r == Ok(9));
