@@ -161,12 +161,6 @@ fn member_access_to_llrep(func: &mut LLFunction, sma: &MemberAccess, dst: &LLVar
             add_array_len(func, var.clone(), dst);
         },
 
-        (_, &MemberAccessType::Call(ref call)) => {
-            func.push_destination(Some(dst.clone()));
-            call_to_llrep(func, call, Some(var.clone()));
-            func.pop_destination();
-        },
-
         _ => {
             panic!("Internal Compiler Error: Invalid member access")
         },

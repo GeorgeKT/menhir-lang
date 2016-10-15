@@ -534,3 +534,22 @@ let r = run(r#"
     println!("r: {:?}", r);
     assert!(r == Ok(6));
 }
+
+
+
+#[test]
+fn test_member_function()
+{
+let r = run(r#"
+    type Foo = {
+        bar: int
+    }
+
+    Foo.add(self, num: int) -> int = self.bar + num
+
+    main() -> int =
+        let f = Foo{7} in f.add(4)
+    "#, true);
+    println!("r: {:?}", r);
+    assert!(r == Ok(11));
+}
