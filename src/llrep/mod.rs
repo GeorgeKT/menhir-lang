@@ -446,6 +446,35 @@ fn name_ref_to_llrep(func: &mut LLFunction, nr: &NameRef) -> Option<LLVar>
     }
 }
 
+fn block_to_llrep(func: &mut LLFunction, b: &Block) -> Option<LLVar>
+{
+    let do_block = |func: &mut LLFunction, b: &Block| {
+        for (idx, e) in b.expressions.iter().enumerate() {
+            if idx == b.expressions.len() - 1 {
+                expr_to_llrep(func, e);
+            } else {
+                func.push_destination(None);
+                expr_to_llrep(func, e);
+                func.pop_destination();
+            }
+        }
+    };
+
+
+    if b.typ != Type::Void {
+        let dst = get_dst(func, &b.typ);
+        func.push_destination(Some(dst.clone()));
+        do_block(func, b);
+        func.pop_destination();
+        Some(dst)
+    } else {
+        func.push_destination(None);
+        do_block(func, b);
+        func.pop_destination();
+        None
+    }
+}
+
 fn to_llrep(func: &mut LLFunction, expr: &Expression) -> LLVar
 {
     expr_to_llrep(func, expr).expect("Expression must return a value")
@@ -564,19 +593,7 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> Option<LLVar>
         },
 
         Expression::Block(ref b) => {
-            let dst = get_dst(func, &b.typ);
-            func.push_destination(Some(dst.clone()));
-            for (idx, e) in b.expressions.iter().enumerate() {
-                if idx == b.expressions.len() - 1 {
-                    expr_to_llrep(func, e);
-                } else {
-                    func.push_destination(None);
-                    expr_to_llrep(func, e);
-                    func.pop_destination();
-                }
-            }
-            func.pop_destination();
-            Some(dst)
+            block_to_llrep(func, b)
         },
 
         Expression::Lambda(ref l) => {
@@ -602,12 +619,16 @@ fn stack_alloc(func: &mut LLFunction, typ: &Type, name: Option<&str>) -> LLVar
         Some(n) => {
             let var = LLVar::named(n, typ.clone());
             func.add_named_var(var.clone());
-            func.add(LLInstruction::Alloc(var.clone()));
+            if *typ != Type::Void {
+                func.add(LLInstruction::Alloc(var.clone()));
+            }
             var
         },
         None => {
             let var = func.new_var(typ.clone());
-            func.add(LLInstruction::Alloc(var.clone()));
+            if *typ != Type::Void {
+                func.add(LLInstruction::Alloc(var.clone()));
+            }
             var
         }
     }
@@ -627,11 +648,19 @@ fn get_dst(func: &mut LLFunction, typ: &Type) -> LLVar
 fn func_to_llrep(sig: &FunctionSignature, expression: &Expression) -> LLFunction
 {
     let mut llfunc = LLFunction::new(&sig);
-    let var = to_llrep(&mut llfunc, &expression);
-    if var.typ.allocate_on_heap() {
-        llfunc.remove_dec_ref_target(&var);
+    match expr_to_llrep(&mut llfunc, &expression)
+    {
+        Some(var) => {
+            if var.typ.allocate_on_heap() {
+                llfunc.remove_dec_ref_target(&var);
+            }
+            llfunc.add(ret_instr(&var));
+        },
+
+        None => {
+            llfunc.add(LLInstruction::ReturnVoid);
+        }
     }
-    llfunc.add(ret_instr(&var));
     llfunc
 }
 

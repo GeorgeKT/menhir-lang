@@ -404,6 +404,10 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: 
             LLVMBuildRet(ctx.builder, ret.value.load(ctx.builder));
         },
 
+        LLInstruction::ReturnVoid => {
+            LLVMBuildRetVoid(ctx.builder);
+        },
+
         LLInstruction::StartScope => {
             ctx.push_stack(ptr::null_mut());
         },

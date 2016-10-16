@@ -144,15 +144,24 @@ fn parse_binary_op_rhs(tq: &mut TokenQueue, mut lhs: Expression) -> CompileResul
     }
 }
 
-fn parse_list<T, P>(tq: &mut TokenQueue, separator: TokenKind, end_token: TokenKind, parse_element: P) -> CompileResult<Vec<T>>
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ListEnd
+{
+    Separator,
+    EndToken,
+}
+
+fn parse_list<T, P>(tq: &mut TokenQueue, separator: TokenKind, end_token: TokenKind, parse_element: P) -> CompileResult<(Vec<T>, ListEnd)>
     where P: Fn(&mut TokenQueue) -> CompileResult<T>
 {
+    let mut list_end = ListEnd::Separator;
     let mut elements = Vec::new();
     while !tq.is_next(end_token.clone())
     {
         let e = try!(parse_element(tq));
         elements.push(e);
         if !tq.is_next(separator.clone()) {
+            list_end = ListEnd::EndToken;
             break;
         } else {
             try!(tq.pop());
@@ -160,10 +169,10 @@ fn parse_list<T, P>(tq: &mut TokenQueue, separator: TokenKind, end_token: TokenK
     }
 
     try!(tq.expect(end_token));
-    Ok(elements)
+    Ok((elements, list_end))
 }
 
-fn parse_comma_separated_list<T, P>(tq: &mut TokenQueue, end_token: TokenKind, parse_element: P) -> CompileResult<Vec<T>>
+fn parse_comma_separated_list<T, P>(tq: &mut TokenQueue, end_token: TokenKind, parse_element: P) -> CompileResult<(Vec<T>, ListEnd)>
     where P: Fn(&mut TokenQueue) -> CompileResult<T>
 {
     parse_list(tq, TokenKind::Comma, end_token, parse_element)
@@ -171,7 +180,7 @@ fn parse_comma_separated_list<T, P>(tq: &mut TokenQueue, end_token: TokenKind, p
 
 fn parse_function_call(tq: &mut TokenQueue, name: NameRef) -> CompileResult<Call>
 {
-    let args = try!(parse_comma_separated_list(tq, TokenKind::CloseParen, parse_expression));
+    let (args, _) = try!(parse_comma_separated_list(tq, TokenKind::CloseParen, parse_expression));
     let span = name.span.expanded(tq.pos());
     Ok(Call::new(name, args, span))
 }
@@ -182,7 +191,8 @@ fn parse_generic_arg_list(tq: &mut TokenQueue) -> CompileResult<Vec<Type>>
         return Ok(Vec::new());
     }
     try!(tq.pop());
-    parse_comma_separated_list(tq, TokenKind::Operator(Operator::GreaterThan), parse_type)
+    let (args, _) = try!(parse_comma_separated_list(tq, TokenKind::Operator(Operator::GreaterThan), parse_type));
+    Ok(args)
 }
 
 fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
@@ -204,7 +214,7 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
     {
         // Function signature: (a, b) -> c
         try!(tq.pop());
-        let args = try!(parse_comma_separated_list(tq, TokenKind::CloseParen, parse_type));
+        let (args, _) = try!(parse_comma_separated_list(tq, TokenKind::CloseParen, parse_type));
         try!(tq.expect(TokenKind::Arrow));
         let ret = try!(parse_type(tq));
         Ok(func_type(args, ret))
@@ -259,7 +269,8 @@ fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool, self_typ
 
 fn parse_function_arguments(tq: &mut TokenQueue, type_is_optional: bool, self_type: &Option<Type>) -> CompileResult<Vec<Argument>>
 {
-    parse_comma_separated_list(tq, TokenKind::CloseParen, |tq| parse_function_argument(tq, type_is_optional, self_type))
+    let (args, _) = try!(parse_comma_separated_list(tq, TokenKind::CloseParen, |tq| parse_function_argument(tq, type_is_optional, self_type)));
+    Ok(args)
 }
 
 fn parse_external_function(tq: &mut TokenQueue, span: &Span) -> CompileResult<ExternalFunction>
@@ -327,7 +338,7 @@ fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, name: &str, 
 
 fn parse_struct_pattern(tq: &mut TokenQueue, name: &str, span: &Span) -> CompileResult<Pattern>
 {
-    let bindings = try!(parse_comma_separated_list(tq, TokenKind::CloseCurly, |tq| {
+    let (bindings, _) = try!(parse_comma_separated_list(tq, TokenKind::CloseCurly, |tq| {
         let (name, _) = try!(tq.expect_identifier());
         Ok(name)
     }));
@@ -531,11 +542,12 @@ fn parse_struct_member(tq: &mut TokenQueue, file_name: &str) -> CompileResult<St
 fn parse_struct_members(tq: &mut TokenQueue) -> CompileResult<Vec<StructMemberDeclaration>>
 {
     let span = try!(tq.expect(TokenKind::OpenCurly)).span;
-    parse_comma_separated_list(
+    let (members, _) = try!(parse_comma_separated_list(
         tq,
         TokenKind::CloseCurly,
         |tq| parse_struct_member(tq, &span.file)
-    )
+    ));
+    Ok(members)
 }
 
 fn parse_struct_type(tq: &mut TokenQueue, namespace: &str, name: &str, span: &Span) -> CompileResult<StructDeclaration>
@@ -547,7 +559,7 @@ fn parse_struct_type(tq: &mut TokenQueue, namespace: &str, name: &str, span: &Sp
 fn parse_struct_initializer(tq: &mut TokenQueue, name: &str, name_span: &Span) -> CompileResult<Expression>
 {
     try!(tq.expect(TokenKind::OpenCurly));
-    let expressions = try!(parse_comma_separated_list(tq, TokenKind::CloseCurly, parse_expression));
+    let (expressions, _) = try!(parse_comma_separated_list(tq, TokenKind::CloseCurly, parse_expression));
     Ok(Expression::StructInitializer(
         struct_initializer(name, expressions, name_span.expanded(tq.pos()))
     ))
@@ -578,7 +590,10 @@ fn parse_member_access(tq: &mut TokenQueue, left_expr: Expression) -> CompileRes
 
 fn parse_block(tq: &mut TokenQueue, start: &Span) -> CompileResult<Expression>
 {
-    let expressions = try!(parse_list(tq, TokenKind::SemiColon, TokenKind::CloseCurly, parse_expression));
+    let (mut expressions, list_end) = try!(parse_list(tq, TokenKind::SemiColon, TokenKind::CloseCurly, parse_expression));
+    if list_end == ListEnd::Separator {
+        expressions.push(Expression::Void);
+    }
     Ok(block(expressions, start.expanded(tq.pos())))
 }
 

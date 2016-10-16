@@ -289,7 +289,6 @@ fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> Type
     let et = try!(type_check_expression(ctx, &mut fun.expression, &None));
     ctx.pop_stack();
     if et != fun.sig.return_type {
-        println!("{:?} <> {:?}", et, fun.sig.return_type);
         return err(&fun.span, ErrorCode::TypeError, format!("Function {} has return type {}, but it is returning an expression of type {}",
             fun.sig.name, fun.sig.return_type, et));
     }
@@ -837,16 +836,16 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::Lambda(ref mut l) => type_check_lambda(ctx, l, type_hint),
         Expression::Let(ref mut l) => type_check_let(ctx, l),
         Expression::LetBindings(ref mut l) => {
-            let mut typ = Type::Unknown;
             for b in &mut l.bindings {
-                typ = try!(type_check_let_binding(ctx, b)).unwrap();
+                try!(type_check_let_binding(ctx, b));
             }
-            valid(typ)
+            valid(Type::Void)
         },
         Expression::If(ref mut i) => type_check_if(ctx, i),
         Expression::Block(ref mut b) => type_check_block(ctx, b, type_hint),
         Expression::StructInitializer(ref mut si) => type_check_struct_initializer(ctx, si),
         Expression::MemberAccess(ref mut sma) => type_check_member_access(ctx, sma),
+        Expression::Void => valid(Type::Void),
     };
 
     match type_check_result

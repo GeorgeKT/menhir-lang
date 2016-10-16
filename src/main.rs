@@ -83,18 +83,25 @@ fn main()
     };
 
     match parse_file(&parser_options, &input_file).and_then(|mut module| {
-        /*
-        use ast::TreePrinter;
-        module.print(0);
-        */
+
         try!(type_check_module(&mut module));
+
+        if debug_compiler {
+            println!("AST:");
+            println!("------\n");
+            use ast::TreePrinter;
+            module.print(0);
+            println!("------\n");
+        }
+
 
         let llmod = compile_to_llrep(&module);
 
         if debug_compiler {
-            println!("llmod:\n");
+            println!("llmod:");
             println!("------\n");
             println!("{}", llmod);
+            println!("------\n");
         }
 
 

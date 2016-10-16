@@ -115,6 +115,7 @@ pub enum LLInstruction
     Bind(LLBind),
     Set(LLSet),
     Return(LLVar),
+    ReturnVoid,
     Branch(LLBasicBlockRef),
     BranchIf(LLBranchIf),
     IncRef(LLVar),
@@ -186,6 +187,9 @@ impl fmt::Display for LLInstruction
             },
             LLInstruction::Return(ref var) => {
                 writeln!(f, "  ret {}", var)
+            },
+            LLInstruction::ReturnVoid => {
+                writeln!(f, "  ret void")
             },
             LLInstruction::Branch(ref name) => {
                 writeln!(f, "  br {}", name)

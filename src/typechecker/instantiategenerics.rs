@@ -166,6 +166,7 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
 
             Ok(member_access(left, right, sma.span.clone()))
         },
+        Expression::Void => Ok(Expression::Void),
     }
 }
 
