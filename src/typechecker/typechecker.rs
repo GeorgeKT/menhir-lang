@@ -540,7 +540,39 @@ fn type_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint: &O
 fn type_check_let_binding(ctx: &mut TypeCheckerContext, b: &mut LetBinding) -> TypeCheckResult
 {
     b.typ = try!(type_check_expression(ctx, &mut b.init, &None));
-    try!(ctx.add(&b.name, b.typ.clone(), &b.span));
+
+    match b.binding_type
+    {
+        LetBindingType::Name(ref name) => {
+            try!(ctx.add(&name, b.typ.clone(), &b.span));
+        },
+
+        LetBindingType::Struct(ref mut s) => {
+            s.typ = b.typ.clone();
+
+            if let Type::Struct(ref st) = s.typ
+            {
+                if st.members.len() != s.bindings.len() {
+                    return err(&s.span, ErrorCode::TypeError,
+                        format!("Wrong number of members in struct binding (expecting {}, found {})",
+                            st.members.len(), s.bindings.len()));
+                }
+
+                s.types = st.members.iter().map(|sm| sm.typ.clone()).collect();
+                for (binding, typ) in s.bindings.iter().zip(s.types.iter()) {
+                    if binding != "_" {
+                        try!(ctx.add(binding, typ.clone(), &s.span));
+                    }
+                }
+            }
+            else
+            {
+                return err(&b.init.span(), ErrorCode::TypeError, 
+                    format!("Expression does not return a struct type"));
+            }
+        },
+    }
+
     valid(b.typ.clone())
 }
 
@@ -558,15 +590,18 @@ fn type_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> TypeCh
                 let mut handled = false;
                 for b in &mut l.bindings
                 {
-                    if b.name == *name
+                    if let LetBindingType::Name(ref b_name) = b.binding_type
                     {
-                        // It's one we know, so lets try again with a proper type hint
-                        b.typ = try!(type_check_expression(ctx, &mut b.init, &Some(expected_type.clone())));
-                        ctx.update(&b.name, b.typ.clone());
-                        l.typ = try!(type_check_expression(ctx, &mut l.expression, &None));
-                        handled = true;
-                        break;
+                        if *b_name == *name {
+                            // It's one we know, so lets try again with a proper type hint
+                            b.typ = try!(type_check_expression(ctx, &mut b.init, &Some(expected_type.clone())));
+                            ctx.update(&b_name, b.typ.clone());
+                            l.typ = try!(type_check_expression(ctx, &mut l.expression, &None));
+                            handled = true;
+                        }
                     }
+
+                    if handled {break;}
                 }
 
                 if !handled {

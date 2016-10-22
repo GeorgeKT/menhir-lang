@@ -1,8 +1,4 @@
-type Foo = {
-    bar: int
-}
-
-Foo.add(self, num: int) -> int = self.bar + num
+make_pair(a: int, b: int) -> {int, int} = ${a, b}
 
 main() -> int =
-    let f = Foo{7} in f.add(4)
+    let {left, right} = make_pair(4, 5) in left + right

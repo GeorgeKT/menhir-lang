@@ -1,10 +1,18 @@
-use ast::{Expression, Type, TreePrinter, prefix};
+use itertools::free::join;
+use ast::{Expression, Type, TreePrinter, prefix, StructPattern};
 use span::{Span};
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum LetBindingType
+{
+    Name(String),
+    Struct(StructPattern),
+}
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct LetBinding
 {
-    pub name: String,
+    pub binding_type: LetBindingType,
     pub init: Expression,
     pub typ: Type,
     pub span: Span,
@@ -26,10 +34,20 @@ pub struct LetExpression
     pub span: Span,
 }
 
-pub fn let_binding(name: String, init: Expression, span: Span) -> LetBinding
+pub fn let_name_binding(name: String, init: Expression, span: Span) -> LetBinding
 {
     LetBinding{
-        name: name,
+        binding_type: LetBindingType::Name(name),
+        init: init,
+        typ: Type::Unknown,
+        span: span,
+    }
+}
+
+pub fn let_binding(bt: LetBindingType, init: Expression, span: Span) -> LetBinding
+{
+    LetBinding{
+        binding_type: bt,
         init: init,
         typ: Type::Unknown,
         span: span,
@@ -73,7 +91,18 @@ impl TreePrinter for LetBinding
     fn print(&self, level: usize)
     {
         let p = prefix(level);
-        println!("{}binding {} ({}) =", p, self.name, self.span);
+        match self.binding_type
+        {
+            LetBindingType::Name(ref name) => {
+                println!("{}binding {} ({}) =", p, name, self.span);
+            },
+
+            LetBindingType::Struct(ref s) => {
+                println!("{}struct binding {{{}}} =",
+                    p, join(s.bindings.iter(), ","));
+            },
+        }
+
         self.init.print(level + 1);
     }
 }

@@ -336,13 +336,13 @@ fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, name: &str, 
     ))
 }
 
-fn parse_struct_pattern(tq: &mut TokenQueue, name: &str, span: &Span) -> CompileResult<Pattern>
+fn parse_struct_pattern(tq: &mut TokenQueue, name: &str, span: &Span) -> CompileResult<StructPattern>
 {
     let (bindings, _) = try!(parse_comma_separated_list(tq, TokenKind::CloseCurly, |tq| {
         let (name, _) = try!(tq.expect_identifier());
         Ok(name)
     }));
-    Ok(Pattern::Struct(struct_pattern(name, bindings, Vec::new(), Type::Unknown, span.expanded(tq.pos()))))
+    Ok(struct_pattern(name, bindings, Vec::new(), Type::Unknown, span.expanded(tq.pos())))
 }
 
 pub fn parse_pattern(tq: &mut TokenQueue) -> CompileResult<Pattern>
@@ -378,7 +378,7 @@ pub fn parse_pattern(tq: &mut TokenQueue) -> CompileResult<Pattern>
         },
 
         TokenKind::OpenCurly => {
-            parse_struct_pattern(tq, "", &tok.span)
+            parse_struct_pattern(tq, "", &tok.span).map(|p| Pattern::Struct(p))
         },
 
         TokenKind::Identifier(id) => {
@@ -387,7 +387,7 @@ pub fn parse_pattern(tq: &mut TokenQueue) -> CompileResult<Pattern>
             }
             else if tq.is_next(TokenKind::OpenCurly) {
                 try!(tq.pop());
-                parse_struct_pattern(tq, &id, &tok.span)
+                parse_struct_pattern(tq, &id, &tok.span).map(|p| Pattern::Struct(p))
             } else {
                 Ok(Pattern::Name(NameRef::new(id, tok.span)))
             }
@@ -431,10 +431,19 @@ fn parse_let(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
     let mut bindings = Vec::new();
     while !tq.is_next(TokenKind::In) && !tq.is_next(TokenKind::SemiColon) && !tq.is_next(TokenKind::CloseParen)
     {
-        let (name, span) = try!(tq.expect_identifier());
+        let (binding_type, span) = if tq.is_next(TokenKind::OpenCurly) {
+            let tok = try!(tq.pop());
+            let pattern = try!(parse_struct_pattern(tq, "", &tok.span));
+            let span = pattern.span.clone();
+            (LetBindingType::Struct(pattern), span)
+        } else {
+            let (name, span) = try!(tq.expect_identifier());
+            (LetBindingType::Name(name), span)
+        };
+
         try!(tq.expect(TokenKind::Assign));
         let init = try!(parse_expression(tq));
-        bindings.push(let_binding(name, init, span.expanded(tq.pos())));
+        bindings.push(let_binding(binding_type, init, span.expanded(tq.pos())));
         try!(eat_comma(tq));
     }
 

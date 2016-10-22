@@ -8,24 +8,44 @@ fn subsitute_let_bindings(generic_args: &GenericMapper, lb: &Vec<LetBinding>) ->
     let mut bindings = Vec::with_capacity(lb.len());
     for b in lb.iter() {
         let binding_expr = try!(substitute_expr(generic_args, &b.init));
-        bindings.push(let_binding(b.name.clone(), binding_expr, b.span.clone()));
+        let new_binding = match b.binding_type
+        {
+            LetBindingType::Name(ref name) => {
+                let_name_binding(name.clone(), binding_expr, b.span.clone())
+            },
+
+            LetBindingType::Struct(ref s) => {
+                let_binding(
+                    LetBindingType::Struct(substitute_struct_pattern(generic_args, s)),
+                    binding_expr,
+                    b.span.clone()
+                )
+            },
+        };
+        bindings.push(new_binding);
     }
     Ok(bindings)
+}
+
+fn substitute_struct_pattern(generic_args: &GenericMapper, p: &StructPattern) -> StructPattern
+{
+    struct_pattern(
+        &p.name,
+        p.bindings.clone(),
+        p.types.iter().map(|t| generic_args.substitute(t)).collect(),
+        generic_args.substitute(&p.typ),
+        p.span.clone()
+    )
 }
 
 fn substitute_pattern(generic_args: &GenericMapper, p: &Pattern) -> CompileResult<Pattern>
 {
     match *p
     {
-        Pattern::Struct(ref p) => {
-            Ok(Pattern::Struct(struct_pattern(
-                &p.name,
-                p.bindings.clone(),
-                p.types.iter().map(|t| generic_args.substitute(t)).collect(),
-                generic_args.substitute(&p.typ),
-                p.span.clone()))
-            )
+        Pattern::Struct(ref sp) => {
+            Ok(Pattern::Struct(substitute_struct_pattern(generic_args, sp)))
         },
+
         Pattern::Name(ref nr) => {
             let new_nr = NameRef{
                 name: nr.name.clone(),
@@ -34,9 +54,11 @@ fn substitute_pattern(generic_args: &GenericMapper, p: &Pattern) -> CompileResul
             };
             Ok(Pattern::Name(new_nr))
         },
+
         Pattern::Literal(Literal::Array(ref al)) => {
             substitute_array_literal(generic_args, al).map(|al| Pattern::Literal(al))
         },
+
         _ => Ok(p.clone()),
     }
 }

@@ -82,10 +82,23 @@ fn call_to_llrep(func: &mut LLFunction, c: &Call, self_arg: Option<LLVar>) -> LL
 
 fn add_binding(func: &mut LLFunction, b: &LetBinding)
 {
-    let dst = stack_alloc(func, &b.typ, Some(&b.name));
-    func.push_destination(Some(dst.clone()));
-    expr_to_llrep(func, &b.init);
-    func.pop_destination();
+    match b.binding_type
+    {
+        LetBindingType::Name(ref name) => {
+            let dst = stack_alloc(func, &b.typ, Some(name));
+            func.push_destination(Some(dst));
+            expr_to_llrep(func, &b.init);
+            func.pop_destination();
+        },
+
+        LetBindingType::Struct(ref s) => {
+            let dst = stack_alloc(func, &b.typ, None);
+            func.push_destination(Some(dst.clone()));
+            expr_to_llrep(func, &b.init);
+            add_struct_pattern_bindings(s, &dst, func);
+            func.pop_destination();
+        },
+    }
 }
 
 fn let_to_llrep(func: &mut LLFunction, l: &LetExpression) -> Option<LLVar>
@@ -232,6 +245,17 @@ fn array_pattern_match_to_llrep(
     func.add(branch_if_instr(&cond, match_case_bb, next_bb));
 }
 
+fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &LLVar, func: &mut LLFunction)
+{
+    for (idx, b) in p.bindings.iter().enumerate() {
+        if b != "_" {
+            let expr = LLExpr::StructMember(struct_var.clone(), idx);
+            let member_ptr = make_var(func, expr, p.types[idx].clone());
+            bind(func, b, &member_ptr);
+        }
+    }
+}
+
 fn struct_pattern_match_to_llrep(
     func: &mut LLFunction,
     mc: &MatchCase,
@@ -243,22 +267,12 @@ fn struct_pattern_match_to_llrep(
 {
     func.push_destination(None);
 
-    let add_bindings = |var: &LLVar, func: &mut LLFunction| {
-        for (idx, b) in p.bindings.iter().enumerate() {
-            if b != "_" {
-                let expr = LLExpr::StructMember(var.clone(), idx);
-                let member_ptr = make_var(func, expr, p.types[idx].clone());
-                bind(func, b, &member_ptr);
-            }
-        }
-    };
-
     match p.typ
     {
         Type::Struct(_) => {
             func.add(LLInstruction::Branch(match_case_bb));
             func.set_current_bb(match_case_bb);
-            add_bindings(target, func);
+            add_struct_pattern_bindings(p, target, func);
         },
         Type::Sum(ref st) => {
             let target_sum_type_index = make_var(func, LLExpr::SumTypeIndex(target.clone()), Type::Int);
@@ -269,7 +283,7 @@ fn struct_pattern_match_to_llrep(
 
             func.set_current_bb(match_case_bb);
             let struct_ptr = make_var(func, LLExpr::SumTypeStruct(target.clone(), idx), st.cases[idx].typ.clone());
-            add_bindings(&struct_ptr, func);
+            add_struct_pattern_bindings(p, &struct_ptr, func);
         },
         _ => panic!("Internal Compiler Error: Expression is not a valid match pattern"),
     }
