@@ -266,20 +266,19 @@ impl fmt::Display for LLFunction
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
         for lambda in &self.lambdas {
-            try!(lambda.fmt(f));
-            try!(writeln!(f, ""));
+            lambda.fmt(f)?;
+            writeln!(f, "")?;
         }
 
-        try!(writeln!(f, "{}({}) -> {}:",
+        writeln!(f, "{}({}) -> {}:",
             self.sig.name,
             join(self.sig.args.iter().map(|arg| format!("{}: {}", arg.name, arg.typ)), ", "),
-            self.sig.return_type)
-        );
+            self.sig.return_type)?;
         for bb_ref in &self.block_order {
             let bb = self.blocks.get(bb_ref).expect("Unknown basic block");
-            try!(writeln!(f, " {}:", bb.name));
+            writeln!(f, " {}:", bb.name)?;
             for inst in &bb.instructions {
-                try!(inst.fmt(f));
+                inst.fmt(f)?;
             }
         }
 

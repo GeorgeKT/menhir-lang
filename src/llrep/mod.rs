@@ -19,8 +19,8 @@ impl fmt::Display for LLModule
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
         for func in &self.functions {
-            try!(func.fmt(f));
-            try!(writeln!(f, " "));
+            func.fmt(f)?;
+            writeln!(f, " ")?;
         }
         Ok(())
     }

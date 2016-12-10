@@ -101,15 +101,15 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
             Ok(actual.clone())
         },
         Type::Generic(_) => {
-            try!(known_types.add(&new_generic, actual, span));
+            known_types.add(&new_generic, actual, span)?;
             Ok(actual.clone())
         },
         Type::Array(ref generic_at) => {
             match *actual
             {
                 Type::Array(ref actual_at) => {
-                    try!(known_types.add(&generic_at.element_type, &actual_at.element_type, span));
-                    let new_el_type = try!(fill_in_generics(&actual_at.element_type, &generic_at.element_type, known_types, span));
+                    known_types.add(&generic_at.element_type, &actual_at.element_type, span)?;
+                    let new_el_type = fill_in_generics(&actual_at.element_type, &generic_at.element_type, known_types, span)?;
                     Ok(array_type(new_el_type))
                 },
                 _ => map_err(),
@@ -124,11 +124,11 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
 
                     let mut new_args = Vec::with_capacity(generic_ft.args.len());
                     for (ga, aa) in generic_ft.args.iter().zip(actual_ft.args.iter()) {
-                        let na = try!(fill_in_generics(aa, ga, known_types, span));
+                        let na = fill_in_generics(aa, ga, known_types, span)?;
                         new_args.push(na);
                     }
 
-                    let nr = try!(fill_in_generics(&actual_ft.return_type, &generic_ft.return_type, known_types, span));
+                    let nr = fill_in_generics(&actual_ft.return_type, &generic_ft.return_type, known_types, span)?;
                     Ok(func_type(new_args, nr))
                 },
                 _ => map_err(),
@@ -147,7 +147,7 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
                             return map_err();
                         }
 
-                        let nt = try!(fill_in_generics(&aa.typ, &ga.typ, known_types, span));
+                        let nt = fill_in_generics(&aa.typ, &ga.typ, known_types, span)?;
                         new_members.push(struct_member(&aa.name, nt));
                     }
 
@@ -169,7 +169,7 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
                             return map_err();
                         }
 
-                        let nt = try!(fill_in_generics(&aa.typ, &ga.typ, known_types, span));
+                        let nt = fill_in_generics(&aa.typ, &ga.typ, known_types, span)?;
                         new_cases.push(sum_type_case(&aa.name, nt));
                     }
 

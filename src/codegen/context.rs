@@ -50,7 +50,7 @@ impl Context
 		unsafe {
             let cname = CString::new(module_name).expect("Invalid module name");
             let context = LLVMContextCreate();
-            let target_machine = try!(TargetMachine::new());
+            let target_machine = TargetMachine::new()?;
             Ok(Context{
                 context: context,
                 module: LLVMModuleCreateWithNameInContext(cname.as_ptr(), context),
@@ -188,7 +188,7 @@ impl Context
     pub unsafe fn gen_object_file(&self, opts: &CodeGenOptions) -> CompileResult<String>
     {
         if opts.optimize {
-            try!(self.optimize());
+            self.optimize()?;
         }
 
         if opts.dump_ir {
@@ -198,18 +198,18 @@ impl Context
             println!("----------------------");
         }
 
-        try!(DirBuilder::new()
+        DirBuilder::new()
             .recursive(true)
             .create(&opts.build_dir)
             .map_err(|e| CompileError::new(
                 &Span::default(),
                 ErrorCode::CodegenError,
-                format!("Unable to create directory for {}: {}", opts.build_dir, e))));
+                format!("Unable to create directory for {}: {}", opts.build_dir, e)))?;
 
 
         let obj_file_name = format!("{}/{}.cobra.o", opts.build_dir, self.name);
         println!("  Building {}", obj_file_name);
-        try!(self.target_machine.emit_to_file(self.module, &obj_file_name));
+        self.target_machine.emit_to_file(self.module, &obj_file_name)?;
         Ok(obj_file_name)
     }
 

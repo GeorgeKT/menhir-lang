@@ -117,7 +117,7 @@ pub fn codegen(m: &LLModule) -> CompileResult<Context>
 {
     unsafe {
         // Set up a context, module and builder in that context.
-        let mut ctx = try!(Context::new(&m.name));
+        let mut ctx = Context::new(&m.name)?;
         add_builtin_functions(&mut ctx);
         gen_module(&mut ctx, m);
 

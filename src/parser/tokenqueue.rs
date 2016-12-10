@@ -79,10 +79,10 @@ impl TokenQueue
 
     pub fn expect_int(&mut self) -> CompileResult<(u64, Span)>
     {
-        let tok = try!(self.pop());
+        let tok = self.pop()?;
         if let TokenKind::Number(ref v) = tok.kind
         {
-            let val = try!(v.parse::<u64>().map_err(|_| CompileError::new(&tok.span, ErrorCode::InvalidInteger, format!("{} is not a valid integer", v))));
+            let val = v.parse::<u64>().map_err(|_| CompileError::new(&tok.span, ErrorCode::InvalidInteger, format!("{} is not a valid integer", v)))?;
             Ok((val, tok.span))
         }
         else
@@ -93,7 +93,7 @@ impl TokenQueue
 
     pub fn expect_identifier(&mut self) -> CompileResult<(String, Span)>
     {
-        let tok = try!(self.pop());
+        let tok = self.pop()?;
         if let TokenKind::Identifier(s) = tok.kind
         {
             Ok((s, tok.span))
@@ -106,7 +106,7 @@ impl TokenQueue
 
     pub fn expect_operator(&mut self) -> CompileResult<Operator>
     {
-        let tok = try!(self.pop());
+        let tok = self.pop()?;
         if let TokenKind::Operator(op) = tok.kind
         {
             Ok(op)

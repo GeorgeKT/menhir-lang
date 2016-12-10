@@ -205,7 +205,7 @@ impl Lexer
             c == '}' || c == ')' || c == ']' ||
             c == '$' || c == ',' || c == '_'
         {
-            let kind = try!(self.data_to_token_kind());
+            let kind = self.data_to_token_kind()?;
             self.state = LexState::Idle;
             let span = self.current_span();
             self.add(kind, span);
@@ -301,13 +301,13 @@ impl Lexer
     {
         for line in BufReader::new(input).lines()
         {
-            for c in try!(line).chars()
+            for c in line?.chars()
             {
-                try!(self.feed(c));
+                self.feed(c)?;
                 self.pos.offset += 1;
             }
 
-            try!(self.feed('\n'));
+            self.feed('\n')?;
             self.pos.offset = 1;
             self.pos.line += 1;
         }

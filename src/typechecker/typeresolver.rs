@@ -90,7 +90,7 @@ fn resolve_sum_case_types(ctx: &mut TypeCheckerContext, st: &mut SumTypeDeclarat
     {
         if let Some(ref mut sd) = c.data
         {
-            if try!(resolve_struct_member_types(ctx, sd, mode)) == TypeResolved::No
+            if resolve_struct_member_types(ctx, sd, mode)? == TypeResolved::No
             {
                 return Ok(TypeResolved::No);
             }
@@ -126,28 +126,28 @@ fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: Re
         match *typ
         {
             TypeDeclaration::Struct(ref mut s) => {
-                if try!(resolve_struct_member_types(ctx, s, mode)) == TypeResolved::Yes
+                if resolve_struct_member_types(ctx, s, mode)? == TypeResolved::Yes
                 {
-                    try!(ctx.add(&s.name, s.typ.clone(), &s.span));
+                    ctx.add(&s.name, s.typ.clone(), &s.span)?;
                     num_resolved += 1;
                 }
             },
             TypeDeclaration::Sum(ref mut s) => {
-                if try!(resolve_sum_case_types(ctx, s, mode)) == TypeResolved::Yes
+                if resolve_sum_case_types(ctx, s, mode)? == TypeResolved::Yes
                 {
-                    try!(ctx.add(&s.name, s.typ.clone(), &s.span));
+                    ctx.add(&s.name, s.typ.clone(), &s.span)?;
                     match s.typ
                     {
                         Type::Enum(ref et) => {
                             for c in et.cases.iter()
                             {
-                                try!(ctx.add(c, s.typ.clone(), &s.span));
+                                ctx.add(c, s.typ.clone(), &s.span)?;
                             }
                         },
                         Type::Sum(ref st) => {
                             for c in st.cases.iter()
                             {
-                                try!(ctx.add(&c.name, s.typ.clone(), &s.span));
+                                ctx.add(&c.name, s.typ.clone(), &s.span)?;
                             }
                         },
                         _ => {},
@@ -171,26 +171,26 @@ pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module) -> Compi
     loop
     {
         let already_resolved = num_resolved;
-        num_resolved = try!(resolve_all_types(ctx, module, ResolveMode::Lazy));
+        num_resolved = resolve_all_types(ctx, module, ResolveMode::Lazy)?;
 
         if num_resolved == module.types.len() {
             break;
         } else if already_resolved == num_resolved {
             // We weren't able to resolve any in this pass, so something is missing
-            try!(resolve_all_types(ctx, module, ResolveMode::Forced));
+            resolve_all_types(ctx, module, ResolveMode::Forced)?;
             break;
         }
     }
 
 
     for ref mut f in module.functions.values_mut() {
-        try!(resolve_function_args_and_ret_type(ctx, &mut f.sig));
-        try!(ctx.add(&f.sig.name, f.sig.typ.clone(), &f.sig.span));
+        resolve_function_args_and_ret_type(ctx, &mut f.sig)?;
+        ctx.add(&f.sig.name, f.sig.typ.clone(), &f.sig.span)?;
     }
 
     for ref mut f in module.externals.values_mut() {
-        try!(resolve_function_args_and_ret_type(ctx, &mut f.sig));
-        try!(ctx.add(&f.sig.name, f.sig.typ.clone(), &f.sig.span));
+        resolve_function_args_and_ret_type(ctx, &mut f.sig)?;
+        ctx.add(&f.sig.name, f.sig.typ.clone(), &f.sig.span)?;
     }
 
     Ok(())

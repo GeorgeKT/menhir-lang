@@ -68,10 +68,10 @@ fn check_sum_match_is_exhaustive<ST: SumTypeCaseIndexOf>(m: &MatchExpression, st
         match c.pattern
         {
             Pattern::Name(ref nr) => {
-                try!(add_to_indices(st.index_of(&nr.name), &nr.name, &mut indexes));
+                add_to_indices(st.index_of(&nr.name), &nr.name, &mut indexes)?;
             },
             Pattern::Struct(ref s) => {
-                try!(add_to_indices(st.index_of(&s.name), &s.name, &mut indexes));
+                add_to_indices(st.index_of(&s.name), &s.name, &mut indexes)?;
             },
             _ => (),
         }
@@ -118,7 +118,7 @@ fn check_bool_match_is_exhaustive(m: &MatchExpression) -> CompileResult<()>
 
 pub fn check_match_is_exhaustive(m: &MatchExpression, target_type: &Type) -> CompileResult<()>
 {
-    let any_match_seen = try!(check_any_match(m));
+    let any_match_seen = check_any_match(m)?;
 
     match *target_type
     {

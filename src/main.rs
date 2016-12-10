@@ -84,7 +84,7 @@ fn main()
 
     match parse_file(&parser_options, &input_file).and_then(|mut module| {
 
-        try!(type_check_module(&mut module));
+        type_check_module(&mut module)?;
 
         if debug_compiler {
             println!("AST:");
@@ -106,7 +106,7 @@ fn main()
 
 
         llvm_init();
-        let mut ctx = try!(codegen(&llmod));
+        let mut ctx = codegen(&llmod)?;
         link(&mut ctx, &opts)
     })
     {

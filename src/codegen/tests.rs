@@ -24,7 +24,7 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
     println!("COBRA runtime version {}", unsafe{cobra_runtime_version()});
     let mut cursor = Cursor::new(prog);
     let parser_options = ParserOptions::default();
-    let mut md = try!(parse_module(&parser_options, &mut cursor, "test", ""));
+    let mut md = parse_module(&parser_options, &mut cursor, "test", "")?;
 
     if dump {
         println!("Before type check");
@@ -33,7 +33,7 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
         println!("-----------------");
     }
 
-    try!(type_check_module(&mut md));
+    type_check_module(&mut md)?;
 
     if dump {
         println!("After type check");
@@ -51,7 +51,7 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
     }
 
     llvm_init();
-    let mut ctx = try!(codegen(&llmod));
+    let mut ctx = codegen(&llmod)?;
 
     unsafe {
         LLVMLinkInInterpreter();

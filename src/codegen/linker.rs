@@ -9,7 +9,7 @@ use span::Span;
 pub fn link(ctx: &Context, opts: &CodeGenOptions) -> CompileResult<()>
 {
     let obj_file = unsafe{
-        try!(ctx.gen_object_file(&opts))
+        ctx.gen_object_file(&opts)?
     };
 
     let program_path = format!("{}/{}", opts.build_dir, opts.program_name);
@@ -18,12 +18,12 @@ pub fn link(ctx: &Context, opts: &CodeGenOptions) -> CompileResult<()>
     cmd.arg("-o").arg(&program_path).arg(obj_file).arg("-lcobraruntime");
 
     println!("  Linking {}", program_path);
-    let output: Output = try!(cmd
+    let output: Output = cmd
         .output()
         .map_err(|e| CompileError::new(
             &Span::default(),
             ErrorCode::CodegenError,
-            format!("Unable to spawn the linker: {}", e))));
+            format!("Unable to spawn the linker: {}", e)))?;
 
 
     if !output.status.success() {
