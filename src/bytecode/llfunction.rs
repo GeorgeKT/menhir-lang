@@ -99,17 +99,17 @@ pub fn bb_name(bb: BasicBlockRef) -> String
 }
 
 #[derive(Debug)]
-pub struct LLBasicBlock
+pub struct BasicBlock
 {
     pub name: String,
     pub instructions: Vec<LLInstruction>
 }
 
-impl LLBasicBlock
+impl BasicBlock
 {
-    pub fn new(name: String) -> LLBasicBlock
+    pub fn new(name: String) -> BasicBlock
     {
-        LLBasicBlock{
+        BasicBlock{
             name: name,
             instructions: Vec::new(),
         }
@@ -122,7 +122,7 @@ impl LLBasicBlock
 pub struct LLFunction
 {
     pub sig: FunctionSignature,
-    pub blocks: BTreeMap<BasicBlockRef, LLBasicBlock>,
+    pub blocks: BTreeMap<BasicBlockRef, BasicBlock>,
     pub block_order: Vec<BasicBlockRef>,
     pub lambdas: Vec<LLFunction>,
     current_bb: usize,
@@ -181,7 +181,7 @@ impl LLFunction
         let bb_ref = self.bb_counter;
         self.bb_counter += 1;
         let name = bb_name(bb_ref);
-        self.blocks.insert(bb_ref, LLBasicBlock::new(name));
+        self.blocks.insert(bb_ref, BasicBlock::new(name));
         bb_ref
     }
 
