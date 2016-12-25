@@ -39,7 +39,7 @@ impl TargetMachine
             cstr!(""),
             cstr!(""),
             LLVMCodeGenOptLevel::LLVMCodeGenLevelDefault,
-            LLVMRelocMode::LLVMRelocDefault,
+            LLVMRelocMode::LLVMRelocPIC,
             LLVMCodeModel::LLVMCodeModelDefault,
         );
         if target_machine == ptr::null_mut() {

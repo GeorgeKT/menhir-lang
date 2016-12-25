@@ -2,7 +2,9 @@ extern print(s: string) -> int
 extern println(s: string) -> int
 extern close(fd: int) -> int
 
-type File = {fd: int}
+type File = {
+    fd: int,
+}
 
 File.destroy(self) {
     println("I'm a destructor");
@@ -15,5 +17,6 @@ File.read(self, bytes: int) -> string {
 
 main() -> int {
     let f = File{1};
-    println(f.read(10))
+    println(f.read(10));
+    0
 }
