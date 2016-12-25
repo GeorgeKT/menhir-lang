@@ -59,19 +59,19 @@ unsafe fn gen_string_literal(ctx: &Context, s: &str, array: &Array)
     array.fill_with_string_literal(ctx, glob, s.len())
 }
 
-unsafe fn gen_literal(ctx: &mut Context, dst: &Var, lit: &LLLiteral)
+unsafe fn gen_literal(ctx: &mut Context, dst: &Var, lit: &ByteCodeLiteral)
 {
     let dst_vr = get_value_ref(ctx, dst);
 
 
     match *lit
     {
-        LLLiteral::Int(v) => dst_vr.store_direct(ctx, const_int(ctx, v)),
-        LLLiteral::Float(ref v) => dst_vr.store_direct(ctx, const_float(ctx, v)),
-        LLLiteral::Char(v) => dst_vr.store_direct(ctx, LLVMConstInt(LLVMInt8TypeInContext(ctx.context), v as u64, 0)),
-        LLLiteral::Bool(v) => dst_vr.store_direct(ctx, const_bool(ctx, v)),
+        ByteCodeLiteral::Int(v) => dst_vr.store_direct(ctx, const_int(ctx, v)),
+        ByteCodeLiteral::Float(ref v) => dst_vr.store_direct(ctx, const_float(ctx, v)),
+        ByteCodeLiteral::Char(v) => dst_vr.store_direct(ctx, LLVMConstInt(LLVMInt8TypeInContext(ctx.context), v as u64, 0)),
+        ByteCodeLiteral::Bool(v) => dst_vr.store_direct(ctx, const_bool(ctx, v)),
 
-        LLLiteral::String(ref v) => {
+        ByteCodeLiteral::String(ref v) => {
             let fill_string_literal = |dst_vr: &ValueRef| {
                 if let &ValueRef::Array(ref array) = dst_vr {
                     gen_string_literal(ctx, v, array)
@@ -88,7 +88,7 @@ unsafe fn gen_literal(ctx: &mut Context, dst: &Var, lit: &LLLiteral)
             }
         },
 
-        LLLiteral::Array(ref vars) => {
+        ByteCodeLiteral::Array(ref vars) => {
             let fill_array_literal = |dst_vr: &ValueRef| {
                 if let &ValueRef::Array(ref array) = dst_vr {
                     gen_array_literal(ctx, vars, array)

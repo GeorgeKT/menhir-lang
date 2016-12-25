@@ -38,12 +38,12 @@ fn make_var(func: &mut ByteCodeFunction, expr: LLExpr, typ: Type) -> Var
     var
 }
 
-fn add_lit(func: &mut ByteCodeFunction, lit: LLLiteral, dst: &Var)
+fn add_lit(func: &mut ByteCodeFunction, lit: ByteCodeLiteral, dst: &Var)
 {
     add_set(func, LLExpr::Literal(lit), dst);
 }
 
-fn make_lit(func: &mut ByteCodeFunction, lit: LLLiteral, typ: Type) -> Var
+fn make_lit(func: &mut ByteCodeFunction, lit: ByteCodeLiteral, typ: Type) -> Var
 {
     let var = func.new_var(typ);
     add_set(func, LLExpr::Literal(lit), &var);
@@ -122,7 +122,7 @@ fn array_lit_to_bc(func: &mut ByteCodeFunction, a: &ArrayLiteral, dst: &Var)
         .map(|e| to_bc(func, e))
         .collect();
 
-    add_lit(func, LLLiteral::Array(vars), dst);
+    add_lit(func, ByteCodeLiteral::Array(vars), dst);
 }
 
 fn struct_initializer_to_bc(func: &mut ByteCodeFunction, si: &StructInitializer, dst: &Var)
@@ -194,13 +194,13 @@ fn name_pattern_match_to_bc(
     {
         Type::Enum(ref et) => {
             let idx = et.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
-            let cv = make_lit(func, LLLiteral::Int(idx as u64), Type::Int);
+            let cv = make_lit(func, ByteCodeLiteral::Int(idx as u64), Type::Int);
             let cond = make_var(func, LLExpr::BinaryOp(Operator::Equals, target.clone(), cv), Type::Bool);
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
         },
         Type::Sum(ref st) => {
             let idx = st.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
-            let cv = make_lit(func, LLLiteral::Int(idx as u64), Type::Int);
+            let cv = make_lit(func, ByteCodeLiteral::Int(idx as u64), Type::Int);
             let sum_type_index = make_var(func, LLExpr::SumTypeIndex(target.clone()), Type::Int);
             let cond = make_var(func,  LLExpr::BinaryOp(Operator::Equals, sum_type_index, cv), Type::Bool);
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
@@ -240,7 +240,7 @@ fn array_pattern_match_to_bc(
     bind(func, &ap.tail, &tail);
 
     let length = make_array_len(func, seq.clone());
-    let zero = make_lit(func, LLLiteral::Int(0), Type::Int);
+    let zero = make_lit(func, ByteCodeLiteral::Int(0), Type::Int);
     let cond = make_var(func, LLExpr::BinaryOp(Operator::GreaterThan, length, zero), Type::Bool);
     func.add(branch_if_instr(&cond, match_case_bb, next_bb));
 }
@@ -277,7 +277,7 @@ fn struct_pattern_match_to_bc(
         Type::Sum(ref st) => {
             let target_sum_type_index = make_var(func, LLExpr::SumTypeIndex(target.clone()), Type::Int);
             let idx = st.index_of(&p.name).expect("Internal Compiler Error: cannot determine index of sum type case");
-            let sum_type_index = make_lit(func, LLLiteral::Int(idx as u64), Type::Int);
+            let sum_type_index = make_lit(func, ByteCodeLiteral::Int(idx as u64), Type::Int);
             let cond = make_var(func, LLExpr::BinaryOp(Operator::Equals, target_sum_type_index, sum_type_index), Type::Bool);
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
 
@@ -299,7 +299,7 @@ fn match_case_to_bc(func: &mut ByteCodeFunction, mc: &MatchCase, target: &Var, m
     let next_bb = func.create_basic_block();
     func.add_basic_block(next_bb);
 
-    let add_literal_case = |func: &mut ByteCodeFunction, lit: LLLiteral, typ: Type| {
+    let add_literal_case = |func: &mut ByteCodeFunction, lit: ByteCodeLiteral, typ: Type| {
         func.push_destination(None);
         let iv = make_lit(func, lit, typ);
         let cond = make_var(func, LLExpr::BinaryOp(Operator::Equals, iv, target.clone()), Type::Bool);
@@ -311,19 +311,19 @@ fn match_case_to_bc(func: &mut ByteCodeFunction, mc: &MatchCase, target: &Var, m
     match mc.pattern
     {
         Pattern::Literal(Literal::Int(_, v)) => {
-            add_literal_case(func, LLLiteral::Int(v), Type::Int);
+            add_literal_case(func, ByteCodeLiteral::Int(v), Type::Int);
         },
 
         Pattern::Literal(Literal::Float(_, ref v)) => {
-            add_literal_case(func, LLLiteral::Float(v.clone()), Type::Float);
+            add_literal_case(func, ByteCodeLiteral::Float(v.clone()), Type::Float);
         },
 
         Pattern::Literal(Literal::Bool(_, v)) => {
-            add_literal_case(func, LLLiteral::Bool(v), Type::Bool);
+            add_literal_case(func, ByteCodeLiteral::Bool(v), Type::Bool);
         },
 
         Pattern::Literal(Literal::Char(_, v)) => {
-            add_literal_case(func, LLLiteral::Char(v), Type::Char);
+            add_literal_case(func, ByteCodeLiteral::Char(v), Type::Char);
         },
 
         Pattern::Name(ref nr) => {
@@ -341,7 +341,7 @@ fn match_case_to_bc(func: &mut ByteCodeFunction, mc: &MatchCase, target: &Var, m
                 Type::Array(_) => {
                     func.push_destination(None);
                     let length = make_array_len(func, target.clone());
-                    let zero = make_lit(func, LLLiteral::Int(0), Type::Int);
+                    let zero = make_lit(func, ByteCodeLiteral::Int(0), Type::Int);
                     let cond = make_var(func, LLExpr::BinaryOp(Operator::Equals, length, zero), Type::Bool);
                     func.add(branch_if_instr(&cond, match_case_bb, next_bb));
                     func.pop_destination();
@@ -377,7 +377,7 @@ fn match_case_to_bc(func: &mut ByteCodeFunction, mc: &MatchCase, target: &Var, m
 
         Pattern::Literal(Literal::String(_, ref s)) => {
             func.push_destination(None);
-            let arr = make_lit(func, LLLiteral::String(s.clone()), string_type());
+            let arr = make_lit(func, ByteCodeLiteral::String(s.clone()), string_type());
             let cond = make_var(func, LLExpr::BinaryOp(Operator::Equals, arr, target.clone()), Type::Bool);
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
             func.pop_destination();
@@ -448,7 +448,7 @@ fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef) -> Option<Var>
             if let Some(idx) = et.index_of(&nr.name) {
                 // enums are integers
                 let dst = get_dst(func, &nr.typ);
-                add_lit(func, LLLiteral::Int(idx as u64), &dst);
+                add_lit(func, ByteCodeLiteral::Int(idx as u64), &dst);
                 Some(dst)
             } else {
                 add_name_ref(func, nr)
@@ -526,13 +526,13 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
 
         Expression::Literal(Literal::Int(_, v)) => {
             let dst = get_dst(func, &Type::Int);
-            add_lit(func, LLLiteral::Int(v), &dst);
+            add_lit(func, ByteCodeLiteral::Int(v), &dst);
             Some(dst)
         },
 
         Expression::Literal(Literal::Float(_, ref v_str)) => {
             let dst = get_dst(func, &Type::Float);
-            add_lit(func, LLLiteral::Float(v_str.clone()), &dst);
+            add_lit(func, ByteCodeLiteral::Float(v_str.clone()), &dst);
             Some(dst)
         },
 
@@ -540,19 +540,19 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
             let dst = get_dst(func, &string_type());
             func.add(set_instr(&dst, LLExpr::HeapAlloc(dst.typ.clone())));
             func.add_dec_ref_target(&dst);
-            add_lit(func, LLLiteral::String(s.clone()), &dst);
+            add_lit(func, ByteCodeLiteral::String(s.clone()), &dst);
             Some(dst)
         },
 
         Expression::Literal(Literal::Bool(_, v)) => {
             let dst = get_dst(func, &Type::Bool);
-            add_lit(func, LLLiteral::Bool(v), &dst);
+            add_lit(func, ByteCodeLiteral::Bool(v), &dst);
             Some(dst)
         },
 
         Expression::Literal(Literal::Char(_, v)) => {
             let dst = get_dst(func, &Type::Char);
-            add_lit(func, LLLiteral::Char(v), &dst);
+            add_lit(func, ByteCodeLiteral::Char(v), &dst);
             Some(dst)
         },
 

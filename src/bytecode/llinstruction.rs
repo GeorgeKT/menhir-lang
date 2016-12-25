@@ -5,7 +5,7 @@ use parser::Operator;
 use bytecode::llfunction::{BasicBlockRef, Var};
 
 #[derive(Debug, Clone)]
-pub enum LLLiteral
+pub enum ByteCodeLiteral
 {
     Int(u64),
     Float(String),
@@ -15,18 +15,18 @@ pub enum LLLiteral
     Array(Vec<Var>),
 }
 
-impl fmt::Display for LLLiteral
+impl fmt::Display for ByteCodeLiteral
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
         match *self
         {
-            LLLiteral::Int(v) => write!(f, "int {}", v),
-            LLLiteral::Float(ref v) => write!(f, "float {}", v),
-            LLLiteral::Char(v) => write!(f, "char {}", v),
-            LLLiteral::String(ref v) => write!(f, "string {}", v),
-            LLLiteral::Bool(v) => write!(f, "bool {}", v),
-            LLLiteral::Array(ref elements) => write!(f, "[{}]", join(elements.iter(), ", ")),
+            ByteCodeLiteral::Int(v) => write!(f, "int {}", v),
+            ByteCodeLiteral::Float(ref v) => write!(f, "float {}", v),
+            ByteCodeLiteral::Char(v) => write!(f, "char {}", v),
+            ByteCodeLiteral::String(ref v) => write!(f, "string {}", v),
+            ByteCodeLiteral::Bool(v) => write!(f, "bool {}", v),
+            ByteCodeLiteral::Array(ref elements) => write!(f, "[{}]", join(elements.iter(), ", ")),
         }
     }
 }
@@ -34,7 +34,7 @@ impl fmt::Display for LLLiteral
 #[derive(Debug, Clone)]
 pub enum LLExpr
 {
-    Literal(LLLiteral),
+    Literal(ByteCodeLiteral),
     UnaryOp(Operator, Var),
     BinaryOp(Operator, Var, Var),
     Call(String, Vec<Var>),
