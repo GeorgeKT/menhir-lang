@@ -4,7 +4,7 @@ mod llinstruction;
 use std::fmt;
 use ast::*;
 use parser::Operator;
-pub use self::llfunction::{LLFunction, LLVar, BasicBlockRef};
+pub use self::llfunction::{LLFunction, Var, BasicBlockRef};
 pub use self::llinstruction::*;
 
 
@@ -26,36 +26,36 @@ impl fmt::Display for LLModule
     }
 }
 
-fn add_set(func: &mut LLFunction, expr: LLExpr, dst: &LLVar)
+fn add_set(func: &mut LLFunction, expr: LLExpr, dst: &Var)
 {
     func.add(set_instr(dst, expr));
 }
 
-fn make_var(func: &mut LLFunction, expr: LLExpr, typ: Type) -> LLVar
+fn make_var(func: &mut LLFunction, expr: LLExpr, typ: Type) -> Var
 {
     let var = func.new_var(typ);
     add_set(func, expr, &var);
     var
 }
 
-fn add_lit(func: &mut LLFunction, lit: LLLiteral, dst: &LLVar)
+fn add_lit(func: &mut LLFunction, lit: LLLiteral, dst: &Var)
 {
     add_set(func, LLExpr::Literal(lit), dst);
 }
 
-fn make_lit(func: &mut LLFunction, lit: LLLiteral, typ: Type) -> LLVar
+fn make_lit(func: &mut LLFunction, lit: LLLiteral, typ: Type) -> Var
 {
     let var = func.new_var(typ);
     add_set(func, LLExpr::Literal(lit), &var);
     var
 }
 
-fn bind(func: &mut LLFunction, name: &str, var: &LLVar)
+fn bind(func: &mut LLFunction, name: &str, var: &Var)
 {
     func.add(bind_instr(name, var))
 }
 
-fn call_to_bc(func: &mut LLFunction, c: &Call, self_arg: Option<LLVar>) -> LLVar
+fn call_to_bc(func: &mut LLFunction, c: &Call, self_arg: Option<Var>) -> Var
 {
     let dst = get_dst(func, &c.return_type);
     func.push_destination(None);
@@ -101,7 +101,7 @@ fn add_binding(func: &mut LLFunction, b: &LetBinding)
     }
 }
 
-fn let_to_bc(func: &mut LLFunction, l: &LetExpression) -> Option<LLVar>
+fn let_to_bc(func: &mut LLFunction, l: &LetExpression) -> Option<Var>
 {
     let dst = get_dst(func, &l.typ);
     func.push_scope();
@@ -116,7 +116,7 @@ fn let_to_bc(func: &mut LLFunction, l: &LetExpression) -> Option<LLVar>
     Some(dst)
 }
 
-fn array_lit_to_bc(func: &mut LLFunction, a: &ArrayLiteral, dst: &LLVar)
+fn array_lit_to_bc(func: &mut LLFunction, a: &ArrayLiteral, dst: &Var)
 {
     let vars = a.elements.iter()
         .map(|e| to_bc(func, e))
@@ -125,9 +125,9 @@ fn array_lit_to_bc(func: &mut LLFunction, a: &ArrayLiteral, dst: &LLVar)
     add_lit(func, LLLiteral::Array(vars), dst);
 }
 
-fn struct_initializer_to_bc(func: &mut LLFunction, si: &StructInitializer, dst: &LLVar)
+fn struct_initializer_to_bc(func: &mut LLFunction, si: &StructInitializer, dst: &Var)
 {
-    let init_members = |func: &mut LLFunction, si: &StructInitializer, dst: &LLVar| {
+    let init_members = |func: &mut LLFunction, si: &StructInitializer, dst: &Var| {
         for (idx, expr) in si.member_initializers.iter().enumerate() {
             let v = to_bc(func, expr);
             func.add(set_struct_member_instr(&dst, idx, &v));
@@ -144,20 +144,20 @@ fn struct_initializer_to_bc(func: &mut LLFunction, si: &StructInitializer, dst: 
     }
 }
 
-fn add_array_len(func: &mut LLFunction, array: LLVar, dst: &LLVar)
+fn add_array_len(func: &mut LLFunction, array: Var, dst: &Var)
 {
     let expr = LLExpr::ArrayProperty(array, ArrayProperty::Len);
     add_set(func, expr, &dst);
 }
 
-fn make_array_len(func: &mut LLFunction, array: LLVar) -> LLVar
+fn make_array_len(func: &mut LLFunction, array: Var) -> Var
 {
     let var = func.new_var(Type::Int);
     add_array_len(func, array, &var);
     var
 }
 
-fn member_access_to_bc(func: &mut LLFunction, sma: &MemberAccess, dst: &LLVar)
+fn member_access_to_bc(func: &mut LLFunction, sma: &MemberAccess, dst: &Var)
 {
     func.push_destination(None);
     let var = to_bc(func, &sma.left);
@@ -184,7 +184,7 @@ fn member_access_to_bc(func: &mut LLFunction, sma: &MemberAccess, dst: &LLVar)
 fn name_pattern_match_to_bc(
     func: &mut LLFunction,
     mc: &MatchCase,
-    target: &LLVar,
+    target: &Var,
     match_end_bb: BasicBlockRef,
     match_case_bb: BasicBlockRef,
     next_bb: BasicBlockRef,
@@ -230,7 +230,7 @@ fn match_case_body_to_bc(
 fn array_pattern_match_to_bc(
     func: &mut LLFunction,
     ap: &ArrayPattern,
-    seq: &LLVar,
+    seq: &Var,
     match_case_bb: BasicBlockRef,
     next_bb: BasicBlockRef)
 {
@@ -245,7 +245,7 @@ fn array_pattern_match_to_bc(
     func.add(branch_if_instr(&cond, match_case_bb, next_bb));
 }
 
-fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &LLVar, func: &mut LLFunction)
+fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &Var, func: &mut LLFunction)
 {
     for (idx, b) in p.bindings.iter().enumerate() {
         if b != "_" {
@@ -259,7 +259,7 @@ fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &LLVar, func: &mut
 fn struct_pattern_match_to_bc(
     func: &mut LLFunction,
     mc: &MatchCase,
-    target: &LLVar,
+    target: &Var,
     match_end_bb: BasicBlockRef,
     match_case_bb: BasicBlockRef,
     next_bb: BasicBlockRef,
@@ -292,7 +292,7 @@ fn struct_pattern_match_to_bc(
     match_case_body_to_bc(func, mc, match_case_bb, match_end_bb, next_bb);
 }
 
-fn match_case_to_bc(func: &mut LLFunction, mc: &MatchCase, target: &LLVar, match_end_bb: BasicBlockRef)
+fn match_case_to_bc(func: &mut LLFunction, mc: &MatchCase, target: &Var, match_end_bb: BasicBlockRef)
 {
     let match_case_bb = func.create_basic_block();
     func.add_basic_block(match_case_bb);
@@ -390,7 +390,7 @@ fn match_case_to_bc(func: &mut LLFunction, mc: &MatchCase, target: &LLVar, match
     }
 }
 
-fn match_to_bc(func: &mut LLFunction, m: &MatchExpression) -> LLVar
+fn match_to_bc(func: &mut LLFunction, m: &MatchExpression) -> Var
 {
     func.push_destination(None);
     let target_var = to_bc(func, &m.target);
@@ -413,10 +413,10 @@ fn match_to_bc(func: &mut LLFunction, m: &MatchExpression) -> LLVar
 }
 
 
-fn name_ref_to_bc(func: &mut LLFunction, nr: &NameRef) -> Option<LLVar>
+fn name_ref_to_bc(func: &mut LLFunction, nr: &NameRef) -> Option<Var>
 {
     let add_name_ref = |func: &mut LLFunction, nr: &NameRef| {
-        let v = LLVar::named(&nr.name, nr.typ.clone());
+        let v = Var::named(&nr.name, nr.typ.clone());
         match func.get_destination()
         {
             Some(var) => {
@@ -460,7 +460,7 @@ fn name_ref_to_bc(func: &mut LLFunction, nr: &NameRef) -> Option<LLVar>
     }
 }
 
-fn block_to_bc(func: &mut LLFunction, b: &Block) -> Option<LLVar>
+fn block_to_bc(func: &mut LLFunction, b: &Block) -> Option<Var>
 {
     let do_block = |func: &mut LLFunction, b: &Block| {
         for (idx, e) in b.expressions.iter().enumerate() {
@@ -489,12 +489,12 @@ fn block_to_bc(func: &mut LLFunction, b: &Block) -> Option<LLVar>
     }
 }
 
-fn to_bc(func: &mut LLFunction, expr: &Expression) -> LLVar
+fn to_bc(func: &mut LLFunction, expr: &Expression) -> Var
 {
     expr_to_bc(func, expr).expect("Expression must return a value")
 }
 
-fn expr_to_bc(func: &mut LLFunction, expr: &Expression) -> Option<LLVar>
+fn expr_to_bc(func: &mut LLFunction, expr: &Expression) -> Option<Var>
 {
     match *expr
     {
@@ -626,12 +626,12 @@ fn expr_to_bc(func: &mut LLFunction, expr: &Expression) -> Option<LLVar>
     }
 }
 
-fn stack_alloc(func: &mut LLFunction, typ: &Type, name: Option<&str>) -> LLVar
+fn stack_alloc(func: &mut LLFunction, typ: &Type, name: Option<&str>) -> Var
 {
     match name
     {
         Some(n) => {
-            let var = LLVar::named(n, typ.clone());
+            let var = Var::named(n, typ.clone());
             func.add_named_var(var.clone());
             if *typ != Type::Void {
                 func.add(LLInstruction::Alloc(var.clone()));
@@ -648,7 +648,7 @@ fn stack_alloc(func: &mut LLFunction, typ: &Type, name: Option<&str>) -> LLVar
     }
 }
 
-fn get_dst(func: &mut LLFunction, typ: &Type) -> LLVar
+fn get_dst(func: &mut LLFunction, typ: &Type) -> Var
 {
     assert!(*typ != Type::Unknown);
     if let Some(dst) = func.get_destination() {

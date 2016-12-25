@@ -2,7 +2,7 @@ use std::fmt;
 use itertools::free::join;
 use ast::{ArrayProperty, Type};
 use parser::Operator;
-use bytecode::llfunction::{BasicBlockRef, LLVar};
+use bytecode::llfunction::{BasicBlockRef, Var};
 
 #[derive(Debug, Clone)]
 pub enum LLLiteral
@@ -12,7 +12,7 @@ pub enum LLLiteral
     Char(u8),
     String(String),
     Bool(bool),
-    Array(Vec<LLVar>),
+    Array(Vec<Var>),
 }
 
 impl fmt::Display for LLLiteral
@@ -35,17 +35,17 @@ impl fmt::Display for LLLiteral
 pub enum LLExpr
 {
     Literal(LLLiteral),
-    UnaryOp(Operator, LLVar),
-    BinaryOp(Operator, LLVar, LLVar),
-    Call(String, Vec<LLVar>),
-    StructMember(LLVar, usize),
-    SumTypeIndex(LLVar),
-    SumTypeStruct(LLVar, usize),
+    UnaryOp(Operator, Var),
+    BinaryOp(Operator, Var, Var),
+    Call(String, Vec<Var>),
+    StructMember(Var, usize),
+    SumTypeIndex(Var),
+    SumTypeStruct(Var, usize),
     SumTypeCase(usize),
-    ArrayProperty(LLVar, ArrayProperty),
-    ArrayHead(LLVar),
-    ArrayTail(LLVar),
-    Ref(LLVar),
+    ArrayProperty(Var, ArrayProperty),
+    ArrayHead(Var),
+    ArrayTail(Var),
+    Ref(Var),
     Func(String),
     HeapAlloc(Type),
 }
@@ -77,29 +77,29 @@ impl fmt::Display for LLExpr
 #[derive(Debug, Clone)]
 pub struct LLSetStructMember
 {
-    pub obj: LLVar,
+    pub obj: Var,
     pub member_index: usize,
-    pub value: LLVar
+    pub value: Var
 }
 
 #[derive(Debug, Clone)]
 pub struct LLBind
 {
     pub name: String,
-    pub var: LLVar,
+    pub var: Var,
 }
 
 #[derive(Debug, Clone)]
 pub struct LLSet
 {
-    pub var: LLVar,
+    pub var: Var,
     pub expr: LLExpr
 }
 
 #[derive(Debug, Clone)]
 pub struct LLBranchIf
 {
-    pub cond: LLVar,
+    pub cond: Var,
     pub on_true: BasicBlockRef,
     pub on_false: BasicBlockRef,
 }
@@ -107,22 +107,22 @@ pub struct LLBranchIf
 #[derive(Debug, Clone)]
 pub enum LLInstruction
 {
-    //SetArrayElement{var: LLVar, index: LLExpr, value: LLExpr},
-    Alloc(LLVar),
+    //SetArrayElement{var: Var, index: LLExpr, value: LLExpr},
+    Alloc(Var),
     SetStructMember(LLSetStructMember),
     StartScope,
     EndScope,
     Bind(LLBind),
     Set(LLSet),
-    Return(LLVar),
+    Return(Var),
     ReturnVoid,
     Branch(BasicBlockRef),
     BranchIf(LLBranchIf),
-    IncRef(LLVar),
-    DecRef(LLVar),
+    IncRef(Var),
+    DecRef(Var),
 }
 
-pub fn set_instr(var: &LLVar, e: LLExpr) -> LLInstruction
+pub fn set_instr(var: &Var, e: LLExpr) -> LLInstruction
 {
     LLInstruction::Set(LLSet{
         var: var.clone(),
@@ -130,7 +130,7 @@ pub fn set_instr(var: &LLVar, e: LLExpr) -> LLInstruction
     })
 }
 
-pub fn set_struct_member_instr(obj: &LLVar, index: usize, e: &LLVar) -> LLInstruction
+pub fn set_struct_member_instr(obj: &Var, index: usize, e: &Var) -> LLInstruction
 {
     LLInstruction::SetStructMember(LLSetStructMember{
         obj: obj.clone(),
@@ -139,12 +139,12 @@ pub fn set_struct_member_instr(obj: &LLVar, index: usize, e: &LLVar) -> LLInstru
     })
 }
 
-pub fn ret_instr(var: &LLVar) -> LLInstruction
+pub fn ret_instr(var: &Var) -> LLInstruction
 {
     LLInstruction::Return(var.clone())
 }
 
-pub fn bind_instr(name: &str, var: &LLVar) -> LLInstruction
+pub fn bind_instr(name: &str, var: &Var) -> LLInstruction
 {
     LLInstruction::Bind(LLBind{
         name: name.into(),
@@ -152,7 +152,7 @@ pub fn bind_instr(name: &str, var: &LLVar) -> LLInstruction
     })
 }
 
-pub fn branch_if_instr(cond: &LLVar, on_true: BasicBlockRef, on_false: BasicBlockRef) -> LLInstruction
+pub fn branch_if_instr(cond: &Var, on_true: BasicBlockRef, on_false: BasicBlockRef) -> LLInstruction
 {
     LLInstruction::BranchIf(LLBranchIf{
         cond: cond.clone(),

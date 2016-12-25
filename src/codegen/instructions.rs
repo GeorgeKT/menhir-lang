@@ -30,7 +30,7 @@ unsafe fn const_float(ctx: &Context, num: &str) -> LLVMValueRef
     }
 }
 
-unsafe fn gen_array_literal(ctx: &Context, elements: &Vec<LLVar>, array: &Array)
+unsafe fn gen_array_literal(ctx: &Context, elements: &Vec<Var>, array: &Array)
 {
     let len = const_int(ctx, elements.len() as u64);
     array.init(ctx, len);
@@ -59,7 +59,7 @@ unsafe fn gen_string_literal(ctx: &Context, s: &str, array: &Array)
     array.fill_with_string_literal(ctx, glob, s.len())
 }
 
-unsafe fn gen_literal(ctx: &mut Context, dst: &LLVar, lit: &LLLiteral)
+unsafe fn gen_literal(ctx: &mut Context, dst: &Var, lit: &LLLiteral)
 {
     let dst_vr = get_value_ref(ctx, dst);
 
@@ -157,7 +157,7 @@ unsafe fn gen_bool_bin_op(ctx: &Context, l: LLVMValueRef, r: LLVMValueRef, op: O
     }
 }
 
-unsafe fn gen_array_bin_op(ctx: &mut Context, dst: &LLVar, left: &LLVar, right: &LLVar, op: Operator)
+unsafe fn gen_array_bin_op(ctx: &mut Context, dst: &Var, left: &Var, right: &Var, op: Operator)
 {
     match op {
         Operator::Add => {
@@ -177,7 +177,7 @@ unsafe fn gen_array_bin_op(ctx: &mut Context, dst: &LLVar, left: &LLVar, right: 
     }
 }
 
-unsafe fn gen_bin_op(ctx: &mut Context, dst: &LLVar, left: &LLVar, right: &LLVar, op: Operator)
+unsafe fn gen_bin_op(ctx: &mut Context, dst: &Var, left: &Var, right: &Var, op: Operator)
 {
     if let Type::Array(_) = left.typ {
         return gen_array_bin_op(ctx, dst, left, right, op);
@@ -204,7 +204,7 @@ unsafe fn gen_bin_op(ctx: &mut Context, dst: &LLVar, left: &LLVar, right: &LLVar
     });
 }
 
-unsafe fn gen_unary_op(ctx: &mut Context, dst: &LLVar, target: &LLVar, op: Operator)
+unsafe fn gen_unary_op(ctx: &mut Context, dst: &Var, target: &Var, op: Operator)
 {
     let t = ctx.get_variable(&target.name).expect("Unknown variable").value.load(ctx.builder);
     let dst = get_value_ref(ctx, dst);
@@ -220,7 +220,7 @@ unsafe fn gen_unary_op(ctx: &mut Context, dst: &LLVar, target: &LLVar, op: Opera
     }
 }
 
-unsafe fn gen_call_args(ctx: &Context, args: &Vec<LLVar>) -> Vec<LLVMValueRef>
+unsafe fn gen_call_args(ctx: &Context, args: &Vec<Var>) -> Vec<LLVMValueRef>
 {
     let mut arg_vals = Vec::with_capacity(args.len());
     for arg in args.iter()
@@ -231,7 +231,7 @@ unsafe fn gen_call_args(ctx: &Context, args: &Vec<LLVar>) -> Vec<LLVMValueRef>
     arg_vals
 }
 
-unsafe fn gen_call(ctx: &mut Context, dst: &LLVar, name: &str, args: &Vec<LLVar>)
+unsafe fn gen_call(ctx: &mut Context, dst: &Var, name: &str, args: &Vec<Var>)
 {
     let func = ctx.get_function(name).expect("Internal Compiler Error: Unknown function");
     let mut arg_vals = gen_call_args(ctx, args);
@@ -244,7 +244,7 @@ unsafe fn gen_call(ctx: &mut Context, dst: &LLVar, name: &str, args: &Vec<LLVar>
     }
 }
 
-unsafe fn gen_struct_member(ctx: &mut Context, dst: &LLVar, obj: &LLVar, index: usize)
+unsafe fn gen_struct_member(ctx: &mut Context, dst: &Var, obj: &Var, index: usize)
 {
     let struct_object = ctx.get_variable(&obj.name).expect("Unknown variable");
     let member_ptr = struct_object.value.member(ctx, index);
@@ -256,14 +256,14 @@ unsafe fn gen_struct_member(ctx: &mut Context, dst: &LLVar, obj: &LLVar, index: 
     }
 }
 
-unsafe fn gen_array_property(ctx: &mut Context, dst: &LLVar, array: &LLVar, property: ArrayProperty)
+unsafe fn gen_array_property(ctx: &mut Context, dst: &Var, array: &Var, property: ArrayProperty)
 {
     let array_object = &ctx.get_variable(&array.name).expect("Unknown variable").value;
     let prop_ptr = array_object.array_property(ctx, property);
     ctx.add_variable(&dst.name, prop_ptr);
 }
 
-unsafe fn gen_ref(ctx: &mut Context, dst: &LLVar, var: &LLVar)
+unsafe fn gen_ref(ctx: &mut Context, dst: &Var, var: &Var)
 {
     if let Type::Func(_) = dst.typ
     {
@@ -280,7 +280,7 @@ unsafe fn gen_ref(ctx: &mut Context, dst: &LLVar, var: &LLVar)
     }
 }
 
-unsafe fn gen_array_head(ctx: &mut Context, dst: &LLVar, array: &LLVar)
+unsafe fn gen_array_head(ctx: &mut Context, dst: &Var, array: &Var)
 {
     let array_object = ctx.get_variable(&array.name).expect("Unknown variable");
 
@@ -292,7 +292,7 @@ unsafe fn gen_array_head(ctx: &mut Context, dst: &LLVar, array: &LLVar)
     }
 }
 
-unsafe fn gen_array_tail(ctx: &mut Context, dst: &LLVar, array: &LLVar)
+unsafe fn gen_array_tail(ctx: &mut Context, dst: &Var, array: &Var)
 {
     let array_object = ctx.get_variable(&array.name).expect("Unknown variable");
     let dst_var = get_value_ref(ctx, dst);
@@ -303,35 +303,35 @@ unsafe fn gen_array_tail(ctx: &mut Context, dst: &LLVar, array: &LLVar)
     }
 }
 
-fn gen_func_expr(ctx: &mut Context, dst: &LLVar, name: &str)
+fn gen_func_expr(ctx: &mut Context, dst: &Var, name: &str)
 {
     let func = ctx.get_function(&name).expect("Internal Compiler Error: Unknown function");
     ctx.add_variable(&dst.name, ValueRef::Const(func.function));
     ctx.add_function_alias(&dst.name, func);
 }
 
-unsafe fn gen_sum_type_index(ctx: &mut Context, dst: &LLVar, obj: &LLVar)
+unsafe fn gen_sum_type_index(ctx: &mut Context, dst: &Var, obj: &Var)
 {
     let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
     let case_type_ptr = obj_var.value.case_type(ctx);
     ctx.add_variable(&dst.name, case_type_ptr);
 }
 
-unsafe fn gen_sum_type_struct(ctx: &mut Context, dst: &LLVar, obj: &LLVar, index: usize)
+unsafe fn gen_sum_type_struct(ctx: &mut Context, dst: &Var, obj: &Var, index: usize)
 {
     let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
     let case_struct = obj_var.value.case_struct(ctx, index);
     ctx.add_variable(&dst.name, case_struct);
 }
 
-unsafe fn gen_sum_type_case(ctx: &mut Context, dst: &LLVar, index: usize)
+unsafe fn gen_sum_type_case(ctx: &mut Context, dst: &Var, index: usize)
 {
     let dst_vr = get_value_ref(ctx, dst);
     let case_type_ptr = dst_vr.case_type(ctx);
     case_type_ptr.store_direct(ctx, const_int(ctx, index as u64));
 }
 
-unsafe fn gen_heap_alloc(ctx: &mut Context, var: &LLVar, typ: &Type)
+unsafe fn gen_heap_alloc(ctx: &mut Context, var: &Var, typ: &Type)
 {
     let vr = get_value_ref(ctx, var);
     let typ = ctx.resolve_type(typ);
@@ -339,7 +339,7 @@ unsafe fn gen_heap_alloc(ctx: &mut Context, var: &LLVar, typ: &Type)
     vr.store_direct(ctx, ptr);
 }
 
-unsafe fn get_value_ref(ctx: &mut Context, var: &LLVar) -> ValueRef
+unsafe fn get_value_ref(ctx: &mut Context, var: &Var) -> ValueRef
 {
     if let Some(ref vr) = ctx.get_variable(&var.name) {
         vr.value.clone()
@@ -350,7 +350,7 @@ unsafe fn get_value_ref(ctx: &mut Context, var: &LLVar) -> ValueRef
     }
 }
 
-unsafe fn gen_expr(ctx: &mut Context, dst: &LLVar, expr: &LLExpr)
+unsafe fn gen_expr(ctx: &mut Context, dst: &Var, expr: &LLExpr)
 {
     match *expr
     {

@@ -5,32 +5,32 @@ use ast::{Type, FunctionSignature};
 use bytecode::llinstruction::LLInstruction;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct LLVar
+pub struct Var
 {
     pub name: String,
     pub typ: Type,
 }
 
-impl LLVar
+impl Var
 {
-    pub fn new(idx: usize, typ: Type) -> LLVar
+    pub fn new(idx: usize, typ: Type) -> Var
     {
-        LLVar{
+        Var{
             name: format!("$var{}", idx),
             typ: typ,
         }
     }
 
-    pub fn named(name: &str, typ: Type) -> LLVar
+    pub fn named(name: &str, typ: Type) -> Var
     {
-        LLVar{
+        Var{
             name: name.into(),
             typ: typ,
         }
     }
 }
 
-impl fmt::Display for LLVar
+impl fmt::Display for Var
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
@@ -41,8 +41,8 @@ impl fmt::Display for LLVar
 #[derive(Debug)]
 pub struct Scope
 {
-    named_vars: HashMap<String, LLVar>,
-    to_dec_ref: Vec<LLVar>,
+    named_vars: HashMap<String, Var>,
+    to_dec_ref: Vec<Var>,
 }
 
 impl Scope
@@ -55,12 +55,12 @@ impl Scope
         }
     }
 
-    pub fn add_named_var(&mut self, var: LLVar)
+    pub fn add_named_var(&mut self, var: Var)
     {
         self.named_vars.insert(var.name.clone(), var);
     }
 
-    pub fn add_dec_ref_target(&mut self, v: &LLVar) -> bool
+    pub fn add_dec_ref_target(&mut self, v: &Var) -> bool
     {
         if self.named_vars.get(&v.name).is_none() {
             false
@@ -70,7 +70,7 @@ impl Scope
         }
     }
 
-    pub fn remove_dec_ref_target(&mut self, v: &LLVar) -> bool
+    pub fn remove_dec_ref_target(&mut self, v: &Var) -> bool
     {
         let len = self.to_dec_ref.len();
         self.to_dec_ref.retain(|e| e != v);
@@ -129,7 +129,7 @@ pub struct LLFunction
     bb_counter: usize,
     var_counter: usize,
     scopes: Vec<Scope>,
-    destinations: Vec<Option<LLVar>>,
+    destinations: Vec<Option<Var>>,
 }
 
 
@@ -153,7 +153,7 @@ impl LLFunction
         f.add_basic_block(entry);
 
         for arg in &sig.args {
-            f.add_named_var(LLVar::named(&arg.name, arg.typ.clone()));
+            f.add_named_var(Var::named(&arg.name, arg.typ.clone()));
         }
         f
     }
@@ -196,11 +196,11 @@ impl LLFunction
         self.current_bb = bb_ref;
     }
 
-    pub fn new_var(&mut self, typ: Type) -> LLVar
+    pub fn new_var(&mut self, typ: Type) -> Var
     {
         let idx = self.var_counter;
         self.var_counter += 1;
-        let v = LLVar::new(idx, typ);
+        let v = Var::new(idx, typ);
         self.add_named_var(v.clone());
         v
     }
@@ -221,7 +221,7 @@ impl LLFunction
         }
     }
 
-    pub fn push_destination(&mut self, var: Option<LLVar>)
+    pub fn push_destination(&mut self, var: Option<Var>)
     {
         self.destinations.push(var);
     }
@@ -231,7 +231,7 @@ impl LLFunction
         let _ = self.destinations.pop();
     }
 
-    pub fn get_destination(&self) -> Option<LLVar>
+    pub fn get_destination(&self) -> Option<Var>
     {
         match self.destinations.last() {
             Some(&Some(ref var)) => Some(var.clone()),
@@ -239,13 +239,13 @@ impl LLFunction
         }
     }
 
-    pub fn add_named_var(&mut self, var: LLVar)
+    pub fn add_named_var(&mut self, var: Var)
     {
         let scope = self.scopes.last_mut().expect("Empty Scope Stack");
         scope.add_named_var(var);
     }
 
-    pub fn add_dec_ref_target(&mut self, v: &LLVar)
+    pub fn add_dec_ref_target(&mut self, v: &Var)
     {
         for scope in self.scopes.iter_mut().rev() {
             if scope.add_dec_ref_target(v) {
@@ -254,7 +254,7 @@ impl LLFunction
         }
     }
 
-    pub fn remove_dec_ref_target(&mut self, v: &LLVar) -> bool
+    pub fn remove_dec_ref_target(&mut self, v: &Var) -> bool
     {
         let scope = self.scopes.last_mut().expect("Empty Scope Stack");
         scope.remove_dec_ref_target(v)
