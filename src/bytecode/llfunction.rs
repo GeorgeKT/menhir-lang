@@ -87,9 +87,9 @@ impl Scope
 }
 
 
-pub type LLBasicBlockRef = usize;
+pub type BasicBlockRef = usize;
 
-pub fn bb_name(bb: LLBasicBlockRef) -> String
+pub fn bb_name(bb: BasicBlockRef) -> String
 {
     if bb == 0 {
         "entry".into()
@@ -122,8 +122,8 @@ impl LLBasicBlock
 pub struct LLFunction
 {
     pub sig: FunctionSignature,
-    pub blocks: BTreeMap<LLBasicBlockRef, LLBasicBlock>,
-    pub block_order: Vec<LLBasicBlockRef>,
+    pub blocks: BTreeMap<BasicBlockRef, LLBasicBlock>,
+    pub block_order: Vec<BasicBlockRef>,
     pub lambdas: Vec<LLFunction>,
     current_bb: usize,
     bb_counter: usize,
@@ -176,7 +176,7 @@ impl LLFunction
         self.blocks.get_mut(&idx).map(|bb| bb.instructions.push(inst));
     }
 
-    pub fn create_basic_block(&mut self) -> LLBasicBlockRef
+    pub fn create_basic_block(&mut self) -> BasicBlockRef
     {
         let bb_ref = self.bb_counter;
         self.bb_counter += 1;
@@ -185,12 +185,12 @@ impl LLFunction
         bb_ref
     }
 
-    pub fn add_basic_block(&mut self, bb_ref: LLBasicBlockRef)
+    pub fn add_basic_block(&mut self, bb_ref: BasicBlockRef)
     {
         self.block_order.push(bb_ref);
     }
 
-    pub fn set_current_bb(&mut self, bb_ref: LLBasicBlockRef)
+    pub fn set_current_bb(&mut self, bb_ref: BasicBlockRef)
     {
         assert!(bb_ref < self.blocks.len());
         self.current_bb = bb_ref;

@@ -10,6 +10,7 @@ use codegen::*;
 use bytecode::*;
 use parser::Operator;
 
+
 pub unsafe fn const_int(ctx: &Context, v: u64) -> LLVMValueRef
 {
     LLVMConstInt(LLVMInt64TypeInContext(ctx.context), v, 0)
@@ -370,7 +371,7 @@ unsafe fn gen_expr(ctx: &mut Context, dst: &LLVar, expr: &LLExpr)
     }
 }
 
-pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: &HashMap<LLBasicBlockRef, LLVMBasicBlockRef>)
+pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: &HashMap<BasicBlockRef, LLVMBasicBlockRef>)
 {
     //print!(">> {}", instr);
     match *instr

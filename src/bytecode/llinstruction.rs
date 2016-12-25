@@ -2,7 +2,7 @@ use std::fmt;
 use itertools::free::join;
 use ast::{ArrayProperty, Type};
 use parser::Operator;
-use bytecode::llfunction::{LLBasicBlockRef, LLVar};
+use bytecode::llfunction::{BasicBlockRef, LLVar};
 
 #[derive(Debug, Clone)]
 pub enum LLLiteral
@@ -100,8 +100,8 @@ pub struct LLSet
 pub struct LLBranchIf
 {
     pub cond: LLVar,
-    pub on_true: LLBasicBlockRef,
-    pub on_false: LLBasicBlockRef,
+    pub on_true: BasicBlockRef,
+    pub on_false: BasicBlockRef,
 }
 
 #[derive(Debug, Clone)]
@@ -116,7 +116,7 @@ pub enum LLInstruction
     Set(LLSet),
     Return(LLVar),
     ReturnVoid,
-    Branch(LLBasicBlockRef),
+    Branch(BasicBlockRef),
     BranchIf(LLBranchIf),
     IncRef(LLVar),
     DecRef(LLVar),
@@ -152,7 +152,7 @@ pub fn bind_instr(name: &str, var: &LLVar) -> LLInstruction
     })
 }
 
-pub fn branch_if_instr(cond: &LLVar, on_true: LLBasicBlockRef, on_false: LLBasicBlockRef) -> LLInstruction
+pub fn branch_if_instr(cond: &LLVar, on_true: BasicBlockRef, on_false: BasicBlockRef) -> LLInstruction
 {
     LLInstruction::BranchIf(LLBranchIf{
         cond: cond.clone(),

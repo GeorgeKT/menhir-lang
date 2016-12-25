@@ -4,7 +4,7 @@ mod llinstruction;
 use std::fmt;
 use ast::*;
 use parser::Operator;
-pub use self::llfunction::{LLFunction, LLVar, LLBasicBlockRef};
+pub use self::llfunction::{LLFunction, LLVar, BasicBlockRef};
 pub use self::llinstruction::*;
 
 
@@ -185,9 +185,9 @@ fn name_pattern_match_to_bc(
     func: &mut LLFunction,
     mc: &MatchCase,
     target: &LLVar,
-    match_end_bb: LLBasicBlockRef,
-    match_case_bb: LLBasicBlockRef,
-    next_bb: LLBasicBlockRef,
+    match_end_bb: BasicBlockRef,
+    match_case_bb: BasicBlockRef,
+    next_bb: BasicBlockRef,
     nr: &NameRef)
 {
     match nr.typ
@@ -217,9 +217,9 @@ fn name_pattern_match_to_bc(
 fn match_case_body_to_bc(
     func: &mut LLFunction,
     mc: &MatchCase,
-    match_case_bb: LLBasicBlockRef,
-    match_end_bb: LLBasicBlockRef,
-    next_bb: LLBasicBlockRef)
+    match_case_bb: BasicBlockRef,
+    match_end_bb: BasicBlockRef,
+    next_bb: BasicBlockRef)
 {
     func.set_current_bb(match_case_bb);
     expr_to_bc(func, &mc.to_execute);
@@ -231,8 +231,8 @@ fn array_pattern_match_to_bc(
     func: &mut LLFunction,
     ap: &ArrayPattern,
     seq: &LLVar,
-    match_case_bb: LLBasicBlockRef,
-    next_bb: LLBasicBlockRef)
+    match_case_bb: BasicBlockRef,
+    next_bb: BasicBlockRef)
 {
     let head = make_var(func, LLExpr::ArrayHead(seq.clone()), seq.typ.get_element_type().expect("Invalid array type"));
     bind(func, &ap.head, &head);
@@ -260,9 +260,9 @@ fn struct_pattern_match_to_bc(
     func: &mut LLFunction,
     mc: &MatchCase,
     target: &LLVar,
-    match_end_bb: LLBasicBlockRef,
-    match_case_bb: LLBasicBlockRef,
-    next_bb: LLBasicBlockRef,
+    match_end_bb: BasicBlockRef,
+    match_case_bb: BasicBlockRef,
+    next_bb: BasicBlockRef,
     p: &StructPattern)
 {
     func.push_destination(None);
@@ -292,7 +292,7 @@ fn struct_pattern_match_to_bc(
     match_case_body_to_bc(func, mc, match_case_bb, match_end_bb, next_bb);
 }
 
-fn match_case_to_bc(func: &mut LLFunction, mc: &MatchCase, target: &LLVar, match_end_bb: LLBasicBlockRef)
+fn match_case_to_bc(func: &mut LLFunction, mc: &MatchCase, target: &LLVar, match_end_bb: BasicBlockRef)
 {
     let match_case_bb = func.create_basic_block();
     func.add_basic_block(match_case_bb);
