@@ -32,7 +32,7 @@ impl fmt::Display for ByteCodeLiteral
 }
 
 #[derive(Debug, Clone)]
-pub enum LLExpr
+pub enum ByteCodeExpression
 {
     Literal(ByteCodeLiteral),
     UnaryOp(Operator, Var),
@@ -50,26 +50,26 @@ pub enum LLExpr
     HeapAlloc(Type),
 }
 
-impl fmt::Display for LLExpr
+impl fmt::Display for ByteCodeExpression
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
         match *self
         {
-            LLExpr::Literal(ref l) => l.fmt(f),
-            LLExpr::UnaryOp(op, ref v) => write!(f, "{} {}", op, v),
-            LLExpr::BinaryOp(op, ref a, ref b) => write!(f, "{} {} {}", a, op, b),
-            LLExpr::Call(ref name, ref args) => write!(f, "{}({})", name, join(args.iter(), ", ")),
-            LLExpr::StructMember(ref obj, index) => write!(f, "{}.{}", obj, index),
-            LLExpr::SumTypeIndex(ref obj) => write!(f, "sum type index {}", obj),
-            LLExpr::SumTypeStruct(ref obj, index) => write!(f, "{}.{}", obj, index),
-            LLExpr::SumTypeCase(index) => write!(f, "sum type case {}", index),
-            LLExpr::ArrayProperty(ref array, ref property) => write!(f, "{}.{:?}", array, property),
-            LLExpr::ArrayHead(ref array) => write!(f, "head {}", array),
-            LLExpr::ArrayTail(ref array) => write!(f, "tail {}", array),
-            LLExpr::Ref(ref obj) => write!(f, "ref {}", obj),
-            LLExpr::Func(ref func) => write!(f, "func {}", func),
-            LLExpr::HeapAlloc(ref typ) => write!(f, "heap_alloc {}", typ),
+            ByteCodeExpression::Literal(ref l) => l.fmt(f),
+            ByteCodeExpression::UnaryOp(op, ref v) => write!(f, "{} {}", op, v),
+            ByteCodeExpression::BinaryOp(op, ref a, ref b) => write!(f, "{} {} {}", a, op, b),
+            ByteCodeExpression::Call(ref name, ref args) => write!(f, "{}({})", name, join(args.iter(), ", ")),
+            ByteCodeExpression::StructMember(ref obj, index) => write!(f, "{}.{}", obj, index),
+            ByteCodeExpression::SumTypeIndex(ref obj) => write!(f, "sum type index {}", obj),
+            ByteCodeExpression::SumTypeStruct(ref obj, index) => write!(f, "{}.{}", obj, index),
+            ByteCodeExpression::SumTypeCase(index) => write!(f, "sum type case {}", index),
+            ByteCodeExpression::ArrayProperty(ref array, ref property) => write!(f, "{}.{:?}", array, property),
+            ByteCodeExpression::ArrayHead(ref array) => write!(f, "head {}", array),
+            ByteCodeExpression::ArrayTail(ref array) => write!(f, "tail {}", array),
+            ByteCodeExpression::Ref(ref obj) => write!(f, "ref {}", obj),
+            ByteCodeExpression::Func(ref func) => write!(f, "func {}", func),
+            ByteCodeExpression::HeapAlloc(ref typ) => write!(f, "heap_alloc {}", typ),
         }
     }
 }
@@ -93,7 +93,7 @@ pub struct LLBind
 pub struct LLSet
 {
     pub var: Var,
-    pub expr: LLExpr
+    pub expr: ByteCodeExpression
 }
 
 #[derive(Debug, Clone)]
@@ -107,7 +107,7 @@ pub struct LLBranchIf
 #[derive(Debug, Clone)]
 pub enum LLInstruction
 {
-    //SetArrayElement{var: Var, index: LLExpr, value: LLExpr},
+    //SetArrayElement{var: Var, index: ByteCodeExpression, value: ByteCodeExpression},
     Alloc(Var),
     SetStructMember(LLSetStructMember),
     StartScope,
@@ -122,7 +122,7 @@ pub enum LLInstruction
     DecRef(Var),
 }
 
-pub fn set_instr(var: &Var, e: LLExpr) -> LLInstruction
+pub fn set_instr(var: &Var, e: ByteCodeExpression) -> LLInstruction
 {
     LLInstruction::Set(LLSet{
         var: var.clone(),

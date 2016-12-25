@@ -350,24 +350,24 @@ unsafe fn get_value_ref(ctx: &mut Context, var: &Var) -> ValueRef
     }
 }
 
-unsafe fn gen_expr(ctx: &mut Context, dst: &Var, expr: &LLExpr)
+unsafe fn gen_expr(ctx: &mut Context, dst: &Var, expr: &ByteCodeExpression)
 {
     match *expr
     {
-        LLExpr::Literal(ref l) => gen_literal(ctx, dst, l),
-        LLExpr::UnaryOp(op, ref v) => gen_unary_op(ctx, dst, v, op),
-        LLExpr::BinaryOp(op, ref a, ref b) => gen_bin_op(ctx, dst, a, b, op),
-        LLExpr::Call(ref name, ref args) => gen_call(ctx, dst, name, args),
-        LLExpr::StructMember(ref obj, index) => gen_struct_member(ctx, dst, obj, index),
-        LLExpr::ArrayProperty(ref array, ref property) => gen_array_property(ctx, dst, array, property.clone()),
-        LLExpr::ArrayHead(ref array) => gen_array_head(ctx, dst, array),
-        LLExpr::ArrayTail(ref array) => gen_array_tail(ctx, dst, array),
-        LLExpr::SumTypeIndex(ref obj) => gen_sum_type_index(ctx, dst, obj),
-        LLExpr::SumTypeStruct(ref obj, index) => gen_sum_type_struct(ctx, dst, obj, index),
-        LLExpr::SumTypeCase(index) => gen_sum_type_case(ctx, dst, index),
-        LLExpr::Ref(ref obj) => gen_ref(ctx, dst, obj),
-        LLExpr::Func(ref func) => gen_func_expr(ctx, dst, func),
-        LLExpr::HeapAlloc(ref typ) => gen_heap_alloc(ctx, dst, typ),
+        ByteCodeExpression::Literal(ref l) => gen_literal(ctx, dst, l),
+        ByteCodeExpression::UnaryOp(op, ref v) => gen_unary_op(ctx, dst, v, op),
+        ByteCodeExpression::BinaryOp(op, ref a, ref b) => gen_bin_op(ctx, dst, a, b, op),
+        ByteCodeExpression::Call(ref name, ref args) => gen_call(ctx, dst, name, args),
+        ByteCodeExpression::StructMember(ref obj, index) => gen_struct_member(ctx, dst, obj, index),
+        ByteCodeExpression::ArrayProperty(ref array, ref property) => gen_array_property(ctx, dst, array, property.clone()),
+        ByteCodeExpression::ArrayHead(ref array) => gen_array_head(ctx, dst, array),
+        ByteCodeExpression::ArrayTail(ref array) => gen_array_tail(ctx, dst, array),
+        ByteCodeExpression::SumTypeIndex(ref obj) => gen_sum_type_index(ctx, dst, obj),
+        ByteCodeExpression::SumTypeStruct(ref obj, index) => gen_sum_type_struct(ctx, dst, obj, index),
+        ByteCodeExpression::SumTypeCase(index) => gen_sum_type_case(ctx, dst, index),
+        ByteCodeExpression::Ref(ref obj) => gen_ref(ctx, dst, obj),
+        ByteCodeExpression::Func(ref func) => gen_func_expr(ctx, dst, func),
+        ByteCodeExpression::HeapAlloc(ref typ) => gen_heap_alloc(ctx, dst, typ),
     }
 }
 
