@@ -2,7 +2,7 @@ use std::fmt;
 use itertools::free::join;
 use ast::{ArrayProperty, Type};
 use parser::Operator;
-use llrep::llfunction::{LLBasicBlockRef, LLVar};
+use bytecode::llfunction::{LLBasicBlockRef, LLVar};
 
 #[derive(Debug, Clone)]
 pub enum LLLiteral

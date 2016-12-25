@@ -2,7 +2,7 @@ use std::fmt;
 use std::collections::{BTreeMap, HashMap};
 use itertools::free::join;
 use ast::{Type, FunctionSignature};
-use llrep::llinstruction::LLInstruction;
+use bytecode::llinstruction::LLInstruction;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct LLVar

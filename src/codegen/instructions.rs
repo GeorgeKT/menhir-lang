@@ -7,7 +7,7 @@ use llvm::*;
 
 use ast::*;
 use codegen::*;
-use llrep::*;
+use bytecode::*;
 use parser::Operator;
 
 pub unsafe fn const_int(ctx: &Context, v: u64) -> LLVMValueRef

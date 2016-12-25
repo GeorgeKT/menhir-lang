@@ -29,7 +29,7 @@ use std::rc::Rc;
 use llvm::prelude::*;
 use llvm::core::*;
 
-use llrep::*;
+use bytecode::*;
 use compileerror::{CompileResult};
 use codegen::function::{gen_function, gen_function_sig};
 use codegen::builtin::add_builtin_functions;

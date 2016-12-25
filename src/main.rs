@@ -10,7 +10,7 @@ mod ast;
 #[macro_use]
 mod codegen;
 mod compileerror;
-mod llrep;
+mod bytecode;
 mod parser;
 mod typechecker;
 mod span;
@@ -21,7 +21,7 @@ use codegen::{CodeGenOptions, codegen, link, llvm_init};
 use docopt::Docopt;
 use parser::{ParserOptions, parse_file};
 use typechecker::{type_check_module};
-use llrep::compile_to_llrep;
+use bytecode::compile_to_byte_code;
 
 
 static USAGE: &'static str =  "
@@ -95,7 +95,7 @@ fn main()
         }
 
 
-        let llmod = compile_to_llrep(&module);
+        let llmod = compile_to_byte_code(&module);
 
         if debug_compiler {
             println!("llmod:");

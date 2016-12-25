@@ -9,7 +9,7 @@ use llvm::prelude::*;
 
 use ast::*;
 use codegen::*;
-use llrep::*;
+use bytecode::*;
 
 
 unsafe fn make_function_instance(ctx: &Context, sig: &FunctionSignature) -> FunctionInstance

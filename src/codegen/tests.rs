@@ -11,7 +11,7 @@ use codegen::{codegen, llvm_init};
 use typechecker::{type_check_module};
 use ast::{TreePrinter};
 use span::Span;
-use llrep::*;
+use bytecode::*;
 
 #[link(name="cobraruntime")]
 extern {
@@ -42,7 +42,7 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
         println!("-----------------");
     }
 
-    let llmod = compile_to_llrep(&md);
+    let llmod = compile_to_byte_code(&md);
     if dump {
         println!("LLREP");
         println!("-----------------");

@@ -678,7 +678,7 @@ fn func_to_llrep(sig: &FunctionSignature, expression: &Expression) -> LLFunction
     llfunc
 }
 
-pub fn compile_to_llrep(md: &Module) -> LLModule
+pub fn compile_to_byte_code(md: &Module) -> LLModule
 {
     let mut ll_mod = LLModule{
         name: md.name.clone(),
