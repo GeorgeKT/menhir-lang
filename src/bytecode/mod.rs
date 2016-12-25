@@ -8,13 +8,13 @@ pub use self::llfunction::{ByteCodeFunction, Var, BasicBlockRef};
 pub use self::llinstruction::*;
 
 
-pub struct LLModule
+pub struct ByteCodeModule
 {
     pub name: String,
     pub functions: Vec<ByteCodeFunction>,
 }
 
-impl fmt::Display for LLModule
+impl fmt::Display for ByteCodeModule
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
@@ -223,7 +223,7 @@ fn match_case_body_to_bc(
 {
     func.set_current_bb(match_case_bb);
     expr_to_bc(func, &mc.to_execute);
-    func.add(LLInstruction::Branch(match_end_bb));
+    func.add(Instruction::Branch(match_end_bb));
     func.set_current_bb(next_bb);
 }
 
@@ -270,7 +270,7 @@ fn struct_pattern_match_to_bc(
     match p.typ
     {
         Type::Struct(_) => {
-            func.add(LLInstruction::Branch(match_case_bb));
+            func.add(Instruction::Branch(match_case_bb));
             func.set_current_bb(match_case_bb);
             add_struct_pattern_bindings(p, target, func);
         },
@@ -331,7 +331,7 @@ fn match_case_to_bc(func: &mut ByteCodeFunction, mc: &MatchCase, target: &Var, m
         },
 
         Pattern::Any(_) => {
-            func.add(LLInstruction::Branch(match_case_bb));
+            func.add(Instruction::Branch(match_case_bb));
             match_case_body_to_bc(func, mc, match_case_bb, match_end_bb, next_bb);
         },
 
@@ -405,7 +405,7 @@ fn match_to_bc(func: &mut ByteCodeFunction, m: &MatchExpression) -> Var
     }
     func.pop_destination();
 
-    func.add(LLInstruction::Branch(match_end_bb));
+    func.add(Instruction::Branch(match_end_bb));
     func.add_basic_block(match_end_bb);
     func.set_current_bb(match_end_bb);
     func.pop_scope();
@@ -422,7 +422,7 @@ fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef) -> Option<Var>
             Some(var) => {
                 assert!(var.typ == v.typ);
                 if var.typ.allocate_on_heap() {
-                    func.add(LLInstruction::IncRef(v.clone()));
+                    func.add(Instruction::IncRef(v.clone()));
                 }
                 add_set(func, ByteCodeExpression::Ref(v), &var);
                 Some(var)
@@ -634,14 +634,14 @@ fn stack_alloc(func: &mut ByteCodeFunction, typ: &Type, name: Option<&str>) -> V
             let var = Var::named(n, typ.clone());
             func.add_named_var(var.clone());
             if *typ != Type::Void {
-                func.add(LLInstruction::Alloc(var.clone()));
+                func.add(Instruction::Alloc(var.clone()));
             }
             var
         },
         None => {
             let var = func.new_var(typ.clone());
             if *typ != Type::Void {
-                func.add(LLInstruction::Alloc(var.clone()));
+                func.add(Instruction::Alloc(var.clone()));
             }
             var
         }
@@ -672,15 +672,15 @@ fn func_to_bc(sig: &FunctionSignature, expression: &Expression) -> ByteCodeFunct
         },
 
         None => {
-            llfunc.add(LLInstruction::ReturnVoid);
+            llfunc.add(Instruction::ReturnVoid);
         }
     }
     llfunc
 }
 
-pub fn compile_to_byte_code(md: &Module) -> LLModule
+pub fn compile_to_byte_code(md: &Module) -> ByteCodeModule
 {
-    let mut ll_mod = LLModule{
+    let mut ll_mod = ByteCodeModule{
         name: md.name.clone(),
         functions: Vec::new(),
     };

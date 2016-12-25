@@ -371,22 +371,22 @@ unsafe fn gen_expr(ctx: &mut Context, dst: &Var, expr: &ByteCodeExpression)
     }
 }
 
-pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: &HashMap<BasicBlockRef, LLVMBasicBlockRef>)
+pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &HashMap<BasicBlockRef, LLVMBasicBlockRef>)
 {
     //print!(">> {}", instr);
     match *instr
     {
-        LLInstruction::Set(ref s) => {
+        Instruction::Set(ref s) => {
             gen_expr(ctx, &s.var, &s.expr);
         },
 
-        LLInstruction::SetStructMember(ref s) => {
+        Instruction::SetStructMember(ref s) => {
             let struct_object = ctx.get_variable(&s.obj.name).expect("Unknown variable obj");
             let member_ptr = struct_object.value.member(ctx, s.member_index);
             member_ptr.store(ctx, &ctx.get_variable(&s.value.name).expect("Unknown variable value").value);
         },
 
-        LLInstruction::Alloc(ref var) => {
+        Instruction::Alloc(ref var) => {
             let typ = match var.typ
             {
                 Type::Func(_) => LLVMPointerType(ctx.resolve_type(&var.typ), 0),
@@ -400,24 +400,24 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: 
             ctx.add_variable(&var.name, v);
         },
 
-        LLInstruction::Return(ref var) => {
+        Instruction::Return(ref var) => {
             let ret = ctx.get_variable(&var.name).expect("Unknown variable");
             LLVMBuildRet(ctx.builder, ret.value.load(ctx.builder));
         },
 
-        LLInstruction::ReturnVoid => {
+        Instruction::ReturnVoid => {
             LLVMBuildRetVoid(ctx.builder);
         },
 
-        LLInstruction::StartScope => {
+        Instruction::StartScope => {
             ctx.push_stack(ptr::null_mut());
         },
 
-        LLInstruction::EndScope => {
+        Instruction::EndScope => {
             ctx.pop_stack();
         },
 
-        LLInstruction::Bind(ref b) => {
+        Instruction::Bind(ref b) => {
             if let Type::Func(_) = b.var.typ {
                 let func = ctx.get_function(&b.var.name).expect("Unknown function");
                 ctx.add_variable(&b.name, ValueRef::new(func.function, &b.var.typ));
@@ -428,24 +428,24 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &LLInstruction, blocks: 
             }
         },
 
-        LLInstruction::Branch(ref bb) => {
+        Instruction::Branch(ref bb) => {
             let llvm_bb = blocks.get(bb).expect("Unknown basic block");
             LLVMBuildBr(ctx.builder, *llvm_bb);
         },
 
-        LLInstruction::BranchIf(ref b) => {
+        Instruction::BranchIf(ref b) => {
             let on_true_bb = blocks.get(&b.on_true).expect("Unknown basic block");
             let on_false_bb = blocks.get(&b.on_false).expect("Unknown basic block");
             let cond = ctx.get_variable(&b.cond.name).expect("Unknown variable");
             LLVMBuildCondBr(ctx.builder, cond.value.load(ctx.builder), *on_true_bb, *on_false_bb);
         },
 
-        LLInstruction::IncRef(ref v) => {
+        Instruction::IncRef(ref v) => {
             let var = ctx.get_variable(&v.name).expect("Unknown variable");
             var.value.inc_ref(ctx);
         },
 
-        LLInstruction::DecRef(ref v) => {
+        Instruction::DecRef(ref v) => {
             let var = ctx.get_variable(&v.name).expect("Unknown variable");
             var.value.dec_ref(ctx);
         },

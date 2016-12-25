@@ -75,7 +75,7 @@ impl fmt::Display for ByteCodeExpression
 }
 
 #[derive(Debug, Clone)]
-pub struct LLSetStructMember
+pub struct SetStructMember
 {
     pub obj: Var,
     pub member_index: usize,
@@ -83,21 +83,21 @@ pub struct LLSetStructMember
 }
 
 #[derive(Debug, Clone)]
-pub struct LLBind
+pub struct Bind
 {
     pub name: String,
     pub var: Var,
 }
 
 #[derive(Debug, Clone)]
-pub struct LLSet
+pub struct Set
 {
     pub var: Var,
     pub expr: ByteCodeExpression
 }
 
 #[derive(Debug, Clone)]
-pub struct LLBranchIf
+pub struct BranchIf
 {
     pub cond: Var,
     pub on_true: BasicBlockRef,
@@ -105,102 +105,102 @@ pub struct LLBranchIf
 }
 
 #[derive(Debug, Clone)]
-pub enum LLInstruction
+pub enum Instruction
 {
     //SetArrayElement{var: Var, index: ByteCodeExpression, value: ByteCodeExpression},
     Alloc(Var),
-    SetStructMember(LLSetStructMember),
+    SetStructMember(SetStructMember),
     StartScope,
     EndScope,
-    Bind(LLBind),
-    Set(LLSet),
+    Bind(Bind),
+    Set(Set),
     Return(Var),
     ReturnVoid,
     Branch(BasicBlockRef),
-    BranchIf(LLBranchIf),
+    BranchIf(BranchIf),
     IncRef(Var),
     DecRef(Var),
 }
 
-pub fn set_instr(var: &Var, e: ByteCodeExpression) -> LLInstruction
+pub fn set_instr(var: &Var, e: ByteCodeExpression) -> Instruction
 {
-    LLInstruction::Set(LLSet{
+    Instruction::Set(Set{
         var: var.clone(),
         expr: e,
     })
 }
 
-pub fn set_struct_member_instr(obj: &Var, index: usize, e: &Var) -> LLInstruction
+pub fn set_struct_member_instr(obj: &Var, index: usize, e: &Var) -> Instruction
 {
-    LLInstruction::SetStructMember(LLSetStructMember{
+    Instruction::SetStructMember(SetStructMember{
         obj: obj.clone(),
         member_index: index,
         value: e.clone(),
     })
 }
 
-pub fn ret_instr(var: &Var) -> LLInstruction
+pub fn ret_instr(var: &Var) -> Instruction
 {
-    LLInstruction::Return(var.clone())
+    Instruction::Return(var.clone())
 }
 
-pub fn bind_instr(name: &str, var: &Var) -> LLInstruction
+pub fn bind_instr(name: &str, var: &Var) -> Instruction
 {
-    LLInstruction::Bind(LLBind{
+    Instruction::Bind(Bind{
         name: name.into(),
         var: var.clone(),
     })
 }
 
-pub fn branch_if_instr(cond: &Var, on_true: BasicBlockRef, on_false: BasicBlockRef) -> LLInstruction
+pub fn branch_if_instr(cond: &Var, on_true: BasicBlockRef, on_false: BasicBlockRef) -> Instruction
 {
-    LLInstruction::BranchIf(LLBranchIf{
+    Instruction::BranchIf(BranchIf{
         cond: cond.clone(),
         on_true: on_true,
         on_false: on_false,
     })
 }
 
-impl fmt::Display for LLInstruction
+impl fmt::Display for Instruction
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
         match *self
         {
-            LLInstruction::Alloc(ref var) => {
+            Instruction::Alloc(ref var) => {
                 writeln!(f, "  alloc {}", var)
             },
-            LLInstruction::SetStructMember(ref s) => {
+            Instruction::SetStructMember(ref s) => {
                 writeln!(f, "  set {}.{} = {}", s.obj, s.member_index, s.value)
             },
-            LLInstruction::StartScope => {
+            Instruction::StartScope => {
                 writeln!(f, "  scope start")
             },
-            LLInstruction::EndScope => {
+            Instruction::EndScope => {
                 writeln!(f, "  scope end")
             },
-            LLInstruction::Bind(ref b) => {
+            Instruction::Bind(ref b) => {
                 writeln!(f, "  bind {} = {}", b.name, b.var.name)
             },
-            LLInstruction::Set(ref s) => {
+            Instruction::Set(ref s) => {
                 writeln!(f, "  set {} = {}", s.var, s.expr)
             },
-            LLInstruction::Return(ref var) => {
+            Instruction::Return(ref var) => {
                 writeln!(f, "  ret {}", var)
             },
-            LLInstruction::ReturnVoid => {
+            Instruction::ReturnVoid => {
                 writeln!(f, "  ret void")
             },
-            LLInstruction::Branch(ref name) => {
+            Instruction::Branch(ref name) => {
                 writeln!(f, "  br {}", name)
             },
-            LLInstruction::BranchIf(ref b) => {
+            Instruction::BranchIf(ref b) => {
                 writeln!(f, "  brif {} ? {} : {} ", b.cond, b.on_true, b.on_false)
             },
-            LLInstruction::IncRef(ref v) => {
+            Instruction::IncRef(ref v) => {
                 writeln!(f, "  incref {}", v.name)
             },
-            LLInstruction::DecRef(ref v) => {
+            Instruction::DecRef(ref v) => {
                 writeln!(f, "  decref {}", v.name)
             },
         }

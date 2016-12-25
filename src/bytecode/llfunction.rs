@@ -2,7 +2,7 @@ use std::fmt;
 use std::collections::{BTreeMap, HashMap};
 use itertools::free::join;
 use ast::{Type, FunctionSignature};
-use bytecode::llinstruction::LLInstruction;
+use bytecode::llinstruction::Instruction;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Var
@@ -81,7 +81,7 @@ impl Scope
     {
         // Cleanup in reverse construction order
         for v in self.to_dec_ref.iter().rev() {
-            func.add(LLInstruction::DecRef(v.clone()));
+            func.add(Instruction::DecRef(v.clone()));
         }
     }
 }
@@ -102,7 +102,7 @@ pub fn bb_name(bb: BasicBlockRef) -> String
 pub struct BasicBlock
 {
     pub name: String,
-    pub instructions: Vec<LLInstruction>
+    pub instructions: Vec<Instruction>
 }
 
 impl BasicBlock
@@ -163,12 +163,12 @@ impl ByteCodeFunction
         self.blocks.get(&0).map(|bb| bb.instructions.is_empty()).unwrap_or(false)
     }
 
-    pub fn add(&mut self, inst: LLInstruction)
+    pub fn add(&mut self, inst: Instruction)
     {
         // Pop final scope before returning
         match inst
         {
-            LLInstruction::Return(_) => self.pop_scope(),
+            Instruction::Return(_) => self.pop_scope(),
             _ => (),
         }
 
@@ -208,7 +208,7 @@ impl ByteCodeFunction
     pub fn push_scope(&mut self)
     {
         self.scopes.push(Scope::new());
-        self.add(LLInstruction::StartScope);
+        self.add(Instruction::StartScope);
     }
 
     pub fn pop_scope(&mut self)
@@ -217,7 +217,7 @@ impl ByteCodeFunction
         s.cleanup(self);
         if !self.scopes.is_empty() {
             // Add an endscope instruction, but not at function exit
-            self.add(LLInstruction::EndScope);
+            self.add(Instruction::EndScope);
         }
     }
 

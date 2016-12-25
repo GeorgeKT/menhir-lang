@@ -92,7 +92,7 @@ pub struct CodeGenOptions
     pub optimize: bool,
 }
 
-fn gen_module(ctx: &mut Context, module: &LLModule)
+fn gen_module(ctx: &mut Context, module: &ByteCodeModule)
 {
     unsafe {
         for func in &module.functions {
@@ -113,7 +113,7 @@ fn gen_module(ctx: &mut Context, module: &LLModule)
     }
 }
 
-pub fn codegen(m: &LLModule) -> CompileResult<Context>
+pub fn codegen(m: &ByteCodeModule) -> CompileResult<Context>
 {
     unsafe {
         // Set up a context, module and builder in that context.
