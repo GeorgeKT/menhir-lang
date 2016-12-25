@@ -4,14 +4,14 @@ mod llinstruction;
 use std::fmt;
 use ast::*;
 use parser::Operator;
-pub use self::llfunction::{LLFunction, Var, BasicBlockRef};
+pub use self::llfunction::{ByteCodeFunction, Var, BasicBlockRef};
 pub use self::llinstruction::*;
 
 
 pub struct LLModule
 {
     pub name: String,
-    pub functions: Vec<LLFunction>,
+    pub functions: Vec<ByteCodeFunction>,
 }
 
 impl fmt::Display for LLModule
@@ -26,36 +26,36 @@ impl fmt::Display for LLModule
     }
 }
 
-fn add_set(func: &mut LLFunction, expr: LLExpr, dst: &Var)
+fn add_set(func: &mut ByteCodeFunction, expr: LLExpr, dst: &Var)
 {
     func.add(set_instr(dst, expr));
 }
 
-fn make_var(func: &mut LLFunction, expr: LLExpr, typ: Type) -> Var
+fn make_var(func: &mut ByteCodeFunction, expr: LLExpr, typ: Type) -> Var
 {
     let var = func.new_var(typ);
     add_set(func, expr, &var);
     var
 }
 
-fn add_lit(func: &mut LLFunction, lit: LLLiteral, dst: &Var)
+fn add_lit(func: &mut ByteCodeFunction, lit: LLLiteral, dst: &Var)
 {
     add_set(func, LLExpr::Literal(lit), dst);
 }
 
-fn make_lit(func: &mut LLFunction, lit: LLLiteral, typ: Type) -> Var
+fn make_lit(func: &mut ByteCodeFunction, lit: LLLiteral, typ: Type) -> Var
 {
     let var = func.new_var(typ);
     add_set(func, LLExpr::Literal(lit), &var);
     var
 }
 
-fn bind(func: &mut LLFunction, name: &str, var: &Var)
+fn bind(func: &mut ByteCodeFunction, name: &str, var: &Var)
 {
     func.add(bind_instr(name, var))
 }
 
-fn call_to_bc(func: &mut LLFunction, c: &Call, self_arg: Option<Var>) -> Var
+fn call_to_bc(func: &mut ByteCodeFunction, c: &Call, self_arg: Option<Var>) -> Var
 {
     let dst = get_dst(func, &c.return_type);
     func.push_destination(None);
@@ -80,7 +80,7 @@ fn call_to_bc(func: &mut LLFunction, c: &Call, self_arg: Option<Var>) -> Var
     dst
 }
 
-fn add_binding(func: &mut LLFunction, b: &LetBinding)
+fn add_binding(func: &mut ByteCodeFunction, b: &LetBinding)
 {
     match b.binding_type
     {
@@ -101,7 +101,7 @@ fn add_binding(func: &mut LLFunction, b: &LetBinding)
     }
 }
 
-fn let_to_bc(func: &mut LLFunction, l: &LetExpression) -> Option<Var>
+fn let_to_bc(func: &mut ByteCodeFunction, l: &LetExpression) -> Option<Var>
 {
     let dst = get_dst(func, &l.typ);
     func.push_scope();
@@ -116,7 +116,7 @@ fn let_to_bc(func: &mut LLFunction, l: &LetExpression) -> Option<Var>
     Some(dst)
 }
 
-fn array_lit_to_bc(func: &mut LLFunction, a: &ArrayLiteral, dst: &Var)
+fn array_lit_to_bc(func: &mut ByteCodeFunction, a: &ArrayLiteral, dst: &Var)
 {
     let vars = a.elements.iter()
         .map(|e| to_bc(func, e))
@@ -125,9 +125,9 @@ fn array_lit_to_bc(func: &mut LLFunction, a: &ArrayLiteral, dst: &Var)
     add_lit(func, LLLiteral::Array(vars), dst);
 }
 
-fn struct_initializer_to_bc(func: &mut LLFunction, si: &StructInitializer, dst: &Var)
+fn struct_initializer_to_bc(func: &mut ByteCodeFunction, si: &StructInitializer, dst: &Var)
 {
-    let init_members = |func: &mut LLFunction, si: &StructInitializer, dst: &Var| {
+    let init_members = |func: &mut ByteCodeFunction, si: &StructInitializer, dst: &Var| {
         for (idx, expr) in si.member_initializers.iter().enumerate() {
             let v = to_bc(func, expr);
             func.add(set_struct_member_instr(&dst, idx, &v));
@@ -144,20 +144,20 @@ fn struct_initializer_to_bc(func: &mut LLFunction, si: &StructInitializer, dst: 
     }
 }
 
-fn add_array_len(func: &mut LLFunction, array: Var, dst: &Var)
+fn add_array_len(func: &mut ByteCodeFunction, array: Var, dst: &Var)
 {
     let expr = LLExpr::ArrayProperty(array, ArrayProperty::Len);
     add_set(func, expr, &dst);
 }
 
-fn make_array_len(func: &mut LLFunction, array: Var) -> Var
+fn make_array_len(func: &mut ByteCodeFunction, array: Var) -> Var
 {
     let var = func.new_var(Type::Int);
     add_array_len(func, array, &var);
     var
 }
 
-fn member_access_to_bc(func: &mut LLFunction, sma: &MemberAccess, dst: &Var)
+fn member_access_to_bc(func: &mut ByteCodeFunction, sma: &MemberAccess, dst: &Var)
 {
     func.push_destination(None);
     let var = to_bc(func, &sma.left);
@@ -182,7 +182,7 @@ fn member_access_to_bc(func: &mut LLFunction, sma: &MemberAccess, dst: &Var)
 
 
 fn name_pattern_match_to_bc(
-    func: &mut LLFunction,
+    func: &mut ByteCodeFunction,
     mc: &MatchCase,
     target: &Var,
     match_end_bb: BasicBlockRef,
@@ -215,7 +215,7 @@ fn name_pattern_match_to_bc(
 
 
 fn match_case_body_to_bc(
-    func: &mut LLFunction,
+    func: &mut ByteCodeFunction,
     mc: &MatchCase,
     match_case_bb: BasicBlockRef,
     match_end_bb: BasicBlockRef,
@@ -228,7 +228,7 @@ fn match_case_body_to_bc(
 }
 
 fn array_pattern_match_to_bc(
-    func: &mut LLFunction,
+    func: &mut ByteCodeFunction,
     ap: &ArrayPattern,
     seq: &Var,
     match_case_bb: BasicBlockRef,
@@ -245,7 +245,7 @@ fn array_pattern_match_to_bc(
     func.add(branch_if_instr(&cond, match_case_bb, next_bb));
 }
 
-fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &Var, func: &mut LLFunction)
+fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &Var, func: &mut ByteCodeFunction)
 {
     for (idx, b) in p.bindings.iter().enumerate() {
         if b != "_" {
@@ -257,7 +257,7 @@ fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &Var, func: &mut L
 }
 
 fn struct_pattern_match_to_bc(
-    func: &mut LLFunction,
+    func: &mut ByteCodeFunction,
     mc: &MatchCase,
     target: &Var,
     match_end_bb: BasicBlockRef,
@@ -292,14 +292,14 @@ fn struct_pattern_match_to_bc(
     match_case_body_to_bc(func, mc, match_case_bb, match_end_bb, next_bb);
 }
 
-fn match_case_to_bc(func: &mut LLFunction, mc: &MatchCase, target: &Var, match_end_bb: BasicBlockRef)
+fn match_case_to_bc(func: &mut ByteCodeFunction, mc: &MatchCase, target: &Var, match_end_bb: BasicBlockRef)
 {
     let match_case_bb = func.create_basic_block();
     func.add_basic_block(match_case_bb);
     let next_bb = func.create_basic_block();
     func.add_basic_block(next_bb);
 
-    let add_literal_case = |func: &mut LLFunction, lit: LLLiteral, typ: Type| {
+    let add_literal_case = |func: &mut ByteCodeFunction, lit: LLLiteral, typ: Type| {
         func.push_destination(None);
         let iv = make_lit(func, lit, typ);
         let cond = make_var(func, LLExpr::BinaryOp(Operator::Equals, iv, target.clone()), Type::Bool);
@@ -390,7 +390,7 @@ fn match_case_to_bc(func: &mut LLFunction, mc: &MatchCase, target: &Var, match_e
     }
 }
 
-fn match_to_bc(func: &mut LLFunction, m: &MatchExpression) -> Var
+fn match_to_bc(func: &mut ByteCodeFunction, m: &MatchExpression) -> Var
 {
     func.push_destination(None);
     let target_var = to_bc(func, &m.target);
@@ -413,9 +413,9 @@ fn match_to_bc(func: &mut LLFunction, m: &MatchExpression) -> Var
 }
 
 
-fn name_ref_to_bc(func: &mut LLFunction, nr: &NameRef) -> Option<Var>
+fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef) -> Option<Var>
 {
-    let add_name_ref = |func: &mut LLFunction, nr: &NameRef| {
+    let add_name_ref = |func: &mut ByteCodeFunction, nr: &NameRef| {
         let v = Var::named(&nr.name, nr.typ.clone());
         match func.get_destination()
         {
@@ -460,9 +460,9 @@ fn name_ref_to_bc(func: &mut LLFunction, nr: &NameRef) -> Option<Var>
     }
 }
 
-fn block_to_bc(func: &mut LLFunction, b: &Block) -> Option<Var>
+fn block_to_bc(func: &mut ByteCodeFunction, b: &Block) -> Option<Var>
 {
-    let do_block = |func: &mut LLFunction, b: &Block| {
+    let do_block = |func: &mut ByteCodeFunction, b: &Block| {
         for (idx, e) in b.expressions.iter().enumerate() {
             if idx == b.expressions.len() - 1 {
                 expr_to_bc(func, e);
@@ -489,12 +489,12 @@ fn block_to_bc(func: &mut LLFunction, b: &Block) -> Option<Var>
     }
 }
 
-fn to_bc(func: &mut LLFunction, expr: &Expression) -> Var
+fn to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Var
 {
     expr_to_bc(func, expr).expect("Expression must return a value")
 }
 
-fn expr_to_bc(func: &mut LLFunction, expr: &Expression) -> Option<Var>
+fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
 {
     match *expr
     {
@@ -626,7 +626,7 @@ fn expr_to_bc(func: &mut LLFunction, expr: &Expression) -> Option<Var>
     }
 }
 
-fn stack_alloc(func: &mut LLFunction, typ: &Type, name: Option<&str>) -> Var
+fn stack_alloc(func: &mut ByteCodeFunction, typ: &Type, name: Option<&str>) -> Var
 {
     match name
     {
@@ -648,7 +648,7 @@ fn stack_alloc(func: &mut LLFunction, typ: &Type, name: Option<&str>) -> Var
     }
 }
 
-fn get_dst(func: &mut LLFunction, typ: &Type) -> Var
+fn get_dst(func: &mut ByteCodeFunction, typ: &Type) -> Var
 {
     assert!(*typ != Type::Unknown);
     if let Some(dst) = func.get_destination() {
@@ -659,9 +659,9 @@ fn get_dst(func: &mut LLFunction, typ: &Type) -> Var
     stack_alloc(func, typ, None)
 }
 
-fn func_to_bc(sig: &FunctionSignature, expression: &Expression) -> LLFunction
+fn func_to_bc(sig: &FunctionSignature, expression: &Expression) -> ByteCodeFunction
 {
-    let mut llfunc = LLFunction::new(&sig);
+    let mut llfunc = ByteCodeFunction::new(&sig);
     match expr_to_bc(&mut llfunc, &expression)
     {
         Some(var) => {
@@ -686,7 +686,7 @@ pub fn compile_to_byte_code(md: &Module) -> LLModule
     };
 
     for func in md.externals.values() {
-        ll_mod.functions.push(LLFunction::new(&func.sig));
+        ll_mod.functions.push(ByteCodeFunction::new(&func.sig));
     }
 
     for func in md.functions.values() {

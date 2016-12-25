@@ -77,7 +77,7 @@ impl Scope
         self.to_dec_ref.len() < len
     }
 
-    pub fn cleanup(&self, func: &mut LLFunction)
+    pub fn cleanup(&self, func: &mut ByteCodeFunction)
     {
         // Cleanup in reverse construction order
         for v in self.to_dec_ref.iter().rev() {
@@ -119,12 +119,12 @@ impl BasicBlock
 
 
 #[derive(Debug)]
-pub struct LLFunction
+pub struct ByteCodeFunction
 {
     pub sig: FunctionSignature,
     pub blocks: BTreeMap<BasicBlockRef, BasicBlock>,
     pub block_order: Vec<BasicBlockRef>,
-    pub lambdas: Vec<LLFunction>,
+    pub lambdas: Vec<ByteCodeFunction>,
     current_bb: usize,
     bb_counter: usize,
     var_counter: usize,
@@ -133,11 +133,11 @@ pub struct LLFunction
 }
 
 
-impl LLFunction
+impl ByteCodeFunction
 {
-    pub fn new(sig: &FunctionSignature) -> LLFunction
+    pub fn new(sig: &FunctionSignature) -> ByteCodeFunction
     {
-        let mut f = LLFunction{
+        let mut f = ByteCodeFunction{
             sig: sig.clone(),
             blocks: BTreeMap::new(),
             block_order: Vec::new(),
@@ -261,7 +261,7 @@ impl LLFunction
     }
 }
 
-impl fmt::Display for LLFunction
+impl fmt::Display for ByteCodeFunction
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {

@@ -51,7 +51,7 @@ pub unsafe fn gen_function_ptr(ctx: &Context, func_ptr: LLVMValueRef, sig: Funct
     fi
 }
 
-pub unsafe fn gen_function(ctx: &mut Context, func: &LLFunction)
+pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction)
 {
     let fi = ctx.get_function(&func.sig.name).expect("Internal Compiler Error: Unknown function");
     let entry_bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, cstr!("entry"));
