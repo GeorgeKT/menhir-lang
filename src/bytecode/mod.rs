@@ -55,7 +55,7 @@ fn bind(func: &mut LLFunction, name: &str, var: &LLVar)
     func.add(bind_instr(name, var))
 }
 
-fn call_to_llrep(func: &mut LLFunction, c: &Call, self_arg: Option<LLVar>) -> LLVar
+fn call_to_bc(func: &mut LLFunction, c: &Call, self_arg: Option<LLVar>) -> LLVar
 {
     let dst = get_dst(func, &c.return_type);
     func.push_destination(None);
@@ -64,7 +64,7 @@ fn call_to_llrep(func: &mut LLFunction, c: &Call, self_arg: Option<LLVar>) -> LL
         args.push(s);
     }
 
-    args.extend(c.args.iter().map(|arg| to_llrep(func, arg)));
+    args.extend(c.args.iter().map(|arg| to_bc(func, arg)));
     func.pop_destination();
 
     func.add(set_instr(
@@ -87,21 +87,21 @@ fn add_binding(func: &mut LLFunction, b: &LetBinding)
         LetBindingType::Name(ref name) => {
             let dst = stack_alloc(func, &b.typ, Some(name));
             func.push_destination(Some(dst));
-            expr_to_llrep(func, &b.init);
+            expr_to_bc(func, &b.init);
             func.pop_destination();
         },
 
         LetBindingType::Struct(ref s) => {
             let dst = stack_alloc(func, &b.typ, None);
             func.push_destination(Some(dst.clone()));
-            expr_to_llrep(func, &b.init);
+            expr_to_bc(func, &b.init);
             add_struct_pattern_bindings(s, &dst, func);
             func.pop_destination();
         },
     }
 }
 
-fn let_to_llrep(func: &mut LLFunction, l: &LetExpression) -> Option<LLVar>
+fn let_to_bc(func: &mut LLFunction, l: &LetExpression) -> Option<LLVar>
 {
     let dst = get_dst(func, &l.typ);
     func.push_scope();
@@ -110,26 +110,26 @@ fn let_to_llrep(func: &mut LLFunction, l: &LetExpression) -> Option<LLVar>
     }
 
     func.push_destination(Some(dst.clone()));
-    to_llrep(func, &l.expression);
+    to_bc(func, &l.expression);
     func.pop_destination();
     func.pop_scope();
     Some(dst)
 }
 
-fn array_lit_to_llrep(func: &mut LLFunction, a: &ArrayLiteral, dst: &LLVar)
+fn array_lit_to_bc(func: &mut LLFunction, a: &ArrayLiteral, dst: &LLVar)
 {
     let vars = a.elements.iter()
-        .map(|e| to_llrep(func, e))
+        .map(|e| to_bc(func, e))
         .collect();
 
     add_lit(func, LLLiteral::Array(vars), dst);
 }
 
-fn struct_initializer_to_llrep(func: &mut LLFunction, si: &StructInitializer, dst: &LLVar)
+fn struct_initializer_to_bc(func: &mut LLFunction, si: &StructInitializer, dst: &LLVar)
 {
     let init_members = |func: &mut LLFunction, si: &StructInitializer, dst: &LLVar| {
         for (idx, expr) in si.member_initializers.iter().enumerate() {
-            let v = to_llrep(func, expr);
+            let v = to_bc(func, expr);
             func.add(set_struct_member_instr(&dst, idx, &v));
         }
     };
@@ -157,10 +157,10 @@ fn make_array_len(func: &mut LLFunction, array: LLVar) -> LLVar
     var
 }
 
-fn member_access_to_llrep(func: &mut LLFunction, sma: &MemberAccess, dst: &LLVar)
+fn member_access_to_bc(func: &mut LLFunction, sma: &MemberAccess, dst: &LLVar)
 {
     func.push_destination(None);
-    let var = to_llrep(func, &sma.left);
+    let var = to_bc(func, &sma.left);
     func.pop_destination();
 
     match (&var.typ, &sma.right)
@@ -181,7 +181,7 @@ fn member_access_to_llrep(func: &mut LLFunction, sma: &MemberAccess, dst: &LLVar
 }
 
 
-fn name_pattern_match_to_llrep(
+fn name_pattern_match_to_bc(
     func: &mut LLFunction,
     mc: &MatchCase,
     target: &LLVar,
@@ -210,11 +210,11 @@ fn name_pattern_match_to_llrep(
         }
     }
 
-    match_case_body_to_llrep(func, mc, match_case_bb, match_end_bb, next_bb);
+    match_case_body_to_bc(func, mc, match_case_bb, match_end_bb, next_bb);
 }
 
 
-fn match_case_body_to_llrep(
+fn match_case_body_to_bc(
     func: &mut LLFunction,
     mc: &MatchCase,
     match_case_bb: LLBasicBlockRef,
@@ -222,12 +222,12 @@ fn match_case_body_to_llrep(
     next_bb: LLBasicBlockRef)
 {
     func.set_current_bb(match_case_bb);
-    expr_to_llrep(func, &mc.to_execute);
+    expr_to_bc(func, &mc.to_execute);
     func.add(LLInstruction::Branch(match_end_bb));
     func.set_current_bb(next_bb);
 }
 
-fn array_pattern_match_to_llrep(
+fn array_pattern_match_to_bc(
     func: &mut LLFunction,
     ap: &ArrayPattern,
     seq: &LLVar,
@@ -256,7 +256,7 @@ fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &LLVar, func: &mut
     }
 }
 
-fn struct_pattern_match_to_llrep(
+fn struct_pattern_match_to_bc(
     func: &mut LLFunction,
     mc: &MatchCase,
     target: &LLVar,
@@ -289,10 +289,10 @@ fn struct_pattern_match_to_llrep(
     }
 
     func.pop_destination();
-    match_case_body_to_llrep(func, mc, match_case_bb, match_end_bb, next_bb);
+    match_case_body_to_bc(func, mc, match_case_bb, match_end_bb, next_bb);
 }
 
-fn match_case_to_llrep(func: &mut LLFunction, mc: &MatchCase, target: &LLVar, match_end_bb: LLBasicBlockRef)
+fn match_case_to_bc(func: &mut LLFunction, mc: &MatchCase, target: &LLVar, match_end_bb: LLBasicBlockRef)
 {
     let match_case_bb = func.create_basic_block();
     func.add_basic_block(match_case_bb);
@@ -305,7 +305,7 @@ fn match_case_to_llrep(func: &mut LLFunction, mc: &MatchCase, target: &LLVar, ma
         let cond = make_var(func, LLExpr::BinaryOp(Operator::Equals, iv, target.clone()), Type::Bool);
         func.add(branch_if_instr(&cond, match_case_bb, next_bb));
         func.pop_destination();
-        match_case_body_to_llrep(func, mc, match_case_bb, match_end_bb, next_bb);
+        match_case_body_to_bc(func, mc, match_case_bb, match_end_bb, next_bb);
     };
 
     match mc.pattern
@@ -327,12 +327,12 @@ fn match_case_to_llrep(func: &mut LLFunction, mc: &MatchCase, target: &LLVar, ma
         },
 
         Pattern::Name(ref nr) => {
-            name_pattern_match_to_llrep(func, mc, target, match_end_bb, match_case_bb, next_bb, nr)
+            name_pattern_match_to_bc(func, mc, target, match_end_bb, match_case_bb, next_bb, nr)
         },
 
         Pattern::Any(_) => {
             func.add(LLInstruction::Branch(match_case_bb));
-            match_case_body_to_llrep(func, mc, match_case_bb, match_end_bb, next_bb);
+            match_case_body_to_bc(func, mc, match_case_bb, match_end_bb, next_bb);
         },
 
         Pattern::EmptyArray(_) => {
@@ -345,7 +345,7 @@ fn match_case_to_llrep(func: &mut LLFunction, mc: &MatchCase, target: &LLVar, ma
                     let cond = make_var(func, LLExpr::BinaryOp(Operator::Equals, length, zero), Type::Bool);
                     func.add(branch_if_instr(&cond, match_case_bb, next_bb));
                     func.pop_destination();
-                    match_case_body_to_llrep(func, mc, match_case_bb, match_end_bb, next_bb);
+                    match_case_body_to_bc(func, mc, match_case_bb, match_end_bb, next_bb);
                 },
                 _ => panic!("Internal Compiler Error: Match expression cannot be matched with an array pattern"),
             }
@@ -356,23 +356,23 @@ fn match_case_to_llrep(func: &mut LLFunction, mc: &MatchCase, target: &LLVar, ma
             {
                 Type::Array(_) => {
                     func.push_destination(None);
-                    array_pattern_match_to_llrep(func, ap, target, match_case_bb, next_bb);
+                    array_pattern_match_to_bc(func, ap, target, match_case_bb, next_bb);
                     func.pop_destination();
                 },
                 _ => panic!("Internal Compiler Error: Match expression cannot be matched with an array pattern"),
             }
 
-            match_case_body_to_llrep(func, mc, match_case_bb, match_end_bb, next_bb);
+            match_case_body_to_bc(func, mc, match_case_bb, match_end_bb, next_bb);
         },
 
         Pattern::Literal(Literal::Array(ref a)) => {
             func.push_destination(None);
             let arr = func.new_var(a.array_type.clone());
-            array_lit_to_llrep(func, a, &arr);
+            array_lit_to_bc(func, a, &arr);
             let cond = make_var(func, LLExpr::BinaryOp(Operator::Equals, arr, target.clone()), Type::Bool);
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
             func.pop_destination();
-            match_case_body_to_llrep(func, mc, match_case_bb, match_end_bb, next_bb);
+            match_case_body_to_bc(func, mc, match_case_bb, match_end_bb, next_bb);
         },
 
         Pattern::Literal(Literal::String(_, ref s)) => {
@@ -381,19 +381,19 @@ fn match_case_to_llrep(func: &mut LLFunction, mc: &MatchCase, target: &LLVar, ma
             let cond = make_var(func, LLExpr::BinaryOp(Operator::Equals, arr, target.clone()), Type::Bool);
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
             func.pop_destination();
-            match_case_body_to_llrep(func, mc, match_case_bb, match_end_bb, next_bb);
+            match_case_body_to_bc(func, mc, match_case_bb, match_end_bb, next_bb);
         },
 
         Pattern::Struct(ref p) => {
-            struct_pattern_match_to_llrep(func, mc, target, match_end_bb, match_case_bb, next_bb, p);
+            struct_pattern_match_to_bc(func, mc, target, match_end_bb, match_case_bb, next_bb, p);
         }
     }
 }
 
-fn match_to_llrep(func: &mut LLFunction, m: &MatchExpression) -> LLVar
+fn match_to_bc(func: &mut LLFunction, m: &MatchExpression) -> LLVar
 {
     func.push_destination(None);
-    let target_var = to_llrep(func, &m.target);
+    let target_var = to_bc(func, &m.target);
     func.pop_destination();
     let match_end_bb = func.create_basic_block();
 
@@ -401,7 +401,7 @@ fn match_to_llrep(func: &mut LLFunction, m: &MatchExpression) -> LLVar
     func.push_scope();
     func.push_destination(Some(dst.clone()));
     for mc in &m.cases {
-        match_case_to_llrep(func, mc, &target_var, match_end_bb);
+        match_case_to_bc(func, mc, &target_var, match_end_bb);
     }
     func.pop_destination();
 
@@ -413,7 +413,7 @@ fn match_to_llrep(func: &mut LLFunction, m: &MatchExpression) -> LLVar
 }
 
 
-fn name_ref_to_llrep(func: &mut LLFunction, nr: &NameRef) -> Option<LLVar>
+fn name_ref_to_bc(func: &mut LLFunction, nr: &NameRef) -> Option<LLVar>
 {
     let add_name_ref = |func: &mut LLFunction, nr: &NameRef| {
         let v = LLVar::named(&nr.name, nr.typ.clone());
@@ -460,15 +460,15 @@ fn name_ref_to_llrep(func: &mut LLFunction, nr: &NameRef) -> Option<LLVar>
     }
 }
 
-fn block_to_llrep(func: &mut LLFunction, b: &Block) -> Option<LLVar>
+fn block_to_bc(func: &mut LLFunction, b: &Block) -> Option<LLVar>
 {
     let do_block = |func: &mut LLFunction, b: &Block| {
         for (idx, e) in b.expressions.iter().enumerate() {
             if idx == b.expressions.len() - 1 {
-                expr_to_llrep(func, e);
+                expr_to_bc(func, e);
             } else {
                 func.push_destination(None);
-                expr_to_llrep(func, e);
+                expr_to_bc(func, e);
                 func.pop_destination();
             }
         }
@@ -489,22 +489,22 @@ fn block_to_llrep(func: &mut LLFunction, b: &Block) -> Option<LLVar>
     }
 }
 
-fn to_llrep(func: &mut LLFunction, expr: &Expression) -> LLVar
+fn to_bc(func: &mut LLFunction, expr: &Expression) -> LLVar
 {
-    expr_to_llrep(func, expr).expect("Expression must return a value")
+    expr_to_bc(func, expr).expect("Expression must return a value")
 }
 
-fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> Option<LLVar>
+fn expr_to_bc(func: &mut LLFunction, expr: &Expression) -> Option<LLVar>
 {
     match *expr
     {
         Expression::NameRef(ref nr) => {
-            name_ref_to_llrep(func, nr)
+            name_ref_to_bc(func, nr)
         },
 
         Expression::UnaryOp(ref u) => {
             func.push_destination(None);
-            let v = to_llrep(func, &u.expression);
+            let v = to_bc(func, &u.expression);
             func.pop_destination();
             let dst = get_dst(func, &u.typ);
             func.add(set_instr(&dst, LLExpr::UnaryOp(u.operator, v)));
@@ -513,8 +513,8 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> Option<LLVar>
 
         Expression::BinaryOp(ref op) => {
             func.push_destination(None);
-            let l = to_llrep(func, &op.left);
-            let r = to_llrep(func, &op.right);
+            let l = to_bc(func, &op.left);
+            let r = to_bc(func, &op.right);
             func.pop_destination();
             let dst = get_dst(func, &op.typ);
             func.add(set_instr(&dst, LLExpr::BinaryOp(op.operator, l, r)));
@@ -561,17 +561,17 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> Option<LLVar>
             func.add(set_instr(&dst, LLExpr::HeapAlloc(dst.typ.clone())));
             func.add_dec_ref_target(&dst);
             func.push_destination(None);
-            array_lit_to_llrep(func, a, &dst);
+            array_lit_to_bc(func, a, &dst);
             func.pop_destination();
             Some(dst)
         },
 
         Expression::Call(ref c) => {
-            Some(call_to_llrep(func, c, None))
+            Some(call_to_bc(func, c, None))
         },
 
         Expression::Let(ref l) => {
-            let_to_llrep(func, l)
+            let_to_bc(func, l)
         },
 
         Expression::LetBindings(ref l) => {
@@ -586,32 +586,32 @@ fn expr_to_llrep(func: &mut LLFunction, expr: &Expression) -> Option<LLVar>
             func.add(set_instr(&dst, LLExpr::HeapAlloc(dst.typ.clone())));
             func.add_dec_ref_target(&dst);
             func.push_destination(None);
-            struct_initializer_to_llrep(func, si, &dst);
+            struct_initializer_to_bc(func, si, &dst);
             func.pop_destination();
             Some(dst)
         },
 
         Expression::MemberAccess(ref sma) => {
             let dst = get_dst(func, &sma.typ);
-            member_access_to_llrep(func, sma, &dst);
+            member_access_to_bc(func, sma, &dst);
             Some(dst)
         },
 
         Expression::Match(ref m) => {
-            Some(match_to_llrep(func, m))
+            Some(match_to_bc(func, m))
         },
 
         Expression::If(ref i) => {
             let match_expr = i.to_match();
-            Some(match_to_llrep(func, &match_expr))
+            Some(match_to_bc(func, &match_expr))
         },
 
         Expression::Block(ref b) => {
-            block_to_llrep(func, b)
+            block_to_bc(func, b)
         },
 
         Expression::Lambda(ref l) => {
-            let lambda = func_to_llrep(&l.sig, &l.expr);
+            let lambda = func_to_bc(&l.sig, &l.expr);
             func.lambdas.push(lambda);
             let dst = get_dst(func, &l.sig.get_type());
             add_set(func, LLExpr::Func(l.sig.name.clone()), &dst);
@@ -659,10 +659,10 @@ fn get_dst(func: &mut LLFunction, typ: &Type) -> LLVar
     stack_alloc(func, typ, None)
 }
 
-fn func_to_llrep(sig: &FunctionSignature, expression: &Expression) -> LLFunction
+fn func_to_bc(sig: &FunctionSignature, expression: &Expression) -> LLFunction
 {
     let mut llfunc = LLFunction::new(&sig);
-    match expr_to_llrep(&mut llfunc, &expression)
+    match expr_to_bc(&mut llfunc, &expression)
     {
         Some(var) => {
             if var.typ.allocate_on_heap() {
@@ -691,7 +691,7 @@ pub fn compile_to_byte_code(md: &Module) -> LLModule
 
     for func in md.functions.values() {
         if !func.is_generic() {
-            ll_mod.functions.push(func_to_llrep(&func.sig, &func.expression));
+            ll_mod.functions.push(func_to_bc(&func.sig, &func.expression));
         }
     }
 
