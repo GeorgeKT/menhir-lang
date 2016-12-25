@@ -1,11 +1,11 @@
-mod llfunction;
-mod llinstruction;
+mod function;
+mod instruction;
 
 use std::fmt;
 use ast::*;
 use parser::Operator;
-pub use self::llfunction::{ByteCodeFunction, Var, BasicBlockRef};
-pub use self::llinstruction::*;
+pub use self::function::{ByteCodeFunction, Var, BasicBlockRef};
+pub use self::instruction::*;
 
 
 pub struct ByteCodeModule

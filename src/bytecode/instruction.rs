@@ -2,7 +2,7 @@ use std::fmt;
 use itertools::free::join;
 use ast::{ArrayProperty, Type};
 use parser::Operator;
-use bytecode::llfunction::{BasicBlockRef, Var};
+use bytecode::function::{BasicBlockRef, Var};
 
 #[derive(Debug, Clone)]
 pub enum ByteCodeLiteral
