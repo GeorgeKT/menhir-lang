@@ -376,14 +376,14 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
     //print!(">> {}", instr);
     match *instr
     {
-        Instruction::Set(ref s) => {
-            gen_expr(ctx, &s.var, &s.expr);
+        Instruction::Set{ref var, ref expr} => {
+            gen_expr(ctx, var, expr);
         },
 
-        Instruction::SetStructMember(ref s) => {
-            let struct_object = ctx.get_variable(&s.obj.name).expect("Unknown variable obj");
-            let member_ptr = struct_object.value.member(ctx, s.member_index);
-            member_ptr.store(ctx, &ctx.get_variable(&s.value.name).expect("Unknown variable value").value);
+        Instruction::SetStructMember{ref obj, member_index, ref value} => {
+            let struct_object = ctx.get_variable(&obj.name).expect("Unknown variable obj");
+            let member_ptr = struct_object.value.member(ctx, member_index);
+            member_ptr.store(ctx, &ctx.get_variable(&value.name).expect("Unknown variable value").value);
         },
 
         Instruction::Alloc(ref var) => {
@@ -417,14 +417,14 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             ctx.pop_stack();
         },
 
-        Instruction::Bind(ref b) => {
-            if let Type::Func(_) = b.var.typ {
-                let func = ctx.get_function(&b.var.name).expect("Unknown function");
-                ctx.add_variable(&b.name, ValueRef::new(func.function, &b.var.typ));
-                ctx.add_function_alias(&b.name, func);
+        Instruction::Bind{ref name, ref var} => {
+            if let Type::Func(_) = var.typ {
+                let func = ctx.get_function(&var.name).expect("Unknown function");
+                ctx.add_variable(&name, ValueRef::new(func.function, &var.typ));
+                ctx.add_function_alias(&name, func);
             } else {
-                let var = ctx.get_variable(&b.var.name).expect("Unknown variable");
-                ctx.add_variable(&b.name, var.value.clone());
+                let var = ctx.get_variable(&var.name).expect("Unknown variable");
+                ctx.add_variable(&name, var.value.clone());
             }
         },
 
@@ -433,10 +433,10 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             LLVMBuildBr(ctx.builder, *llvm_bb);
         },
 
-        Instruction::BranchIf(ref b) => {
-            let on_true_bb = blocks.get(&b.on_true).expect("Unknown basic block");
-            let on_false_bb = blocks.get(&b.on_false).expect("Unknown basic block");
-            let cond = ctx.get_variable(&b.cond.name).expect("Unknown variable");
+        Instruction::BranchIf{ref cond, ref on_true, ref on_false} => {
+            let on_true_bb = blocks.get(&on_true).expect("Unknown basic block");
+            let on_false_bb = blocks.get(&on_false).expect("Unknown basic block");
+            let cond = ctx.get_variable(&cond.name).expect("Unknown variable");
             LLVMBuildCondBr(ctx.builder, cond.value.load(ctx.builder), *on_true_bb, *on_false_bb);
         },
 

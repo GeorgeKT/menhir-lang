@@ -75,68 +75,38 @@ impl fmt::Display for ByteCodeExpression
 }
 
 #[derive(Debug, Clone)]
-pub struct SetStructMember
-{
-    pub obj: Var,
-    pub member_index: usize,
-    pub value: Var
-}
-
-#[derive(Debug, Clone)]
-pub struct Bind
-{
-    pub name: String,
-    pub var: Var,
-}
-
-#[derive(Debug, Clone)]
-pub struct Set
-{
-    pub var: Var,
-    pub expr: ByteCodeExpression
-}
-
-#[derive(Debug, Clone)]
-pub struct BranchIf
-{
-    pub cond: Var,
-    pub on_true: BasicBlockRef,
-    pub on_false: BasicBlockRef,
-}
-
-#[derive(Debug, Clone)]
 pub enum Instruction
 {
     //SetArrayElement{var: Var, index: ByteCodeExpression, value: ByteCodeExpression},
     Alloc(Var),
-    SetStructMember(SetStructMember),
+    SetStructMember{obj: Var, member_index: usize, value: Var},
     StartScope,
     EndScope,
-    Bind(Bind),
-    Set(Set),
+    Bind{name: String, var: Var},
+    Set{var: Var, expr: ByteCodeExpression},
     Return(Var),
     ReturnVoid,
     Branch(BasicBlockRef),
-    BranchIf(BranchIf),
+    BranchIf{cond: Var, on_true: BasicBlockRef, on_false: BasicBlockRef},
     IncRef(Var),
     DecRef(Var),
 }
 
 pub fn set_instr(var: &Var, e: ByteCodeExpression) -> Instruction
 {
-    Instruction::Set(Set{
+    Instruction::Set{
         var: var.clone(),
         expr: e,
-    })
+    }
 }
 
 pub fn set_struct_member_instr(obj: &Var, index: usize, e: &Var) -> Instruction
 {
-    Instruction::SetStructMember(SetStructMember{
+    Instruction::SetStructMember{
         obj: obj.clone(),
         member_index: index,
         value: e.clone(),
-    })
+    }
 }
 
 pub fn ret_instr(var: &Var) -> Instruction
@@ -146,19 +116,19 @@ pub fn ret_instr(var: &Var) -> Instruction
 
 pub fn bind_instr(name: &str, var: &Var) -> Instruction
 {
-    Instruction::Bind(Bind{
+    Instruction::Bind{
         name: name.into(),
         var: var.clone(),
-    })
+    }
 }
 
 pub fn branch_if_instr(cond: &Var, on_true: BasicBlockRef, on_false: BasicBlockRef) -> Instruction
 {
-    Instruction::BranchIf(BranchIf{
+    Instruction::BranchIf{
         cond: cond.clone(),
         on_true: on_true,
         on_false: on_false,
-    })
+    }
 }
 
 impl fmt::Display for Instruction
@@ -170,8 +140,8 @@ impl fmt::Display for Instruction
             Instruction::Alloc(ref var) => {
                 writeln!(f, "  alloc {}", var)
             },
-            Instruction::SetStructMember(ref s) => {
-                writeln!(f, "  set {}.{} = {}", s.obj, s.member_index, s.value)
+            Instruction::SetStructMember{ref obj, member_index, ref value} => {
+                writeln!(f, "  set {}.{} = {}", obj, member_index, value)
             },
             Instruction::StartScope => {
                 writeln!(f, "  scope start")
@@ -179,11 +149,11 @@ impl fmt::Display for Instruction
             Instruction::EndScope => {
                 writeln!(f, "  scope end")
             },
-            Instruction::Bind(ref b) => {
-                writeln!(f, "  bind {} = {}", b.name, b.var.name)
+            Instruction::Bind{ref name, ref var} => {
+                writeln!(f, "  bind {} = {}", name, var.name)
             },
-            Instruction::Set(ref s) => {
-                writeln!(f, "  set {} = {}", s.var, s.expr)
+            Instruction::Set{ref var, ref expr} => {
+                writeln!(f, "  set {} = {}", var, expr)
             },
             Instruction::Return(ref var) => {
                 writeln!(f, "  ret {}", var)
@@ -194,8 +164,8 @@ impl fmt::Display for Instruction
             Instruction::Branch(ref name) => {
                 writeln!(f, "  br {}", name)
             },
-            Instruction::BranchIf(ref b) => {
-                writeln!(f, "  brif {} ? {} : {} ", b.cond, b.on_true, b.on_false)
+            Instruction::BranchIf{ref cond, ref on_true, ref on_false} => {
+                writeln!(f, "  brif {} ? {} : {} ", cond, on_true, on_false)
             },
             Instruction::IncRef(ref v) => {
                 writeln!(f, "  incref {}", v.name)
