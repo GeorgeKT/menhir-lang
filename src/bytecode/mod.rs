@@ -1,11 +1,13 @@
 mod function;
 mod instruction;
+mod interpreter;
 
 use std::fmt;
 use ast::*;
 use parser::Operator;
-pub use self::function::{ByteCodeFunction, Var, BasicBlockRef};
+pub use self::function::*;
 pub use self::instruction::*;
+pub use self::interpreter::*;
 
 
 pub struct ByteCodeModule

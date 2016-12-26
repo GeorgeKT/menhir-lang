@@ -17,11 +17,12 @@ mod span;
 
 
 use std::path::{Path, PathBuf};
+use std::process::exit;
 use codegen::{CodeGenOptions, codegen, link, llvm_init};
 use docopt::Docopt;
 use parser::{ParserOptions, parse_file};
 use typechecker::{type_check_module};
-use bytecode::compile_to_byte_code;
+use bytecode::{compile_to_byte_code, run_byte_code};
 
 
 static USAGE: &'static str =  "
@@ -34,6 +35,7 @@ options:
   -O, --optimize                               Optimize the code.
   -I <imports>, --imports=<imports>            Directory to look for imports, use a comma separated list for more then one.
   -o <output-file>, --output=<output-file>     Name of binary to create (by default input-file without the extensions)
+  -i --interpret                               Execute the code in the interpreter
 ";
 
 
@@ -45,6 +47,7 @@ struct Args
     arg_input_file: Option<String>,
     flag_output: Option<String>,
     flag_imports: Option<String>,
+    flag_interpret: Option<bool>,
 }
 
 
@@ -65,6 +68,7 @@ fn main()
         .unwrap_or_else(|e| e.exit());
 
     let input_file = args.arg_input_file.expect("Missing input file argument");
+    let run_interpreter = args.flag_interpret.unwrap_or(false);
     let output_file = args.flag_output.unwrap_or(default_output_file(&input_file));
     let debug_compiler = args.flag_debug.unwrap_or(false);
 
@@ -95,22 +99,39 @@ fn main()
         }
 
 
-        let llmod = compile_to_byte_code(&module);
+        let bc_mod = compile_to_byte_code(&module);
 
         if debug_compiler {
-            println!("llmod:");
+            println!("bytecode:");
             println!("------\n");
-            println!("{}", llmod);
+            println!("{}", bc_mod);
             println!("------\n");
         }
 
+        if run_interpreter {
+            match run_byte_code(&bc_mod, "main")
+            {
+                Ok(ret) => {
+                    exit(ret.to_exit_code())
+                },
+                
+                Err(e) => {
+                    println!("Failed to execute program: {}", e.0);
+                    exit(-1);
+                }
+            }
 
-        llvm_init();
-        let mut ctx = codegen(&llmod)?;
-        link(&mut ctx, &opts)
+        } else {
+            llvm_init();
+            let mut ctx = codegen(&bc_mod)?;
+            link(&mut ctx, &opts)
+        }
     })
     {
         Ok(_) => {},
-        Err(e) => e.print(),
+        Err(e) => {
+            e.print();
+            exit(-1);
+        },
     }
 }
