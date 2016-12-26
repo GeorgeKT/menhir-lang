@@ -31,7 +31,8 @@ Usage: cobra [options] <input-file>
 
 options:
   --help                                       Show this message.
-  -d, --debug                                  Debug mode.
+  -D <dump>, --dump=<dump>                     Dump internal compiler state for debug purposes. Argument can be all, ast, bytecode or ir.
+                                               A comma separated list of these values is also supported.
   -O, --optimize                               Optimize the code.
   -I <imports>, --imports=<imports>            Directory to look for imports, use a comma separated list for more then one.
   -o <output-file>, --output=<output-file>     Name of binary to create (by default input-file without the extensions)
@@ -42,7 +43,7 @@ options:
 #[derive(RustcDecodable, Debug)]
 struct Args
 {
-    flag_debug: Option<bool>,
+    flag_dump: Option<String>,
     flag_optimize: Option<bool>,
     arg_input_file: Option<String>,
     flag_output: Option<String>,
@@ -70,7 +71,7 @@ fn main()
     let input_file = args.arg_input_file.expect("Missing input file argument");
     let run_interpreter = args.flag_interpret.unwrap_or(false);
     let output_file = args.flag_output.unwrap_or(default_output_file(&input_file));
-    let debug_compiler = args.flag_debug.unwrap_or(false);
+    let dump_flags = args.flag_dump.unwrap_or_default();
 
 
     let parser_options = ParserOptions{
@@ -80,7 +81,7 @@ fn main()
     };
 
     let opts = CodeGenOptions{
-        dump_ir: debug_compiler,
+        dump_ir: dump_flags.contains("ir") || dump_flags.contains("all"),
         build_dir: "build".into(),
         program_name: output_file,
         optimize: args.flag_optimize.unwrap_or(false),
@@ -90,7 +91,7 @@ fn main()
 
         type_check_module(&mut module)?;
 
-        if debug_compiler {
+        if dump_flags.contains("ast") || dump_flags.contains("all") {
             println!("AST:");
             println!("------\n");
             use ast::TreePrinter;
@@ -101,7 +102,7 @@ fn main()
 
         let bc_mod = compile_to_byte_code(&module);
 
-        if debug_compiler {
+        if dump_flags.contains("bytecode") || dump_flags.contains("all") {
             println!("bytecode:");
             println!("------\n");
             println!("{}", bc_mod);
@@ -114,7 +115,6 @@ fn main()
                 Ok(ret) => {
                     exit(ret.to_exit_code())
                 },
-                
                 Err(e) => {
                     println!("Failed to execute program: {}", e.0);
                     exit(-1);

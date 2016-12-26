@@ -473,6 +473,11 @@ fn parse_if(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 fn parse_type_declaration(tq: &mut TokenQueue, namespace: &str, span: &Span) -> CompileResult<TypeDeclaration>
 {
     let (name, _) = tq.expect_identifier()?;
+    if tq.is_next(TokenKind::OpenCurly) {
+        let sd = parse_struct_type(tq, namespace, &name, span)?;
+        return Ok(TypeDeclaration::Struct(sd))
+    }
+
     tq.expect(TokenKind::Assign)?;
     if tq.is_next(TokenKind::OpenCurly)
     {
