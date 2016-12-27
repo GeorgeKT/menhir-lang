@@ -61,41 +61,6 @@ fn bind(func: &mut ByteCodeFunction, name: &str, var: &Var)
 
 
 
-fn add_binding(func: &mut ByteCodeFunction, b: &LetBinding)
-{
-    match b.binding_type
-    {
-        LetBindingType::Name(ref name) => {
-            let dst = stack_alloc(func, &b.typ, Some(name));
-            func.push_destination(Some(dst));
-            expr_to_bc(func, &b.init);
-            func.pop_destination();
-        },
-
-        LetBindingType::Struct(ref s) => {
-            let dst = stack_alloc(func, &b.typ, None);
-            func.push_destination(Some(dst.clone()));
-            expr_to_bc(func, &b.init);
-            add_struct_pattern_bindings(s, &dst, func);
-            func.pop_destination();
-        },
-    }
-}
-
-fn let_to_bc(func: &mut ByteCodeFunction, l: &LetExpression) -> Option<Var>
-{
-    let dst = get_dst(func, &l.typ);
-    func.push_scope();
-    for b in &l.bindings{
-        add_binding(func, b);
-    }
-
-    func.push_destination(Some(dst.clone()));
-    to_bc(func, &l.expression);
-    func.pop_destination();
-    func.pop_scope();
-    Some(dst)
-}
 
 
 fn add_array_len(func: &mut ByteCodeFunction, array: Var, dst: &Var)
@@ -203,17 +168,6 @@ fn array_pattern_match_to_bc(
     let zero = make_lit(func, ByteCodeLiteral::Int(0), Type::Int);
     let cond = make_var(func, ByteCodeExpression::BinaryOp(Operator::GreaterThan, length, zero), Type::Bool);
     func.add(branch_if_instr(&cond, match_case_bb, next_bb));
-}
-
-fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &Var, func: &mut ByteCodeFunction)
-{
-    for (idx, b) in p.bindings.iter().enumerate() {
-        if b != "_" {
-            let expr = ByteCodeExpression::StructMember(struct_var.clone(), idx);
-            let member_ptr = make_var(func, expr, p.types[idx].clone());
-            bind(func, b, &member_ptr);
-        }
-    }
 }
 
 fn struct_pattern_match_to_bc(

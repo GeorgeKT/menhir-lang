@@ -113,6 +113,53 @@ fn block_to_bc(func: &mut ByteCodeFunction, b: &Block) -> Option<Var>
     }
 }
 
+fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &Var, func: &mut ByteCodeFunction)
+{
+    for (idx, name) in p.bindings.iter().enumerate() {
+        if name != "_" {
+            let v = Var::named(name, ptr_type(p.types[idx].clone()));
+            func.add(load_member_instr(&v, struct_var, idx));
+            func.add_named_var(v);
+        }
+    }
+}
+
+fn add_binding(func: &mut ByteCodeFunction, b: &LetBinding)
+{
+    match b.binding_type
+    {
+        LetBindingType::Name(ref name) => {
+            let dst = stack_alloc(func, &b.typ, Some(name));
+            func.push_destination(Some(dst));
+            expr_to_bc(func, &b.init);
+            func.pop_destination();
+        },
+
+        LetBindingType::Struct(ref s) => {
+            let dst = stack_alloc(func, &b.typ, None);
+            func.push_destination(Some(dst.clone()));
+            expr_to_bc(func, &b.init);
+            add_struct_pattern_bindings(s, &dst, func);
+            func.pop_destination();
+        },
+    }
+}
+
+fn let_to_bc(func: &mut ByteCodeFunction, l: &LetExpression) -> Option<Var>
+{
+    let dst = get_dst(func, &l.typ);
+    func.push_scope();
+    for b in &l.bindings{
+        add_binding(func, b);
+    }
+
+    func.push_destination(Some(dst.clone()));
+    to_bc(func, &l.expression);
+    func.pop_destination();
+    func.pop_scope();
+    Some(dst)
+}
+
 fn to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Var
 {
     expr_to_bc(func, expr).expect("Expression must return a value")
@@ -195,6 +242,17 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
             block_to_bc(func, b)
         },
 
+        Expression::Let(ref l) => {
+            let_to_bc(func, l)
+        },
+
+        Expression::LetBindings(ref l) => {
+            for b in &l.bindings {
+                add_binding(func, b);
+            }
+            None
+        },
+
         /*
         Expression::NameRef(ref nr) => {
             name_ref_to_bc(func, nr)
@@ -207,16 +265,7 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
 
 
 
-        Expression::Let(ref l) => {
-            let_to_bc(func, l)
-        },
 
-        Expression::LetBindings(ref l) => {
-            for b in &l.bindings {
-                add_binding(func, b);
-            }
-            None
-        },
 
 
 
