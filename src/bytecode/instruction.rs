@@ -102,6 +102,25 @@ pub fn ret_instr(var: &Var) -> Instruction
     Instruction::Return(var.clone())
 }
 
+pub fn unary_op_instr(dst: &Var, op: Operator, src: Var) -> Instruction
+{
+    Instruction::UnaryOp{
+        dst: dst.clone(),
+        op: op,
+        src: src,
+    }
+}
+
+pub fn binary_op_instr(dst: &Var, op: Operator, left: Var, right: Var) -> Instruction
+{
+    Instruction::BinaryOp{
+        dst: dst.clone(),
+        op: op,
+        left: left,
+        right: right,
+    }
+}
+
 pub fn branch_if_instr(cond: &Var, on_true: BasicBlockRef, on_false: BasicBlockRef) -> Instruction
 {
     Instruction::BranchIf{

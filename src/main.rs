@@ -88,7 +88,7 @@ fn main()
         optimize: args.flag_optimize.unwrap_or(false),
     };
 */
-    match parse_file(&parser_options, &input_file).and_then(|mut module| {
+    let ret = parse_file(&parser_options, &input_file).and_then(|mut module| {
 
         type_check_module(&mut module)?;
 
@@ -121,7 +121,6 @@ fn main()
                     exit(-1);
                 }
             }
-
         } else {
             /*
             llvm_init();
@@ -130,7 +129,11 @@ fn main()
             */
             panic!("NYI");
         }
-    })
+
+        Ok(())
+    });
+
+    match ret
     {
         Ok(_) => {},
         Err(e) => {
