@@ -60,6 +60,31 @@ fn call_to_bc(func: &mut ByteCodeFunction, c: &Call, self_arg: Option<Var>) -> V
     dst
 }
 
+
+fn struct_initializer_to_bc(func: &mut ByteCodeFunction, si: &StructInitializer, dst: &Var)
+{
+    let init_members = |func: &mut ByteCodeFunction, si: &StructInitializer, dst: &Var| {
+        for (idx, expr) in si.member_initializers.iter().enumerate() {
+            let v = to_bc(func, expr);
+            let member_ptr = get_dst(func, &ptr_type(v.typ.clone()));
+            func.add(load_member_instr(&member_ptr, dst, idx));
+            func.add(store_instr(&member_ptr, &v));
+        }
+    };
+
+    if let Type::Sum(ref st) = dst.typ {
+        let idx = st.index_of(&si.struct_name).expect("Internal Compiler Error: cannot determine index of sum type case");
+        func.add(set_prop_instr(dst, ByteCodeProperty::SumTypeIndex, idx));
+
+        let struct_ptr = func.new_var(ptr_type(st.cases[idx].typ.clone()));
+        func.add(load_member_instr(&struct_ptr, &dst, idx));
+        init_members(func, si, &struct_ptr);
+    } else {
+        init_members(func, si, dst);
+    }
+}
+
+
 fn to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Var
 {
     expr_to_bc(func, expr).expect("Expression must return a value")
@@ -130,6 +155,14 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
             Some(call_to_bc(func, c, None))
         },
 
+        Expression::StructInitializer(ref si) => {
+            let dst = get_dst(func, &si.typ);
+            func.push_destination(None);
+            struct_initializer_to_bc(func, si, &dst);
+            func.pop_destination();
+            Some(dst)
+        },
+
         /*
         Expression::NameRef(ref nr) => {
             name_ref_to_bc(func, nr)
@@ -153,13 +186,7 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
             None
         },
 
-        Expression::StructInitializer(ref si) => {
-            let dst = get_dst(func, &si.typ);
-            func.push_destination(None);
-            struct_initializer_to_bc(func, si, &dst);
-            func.pop_destination();
-            Some(dst)
-        },
+
 
         Expression::MemberAccess(ref sma) => {
             let dst = get_dst(func, &sma.typ);

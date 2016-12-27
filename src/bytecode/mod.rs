@@ -97,24 +97,6 @@ fn let_to_bc(func: &mut ByteCodeFunction, l: &LetExpression) -> Option<Var>
     Some(dst)
 }
 
-fn struct_initializer_to_bc(func: &mut ByteCodeFunction, si: &StructInitializer, dst: &Var)
-{
-    let init_members = |func: &mut ByteCodeFunction, si: &StructInitializer, dst: &Var| {
-        for (idx, expr) in si.member_initializers.iter().enumerate() {
-            let v = to_bc(func, expr);
-            func.add(set_struct_member_instr(&dst, idx, &v));
-        }
-    };
-
-    if let Type::Sum(ref st) = dst.typ {
-        let idx = st.index_of(&si.struct_name).expect("Internal Compiler Error: cannot determine index of sum type case");
-        add_set(func, ByteCodeExpression::SumTypeCase(idx), dst);
-        let struct_ptr = make_var(func, ByteCodeExpression::SumTypeStruct(dst.clone(), idx), st.cases[idx].typ.clone());
-        init_members(func, si, &struct_ptr);
-    } else {
-        init_members(func, si, dst);
-    }
-}
 
 fn add_array_len(func: &mut ByteCodeFunction, array: Var, dst: &Var)
 {

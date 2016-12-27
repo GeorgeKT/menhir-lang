@@ -58,7 +58,8 @@ pub enum Instruction
     StoreLit{dst: Var, lit: ByteCodeLiteral},
     Load{dst: Var, src: Var},
     LoadMember{dst: Var, obj: Var, member_index: usize},
-    LoadProperty{dst: Var, obj: Var, prop: ByteCodeProperty},
+    GetProperty{dst: Var, obj: Var, prop: ByteCodeProperty},
+    SetProperty{dst: Var, prop: ByteCodeProperty, val: usize},
     UnaryOp{dst: Var, op: Operator, src: Var},
     BinaryOp{dst: Var, op: Operator, left: Var, right: Var},
     Call{dst: Var, func: String, args: Vec<Var>},
@@ -94,6 +95,15 @@ pub fn load_instr(dst: &Var, src: &Var) -> Instruction
     Instruction::Load{
         dst: dst.clone(),
         src: src.clone(),
+    }
+}
+
+pub fn load_member_instr(dst: &Var, obj: &Var, member_index: usize) -> Instruction
+{
+    Instruction::LoadMember{
+        dst: dst.clone(),
+        obj: obj.clone(),
+        member_index: member_index,
     }
 }
 
@@ -139,6 +149,15 @@ pub fn call_instr(dst: &Var, func: &str, args: Vec<Var>) -> Instruction
     }
 }
 
+pub fn set_prop_instr(dst: &Var, prop: ByteCodeProperty, value: usize) -> Instruction
+{
+    Instruction::SetProperty{
+        dst: dst.clone(),
+        prop: prop,
+        val: value,
+    }
+}
+
 impl fmt::Display for Instruction
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
@@ -161,8 +180,12 @@ impl fmt::Display for Instruction
                 writeln!(f, "  ldrm {} {}.{}", dst, obj, member_index)
             },
 
-            Instruction::LoadProperty{ref dst, ref obj, ref prop} => {
-                writeln!(f, "  ldrp {} {}.{}", dst, obj, prop)
+            Instruction::GetProperty{ref dst, ref obj, ref prop} => {
+                writeln!(f, "  getp {} {}.{}", dst, obj, prop)
+            },
+
+            Instruction::SetProperty{ref dst, ref prop, ref val} => {
+                writeln!(f, "  setp {} {} {}", dst, prop, val)
             },
 
             Instruction::UnaryOp{ref dst, ref op, ref src} => {
