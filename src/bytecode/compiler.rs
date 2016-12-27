@@ -253,6 +253,21 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
             None
         },
 
+        Expression::New(ref n) => {
+            let dst = get_dst(func, &n.typ);
+            func.add(Instruction::HeapAlloc(dst.clone()));
+            func.push_destination(Some(dst.clone()));
+            expr_to_bc(func, &n.inner);
+            func.pop_destination();
+            Some(dst)
+        },
+
+        Expression::Delete(ref d) => {
+            let to_delete = to_bc(func, &d.inner);
+            func.add(Instruction::Delete(to_delete));
+            None
+        },
+
         /*
         Expression::NameRef(ref nr) => {
             name_ref_to_bc(func, nr)
@@ -294,19 +309,7 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
             Some(dst)
         },
 
-        Expression::New(ref n) => {
-            let dst = get_dst(func, &n.typ);
-            let inner_type = n.typ.get_element_type().expect("Empty inner type of new expression");
-            add_set(func, ByteCodeExpression::HeapAlloc(inner_type), &dst);
-            expr_to_bc(func, &n.inner);
-            Some(dst)
-        },
 
-        Expression::Delete(ref d) => {
-            let to_delete = to_bc(func, &d.inner);
-            func.add(Instruction::Delete(to_delete));
-            None
-        },
         Expression::ArrayGenerator(ref _a) => panic!("NYI"),
         */
 
