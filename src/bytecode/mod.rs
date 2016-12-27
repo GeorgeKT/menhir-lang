@@ -415,34 +415,6 @@ fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef) -> Option<Var>
     }
 }
 
-fn block_to_bc(func: &mut ByteCodeFunction, b: &Block) -> Option<Var>
-{
-    let do_block = |func: &mut ByteCodeFunction, b: &Block| {
-        for (idx, e) in b.expressions.iter().enumerate() {
-            if idx == b.expressions.len() - 1 {
-                expr_to_bc(func, e);
-            } else {
-                func.push_destination(None);
-                expr_to_bc(func, e);
-                func.pop_destination();
-            }
-        }
-    };
-
-
-    if b.typ != Type::Void {
-        let dst = get_dst(func, &b.typ);
-        func.push_destination(Some(dst.clone()));
-        do_block(func, b);
-        func.pop_destination();
-        Some(dst)
-    } else {
-        func.push_destination(None);
-        do_block(func, b);
-        func.pop_destination();
-        None
-    }
-}
 
 
 

@@ -84,6 +84,34 @@ fn struct_initializer_to_bc(func: &mut ByteCodeFunction, si: &StructInitializer,
     }
 }
 
+fn block_to_bc(func: &mut ByteCodeFunction, b: &Block) -> Option<Var>
+{
+    let do_block = |func: &mut ByteCodeFunction, b: &Block| {
+        for (idx, e) in b.expressions.iter().enumerate() {
+            if idx == b.expressions.len() - 1 {
+                expr_to_bc(func, e);
+            } else {
+                func.push_destination(None);
+                expr_to_bc(func, e);
+                func.pop_destination();
+            }
+        }
+    };
+
+
+    if b.typ != Type::Void {
+        let dst = get_dst(func, &b.typ);
+        func.push_destination(Some(dst.clone()));
+        do_block(func, b);
+        func.pop_destination();
+        Some(dst)
+    } else {
+        func.push_destination(None);
+        do_block(func, b);
+        func.pop_destination();
+        None
+    }
+}
 
 fn to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Var
 {
@@ -163,6 +191,10 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
             Some(dst)
         },
 
+        Expression::Block(ref b) => {
+            block_to_bc(func, b)
+        },
+
         /*
         Expression::NameRef(ref nr) => {
             name_ref_to_bc(func, nr)
@@ -203,9 +235,7 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
             Some(match_to_bc(func, &match_expr))
         },
 
-        Expression::Block(ref b) => {
-            block_to_bc(func, b)
-        },
+
 
         Expression::Lambda(ref l) => {
             let lambda = func_to_bc(&l.sig, &l.expr);
