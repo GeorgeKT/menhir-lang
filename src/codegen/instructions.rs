@@ -231,29 +231,35 @@ unsafe fn gen_call_args(ctx: &Context, args: &Vec<Var>) -> Vec<LLVMValueRef>
     arg_vals
 }
 
-unsafe fn gen_call(ctx: &mut Context, dst: &Var, name: &str, args: &Vec<Var>)
+unsafe fn gen_call(ctx: &mut Context, _dst: &Var, name: &str, args: &Vec<Var>)
 {
     let func = ctx.get_function(name).expect("Internal Compiler Error: Unknown function");
     let mut arg_vals = gen_call_args(ctx, args);
-    let ret = LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr!("ret"));
+    let _ret = LLVMBuildCall(ctx.builder, func.function, arg_vals.as_mut_ptr(), arg_vals.len() as libc::c_uint, cstr!("ret"));
+    panic!("Fix this !!!!");
+    /*
     if dst.typ.allocate_on_heap() {
         ctx.add_variable(&dst.name, ValueRef::new(ret, &dst.typ));
     } else {
         let dst_val = get_value_ref(ctx, dst);
         dst_val.store_direct(ctx, ret);
     }
+    */
 }
 
-unsafe fn gen_struct_member(ctx: &mut Context, dst: &Var, obj: &Var, index: usize)
+unsafe fn gen_struct_member(ctx: &mut Context, _dst: &Var, obj: &Var, index: usize)
 {
     let struct_object = ctx.get_variable(&obj.name).expect("Unknown variable");
-    let member_ptr = struct_object.value.member(ctx, index);
+    let _member_ptr = struct_object.value.member(ctx, index);
+    panic!("Fix this !!!!");
+    /*
     if dst.typ.allocate_on_heap() {
         ctx.add_variable(&dst.name, member_ptr);
     } else {
         let dst_var = get_value_ref(ctx, dst);
         dst_var.store(ctx, &member_ptr);
     }
+    */
 }
 
 unsafe fn gen_array_property(ctx: &mut Context, dst: &Var, array: &Var, property: ArrayProperty)
@@ -440,14 +446,9 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             LLVMBuildCondBr(ctx.builder, cond.value.load(ctx.builder), *on_true_bb, *on_false_bb);
         },
 
-        Instruction::IncRef(ref v) => {
-            let var = ctx.get_variable(&v.name).expect("Unknown variable");
-            var.value.inc_ref(ctx);
-        },
-
-        Instruction::DecRef(ref v) => {
-            let var = ctx.get_variable(&v.name).expect("Unknown variable");
-            var.value.dec_ref(ctx);
+        Instruction::Delete(ref var) => {
+            let var = ctx.get_variable(&var.name).expect("Unknown variable");
+            LLVMBuildFree(ctx.builder, var.value.load(ctx.builder));
         },
     }
 }

@@ -1,4 +1,5 @@
 use std::fmt;
+use std::ops::Deref;
 use std::hash::{Hasher, Hash};
 use std::rc::Rc;
 use itertools::free::join;
@@ -102,6 +103,7 @@ pub enum Type
     Float,
     Char,
     Bool,
+    Pointer(Rc<Type>),
     Unresolved(Rc<UnresolvedType>),
     Array(Rc<ArrayType>),
     EmptyArray,
@@ -138,6 +140,7 @@ impl Type
         match *self
         {
             Type::Array(ref at) => Some(at.element_type.clone()),
+            Type::Pointer(ref inner) => Some(inner.deref().clone()),
             _ => None,
         }
     }
@@ -180,6 +183,7 @@ impl Type
             Type::Struct(ref st) => st.members.iter().any(|m| m.typ.is_generic()),
             Type::Sum(ref st) => st.cases.iter().any(|c| c.typ.is_generic()),
             Type::Unresolved(ref ut) => ut.generic_args.iter().any(|t| t.is_generic()),
+            Type::Pointer(ref inner) => inner.is_generic(),
             _ => false,
         }
     }
@@ -192,17 +196,6 @@ impl Type
             Type::Struct(_) => true,
             Type::Sum(_) => true,
             Type::Func(_) => true,
-            _ => false,
-        }
-    }
-
-    pub fn allocate_on_heap(&self) -> bool
-    {
-        match *self
-        {
-            Type::Array(_) => true,
-            Type::Struct(_) => true,
-            Type::Sum(_) => true,
             _ => false,
         }
     }
@@ -311,6 +304,11 @@ pub fn struct_type(name: &str, members: Vec<StructMember>) -> Type
     }))
 }
 
+pub fn ptr_type(inner: Type) -> Type
+{
+    Type::Pointer(Rc::new(inner))
+}
+
 pub fn struct_member(name: &str, typ: Type) -> StructMember
 {
     StructMember{name: name.into(), typ: typ}
@@ -387,6 +385,7 @@ impl fmt::Display for Type
             Type::Float => write!(f, "float"),
             Type::Char => write!(f, "char"),
             Type::Bool => write!(f, "bool"),
+            Type::Pointer(ref inner) => write!(f, "*{}", inner),
             Type::Unresolved(ref s) =>
                 if s.generic_args.is_empty() {
                     write!(f, "{}", s.name)

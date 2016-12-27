@@ -168,34 +168,4 @@ impl ValueRef
             _ => panic!("Internal Compiler Error: Attempting to get a sum type case member from a non sum type"),
         }
     }
-
-    pub unsafe fn inc_ref(&self, ctx: &Context)
-    {
-        if let &ValueRef::HeapPtr(_, _) = self {
-            self.deref(ctx).inc_ref(ctx);
-        } else {
-            let arc_inc_ref = ctx.get_builtin("arc_inc_ref");
-            let void_ptr = LLVMBuildBitCast(ctx.builder, self.get(), ctx.resolve_type(&Type::VoidPtr), cstr!("cast_to_void_ptr"));
-            let mut args = vec![
-                void_ptr
-            ];
-            LLVMBuildCall(ctx.builder, arc_inc_ref.function, args.as_mut_ptr(), 1, cstr!(""));
-        }
-    }
-
-
-    pub unsafe fn dec_ref(&self, ctx: &Context)
-    {
-        if let &ValueRef::HeapPtr(_, _) = self {
-            self.deref(ctx).dec_ref(ctx);
-        } else {
-            let arc_dec_ref = ctx.get_builtin("arc_dec_ref");
-            let void_ptr = LLVMBuildBitCast(ctx.builder, self.get(), ctx.resolve_type(&Type::VoidPtr), cstr!("cast_to_void_ptr"));
-            let mut args = vec![
-                void_ptr
-            ];
-            LLVMBuildCall(ctx.builder, arc_dec_ref.function, args.as_mut_ptr(), 1, cstr!(""));
-        }
-    }
-
 }

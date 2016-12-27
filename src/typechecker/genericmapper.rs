@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use itertools::free::join;
-use ast::{func_type, array_type, struct_type, struct_member, sum_type, sum_type_case, Type};
+use ast::{func_type, array_type, struct_type, struct_member, sum_type, sum_type_case, ptr_type, Type};
 use compileerror::{CompileResult, ErrorCode, err};
 use span::Span;
 
@@ -66,6 +66,9 @@ impl GenericMapper
                         .map(|c| sum_type_case(&c.name, self.substitute(&c.typ)))
                         .collect()
                 )
+            },
+            Type::Pointer(ref inner) => {
+                ptr_type(self.substitute(inner))
             },
             _ => generic.clone(),
         }
@@ -178,6 +181,15 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
                 _ => map_err(),
             }
         },
+        Type::Pointer(ref generic_inner) => {
+            match *actual {
+                Type::Pointer(ref actual_inner) => {
+                    let inner = fill_in_generics(actual_inner, generic_inner, known_types, span)?;
+                    Ok(ptr_type(inner))
+                },
+                _ => map_err(),
+            }
+        },
         _ => map_err(),
     }
 }
@@ -186,7 +198,7 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
 mod tests
 {
     use super::*;
-    use ast::{Type, array_type, func_type, string_type};
+    use ast::{Type, array_type, func_type, string_type, ptr_type};
     use span::Span;
 
     fn gen_type(name: &str) -> Type
@@ -224,6 +236,19 @@ mod tests
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
         assert!(r == Ok(array_type(Type::Int)));
+        assert!(tm.substitute(&gen_type("a")) == Type::Int);
+    }
+
+    #[test]
+    fn test_pointer()
+    {
+        let mut tm = GenericMapper::new();
+        let gptr = ptr_type(gen_type("a"));
+        let aptr = ptr_type(Type::Int);
+        let r = fill_in_generics(&aptr, &gptr, &mut tm, &Span::default());
+        println!("tm: {:?}", tm);
+        println!("r: {:?}", r);
+        assert!(r == Ok(ptr_type(Type::Int)));
         assert!(tm.substitute(&gen_type("a")) == Type::Int);
     }
 

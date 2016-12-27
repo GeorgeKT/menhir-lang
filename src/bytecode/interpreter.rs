@@ -7,6 +7,7 @@ use parser::Operator;
 #[derive(Debug)]
 pub struct ExecutionError(pub String);
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum Value
 {
@@ -59,6 +60,7 @@ impl Value
     }
 }
 
+/*
 struct StackFrame
 {
     vars: HashMap<String, Value>,
@@ -158,17 +160,17 @@ impl<'a> Interpreter<'a>
         }
     }
 
-    fn unary_op(&self, op: Operator, var: &str) -> Result<Value, ExecutionError>
+    fn unary_op(&self, _op: Operator, _var: &str) -> Result<Value, ExecutionError>
     {
         panic!("NYI");
     }
 
-    fn binary_op(&self, op: Operator, left: &str, right: &str) -> Result<Value, ExecutionError>
+    fn binary_op(&self, _op: Operator, _left: &str, _right: &str) -> Result<Value, ExecutionError>
     {
         panic!("NYI");
     }
 
-    fn call(&self, name: &str, args: &Vec<Var>) -> Result<Value, ExecutionError>
+    fn call(&self, _name: &str, _args: &Vec<Var>) -> Result<Value, ExecutionError>
     {
         panic!("NYI");
     }
@@ -181,16 +183,16 @@ impl<'a> Interpreter<'a>
             ByteCodeExpression::UnaryOp(op, ref v) => self.unary_op(op, &v.name)?,
             ByteCodeExpression::BinaryOp(op, ref a, ref b) => self.binary_op(op, &a.name, &b.name)?,
             ByteCodeExpression::Call(ref name, ref args) => self.call(name, args)?,
-            ByteCodeExpression::StructMember(ref obj, index) => panic!("NYI"),
-            ByteCodeExpression::SumTypeIndex(ref obj) => panic!("NYI"),
-            ByteCodeExpression::SumTypeStruct(ref obj, index) => panic!("NYI"),
-            ByteCodeExpression::SumTypeCase(index) => panic!("NYI"),
-            ByteCodeExpression::ArrayProperty(ref array, ref property) => panic!("NYI"),
-            ByteCodeExpression::ArrayHead(ref array) => panic!("NYI"),
-            ByteCodeExpression::ArrayTail(ref array) => panic!("NYI"),
-            ByteCodeExpression::Ref(ref obj) => panic!("NYI"),
-            ByteCodeExpression::Func(ref func) => panic!("NYI"),
-            ByteCodeExpression::HeapAlloc(ref typ) => panic!("NYI"),
+            ByteCodeExpression::StructMember(ref _obj, _index) => panic!("NYI"),
+            ByteCodeExpression::SumTypeIndex(ref _obj) => panic!("NYI"),
+            ByteCodeExpression::SumTypeStruct(ref _obj, _index) => panic!("NYI"),
+            ByteCodeExpression::SumTypeCase(_index) => panic!("NYI"),
+            ByteCodeExpression::ArrayProperty(ref _array, ref _property) => panic!("NYI"),
+            ByteCodeExpression::ArrayHead(ref _array) => panic!("NYI"),
+            ByteCodeExpression::ArrayTail(ref _array) => panic!("NYI"),
+            ByteCodeExpression::Ref(ref _obj) => panic!("NYI"),
+            ByteCodeExpression::Func(ref _func) => panic!("NYI"),
+            ByteCodeExpression::HeapAlloc(ref _typ) => panic!("NYI"),
         };
 
         self.update_variable(name, value)
@@ -215,7 +217,7 @@ impl<'a> Interpreter<'a>
         }
     }
 
-    fn execute_instruction(&mut self, current_bb: BasicBlockRef, instr: &Instruction) -> Result<Action, ExecutionError>
+    fn execute_instruction(&mut self, instr: &Instruction) -> Result<Action, ExecutionError>
     {
         println!("{}", instr);
         match *instr
@@ -224,7 +226,7 @@ impl<'a> Interpreter<'a>
                 self.add_variable(&var.name, Value::Uninitialized)?;
                 Ok(Action::Continue)
             },
-            Instruction::SetStructMember{ref obj, member_index, ref value} => {
+            Instruction::SetStructMember{../*ref obj, member_index, ref value*/} => {
                 panic!("NYI");
             },
             Instruction::StartScope => {
@@ -235,7 +237,7 @@ impl<'a> Interpreter<'a>
                 self.stack.pop();
                 Ok(Action::Continue)
             },
-            Instruction::Bind{ref name, ref var} => {
+            Instruction::Bind{../*ref name, ref var*/} => {
                 panic!("NYI");
             },
             Instruction::Set{ref var, ref expr} => {
@@ -254,10 +256,7 @@ impl<'a> Interpreter<'a>
             Instruction::BranchIf{ref cond, on_true, on_false} => {
                 self.branch_if(&cond.name, on_true, on_false)
             },
-            Instruction::IncRef(ref v) => {
-                panic!("NYI");
-            },
-            Instruction::DecRef(ref v) => {
+            Instruction::Delete(ref _var) => {
                 panic!("NYI");
             },
         }
@@ -267,7 +266,7 @@ impl<'a> Interpreter<'a>
     {
         if let Some(ref bb) = func.blocks.get(&bb_ref) {
             for inst in &bb.instructions {
-                let action = self.execute_instruction(bb_ref, inst)?;
+                let action = self.execute_instruction(inst)?;
                 if let Action::Continue = action {
                     continue;
                 } else {
@@ -317,11 +316,14 @@ impl<'a> Interpreter<'a>
         }
     }
 }
+*/
 
 
-
-pub fn run_byte_code(module: &ByteCodeModule, function: &str) -> Result<Value, ExecutionError>
+pub fn run_byte_code(_module: &ByteCodeModule, _function: &str) -> Result<Value, ExecutionError>
 {
+    /*
     let mut interpreter = Interpreter::new(module);
     interpreter.run_function(function, vec![])
+    */
+    Err(ExecutionError(format!("NYI")))
 }

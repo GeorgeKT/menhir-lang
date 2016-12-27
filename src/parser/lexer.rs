@@ -117,6 +117,8 @@ impl Lexer
             "if" => TokenKind::If,
             "else" => TokenKind::Else,
             "extern" => TokenKind::Extern,
+            "new" => TokenKind::New,
+            "delete" => TokenKind::Delete,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
         };
 

@@ -18,6 +18,8 @@ pub enum Expression
     LetBindings(Box<LetBindingList>),
     StructInitializer(StructInitializer),
     MemberAccess(MemberAccess),
+    New(Box<NewExpression>),
+    Delete(Box<DeleteExpression>),
     Void,
 }
 
@@ -69,6 +71,8 @@ impl Expression
             Expression::If(ref i) => i.span.clone(),
             Expression::StructInitializer(ref si) => si.span.clone(),
             Expression::MemberAccess(ref sma) => sma.span.clone(),
+            Expression::New(ref n) => n.span.clone(),
+            Expression::Delete(ref d) => d.span.clone(),
             Expression::Void => Span::default(),
         }
     }
@@ -132,6 +136,8 @@ impl TreePrinter for Expression
             Expression::If(ref i) => i.print(level),
             Expression::StructInitializer(ref si) => si.print(level),
             Expression::MemberAccess(ref sma) => sma.print(level),
+            Expression::New(ref n) => n.print(level),
+            Expression::Delete(ref n) => n.print(level),
             Expression::Void => println!("{}void", p),
         }
     }

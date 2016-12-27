@@ -42,7 +42,7 @@ impl fmt::Display for Var
 pub struct Scope
 {
     named_vars: HashMap<String, Var>,
-    to_dec_ref: Vec<Var>,
+    to_cleanup: Vec<Var>,
 }
 
 impl Scope
@@ -51,7 +51,7 @@ impl Scope
     {
         Scope{
             named_vars: HashMap::new(),
-            to_dec_ref: Vec::new(),
+            to_cleanup: Vec::new(),
         }
     }
 
@@ -60,28 +60,29 @@ impl Scope
         self.named_vars.insert(var.name.clone(), var);
     }
 
-    pub fn add_dec_ref_target(&mut self, v: &Var) -> bool
+/*
+    pub fn add_cleanup_target(&mut self, v: &Var) -> bool
     {
         if self.named_vars.get(&v.name).is_none() {
             false
         } else {
-            self.to_dec_ref.push(v.clone());
+            self.to_cleanup.push(v.clone());
             true
         }
     }
 
-    pub fn remove_dec_ref_target(&mut self, v: &Var) -> bool
+    pub fn remove_cleanup_target(&mut self, v: &Var) -> bool
     {
-        let len = self.to_dec_ref.len();
-        self.to_dec_ref.retain(|e| e != v);
-        self.to_dec_ref.len() < len
+        let len = self.to_cleanup.len();
+        self.to_cleanup.retain(|e| e != v);
+        self.to_cleanup.len() < len
     }
-
-    pub fn cleanup(&self, func: &mut ByteCodeFunction)
+*/
+    pub fn cleanup(&self, _func: &mut ByteCodeFunction)
     {
         // Cleanup in reverse construction order
-        for v in self.to_dec_ref.iter().rev() {
-            func.add(Instruction::DecRef(v.clone()));
+        for _v in self.to_cleanup.iter().rev() {
+            panic!("TODO: add destructor calls");
         }
     }
 }
@@ -245,20 +246,16 @@ impl ByteCodeFunction
         scope.add_named_var(var);
     }
 
-    pub fn add_dec_ref_target(&mut self, v: &Var)
+/*
+    pub fn add_cleanup_target(&mut self, v: &Var)
     {
         for scope in self.scopes.iter_mut().rev() {
-            if scope.add_dec_ref_target(v) {
+            if scope.add_cleanup_target(v) {
                 break;
             }
         }
     }
-
-    pub fn remove_dec_ref_target(&mut self, v: &Var) -> bool
-    {
-        let scope = self.scopes.last_mut().expect("Empty Scope Stack");
-        scope.remove_dec_ref_target(v)
-    }
+    */
 }
 
 impl fmt::Display for ByteCodeFunction

@@ -1,3 +1,4 @@
+use std::fmt;
 use ast::*;
 use span::Span;
 
@@ -5,6 +6,17 @@ use span::Span;
 pub enum ArrayProperty
 {
     Len,
+}
+
+impl fmt::Display for ArrayProperty
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
+    {
+        match *self
+        {
+            ArrayProperty::Len => write!(f, "len"),
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]

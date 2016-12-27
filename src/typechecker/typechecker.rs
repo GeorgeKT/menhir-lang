@@ -567,7 +567,7 @@ fn type_check_let_binding(ctx: &mut TypeCheckerContext, b: &mut LetBinding) -> T
             }
             else
             {
-                return err(&b.init.span(), ErrorCode::TypeError, 
+                return err(&b.init.span(), ErrorCode::TypeError,
                     format!("Expression does not return a struct type"));
             }
         },
@@ -752,8 +752,15 @@ fn member_call_to_call(left: &Expression, call: &Call) -> Expression
 fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess) -> TypeCheckResult
 {
     let left_type = type_check_expression(ctx, &mut sma.left, &None)?;
+    // member access through pointer is the same as a normal member access
+    let left_type_ref = if let Type::Pointer(ref inner) = left_type {
+        use std::ops::Deref;
+        inner.deref()
+    } else {
+        &left_type
+    };
 
-    let (typ, new_right) = match (&mut sma.right, &left_type)
+    let (typ, new_right) = match (&mut sma.right, left_type_ref)
     {
         (&mut MemberAccessType::Name(ref mut field), &Type::Struct(ref st)) => {
             let (member_idx, member_type) = find_member_type(&st.members, &field.name, &sma.span)?;
@@ -856,6 +863,23 @@ fn type_check_block(ctx: &mut TypeCheckerContext, b: &mut Block, type_hint: &Opt
     valid(b.typ.clone())
 }
 
+fn type_check_new(ctx: &mut TypeCheckerContext, n: &mut NewExpression, type_hint: &Option<Type>) -> TypeCheckResult
+{
+    let typ = type_check_expression(ctx, &mut n.inner, type_hint)?;
+    n.typ = ptr_type(typ);
+    valid(n.typ.clone())
+}
+
+fn type_check_delete(ctx: &mut TypeCheckerContext, d: &mut DeleteExpression, type_hint: &Option<Type>) -> TypeCheckResult
+{
+    let typ = type_check_expression(ctx, &mut d.inner, type_hint)?;
+    match typ
+    {
+        Type::Pointer(_) => valid(Type::Void),
+        _ => err(&d.span, ErrorCode::TypeError, format!("delete expression expects a pointer argument, argument has type {}", typ)),
+    }
+}
+
 pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: &Option<Type>) -> CompileResult<Type>
 {
     let type_check_result = match *e
@@ -880,6 +904,8 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::Block(ref mut b) => type_check_block(ctx, b, type_hint),
         Expression::StructInitializer(ref mut si) => type_check_struct_initializer(ctx, si),
         Expression::MemberAccess(ref mut sma) => type_check_member_access(ctx, sma),
+        Expression::New(ref mut n) => type_check_new(ctx, n, type_hint),
+        Expression::Delete(ref mut d) => type_check_delete(ctx, d, type_hint),
         Expression::Void => valid(Type::Void),
     };
 

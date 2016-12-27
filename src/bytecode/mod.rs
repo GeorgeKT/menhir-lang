@@ -1,3 +1,4 @@
+mod compiler;
 mod function;
 mod instruction;
 mod interpreter;
@@ -5,10 +6,10 @@ mod interpreter;
 use std::fmt;
 use ast::*;
 use parser::Operator;
+pub use self::compiler::*;
 pub use self::function::*;
 pub use self::instruction::*;
 pub use self::interpreter::*;
-
 
 pub struct ByteCodeModule
 {
@@ -28,6 +29,7 @@ impl fmt::Display for ByteCodeModule
     }
 }
 
+/*
 fn add_set(func: &mut ByteCodeFunction, expr: ByteCodeExpression, dst: &Var)
 {
     func.add(set_instr(dst, expr));
@@ -76,9 +78,6 @@ fn call_to_bc(func: &mut ByteCodeFunction, c: &Call, self_arg: Option<Var>) -> V
             args,
         )
     ));
-    if dst.typ.allocate_on_heap() {
-        func.add_dec_ref_target(&dst);
-    }
     dst
 }
 
@@ -165,7 +164,13 @@ fn member_access_to_bc(func: &mut ByteCodeFunction, sma: &MemberAccess, dst: &Va
     let var = to_bc(func, &sma.left);
     func.pop_destination();
 
-    match (&var.typ, &sma.right)
+    let var_typ = if let Type::Pointer(ref inner) = var.typ {
+        &inner
+    } else {
+        &var.typ
+    };
+
+    match (var_typ, &sma.right)
     {
         (&Type::Struct(_), &MemberAccessType::Name(ref field)) => {
             let expr = ByteCodeExpression::StructMember(var.clone(), field.index);
@@ -423,9 +428,6 @@ fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef) -> Option<Var>
         {
             Some(var) => {
                 assert!(var.typ == v.typ);
-                if var.typ.allocate_on_heap() {
-                    func.add(Instruction::IncRef(v.clone()));
-                }
                 add_set(func, ByteCodeExpression::Ref(v), &var);
                 Some(var)
             },
@@ -438,8 +440,6 @@ fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef) -> Option<Var>
         Type::Sum(ref st) => {
             if let Some(idx) = st.index_of(&nr.name) {
                 let dst = get_dst(func, &nr.typ);
-                func.add(set_instr(&dst, ByteCodeExpression::HeapAlloc(dst.typ.clone())));
-                func.add_dec_ref_target(&dst);
                 add_set(func, ByteCodeExpression::SumTypeCase(idx), &dst);
                 Some(dst)
             } else {
@@ -520,9 +520,6 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
             func.pop_destination();
             let dst = get_dst(func, &op.typ);
             func.add(set_instr(&dst, ByteCodeExpression::BinaryOp(op.operator, l, r)));
-            if dst.typ.allocate_on_heap() {
-                func.add_dec_ref_target(&dst);
-            }
             Some(dst)
         },
 
@@ -541,7 +538,6 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
         Expression::Literal(Literal::String(_, ref s))  => {
             let dst = get_dst(func, &string_type());
             func.add(set_instr(&dst, ByteCodeExpression::HeapAlloc(dst.typ.clone())));
-            func.add_dec_ref_target(&dst);
             add_lit(func, ByteCodeLiteral::String(s.clone()), &dst);
             Some(dst)
         },
@@ -561,7 +557,6 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
         Expression::Literal(Literal::Array(ref a)) => {
             let dst = get_dst(func, &a.array_type);
             func.add(set_instr(&dst, ByteCodeExpression::HeapAlloc(dst.typ.clone())));
-            func.add_dec_ref_target(&dst);
             func.push_destination(None);
             array_lit_to_bc(func, a, &dst);
             func.pop_destination();
@@ -585,8 +580,6 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
 
         Expression::StructInitializer(ref si) => {
             let dst = get_dst(func, &si.typ);
-            func.add(set_instr(&dst, ByteCodeExpression::HeapAlloc(dst.typ.clone())));
-            func.add_dec_ref_target(&dst);
             func.push_destination(None);
             struct_initializer_to_bc(func, si, &dst);
             func.pop_destination();
@@ -618,6 +611,20 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
             let dst = get_dst(func, &l.sig.get_type());
             add_set(func, ByteCodeExpression::Func(l.sig.name.clone()), &dst);
             Some(dst)
+        },
+
+        Expression::New(ref n) => {
+            let dst = get_dst(func, &n.typ);
+            let inner_type = n.typ.get_element_type().expect("Empty inner type of new expression");
+            add_set(func, ByteCodeExpression::HeapAlloc(inner_type), &dst);
+            expr_to_bc(func, &n.inner);
+            Some(dst)
+        },
+
+        Expression::Delete(ref d) => {
+            let to_delete = to_bc(func, &d.inner);
+            func.add(Instruction::Delete(to_delete));
+            None
         },
 
         /*
@@ -654,7 +661,9 @@ fn get_dst(func: &mut ByteCodeFunction, typ: &Type) -> Var
 {
     assert!(*typ != Type::Unknown);
     if let Some(dst) = func.get_destination() {
-        assert!(dst.typ == *typ);
+        if dst.typ != *typ {
+            panic!("Internal compiler error: dst.typ != *typ in get_dst");
+        }
         return dst;
     }
 
@@ -667,9 +676,6 @@ fn func_to_bc(sig: &FunctionSignature, expression: &Expression) -> ByteCodeFunct
     match expr_to_bc(&mut llfunc, &expression)
     {
         Some(var) => {
-            if var.typ.allocate_on_heap() {
-                llfunc.remove_dec_ref_target(&var);
-            }
             llfunc.add(ret_instr(&var));
         },
 
@@ -680,22 +686,4 @@ fn func_to_bc(sig: &FunctionSignature, expression: &Expression) -> ByteCodeFunct
     llfunc
 }
 
-pub fn compile_to_byte_code(md: &Module) -> ByteCodeModule
-{
-    let mut ll_mod = ByteCodeModule{
-        name: md.name.clone(),
-        functions: Vec::new(),
-    };
-
-    for func in md.externals.values() {
-        ll_mod.functions.push(ByteCodeFunction::new(&func.sig));
-    }
-
-    for func in md.functions.values() {
-        if !func.is_generic() {
-            ll_mod.functions.push(func_to_bc(&func.sig, &func.expression));
-        }
-    }
-
-    ll_mod
-}
+*/

@@ -8,7 +8,7 @@ extern crate uuid;
 
 mod ast;
 #[macro_use]
-mod codegen;
+//mod codegen;
 mod compileerror;
 mod bytecode;
 mod parser;
@@ -18,7 +18,7 @@ mod span;
 
 use std::path::{Path, PathBuf};
 use std::process::exit;
-use codegen::{CodeGenOptions, codegen, link, llvm_init};
+//use codegen::{CodeGenOptions, codegen, link, llvm_init};
 use docopt::Docopt;
 use parser::{ParserOptions, parse_file};
 use typechecker::{type_check_module};
@@ -80,13 +80,14 @@ fn main()
             .unwrap_or(Vec::new()),
     };
 
+/*
     let opts = CodeGenOptions{
         dump_ir: dump_flags.contains("ir") || dump_flags.contains("all"),
         build_dir: "build".into(),
         program_name: output_file,
         optimize: args.flag_optimize.unwrap_or(false),
     };
-
+*/
     match parse_file(&parser_options, &input_file).and_then(|mut module| {
 
         type_check_module(&mut module)?;
@@ -122,9 +123,12 @@ fn main()
             }
 
         } else {
+            /*
             llvm_init();
             let mut ctx = codegen(&bc_mod)?;
             link(&mut ctx, &opts)
+            */
+            panic!("NYI");
         }
     })
     {
