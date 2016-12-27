@@ -167,6 +167,15 @@ pub fn set_prop_instr(dst: &Var, prop: ByteCodeProperty, value: usize) -> Instru
     }
 }
 
+pub fn get_prop_instr(dst: &Var, obj: &Var, prop: ByteCodeProperty) -> Instruction
+{
+    Instruction::GetProperty{
+        dst: dst.clone(),
+        obj: obj.clone(),
+        prop: prop,
+    }
+}
+
 impl fmt::Display for Instruction
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>

@@ -76,34 +76,6 @@ fn make_array_len(func: &mut ByteCodeFunction, array: Var) -> Var
     var
 }
 
-fn member_access_to_bc(func: &mut ByteCodeFunction, sma: &MemberAccess, dst: &Var)
-{
-    func.push_destination(None);
-    let var = to_bc(func, &sma.left);
-    func.pop_destination();
-
-    let var_typ = if let Type::Pointer(ref inner) = var.typ {
-        &inner
-    } else {
-        &var.typ
-    };
-
-    match (var_typ, &sma.right)
-    {
-        (&Type::Struct(_), &MemberAccessType::Name(ref field)) => {
-            let expr = ByteCodeExpression::StructMember(var.clone(), field.index);
-            add_set(func, expr, dst);
-        },
-
-        (&Type::Array(_), &MemberAccessType::ArrayProperty(ArrayProperty::Len)) => {
-            add_array_len(func, var.clone(), dst);
-        },
-
-        _ => {
-            panic!("Internal Compiler Error: Invalid member access")
-        },
-    }
-}
 
 
 fn name_pattern_match_to_bc(
@@ -326,48 +298,6 @@ fn match_to_bc(func: &mut ByteCodeFunction, m: &MatchExpression) -> Var
     dst
 }
 
-
-fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef) -> Option<Var>
-{
-    let add_name_ref = |func: &mut ByteCodeFunction, nr: &NameRef| {
-        let v = Var::named(&nr.name, nr.typ.clone());
-        match func.get_destination()
-        {
-            Some(var) => {
-                assert!(var.typ == v.typ);
-                add_set(func, ByteCodeExpression::Ref(v), &var);
-                Some(var)
-            },
-            None => Some(v),
-        }
-    };
-
-    match nr.typ
-    {
-        Type::Sum(ref st) => {
-            if let Some(idx) = st.index_of(&nr.name) {
-                let dst = get_dst(func, &nr.typ);
-                add_set(func, ByteCodeExpression::SumTypeCase(idx), &dst);
-                Some(dst)
-            } else {
-                add_name_ref(func, nr)
-            }
-        },
-        Type::Enum(ref et) => {
-            if let Some(idx) = et.index_of(&nr.name) {
-                // enums are integers
-                let dst = get_dst(func, &nr.typ);
-                add_lit(func, ByteCodeLiteral::Int(idx as u64), &dst);
-                Some(dst)
-            } else {
-                add_name_ref(func, nr)
-            }
-        },
-        _ => {
-            add_name_ref(func, nr)
-        }
-    }
-}
 
 
 

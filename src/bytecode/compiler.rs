@@ -160,6 +160,78 @@ fn let_to_bc(func: &mut ByteCodeFunction, l: &LetExpression) -> Option<Var>
     Some(dst)
 }
 
+
+fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef) -> Option<Var>
+{
+    let add_name_ref = |func: &mut ByteCodeFunction, nr: &NameRef| {
+        let v = Var::named(&nr.name, nr.typ.clone());
+        match func.get_destination()
+        {
+            Some(var) => {
+                assert!(var.typ == v.typ);
+                func.add(store_instr(&var, &v));
+                Some(var)
+            },
+            None => Some(v),
+        }
+    };
+
+    match nr.typ
+    {
+        Type::Sum(ref st) => {
+            if let Some(idx) = st.index_of(&nr.name) {
+                let dst = get_dst(func, &nr.typ);
+                func.add(set_prop_instr(&dst, ByteCodeProperty::SumTypeIndex, idx));
+                Some(dst)
+            } else {
+                add_name_ref(func, nr)
+            }
+        },
+        Type::Enum(ref et) => {
+            if let Some(idx) = et.index_of(&nr.name) {
+                // enums are integers
+                let dst = get_dst(func, &nr.typ);
+                func.add(store_lit_instr(&dst, ByteCodeLiteral::Int(idx as u64)));
+                Some(dst)
+            } else {
+                add_name_ref(func, nr)
+            }
+        },
+        _ => {
+            add_name_ref(func, nr)
+        }
+    }
+}
+
+fn member_access_to_bc(func: &mut ByteCodeFunction, sma: &MemberAccess, dst: &Var)
+{
+    func.push_destination(None);
+    let var = to_bc(func, &sma.left);
+    func.pop_destination();
+
+    let var_typ = if let Type::Pointer(ref inner) = var.typ {
+        &inner
+    } else {
+        &var.typ
+    };
+
+    match (var_typ, &sma.right)
+    {
+        (&Type::Struct(_), &MemberAccessType::Name(ref field)) => {
+
+            func.add(load_member_instr(dst, &var, field.index));
+        },
+
+        (&Type::Array(_), &MemberAccessType::ArrayProperty(ArrayProperty::Len)) => {
+            func.add(get_prop_instr(dst, &var, ByteCodeProperty::ArrayProperty(ArrayProperty::Len)));
+        },
+
+        _ => {
+            panic!("Internal Compiler Error: Invalid member access")
+        },
+    }
+}
+
 fn to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Var
 {
     expr_to_bc(func, expr).expect("Expression must return a value")
@@ -276,7 +348,6 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
             Some(dst)
         },
 
-        /*
         Expression::NameRef(ref nr) => {
             name_ref_to_bc(func, nr)
         },
@@ -287,6 +358,7 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
             Some(dst)
         },
 
+/*
         Expression::Match(ref m) => {
             Some(match_to_bc(func, m))
         },
@@ -296,13 +368,8 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
             Some(match_to_bc(func, &match_expr))
         },
 
-
-
-
-
-
-        Expression::ArrayGenerator(ref _a) => panic!("NYI"),
         */
+        Expression::ArrayGenerator(ref _a) => panic!("NYI"),
 
         _ => {
             panic!("NYI");
