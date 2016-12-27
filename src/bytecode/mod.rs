@@ -59,27 +59,7 @@ fn bind(func: &mut ByteCodeFunction, name: &str, var: &Var)
     func.add(bind_instr(name, var))
 }
 
-fn call_to_bc(func: &mut ByteCodeFunction, c: &Call, self_arg: Option<Var>) -> Var
-{
-    let dst = get_dst(func, &c.return_type);
-    func.push_destination(None);
-    let mut args = Vec::new();
-    if let Some(s) = self_arg {
-        args.push(s);
-    }
 
-    args.extend(c.args.iter().map(|arg| to_bc(func, arg)));
-    func.pop_destination();
-
-    func.add(set_instr(
-        &dst,
-        ByteCodeExpression::Call(
-            c.callee.name.clone(),
-            args,
-        )
-    ));
-    dst
-}
 
 fn add_binding(func: &mut ByteCodeFunction, b: &LetBinding)
 {
@@ -115,15 +95,6 @@ fn let_to_bc(func: &mut ByteCodeFunction, l: &LetExpression) -> Option<Var>
     func.pop_destination();
     func.pop_scope();
     Some(dst)
-}
-
-fn array_lit_to_bc(func: &mut ByteCodeFunction, a: &ArrayLiteral, dst: &Var)
-{
-    let vars = a.elements.iter()
-        .map(|e| to_bc(func, e))
-        .collect();
-
-    add_lit(func, ByteCodeLiteral::Array(vars), dst);
 }
 
 fn struct_initializer_to_bc(func: &mut ByteCodeFunction, si: &StructInitializer, dst: &Var)
@@ -492,26 +463,6 @@ fn block_to_bc(func: &mut ByteCodeFunction, b: &Block) -> Option<Var>
 }
 
 
-fn stack_alloc(func: &mut ByteCodeFunction, typ: &Type, name: Option<&str>) -> Var
-{
-    match name
-    {
-        Some(n) => {
-            let var = Var::named(n, typ.clone());
-            func.add_named_var(var.clone());
-            if *typ != Type::Void {
-                func.add(Instruction::Alloc(var.clone()));
-            }
-            var
-        },
-        None => {
-            let var = func.new_var(typ.clone());
-            if *typ != Type::Void {
-                func.add(Instruction::Alloc(var.clone()));
-            }
-            var
-        }
-    }
-}
+
 
 */

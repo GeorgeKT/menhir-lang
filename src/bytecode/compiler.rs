@@ -45,6 +45,20 @@ fn array_lit_to_bc(func: &mut ByteCodeFunction, a: &ArrayLiteral, dst: &Var)
     func.add(store_lit_instr(dst, ByteCodeLiteral::Array(vars)));
 }
 
+fn call_to_bc(func: &mut ByteCodeFunction, c: &Call, self_arg: Option<Var>) -> Var
+{
+    let dst = get_dst(func, &c.return_type);
+    func.push_destination(None);
+    let mut args = Vec::new();
+    if let Some(s) = self_arg {
+        args.push(s);
+    }
+
+    args.extend(c.args.iter().map(|arg| to_bc(func, arg)));
+    func.pop_destination();
+    func.add(call_instr(&dst, &c.callee.name, args));
+    dst
+}
 
 fn to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Var
 {
@@ -112,6 +126,10 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
             Some(dst)
         },
 
+        Expression::Call(ref c) => {
+            Some(call_to_bc(func, c, None))
+        },
+
         /*
         Expression::NameRef(ref nr) => {
             name_ref_to_bc(func, nr)
@@ -123,9 +141,6 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
 
 
 
-        Expression::Call(ref c) => {
-            Some(call_to_bc(func, c, None))
-        },
 
         Expression::Let(ref l) => {
             let_to_bc(func, l)

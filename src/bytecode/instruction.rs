@@ -130,6 +130,15 @@ pub fn branch_if_instr(cond: &Var, on_true: BasicBlockRef, on_false: BasicBlockR
     }
 }
 
+pub fn call_instr(dst: &Var, func: &str, args: Vec<Var>) -> Instruction
+{
+    Instruction::Call{
+        dst: dst.clone(),
+        func: func.into(),
+        args: args
+    }
+}
+
 impl fmt::Display for Instruction
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
