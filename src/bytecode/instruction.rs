@@ -56,6 +56,7 @@ pub enum Instruction
 {
     Store{dst: Var, src: Var},
     StoreLit{dst: Var, lit: ByteCodeLiteral},
+    StoreFunc{dst: Var, func: String},
     Load{dst: Var, src: Var},
     LoadMember{dst: Var, obj: Var, member_index: usize},
     GetProperty{dst: Var, obj: Var, prop: ByteCodeProperty},
@@ -87,6 +88,14 @@ pub fn store_lit_instr(dst: &Var, lit: ByteCodeLiteral) -> Instruction
     Instruction::StoreLit{
         dst: dst.clone(),
         lit: lit,
+    }
+}
+
+pub fn store_func_instr(dst: &Var, func: &str) -> Instruction
+{
+    Instruction::StoreFunc{
+        dst: dst.clone(),
+        func: func.into(),
     }
 }
 
@@ -170,6 +179,10 @@ impl fmt::Display for Instruction
 
             Instruction::StoreLit{ref dst, ref lit} => {
                 writeln!(f, "  strlit {} {}", dst, lit)
+            },
+
+            Instruction::StoreFunc{ref dst, ref func} => {
+                writeln!(f, "  strfunc {} {}", dst, func)
             },
 
             Instruction::Load{ref dst, ref src} => {

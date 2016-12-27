@@ -268,21 +268,18 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
             None
         },
 
+        Expression::Lambda(ref l) => {
+            let lambda = func_to_bc(&l.sig, &l.expr);
+            func.lambdas.push(lambda);
+            let dst = get_dst(func, &l.sig.get_type());
+            func.add(store_func_instr(&dst, &l.sig.name));
+            Some(dst)
+        },
+
         /*
         Expression::NameRef(ref nr) => {
             name_ref_to_bc(func, nr)
         },
-
-
-
-
-
-
-
-
-
-
-
 
         Expression::MemberAccess(ref sma) => {
             let dst = get_dst(func, &sma.typ);
@@ -301,13 +298,7 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
 
 
 
-        Expression::Lambda(ref l) => {
-            let lambda = func_to_bc(&l.sig, &l.expr);
-            func.lambdas.push(lambda);
-            let dst = get_dst(func, &l.sig.get_type());
-            add_set(func, ByteCodeExpression::Func(l.sig.name.clone()), &dst);
-            Some(dst)
-        },
+
 
 
         Expression::ArrayGenerator(ref _a) => panic!("NYI"),
