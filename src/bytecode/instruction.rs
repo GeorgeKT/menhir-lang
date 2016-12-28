@@ -1,6 +1,5 @@
 use std::fmt;
 use itertools::free::join;
-use ast::{ArrayProperty, Type};
 use parser::Operator;
 use bytecode::function::{BasicBlockRef, Var};
 
@@ -34,7 +33,7 @@ impl fmt::Display for ByteCodeLiteral
 #[derive(Debug, Clone)]
 pub enum ByteCodeProperty
 {
-    ArrayProperty(ArrayProperty),
+    Len,
     SumTypeIndex,
 }
 
@@ -44,7 +43,7 @@ impl fmt::Display for ByteCodeProperty
     {
         match *self
         {
-            ByteCodeProperty::ArrayProperty(ref ap) => write!(f, "array property {}", ap),
+            ByteCodeProperty::Len => write!(f, "len"),
             ByteCodeProperty::SumTypeIndex => write!(f, "sum type index"),
         }
     }
@@ -64,6 +63,7 @@ pub enum Instruction
     UnaryOp{dst: Var, op: Operator, src: Var},
     BinaryOp{dst: Var, op: Operator, left: Var, right: Var},
     Call{dst: Var, func: String, args: Vec<Var>},
+    Slice{dst: Var, src: Var, start: Var, len: Var},
     StackAlloc(Var),
     HeapAlloc(Var),
     StartScope,
@@ -74,6 +74,7 @@ pub enum Instruction
     BranchIf{cond: Var, on_true: BasicBlockRef, on_false: BasicBlockRef},
     Delete(Var),
 }
+
 
 pub fn store_instr(dst: &Var, src: &Var) -> Instruction
 {
@@ -176,6 +177,16 @@ pub fn get_prop_instr(dst: &Var, obj: &Var, prop: ByteCodeProperty) -> Instructi
     }
 }
 
+pub fn slice_instr(dst: &Var, src: &Var, start: Var, len: Var) -> Instruction
+{
+    Instruction::Slice{
+        dst: dst.clone(),
+        src: src.clone(),
+        start: start,
+        len: len,
+    }
+}
+
 impl fmt::Display for Instruction
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
@@ -256,6 +267,10 @@ impl fmt::Display for Instruction
 
             Instruction::Delete(ref var) => {
                 writeln!(f, "  delete {}", var)
+            },
+
+            Instruction::Slice{ref dst, ref src, ref start, ref len} => {
+                writeln!(f, "  slice {} {} {} {}", dst, src, start, len)
             },
         }
     }

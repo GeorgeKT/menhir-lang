@@ -44,7 +44,7 @@ impl GenericMapper
         match *generic
         {
             Type::Array(ref at) => {
-                array_type(self.substitute(&at.element_type))
+                array_type(self.substitute(&at.element_type), at.len)
             },
             Type::Func(ref ft) => {
                 func_type(
@@ -113,7 +113,7 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
                 Type::Array(ref actual_at) => {
                     known_types.add(&generic_at.element_type, &actual_at.element_type, span)?;
                     let new_el_type = fill_in_generics(&actual_at.element_type, &generic_at.element_type, known_types, span)?;
-                    Ok(array_type(new_el_type))
+                    Ok(array_type(new_el_type, actual_at.len))
                 },
                 _ => map_err(),
             }

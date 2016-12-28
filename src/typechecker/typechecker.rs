@@ -154,7 +154,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
 fn type_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLiteral) -> TypeCheckResult
 {
     if a.elements.is_empty() {
-        a.array_type = Type::EmptyArray;
+        a.array_type = array_type(Type::Int, 0);
         return valid(a.array_type.clone());
     }
 
@@ -168,7 +168,7 @@ fn type_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLiteral) 
         }
     }
 
-    let array_type = array_type(array_element_type);
+    let array_type = array_type(array_element_type, a.elements.len());
     if a.array_type == Type::Unknown {
         a.array_type = array_type;
     } else if a.array_type != array_type {
@@ -177,28 +177,6 @@ fn type_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLiteral) 
 
     valid(a.array_type.clone())
 }
-
-fn type_check_array_generator(ctx: &mut TypeCheckerContext, a: &mut ArrayGenerator) -> TypeCheckResult
-{
-    ctx.push_stack();
-
-    // At the moment assume iterable is an array, in the future expand to all iterators
-    let it_type = type_check_expression(ctx, &mut a.iterable, &None)?;
-    let it_element_type = match it_type.get_element_type()
-    {
-        Some(Type::Unknown) => return err(&a.span, ErrorCode::TypeError, format!("Extract expression with empty array is pointless")),
-        Some(et) => et,
-        None => return err(&a.span, ErrorCode::TypeError, format!("Iterable expression in array generator is not an array")),
-    };
-
-    ctx.add(&a.var, it_element_type, &a.span)?;
-
-    let element_type = type_check_expression(ctx, &mut a.left, &None)?;
-    a.array_type = array_type(element_type);
-    ctx.pop_stack();
-    valid(a.array_type.clone())
-}
-
 
 fn resolve_generic_args_in_call(ctx: &mut TypeCheckerContext, ft: &FuncType, c: &mut Call) -> CompileResult<Vec<Type>>
 {
@@ -333,7 +311,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Ty
 
                 ctx.push_stack();
                 ctx.add(&ap.head, element_type.clone(), &ap.span)?;
-                ctx.add(&ap.tail, array_type(element_type.clone()), &ap.span)?;
+                ctx.add(&ap.tail, slice_type(element_type.clone()), &ap.span)?;
                 let ct = infer_case_type(ctx, &mut c.to_execute, &return_type)?;
                 ctx.pop_stack();
                 ct
@@ -888,7 +866,6 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::BinaryOp(ref mut op) => type_check_binary_op(ctx, op),
         Expression::Literal(Literal::Array(ref mut a)) => type_check_array_literal(ctx, a),
         Expression::Literal(ref lit) => valid(lit.get_type()),
-        Expression::ArrayGenerator(ref mut a) => type_check_array_generator(ctx, a),
         Expression::Call(ref mut c) => type_check_call(ctx, c),
         Expression::NameRef(ref mut nr) => type_check_name(ctx, nr, type_hint),
         Expression::Match(ref mut m) => type_check_match(ctx, m),

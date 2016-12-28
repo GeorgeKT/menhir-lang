@@ -196,7 +196,7 @@ fn parse_generic_arg_list(tq: &mut TokenQueue) -> CompileResult<Vec<Type>>
     Ok(args)
 }
 
-fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
+fn parse_start_of_type(tq: &mut TokenQueue) -> CompileResult<Type>
 {
     if tq.is_next(TokenKind::Operator(Operator::Mul))
     {
@@ -209,13 +209,6 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
         tq.pop()?;
         let (name, _span) = tq.expect_identifier()?;
         Ok(Type::Generic(name))
-    }
-    else if tq.is_next(TokenKind::OpenBracket)
-    {
-        tq.pop()?;
-        let at = parse_type(tq)?;
-        tq.expect(TokenKind::CloseBracket)?;
-        Ok(array_type(at))
     }
     else if tq.is_next(TokenKind::OpenParen)
     {
@@ -250,6 +243,24 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
             },
         }
     }
+}
+
+fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
+{
+    let mut typ = parse_start_of_type(tq)?;
+    while tq.is_next(TokenKind::OpenBracket)
+    {
+        tq.pop()?;
+        if tq.is_next(TokenKind::CloseBracket) {
+            tq.pop()?;
+            typ = slice_type(typ);
+        } else {
+            let (len, _span) = tq.expect_int()?;
+            typ = array_type(typ, len as usize);
+        }
+    }
+
+    Ok(typ)
 }
 
 fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool, self_type: &Option<Type>) -> CompileResult<Argument>

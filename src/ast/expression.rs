@@ -5,7 +5,6 @@ use ast::*;
 pub enum Expression
 {
     Literal(Literal),
-    ArrayGenerator(Box<ArrayGenerator>),
     UnaryOp(Box<UnaryOp>),
     BinaryOp(Box<BinaryOp>),
     Block(Box<Block>),
@@ -58,7 +57,6 @@ impl Expression
         match *self
         {
             Expression::Literal(ref lit) => lit.span(),
-            Expression::ArrayGenerator(ref a) => a.span.clone(),
             Expression::UnaryOp(ref op) => op.span.clone(),
             Expression::BinaryOp(ref op) => op.span.clone(),
             Expression::Block(ref b) => b.span.clone(),
@@ -110,8 +108,6 @@ impl TreePrinter for Expression
         match *self
         {
             Expression::Literal(ref lit) => lit.print(level),
-
-            Expression::ArrayGenerator(ref a) => a.print(level),
             Expression::UnaryOp(ref op) => {
                 println!("{}unary {} ({})", p, op.operator, op.span);
                 op.expression.print(level + 1)

@@ -1,8 +1,6 @@
-use std::collections::HashMap;
 use std::fmt;
 use itertools::free::join;
 use bytecode::*;
-use parser::Operator;
 
 #[derive(Debug)]
 pub struct ExecutionError(pub String);
@@ -187,7 +185,7 @@ impl<'a> Interpreter<'a>
             ByteCodeExpression::SumTypeIndex(ref _obj) => panic!("NYI"),
             ByteCodeExpression::SumTypeStruct(ref _obj, _index) => panic!("NYI"),
             ByteCodeExpression::SumTypeCase(_index) => panic!("NYI"),
-            ByteCodeExpression::ArrayProperty(ref _array, ref _property) => panic!("NYI"),
+            ByteCodeExpression::Property(ref _array, ref _property) => panic!("NYI"),
             ByteCodeExpression::ArrayHead(ref _array) => panic!("NYI"),
             ByteCodeExpression::ArrayTail(ref _array) => panic!("NYI"),
             ByteCodeExpression::Ref(ref _obj) => panic!("NYI"),

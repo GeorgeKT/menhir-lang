@@ -1,7 +1,7 @@
 use llvm::prelude::*;
 use llvm::core::*;
 
-use ast::{Type, ArrayProperty};
+use ast::{Type, Property};
 use codegen::{Context, Array, StructValue, SumTypeValue};
 
 
@@ -127,15 +127,15 @@ impl ValueRef
         }
     }
 
-    pub unsafe fn array_property(&self, ctx: &Context, prop: ArrayProperty) -> ValueRef
+    pub unsafe fn array_property(&self, ctx: &Context, prop: Property) -> ValueRef
     {
         match (self, prop)
         {
-            (&ValueRef::Array(ref ar), ArrayProperty::Len) => {
+            (&ValueRef::Array(ref ar), Property::Len) => {
                 ar.get_length_ptr(ctx)
             },
 
-            (&ValueRef::HeapPtr(_, Type::Array(_)), ArrayProperty::Len) => {
+            (&ValueRef::HeapPtr(_, Type::Array(_)), Property::Len) => {
                 self.deref(ctx).array_property(ctx, prop)
             },
             _ => panic!("Internal Compiler Error: Invalid array property access"),

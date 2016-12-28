@@ -1,4 +1,4 @@
-use ast::{Expression, TreePrinter, Literal, Type, prefix};
+use ast::{Expression, Literal, Type};
 use span::{Span};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -51,26 +51,4 @@ pub fn array_lit(e: Vec<Expression>, span: Span) -> Literal
         array_type: Type::Unknown,
         span: span,
     })
-}
-
-pub fn array_generator(left: Expression, var: &str, iterable: Expression, span: Span) -> Expression
-{
-    Expression::ArrayGenerator(Box::new(ArrayGenerator{
-        left: left,
-        var: var.into(),
-        iterable: iterable,
-        array_type: Type::Unknown,
-        span: span,
-    }))
-}
-
-impl TreePrinter for ArrayGenerator
-{
-    fn print(&self, level: usize)
-    {
-        let p = prefix(level);
-        println!("{}array generator {} ({})", p, self.var, self.span);
-        self.left.print(level + 1);
-        self.iterable.print(level + 1)
-    }
 }

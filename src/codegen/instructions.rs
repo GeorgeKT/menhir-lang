@@ -262,7 +262,7 @@ unsafe fn gen_struct_member(ctx: &mut Context, _dst: &Var, obj: &Var, index: usi
     */
 }
 
-unsafe fn gen_array_property(ctx: &mut Context, dst: &Var, array: &Var, property: ArrayProperty)
+unsafe fn gen_array_property(ctx: &mut Context, dst: &Var, array: &Var, property: Property)
 {
     let array_object = &ctx.get_variable(&array.name).expect("Unknown variable").value;
     let prop_ptr = array_object.array_property(ctx, property);
@@ -365,7 +365,7 @@ unsafe fn gen_expr(ctx: &mut Context, dst: &Var, expr: &ByteCodeExpression)
         ByteCodeExpression::BinaryOp(op, ref a, ref b) => gen_bin_op(ctx, dst, a, b, op),
         ByteCodeExpression::Call(ref name, ref args) => gen_call(ctx, dst, name, args),
         ByteCodeExpression::StructMember(ref obj, index) => gen_struct_member(ctx, dst, obj, index),
-        ByteCodeExpression::ArrayProperty(ref array, ref property) => gen_array_property(ctx, dst, array, property.clone()),
+        ByteCodeExpression::Property(ref array, ref property) => gen_array_property(ctx, dst, array, property.clone()),
         ByteCodeExpression::ArrayHead(ref array) => gen_array_head(ctx, dst, array),
         ByteCodeExpression::ArrayTail(ref array) => gen_array_tail(ctx, dst, array),
         ByteCodeExpression::SumTypeIndex(ref obj) => gen_sum_type_index(ctx, dst, obj),

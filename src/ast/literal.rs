@@ -1,4 +1,4 @@
-use ast::{Type, ArrayLiteral, TreePrinter, prefix, array_type};
+use ast::{Type, ArrayLiteral, TreePrinter, prefix};
 use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -22,7 +22,7 @@ impl Literal
             Literal::Float(_, _) => Type::Float,
             Literal::Bool(_, _) => Type::Bool,
             Literal::Char(_, _) => Type::Char,
-            Literal::String(_, _) => array_type(Type::Char),
+            Literal::String(_, _) => Type::String,
             Literal::Array(ref a) => a.array_type.clone(),
         }
     }

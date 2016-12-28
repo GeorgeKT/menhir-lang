@@ -27,10 +27,22 @@ box(inner: *$a) -> Box<$a> {
     delete self.inner;
 }
 
-main() -> int {
-    #let f = box(new File{1});
-    #println(f.inner.read(10));
+foo(a: int[], b: int) -> int[]
+{
+    let c = a[0:5];
+    for i in 0..a.len {
+        c[i] = a[i] + b;
+    }
+    c
+}
 
+main() -> int {
+    # let f = box(new File{1});
+    #println(f.inner.read(10));
+    let b = 7;
+    let c = b;
+    let d = [0; 7];
+    let e = d[2:3];
     let a = new 5;
     delete a;
     0

@@ -70,7 +70,7 @@ fn main()
 
     let input_file = args.arg_input_file.expect("Missing input file argument");
     let run_interpreter = args.flag_interpret.unwrap_or(false);
-    let output_file = args.flag_output.unwrap_or(default_output_file(&input_file));
+    let _output_file = args.flag_output.unwrap_or(default_output_file(&input_file));
     let dump_flags = args.flag_dump.unwrap_or_default();
 
 

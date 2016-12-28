@@ -101,12 +101,6 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             substitute_array_literal(generic_args, a).map(|al| Expression::Literal(al))
         },
 
-        Expression::ArrayGenerator(ref a) => {
-            let iterable = substitute_expr(generic_args, &a.iterable)?;
-            let left = substitute_expr(generic_args, &a.left)?;
-            Ok(array_generator(left, &a.var, iterable, a.span.clone()))
-        },
-
         Expression::Call(ref c) => {
             let new_c = substitute_call(generic_args, c)?;
             Ok(Expression::Call(new_c))
@@ -281,11 +275,6 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
             Ok(())
         },
 
-        Expression::ArrayGenerator(ref a) => {
-            resolve_generics(new_functions, module, &a.iterable)?;
-            resolve_generics(new_functions, module, &a.left)
-        },
-
         Expression::Call(ref c) => {
             for a in c.args.iter() {
                 resolve_generics(new_functions, module, a)?;
@@ -374,11 +363,6 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
                 replace_generic_calls(new_functions, el)?;
             }
             Ok(())
-        },
-
-        Expression::ArrayGenerator(ref mut a) => {
-            replace_generic_calls(new_functions, &mut a.iterable)?;
-            replace_generic_calls(new_functions, &mut a.left)
         },
 
         Expression::Call(ref mut call) => {
