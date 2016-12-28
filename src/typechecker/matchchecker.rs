@@ -122,15 +122,18 @@ pub fn check_match_is_exhaustive(m: &MatchExpression, target_type: &Type) -> Com
 
     match *target_type
     {
-        Type::Array(_) => {
+        Type::Array(_) | Type::Slice(_) => {
             check_array_match_is_exhaustive(m, any_match_seen)
         },
+
         Type::Sum(ref st) => {
             check_sum_match_is_exhaustive(m, st.deref(), any_match_seen)
         },
+
         Type::Enum(ref et) => {
             check_sum_match_is_exhaustive(m, et.deref(), any_match_seen)
         },
+
         Type::Struct(_) => {
             if m.cases.len() != 0 {
                 err(&m.span, ErrorCode::DuplicatePatternMatch, format!("Duplicate pattern match, structs can only have one pattern match"))
@@ -138,9 +141,11 @@ pub fn check_match_is_exhaustive(m: &MatchExpression, target_type: &Type) -> Com
                 Ok(())
             }
         },
+
         Type::Bool => {
             check_bool_match_is_exhaustive(m)
         },
+        
         _ => {
             if !any_match_seen {
                 err(&m.span, ErrorCode::IncompletePatternMatch, format!("Incomplete pattern match for type {}", target_type))
