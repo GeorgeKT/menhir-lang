@@ -106,6 +106,7 @@ pub enum Type
     Void,
     Unknown,
     Int,
+    UInt,
     Float,
     Char,
     Bool,
@@ -359,6 +360,7 @@ impl fmt::Display for Type
             Type::Void => write!(f, "void"),
             Type::Unknown => write!(f, "unknown"),
             Type::Int => write!(f, "int"),
+            Type::UInt => write!(f, "uint"),
             Type::Float => write!(f, "float"),
             Type::Char => write!(f, "char"),
             Type::Bool => write!(f, "bool"),
@@ -415,6 +417,7 @@ pub fn to_primitive(name: &str) -> Option<Type>
     match name
     {
         "int" => Some(Type::Int),
+        "uint" => Some(Type::UInt),
         "float" => Some(Type::Float),
         "string" => Some(Type::String),
         "bool" => Some(Type::Bool),

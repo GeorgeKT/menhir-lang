@@ -169,7 +169,7 @@ impl ByteCodeFunction
         // Pop final scope before returning
         match inst
         {
-            Instruction::Return(_) => self.pop_scope(),
+            Instruction::Return(_) | Instruction::ReturnVoid => self.pop_scope(),
             _ => (),
         }
 

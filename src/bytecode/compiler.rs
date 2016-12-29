@@ -490,7 +490,7 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
     match *expr
     {
         Expression::Void => None,
-        
+
         Expression::UnaryOp(ref u) => {
             func.push_destination(None);
             let v = to_bc(func, &u.expression);
@@ -578,7 +578,10 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
         Expression::New(ref n) => {
             let dst = get_dst(func, &n.typ);
             func.add(Instruction::HeapAlloc(dst.clone()));
-            func.push_destination(Some(dst.clone()));
+            let inner_type = dst.typ.get_element_type().expect("Expecting a pointer type here");
+            let dereffed = stack_alloc(func, &inner_type, None);
+            func.add(load_instr(&dereffed, &dst));
+            func.push_destination(Some(dereffed));
             expr_to_bc(func, &n.inner);
             func.pop_destination();
             Some(dst)

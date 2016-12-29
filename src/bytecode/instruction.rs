@@ -53,10 +53,10 @@ impl fmt::Display for ByteCodeProperty
 #[derive(Debug, Clone)]
 pub enum Instruction
 {
+    Load{dst: Var, src: Var},
     Store{dst: Var, src: Var},
     StoreLit{dst: Var, lit: ByteCodeLiteral},
     StoreFunc{dst: Var, func: String},
-    Load{dst: Var, src: Var},
     LoadMember{dst: Var, obj: Var, member_index: usize},
     GetProperty{dst: Var, obj: Var, prop: ByteCodeProperty},
     SetProperty{dst: Var, prop: ByteCodeProperty, val: usize},
@@ -75,6 +75,13 @@ pub enum Instruction
     Delete(Var),
 }
 
+pub fn load_instr(dst: &Var, src: &Var) -> Instruction
+{
+    Instruction::Load{
+        dst: dst.clone(),
+        src: src.clone(),
+    }
+}
 
 pub fn store_instr(dst: &Var, src: &Var) -> Instruction
 {
@@ -97,14 +104,6 @@ pub fn store_func_instr(dst: &Var, func: &str) -> Instruction
     Instruction::StoreFunc{
         dst: dst.clone(),
         func: func.into(),
-    }
-}
-
-pub fn load_instr(dst: &Var, src: &Var) -> Instruction
-{
-    Instruction::Load{
-        dst: dst.clone(),
-        src: src.clone(),
     }
 }
 
@@ -193,6 +192,10 @@ impl fmt::Display for Instruction
     {
         match *self
         {
+            Instruction::Load{ref dst, ref src} => {
+                writeln!(f, "  load {} {}", dst, src)
+            },
+
             Instruction::Store{ref dst, ref src} => {
                 writeln!(f, "  str {} {}", dst, src)
             },
@@ -203,10 +206,6 @@ impl fmt::Display for Instruction
 
             Instruction::StoreFunc{ref dst, ref func} => {
                 writeln!(f, "  strfunc {} {}", dst, func)
-            },
-
-            Instruction::Load{ref dst, ref src} => {
-                writeln!(f, "  ldr {} {}", dst, src)
             },
 
             Instruction::LoadMember{ref dst, ref obj, member_index} => {

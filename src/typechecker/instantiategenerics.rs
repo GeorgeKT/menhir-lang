@@ -308,6 +308,14 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
             resolve_generics(new_functions, module, &l.expression)
         },
 
+        Expression::LetBindings(ref l) => {
+            for b in l.bindings.iter() {
+                resolve_generics(new_functions, module, &b.init)?
+            }
+
+            Ok(())
+        },
+
         Expression::StructInitializer(ref si) => {
             for mi in si.member_initializers.iter() {
                 resolve_generics(new_functions, module, mi)?;
@@ -397,6 +405,13 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
             }
 
             replace_generic_calls(new_functions, &mut l.expression)
+        },
+
+        Expression::LetBindings(ref mut l) => {
+            for b in l.bindings.iter_mut() {
+                replace_generic_calls(new_functions, &mut b.init)?
+            }
+            Ok(())
         },
 
         Expression::Block(ref mut b) => {

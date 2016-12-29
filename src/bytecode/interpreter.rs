@@ -1,9 +1,39 @@
 use std::fmt;
+use std::rc::Rc;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::ops::Deref;
 use itertools::free::join;
 use bytecode::*;
+use parser::Operator;
 
 #[derive(Debug)]
 pub struct ExecutionError(pub String);
+
+#[derive(Debug, Clone)]
+pub struct ValueRef(Rc<RefCell<Value>>);
+
+impl ValueRef
+{
+    fn new(v: Value) -> ValueRef
+    {
+        ValueRef(Rc::new(RefCell::new(v)))
+    }
+
+    fn clone_value(&self) -> Value
+    {
+        self.0.borrow().clone()
+    }
+}
+
+impl fmt::Display for ValueRef
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
+    {
+        let v = self.0.borrow();
+        write!(f, "{}", *v)
+    }
+}
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -16,11 +46,14 @@ pub enum Value
     Float(f64),
     Char(char),
     Bool(bool),
-    Array(Vec<Value>),
+    String(String),
+    Array(Vec<ValueRef>),
+    Slice(Vec<ValueRef>),
     Func(String),
     Struct(Vec<Value>),
     Sum(usize, Box<Value>),
     Enum(usize),
+    Pointer(ValueRef),
 }
 
 impl fmt::Display for Value
@@ -37,10 +70,13 @@ impl fmt::Display for Value
             Value::Char(v) => write!(f, "char {}", v),
             Value::Bool(v) => write!(f, "bool {}", v),
             Value::Array(ref v) => write!(f, "[{}]", join(v.iter(), ", ")),
+            Value::String(ref s) => write!(f, "\"{}\"", s),
+            Value::Slice(ref v) => write!(f, "[{}]", join(v.iter(), ", ")),
             Value::Func(ref v) => write!(f, "func {}", v),
             Value::Struct(ref v) => write!(f, "{{{}}}", join(v.iter(), ", ")),
             Value::Sum(idx, ref v) => write!(f, "sum {} {}", idx, v),
             Value::Enum(idx) => write!(f, "enum {}", idx),
+            Value::Pointer(ref v) => write!(f, "pointer {}", v),
         }
     }
 }
@@ -58,11 +94,10 @@ impl Value
     }
 }
 
-/*
 struct StackFrame
 {
-    vars: HashMap<String, Value>,
-    result: Value,
+    vars: HashMap<String, ValueRef>,
+    result: ValueRef,
 }
 
 impl StackFrame
@@ -71,7 +106,7 @@ impl StackFrame
     {
         StackFrame{
             vars: HashMap::new(),
-            result: Value::Void,
+            result: ValueRef::new(Value::Void),
         }
     }
 }
@@ -105,16 +140,16 @@ impl<'a> Interpreter<'a>
         if sf.vars.get(name).is_none() {
             Err(ExecutionError(format!("Variable {} already exists", name)))
         } else {
-            sf.vars.insert(name.into(), v);
+            sf.vars.insert(name.into(), ValueRef::new(v));
             Ok(())
         }
     }
 
-    fn get_variable(&self, name: &str) -> Result<&Value, ExecutionError>
+    fn get_variable(&self, name: &str) -> Result<ValueRef, ExecutionError>
     {
         for sf in self.stack.iter().rev() {
-            if let Some(ref v) = sf.vars.get(name) {
-                return Ok(v);
+            if let Some(v) = sf.vars.get(name) {
+                return Ok(v.clone());
             }
         }
 
@@ -125,7 +160,7 @@ impl<'a> Interpreter<'a>
     {
         for sf in self.stack.iter_mut().rev() {
             if let Some(v) = sf.vars.get_mut(name) {
-                *v = new_value;
+                *v = ValueRef::new(new_value);
                 return Ok(())
             }
         }
@@ -146,54 +181,31 @@ impl<'a> Interpreter<'a>
                 }
             },
             &ByteCodeLiteral::Char(v) => Ok(Value::Char(v as char)),
-            &ByteCodeLiteral::String(ref s) => Ok(Value::Array(s.chars().map(|c| Value::Char(c)).collect())),
+            &ByteCodeLiteral::String(ref s) => Ok(Value::String(s.clone())),
             &ByteCodeLiteral::Bool(v) => Ok(Value::Bool(v)),
             &ByteCodeLiteral::Array(ref members) => {
                 let mut vars = Vec::new();
                 for var in members {
-                    vars.push(self.get_variable(&var.name)?.clone());
+                    vars.push(self.get_variable(&var.name)?);
                 }
                 Ok(Value::Array(vars))
             },
         }
     }
 
-    fn unary_op(&self, _op: Operator, _var: &str) -> Result<Value, ExecutionError>
+    fn unary_op(&self, _dst: &str, _op: Operator, _var: &str) -> Result<Action, ExecutionError>
     {
         panic!("NYI");
     }
 
-    fn binary_op(&self, _op: Operator, _left: &str, _right: &str) -> Result<Value, ExecutionError>
+    fn binary_op(&self, _dst: &str, _op: Operator, _left: &str, _right: &str) -> Result<Action, ExecutionError>
     {
         panic!("NYI");
     }
 
-    fn call(&self, _name: &str, _args: &Vec<Var>) -> Result<Value, ExecutionError>
+    fn call(&self, _dst: &str, _name: &str, _args: &Vec<Var>) -> Result<Action, ExecutionError>
     {
         panic!("NYI");
-    }
-
-    fn set(&mut self, name: &str, expr: &ByteCodeExpression) -> Result<(), ExecutionError>
-    {
-        let value = match *expr
-        {
-            ByteCodeExpression::Literal(ref l) => self.make_value(l)?,
-            ByteCodeExpression::UnaryOp(op, ref v) => self.unary_op(op, &v.name)?,
-            ByteCodeExpression::BinaryOp(op, ref a, ref b) => self.binary_op(op, &a.name, &b.name)?,
-            ByteCodeExpression::Call(ref name, ref args) => self.call(name, args)?,
-            ByteCodeExpression::StructMember(ref _obj, _index) => panic!("NYI"),
-            ByteCodeExpression::SumTypeIndex(ref _obj) => panic!("NYI"),
-            ByteCodeExpression::SumTypeStruct(ref _obj, _index) => panic!("NYI"),
-            ByteCodeExpression::SumTypeCase(_index) => panic!("NYI"),
-            ByteCodeExpression::Property(ref _array, ref _property) => panic!("NYI"),
-            ByteCodeExpression::ArrayHead(ref _array) => panic!("NYI"),
-            ByteCodeExpression::ArrayTail(ref _array) => panic!("NYI"),
-            ByteCodeExpression::Ref(ref _obj) => panic!("NYI"),
-            ByteCodeExpression::Func(ref _func) => panic!("NYI"),
-            ByteCodeExpression::HeapAlloc(ref _typ) => panic!("NYI"),
-        };
-
-        self.update_variable(name, value)
     }
 
     fn ret(&mut self, name: &str) -> Result<Action, ExecutionError>
@@ -207,7 +219,8 @@ impl<'a> Interpreter<'a>
     fn branch_if(&self, var: &str, on_true: BasicBlockRef, on_false: BasicBlockRef) ->  Result<Action, ExecutionError>
     {
         let val = self.get_variable(var)?;
-        match val
+        let inner = val.0.borrow();
+        match inner.deref()
         {
             &Value::Bool(true) => Ok(Action::Jump(on_true)),
             &Value::Bool(false) => Ok(Action::Jump(on_false)),
@@ -220,42 +233,87 @@ impl<'a> Interpreter<'a>
         println!("{}", instr);
         match *instr
         {
-            Instruction::Alloc(ref var) => {
+            Instruction::Load{ref dst, ref src} => {
+                panic!("  load {} {}", dst, src)
+            },
+
+            Instruction::Store{ref dst, ref src} => {
+                panic!(" str {} {}", dst, src)
+            },
+
+            Instruction::StoreLit{ref dst, ref lit} => {
+                panic!("  strlit {} {}", dst, lit)
+            },
+
+            Instruction::StoreFunc{ref dst, ref func} => {
+                panic!("  strfunc {} {}", dst, func)
+            },
+
+            Instruction::LoadMember{ref dst, ref obj, member_index} => {
+                panic!("  ldrm {} {}.{}", dst, obj, member_index)
+            },
+
+            Instruction::GetProperty{ref dst, ref obj, ref prop} => {
+                panic!("  getp {} {}.{}", dst, obj, prop)
+            },
+
+            Instruction::SetProperty{ref dst, ref prop, ref val} => {
+                panic!("  setp {} {} {}", dst, prop, val)
+            },
+
+            Instruction::UnaryOp{ref dst, op, ref src} => {
+                self.unary_op(&dst.name, op, &src.name)
+            },
+
+            Instruction::BinaryOp{ref dst, op, ref left, ref right} => {
+                self.binary_op(&dst.name, op, &left.name, &right.name)
+            },
+
+            Instruction::Call{ref dst, ref func, ref args} => {
+                self.call(&dst.name, func, args)
+            },
+
+            Instruction::StackAlloc(ref var) => {
                 self.add_variable(&var.name, Value::Uninitialized)?;
                 Ok(Action::Continue)
             },
-            Instruction::SetStructMember{../*ref obj, member_index, ref value*/} => {
-                panic!("NYI");
+
+            Instruction::HeapAlloc(ref var) => {
+                panic!("  halloc {}", var)
             },
+
+            Instruction::Return(ref var) => {
+                self.ret(&var.name)
+            },
+
+            Instruction::ReturnVoid => {
+                Ok(Action::Return)
+            },
+
+            Instruction::Branch(bb) => {
+                Ok(Action::Jump(bb))
+            },
+
+            Instruction::BranchIf{ref cond, on_true, on_false} => {
+                self.branch_if(&cond.name, on_true, on_false)
+            },
+
+            Instruction::Delete(ref var) => {
+                panic!("  delete {}", var)
+            },
+
+            Instruction::Slice{ref dst, ref src, ref start, ref len} => {
+                panic!("  slice {} {} {} {}", dst, src, start, len)
+            },
+
             Instruction::StartScope => {
                 self.stack.push(StackFrame::new());
                 Ok(Action::Continue)
             },
+
             Instruction::EndScope => {
                 self.stack.pop();
                 Ok(Action::Continue)
-            },
-            Instruction::Bind{../*ref name, ref var*/} => {
-                panic!("NYI");
-            },
-            Instruction::Set{ref var, ref expr} => {
-                self.set(&var.name, expr)?;
-                Ok(Action::Continue)
-            },
-            Instruction::Return(ref var) => {
-                self.ret(&var.name)
-            },
-            Instruction::ReturnVoid => {
-                Ok(Action::Return)
-            },
-            Instruction::Branch(bb) => {
-                Ok(Action::Jump(bb))
-            },
-            Instruction::BranchIf{ref cond, on_true, on_false} => {
-                self.branch_if(&cond.name, on_true, on_false)
-            },
-            Instruction::Delete(ref _var) => {
-                panic!("NYI");
             },
         }
     }
@@ -278,7 +336,7 @@ impl<'a> Interpreter<'a>
         }
     }
 
-    fn run(&mut self, func: &ByteCodeFunction, args: Vec<(String, Value)>) -> Result<Value, ExecutionError>
+    fn run(&mut self, func: &ByteCodeFunction, args: Vec<(String, Value)>) -> Result<ValueRef, ExecutionError>
     {
         println!("{}:", func.sig.name);
         self.stack.push(StackFrame::new());
@@ -297,10 +355,10 @@ impl<'a> Interpreter<'a>
         }
 
         let sf = self.stack.pop().expect("Empty stack");
-        Ok(sf.result)
+        Ok(sf.result.clone())
     }
 
-    pub fn run_function(&mut self, function: &str, args: Vec<(String, Value)>) -> Result<Value, ExecutionError>
+    pub fn run_function(&mut self, function: &str, args: Vec<(String, Value)>) -> Result<ValueRef, ExecutionError>
     {
         match self.module.functions.iter().find(|func| func.sig.name == function)
         {
@@ -314,14 +372,10 @@ impl<'a> Interpreter<'a>
         }
     }
 }
-*/
 
-
-pub fn run_byte_code(_module: &ByteCodeModule, _function: &str) -> Result<Value, ExecutionError>
+pub fn run_byte_code(module: &ByteCodeModule, function: &str) -> Result<Value, ExecutionError>
 {
-    /*
     let mut interpreter = Interpreter::new(module);
-    interpreter.run_function(function, vec![])
-    */
-    Err(ExecutionError(format!("NYI")))
+    let vr = interpreter.run_function(function, vec![]);
+    vr.map(|r| r.clone_value())
 }
