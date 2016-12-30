@@ -5,6 +5,7 @@ use std::rc::Rc;
 use itertools::free::join;
 use ast::{Expression, TreePrinter, MemberAccessType, Property, prefix};
 use span::Span;
+use parser::Operator;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct SumTypeCase
@@ -184,6 +185,31 @@ impl Type
         }
     }
 
+    pub fn is_operator_supported(&self, op: Operator) -> bool
+    {
+        const GENERAL_NUMERIC_OPERATORS: [Operator; 10] = [
+            Operator::Add, Operator::Sub, Operator::Div, Operator::Mul,
+            Operator::Equals, Operator::NotEquals, Operator::GreaterThan, Operator::LessThan,
+            Operator::GreaterThanEquals, Operator::LessThanEquals,
+        ];
+
+        const COMPARISON_OPERATORS: [Operator; 6] = [
+            Operator::Equals, Operator::NotEquals, Operator::GreaterThan, Operator::LessThan,
+            Operator::GreaterThanEquals, Operator::LessThanEquals,
+        ];
+
+        match *self
+        {
+            Type::Int | Type::UInt => op == Operator::Mod || GENERAL_NUMERIC_OPERATORS.contains(&op),
+            Type::Float => GENERAL_NUMERIC_OPERATORS.contains(&op),
+            Type::Char => COMPARISON_OPERATORS.contains(&op),
+            Type::Bool => COMPARISON_OPERATORS.contains(&op) || op == Operator::And || op == Operator::Or || op == Operator::Not,
+            Type::String => op == Operator::Equals || op == Operator::NotEquals,
+            Type::Pointer(_) => COMPARISON_OPERATORS.contains(&op),
+            _ => false,
+        }
+    }
+
     pub fn is_generic(&self) -> bool
     {
         match *self
@@ -204,16 +230,7 @@ impl Type
     {
         match *self
         {
-            Type::Int | Type::Float => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_integer(&self) -> bool
-    {
-        match *self
-        {
-            Type::Int => true,
+            Type::Int | Type::UInt | Type::Float => true,
             _ => false,
         }
     }
@@ -337,18 +354,6 @@ pub fn unresolved_type(name: &str, generic_args: Vec<Type>) -> Type
         name: name.into(),
         generic_args: generic_args,
     }))
-}
-
-pub fn addition_type(at: &Type, bt: &Type) -> Option<Type>
-{
-    match (at, bt)
-    {
-        (&Type::Int, &Type::Int) => Some(Type::Int),
-        (&Type::Float, &Type::Float) => Some(Type::Float),
-        (&Type::Char, &Type::Char) => Some(Type::Char),
-        _ => None,
-    }
-
 }
 
 impl fmt::Display for Type

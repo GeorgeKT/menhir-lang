@@ -1,8 +1,7 @@
 use std::fmt;
-use std::rc::Rc;
+use std::rc::{Weak, Rc};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ops::Deref;
 use itertools::free::join;
 use bytecode::*;
 use parser::Operator;
@@ -11,18 +10,58 @@ use parser::Operator;
 pub struct ExecutionError(pub String);
 
 #[derive(Debug, Clone)]
-pub struct ValueRef(Rc<RefCell<Value>>);
-
+pub enum ValueRef
+{
+    Owner(Rc<RefCell<Value>>),
+    Ptr(Weak<RefCell<Value>>),
+}
 impl ValueRef
 {
     fn new(v: Value) -> ValueRef
     {
-        ValueRef(Rc::new(RefCell::new(v)))
+        ValueRef::Owner(Rc::new(RefCell::new(v)))
     }
 
-    fn clone_value(&self) -> Value
+    fn clone_value(&self) -> Result<Value, ExecutionError>
     {
-        self.0.borrow().clone()
+        match *self
+        {
+            ValueRef::Owner(ref v) => Ok(v.borrow().clone()),
+            ValueRef::Ptr(ref v) => {
+                if let Some(rv) = v.upgrade() {
+                    Ok(rv.borrow().clone())
+                } else {
+                    Err(ExecutionError(format!("Dangling pointer, owner of element pointed to is gone")))
+                }
+            }
+        }
+    }
+
+    fn to_ptr(&self) -> ValueRef
+    {
+        if let ValueRef::Owner(ref v) = *self {
+            ValueRef::Ptr(Rc::downgrade(v))
+        } else {
+            self.clone()
+        }
+    }
+
+    fn apply<Op, R>(&self, op: Op) -> Result<R, ExecutionError>
+        where Op: Fn(&Value) -> Result<R, ExecutionError>, R: Sized
+    {
+        match *self
+        {
+            ValueRef::Owner(ref v) => {
+                op(&v.borrow())
+            },
+            ValueRef::Ptr(ref v) => {
+                if let Some(rv) = v.upgrade() {
+                    op(&rv.borrow())
+                } else {
+                    Err(ExecutionError(format!("Dangling pointer, owner of element pointed to is gone")))
+                }
+            }
+        }
     }
 }
 
@@ -30,12 +69,26 @@ impl fmt::Display for ValueRef
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
-        let v = self.0.borrow();
-        write!(f, "{}", *v)
+        match *self
+        {
+            ValueRef::Owner(ref v) => {
+                let inner = v.borrow();
+                write!(f, "{}", *inner)
+            },
+
+            ValueRef::Ptr(ref v) => {
+                if let Some(rv) = v.upgrade() {
+                    let inner = rv.borrow();
+                    write!(f, "{}", *inner)
+                } else {
+                    println!("Danging pointer access");
+                    Err(fmt::Error)
+                }
+            }
+        }
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum Value
 {
@@ -50,8 +103,8 @@ pub enum Value
     Array(Vec<ValueRef>),
     Slice(Vec<ValueRef>),
     Func(String),
-    Struct(Vec<Value>),
-    Sum(usize, Box<Value>),
+    Struct(Vec<ValueRef>),
+    Sum(usize, Box<ValueRef>),
     Enum(usize),
     Pointer(ValueRef),
 }
@@ -193,14 +246,91 @@ impl<'a> Interpreter<'a>
         }
     }
 
-    fn unary_op(&self, _dst: &str, _op: Operator, _var: &str) -> Result<Action, ExecutionError>
+    fn unary_op(&mut self, dst: &str, op: Operator, var: &str) -> Result<Action, ExecutionError>
     {
-        panic!("NYI");
+        let val = self.get_variable(var)?;
+        let result = val.apply(|v: &Value| {
+            match (op, v)
+            {
+                (Operator::Sub, &Value::Int(num)) => Ok(Value::Int(-num)),
+                (Operator::Sub, &Value::UInt(num)) => Ok(Value::Int(-(num as i64))),
+                (Operator::Sub, &Value::Float(num)) => Ok(Value::Float(-num)),
+                (Operator::Not, &Value::Bool(b)) => Ok(Value::Bool(!b)),
+                _ => Err(ExecutionError(format!("Invalid unary op"))),
+            }
+        })?;
+
+        self.update_variable(dst, result)?;
+        Ok(Action::Continue)
     }
 
-    fn binary_op(&self, _dst: &str, _op: Operator, _left: &str, _right: &str) -> Result<Action, ExecutionError>
+    fn binary_op(&mut self, dst: &str, op: Operator, left: &str, right: &str) -> Result<Action, ExecutionError>
     {
-        panic!("NYI");
+        let left = self.get_variable(left)?.clone_value()?;
+        let right = self.get_variable(right)?.clone_value()?;
+
+        let value = match (op, left, right)
+        {
+            (Operator::Add, Value::Int(l), Value::Int(r)) => Value::Int(l + r),
+            (Operator::Add, Value::UInt(l), Value::UInt(r)) => Value::UInt(l + r),
+            (Operator::Add, Value::Float(l), Value::Float(r)) => Value::Float(l + r),
+
+            (Operator::Sub, Value::Int(l), Value::Int(r)) => Value::Int(l - r),
+            (Operator::Sub, Value::UInt(l), Value::UInt(r)) => Value::UInt(l - r),
+            (Operator::Sub, Value::Float(l), Value::Float(r)) => Value::Float(l - r),
+
+            (Operator::Mul, Value::Int(l), Value::Int(r)) => Value::Int(l * r),
+            (Operator::Mul, Value::UInt(l), Value::UInt(r)) => Value::UInt(l * r),
+            (Operator::Mul, Value::Float(l), Value::Float(r)) => Value::Float(l * r),
+
+            (Operator::Div, Value::Int(l), Value::Int(r)) => Value::Int(l / r),
+            (Operator::Div, Value::UInt(l), Value::UInt(r)) => Value::UInt(l / r),
+            (Operator::Div, Value::Float(l), Value::Float(r)) => Value::Float(l / r),
+
+            (Operator::Mod, Value::Int(l), Value::Int(r)) => Value::Int(l % r),
+            (Operator::Mod, Value::UInt(l), Value::UInt(r)) => Value::UInt(l % r),
+
+            (Operator::LessThan, Value::Int(l), Value::Int(r)) => Value::Bool(l < r),
+            (Operator::LessThan, Value::UInt(l), Value::UInt(r)) => Value::Bool(l < r),
+            (Operator::LessThan, Value::Float(l), Value::Float(r)) => Value::Bool(l < r),
+            (Operator::LessThan, Value::Char(l), Value::Char(r)) => Value::Bool(l < r),
+
+            (Operator::GreaterThan, Value::Int(l), Value::Int(r)) => Value::Bool(l < r),
+            (Operator::GreaterThan, Value::UInt(l), Value::UInt(r)) => Value::Bool(l < r),
+            (Operator::GreaterThan, Value::Float(l), Value::Float(r)) => Value::Bool(l < r),
+            (Operator::GreaterThan, Value::Char(l), Value::Char(r)) => Value::Bool(l < r),
+
+            (Operator::LessThanEquals, Value::Int(l), Value::Int(r)) => Value::Bool(l <= r),
+            (Operator::LessThanEquals, Value::UInt(l), Value::UInt(r)) => Value::Bool(l <= r),
+            (Operator::LessThanEquals, Value::Float(l), Value::Float(r)) => Value::Bool(l <= r),
+            (Operator::LessThanEquals, Value::Char(l), Value::Char(r)) => Value::Bool(l <= r),
+
+            (Operator::GreaterThanEquals, Value::Int(l), Value::Int(r)) => Value::Bool(l >= r),
+            (Operator::GreaterThanEquals, Value::UInt(l), Value::UInt(r)) => Value::Bool(l >= r),
+            (Operator::GreaterThanEquals, Value::Float(l), Value::Float(r)) => Value::Bool(l >= r),
+            (Operator::GreaterThanEquals, Value::Char(l), Value::Char(r)) => Value::Bool(l >= r),
+
+            (Operator::Equals, Value::Int(l), Value::Int(r)) => Value::Bool(l == r),
+            (Operator::Equals, Value::UInt(l), Value::UInt(r)) => Value::Bool(l == r),
+            (Operator::Equals, Value::Float(l), Value::Float(r)) => Value::Bool(l == r),
+            (Operator::Equals, Value::Char(l), Value::Char(r)) => Value::Bool(l == r),
+            (Operator::Equals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l == *r),
+
+            (Operator::NotEquals, Value::Int(l), Value::Int(r)) => Value::Bool(l != r),
+            (Operator::NotEquals, Value::UInt(l), Value::UInt(r)) => Value::Bool(l != r),
+            (Operator::NotEquals, Value::Float(l), Value::Float(r)) => Value::Bool(l != r),
+            (Operator::NotEquals, Value::Char(l), Value::Char(r)) => Value::Bool(l != r),
+            (Operator::NotEquals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l != *r),
+
+            (Operator::And, Value::Bool(l), Value::Bool(r)) => Value::Bool(l && r),
+            (Operator::Or, Value::Bool(l), Value::Bool(r)) => Value::Bool(l || r),
+
+            _ => return Err(ExecutionError(format!("Operator {} not supported on these operands", op))),
+        };
+
+
+        self.update_variable(dst, value)?;
+        Ok(Action::Continue)
     }
 
     fn call(&self, _dst: &str, _name: &str, _args: &Vec<Var>) -> Result<Action, ExecutionError>
@@ -219,13 +349,14 @@ impl<'a> Interpreter<'a>
     fn branch_if(&self, var: &str, on_true: BasicBlockRef, on_false: BasicBlockRef) ->  Result<Action, ExecutionError>
     {
         let val = self.get_variable(var)?;
-        let inner = val.0.borrow();
-        match inner.deref()
-        {
-            &Value::Bool(true) => Ok(Action::Jump(on_true)),
-            &Value::Bool(false) => Ok(Action::Jump(on_false)),
-            _ => Err(ExecutionError(format!("brif operand {} is not a boolean", var))),
-        }
+        val.apply(|v: &Value| {
+            match v
+            {
+                &Value::Bool(true) => Ok(Action::Jump(on_true)),
+                &Value::Bool(false) => Ok(Action::Jump(on_false)),
+                _ => Err(ExecutionError(format!("brif operand {} is not a boolean", var))),
+            }
+        })
     }
 
     fn execute_instruction(&mut self, instr: &Instruction) -> Result<Action, ExecutionError>
@@ -238,11 +369,15 @@ impl<'a> Interpreter<'a>
             },
 
             Instruction::Store{ref dst, ref src} => {
-                panic!(" str {} {}", dst, src)
+                let v = self.get_variable(&src.name)?;
+                self.update_variable(&dst.name, v.clone_value()?)?;
+                Ok(Action::Continue)
             },
 
             Instruction::StoreLit{ref dst, ref lit} => {
-                panic!("  strlit {} {}", dst, lit)
+                let v = self.make_value(lit)?;
+                self.update_variable(&dst.name, v)?;
+                Ok(Action::Continue)
             },
 
             Instruction::StoreFunc{ref dst, ref func} => {
@@ -250,7 +385,7 @@ impl<'a> Interpreter<'a>
             },
 
             Instruction::LoadMember{ref dst, ref obj, member_index} => {
-                panic!("  ldrm {} {}.{}", dst, obj, member_index)
+                panic!("  loadm {} {}.{}", dst, obj, member_index)
             },
 
             Instruction::GetProperty{ref dst, ref obj, ref prop} => {
@@ -376,6 +511,6 @@ impl<'a> Interpreter<'a>
 pub fn run_byte_code(module: &ByteCodeModule, function: &str) -> Result<Value, ExecutionError>
 {
     let mut interpreter = Interpreter::new(module);
-    let vr = interpreter.run_function(function, vec![]);
-    vr.map(|r| r.clone_value())
+    let vr = interpreter.run_function(function, vec![])?;
+    vr.clone_value()
 }

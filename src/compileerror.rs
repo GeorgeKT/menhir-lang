@@ -28,7 +28,7 @@ pub enum ErrorCode
     UnknownName,
     MissingType,
     CallingNonCallable,
-    CodegenError,
+    //CodegenError,
     RedefinitionOfVariable,
     RedefinitionOfFunction,
     RedefinitionOfStruct,

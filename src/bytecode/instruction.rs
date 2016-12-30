@@ -209,7 +209,7 @@ impl fmt::Display for Instruction
             },
 
             Instruction::LoadMember{ref dst, ref obj, member_index} => {
-                writeln!(f, "  ldrm {} {}.{}", dst, obj, member_index)
+                writeln!(f, "  loadm {} {}.{}", dst, obj, member_index)
             },
 
             Instruction::GetProperty{ref dst, ref obj, ref prop} => {

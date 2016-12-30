@@ -35,15 +35,9 @@ fn replace_by(e: Expression) -> TypeCheckResult
     Ok(TypeCheckAction::ReplaceBy(e))
 }
 
-
 fn invalid_unary_operator<T>(span: &Span, op: Operator) -> CompileResult<T>
 {
     err(span, ErrorCode::InvalidUnaryOperator, format!("{} is not a valid unary operator", op))
-}
-
-fn expected_numeric_operands<T>(span: &Span, op: Operator) -> CompileResult<T>
-{
-    err(span, ErrorCode::TypeError, format!("Operator {} expects two numeric expression as operands", op))
 }
 
 fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> TypeCheckResult
@@ -86,67 +80,36 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
         return valid(left_type);
     }
 
+    if left_type != right_type {
+        return err(&b.span, ErrorCode::TypeError, format!("Operator {} expects operands of the same type", b.operator));
+    }
+
+    if !left_type.is_operator_supported(b.operator) {
+        return err(&b.span, ErrorCode::TypeError, format!("Operator {} is not supported on {}", b.operator, left_type));
+    }
+
     match b.operator
     {
-        Operator::Add => {
-            match addition_type(&left_type, &right_type)
-            {
-                Some(t) => {
-                    b.typ = t.clone();
-                    valid(t)
-                },
-                None => err(&b.span, ErrorCode::TypeError,
-                    format!("Addition is not supported on operands of type {} and {}", left_type, right_type))
-            }
-        },
-
+        Operator::Add |
         Operator::Sub |
         Operator::Mul |
-        Operator::Div =>
-            if !left_type.is_numeric() || !right_type.is_numeric() {
-                expected_numeric_operands(&b.span, b.operator)
-            } else if left_type != right_type {
-                err(&b.span, ErrorCode::TypeError, format!("Operator {} expects operands of the same type", b.operator))
-            } else {
-                b.typ = right_type;
-                valid(left_type)
-            },
+        Operator::Mod |
+        Operator::Div => {
+            b.typ = right_type;
+            valid(left_type)
+        },
 
         Operator::LessThan |
         Operator::GreaterThan |
         Operator::LessThanEquals |
-        Operator::GreaterThanEquals =>
-            if !left_type.is_numeric() || !right_type.is_numeric() {
-                expected_numeric_operands(&b.span, b.operator)
-            } else if left_type != right_type {
-                err(&b.span, ErrorCode::TypeError, format!("Operator {} expects operands of the same type", b.operator))
-            } else {
-                b.typ = Type::Bool;
-                valid(Type::Bool)
-            },
-
-        Operator::Mod =>
-            if !left_type.is_integer() || !right_type.is_integer() {
-                err(&b.span, ErrorCode::TypeError, format!("Operator {} expects two integer expressions as operands", b.operator))
-            } else {
-                b.typ = Type::Int;
-                valid(Type::Int)
-            },
-        Operator::Equals | Operator::NotEquals =>
-            if left_type != right_type {
-                err(&b.span, ErrorCode::TypeError, format!("Operator {} expects two expressions of the same type as operands", b.operator))
-            } else {
-                b.typ = Type::Bool;
-                valid(Type::Bool)
-            },
-
-        Operator::And | Operator::Or =>
-            if !left_type.is_bool() || !right_type.is_bool() {
-                err(&b.span, ErrorCode::TypeError, format!("Operator {} expects two boolean expressions as operands", b.operator))
-            } else {
-                b.typ = Type::Bool;
-                valid(Type::Bool)
-            },
+        Operator::GreaterThanEquals |
+        Operator::Equals |
+        Operator::NotEquals |
+        Operator::And |
+        Operator::Or => {
+            b.typ = Type::Bool;
+            valid(Type::Bool)
+        },
         _ => err(&b.span, ErrorCode::InvalidBinaryOperator, format!("Operator {} is not a binary operator", b.operator))
     }
 }
