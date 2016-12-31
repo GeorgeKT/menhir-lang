@@ -3,6 +3,7 @@ use std::rc::{Weak, Rc};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use itertools::free::join;
+use ast::Type;
 use bytecode::*;
 use parser::Operator;
 
@@ -156,6 +157,67 @@ impl Value
             _ => 1i32,
         }
     }
+
+    pub fn from_literal(lit: &ByteCodeLiteral) -> Result<Value, ExecutionError>
+    {
+        match lit
+        {
+            &ByteCodeLiteral::Int(v) => Ok(Value::Int(v as i64)),
+            &ByteCodeLiteral::Float(ref num) => {
+                match num.parse::<f64>()
+                {
+                    Ok(f) => Ok(Value::Float(f)),
+                    Err(_) => Err(ExecutionError(format!("{} is not a valid floating point number", num))),
+                }
+            },
+            &ByteCodeLiteral::Char(v) => Ok(Value::Char(v as char)),
+            &ByteCodeLiteral::String(ref s) => Ok(Value::String(s.clone())),
+            &ByteCodeLiteral::Bool(v) => Ok(Value::Bool(v)),
+        }
+    }
+
+    pub fn from_type(typ: &Type) -> Result<Value, ExecutionError>
+    {
+        match *typ
+        {
+            Type::Unknown | Type::Unresolved(_) | Type::Generic(_) => panic!("Types must be known before the interpreter can run"),
+            Type::Void => Ok(Value::Void),
+            Type::Int => Ok(Value::Int(0)),
+            Type::UInt => Ok(Value::UInt(0)),
+            Type::Float => Ok(Value::Float(0.0)),
+            Type::Char => Ok(Value::Char('x')),
+            Type::Bool => Ok(Value::Bool(false)),
+            Type::String => Ok(Value::String(String::default())),
+            Type::Array(ref at) => {
+                let mut array = Vec::with_capacity(at.len);
+                for _ in 0..at.len {
+                    let element = Value::from_type(&at.element_type)?;
+                    array.push(ValueRef::new(element));
+                }
+                Ok(Value::Array(array))
+            },
+            Type::Slice(_) => Ok(Value::Slice(Vec::new())),
+            Type::Func(_) => Ok(Value::Func(String::new())),
+            Type::Struct(ref st) => {
+                let mut members = Vec::new();
+                for m in &st.members {
+                    let member = Value::from_type(&m.typ)?;
+                    members.push(ValueRef::new(member));
+                }
+                Ok(Value::Struct(members))
+            },
+            Type::Enum(_) => Ok(Value::Enum(0)),
+            Type::Sum(ref st) => {
+                let first_case = Value::from_type(&st.cases[0].typ)?;
+                Ok(Value::Sum(0, Box::new(ValueRef::new(first_case))))
+            },
+            Type::Pointer(ref inner) => {
+                let inner = Value::from_type(inner)?;
+                Ok(Value::Pointer(ValueRef::new(inner)))
+            },
+
+        }
+    }
 }
 
 struct StackFrame
@@ -243,31 +305,6 @@ impl<'a> Interpreter<'a>
             *v = vr;
             Ok(())
         })
-    }
-
-    fn make_value(&self, lit: &ByteCodeLiteral) -> Result<Value, ExecutionError>
-    {
-        match lit
-        {
-            &ByteCodeLiteral::Int(v) => Ok(Value::Int(v as i64)),
-            &ByteCodeLiteral::Float(ref num) => {
-                match num.parse::<f64>()
-                {
-                    Ok(f) => Ok(Value::Float(f)),
-                    Err(_) => Err(ExecutionError(format!("{} is not a valid floating point number", num))),
-                }
-            },
-            &ByteCodeLiteral::Char(v) => Ok(Value::Char(v as char)),
-            &ByteCodeLiteral::String(ref s) => Ok(Value::String(s.clone())),
-            &ByteCodeLiteral::Bool(v) => Ok(Value::Bool(v)),
-            &ByteCodeLiteral::Array(ref members) => {
-                let mut vars = Vec::new();
-                for var in members {
-                    vars.push(self.get_variable(&var.name)?);
-                }
-                Ok(Value::Array(vars))
-            },
-        }
     }
 
     fn unary_op(&mut self, dst: &str, op: Operator, var: &str) -> Result<Action, ExecutionError>
@@ -393,23 +430,6 @@ impl<'a> Interpreter<'a>
         })
     }
 
-    fn load(&mut self, dst: &str, src: &str) -> Result<Action, ExecutionError>
-    {
-        let var = self.get_variable(&src)?;
-        let inner_ptr = var.apply(|v: &Value|{
-            match *v
-            {
-                Value::Pointer(ref inner) => {
-                    Ok(inner.to_ptr())
-                },
-                _ => Err(ExecutionError(format!("load can only work on pointers")))
-            }
-        })?;
-
-        self.replace_variable(dst, inner_ptr)?;
-        Ok(Action::Continue)
-    }
-
     fn store(&mut self, dst: &str, src: &str) -> Result<Action, ExecutionError>
     {
         let new_value = self.get_variable(src)?.clone_value()?;
@@ -439,31 +459,50 @@ impl<'a> Interpreter<'a>
         Ok(Action::Continue)
     }
 
+    fn load_member(&mut self, dst: &str, obj: &str, member_index: usize) -> Result<Action, ExecutionError>
+    {
+        let obj = self.get_variable(obj)?;
+        let vr = obj.apply(|value: &Value| {
+            match *value
+            {
+                Value::Array(ref arr) => {
+                    if member_index < arr.len() {
+                        Ok(arr[member_index].to_ptr())
+                    } else {
+                        Err(ExecutionError(format!("Array index out of bounds")))
+                    }
+                },
+
+                _ => Err(ExecutionError(format!("Load member not supported on {}", value)))
+            }
+        })?;
+
+        self.replace_variable(dst, vr)?;
+        Ok(Action::Continue)
+    }
+
     fn execute_instruction(&mut self, instr: &Instruction) -> Result<Action, ExecutionError>
     {
         print!("{}", instr);
         match *instr
         {
-            Instruction::Load{ref dst, ref src} => {
-                self.load(&dst.name, &src.name)
-            },
-
             Instruction::Store{ref dst, ref src} => {
                 self.store(&dst.name, &src.name)
             },
 
             Instruction::StoreLit{ref dst, ref lit} => {
-                let v = self.make_value(lit)?;
+                let v = Value::from_literal(lit)?;
                 self.update_variable(&dst.name, v)?;
                 Ok(Action::Continue)
             },
 
             Instruction::StoreFunc{ref dst, ref func} => {
-                panic!("  strfunc {} {}", dst, func)
+                self.update_variable(&dst.name, Value::Func(func.clone()))?;
+                Ok(Action::Continue)
             },
 
             Instruction::LoadMember{ref dst, ref obj, member_index} => {
-                panic!("  loadm {} {}.{}", dst, obj, member_index)
+                self.load_member(&dst.name, &obj.name, member_index)
             },
 
             Instruction::GetProperty{ref dst, ref obj, ref prop} => {
@@ -487,7 +526,7 @@ impl<'a> Interpreter<'a>
             },
 
             Instruction::StackAlloc(ref var) => {
-                self.add_variable(&var.name, Value::Uninitialized)?;
+                self.add_variable(&var.name, Value::from_type(&var.typ)?)?;
                 Ok(Action::Continue)
             },
 
@@ -570,6 +609,7 @@ impl<'a> Interpreter<'a>
         }
 
         let sf = self.stack.pop().expect("Empty stack");
+        println!("end");
         Ok(sf.result.clone())
     }
 

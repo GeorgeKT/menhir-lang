@@ -63,7 +63,7 @@ struct Test
 }
 
 
-const ALL_TESTS: [Test; 6] = [
+const ALL_TESTS: [Test; 10] = [
     Test{
         name: "number",
         ret: 5,
@@ -102,10 +102,61 @@ const ALL_TESTS: [Test; 6] = [
     Test{
         name: "call",
         ret: 13,
-        debug: true,
+        debug: false,
         code: r#"
             add(a: int, b: int) -> int = a + b
             main() -> int = add(6, 7)
+        "#
+    },
+
+    Test{
+        name: "match int",
+        ret: 299,
+        debug: false,
+        code: r#"
+            foo(a: int) -> int =
+                match a:
+                    0 => 100,
+                    1 => 299,
+                    _ => 0
+
+            main() -> int = foo(1)
+        "#
+    },
+
+    Test{
+        name: "match bool",
+        ret: 100,
+        debug: false,
+        code: r#"
+            foo(a: bool) -> int =
+                match a:
+                    true => 100,
+                    false => 299
+
+            main() -> int = foo(true)
+        "#
+    },
+
+    Test{
+        name: "let",
+        ret: 18,
+        debug: false,
+        code: r#"foo(a: int, b: int, c: int) -> int =
+            let x = a * b, y = b * c in
+                x + y
+
+            main() -> int = foo(2, 3, 4)
+        "#
+    },
+
+    Test{
+        name: "array",
+        ret: 5,
+        debug: true,
+        code: r#"
+            main() -> int =
+                let x = [2, 3, 4] in 5
         "#
     }
 ];
@@ -118,8 +169,8 @@ fn test_all()
     {
         println!("#### start {} ####", test.name);
         assert_eq!(run(test.code, test.debug), Ok(test.ret));
-        println!("#### end   {} ####", test.name);
+        println!("#### end {} ####", test.name);
     }
 
-    //assert!(false);
+    assert!(false);
 }

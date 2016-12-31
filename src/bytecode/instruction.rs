@@ -11,7 +11,6 @@ pub enum ByteCodeLiteral
     Char(u8),
     String(String),
     Bool(bool),
-    Array(Vec<Var>),
 }
 
 impl fmt::Display for ByteCodeLiteral
@@ -25,7 +24,6 @@ impl fmt::Display for ByteCodeLiteral
             ByteCodeLiteral::Char(v) => write!(f, "char {}", v),
             ByteCodeLiteral::String(ref v) => write!(f, "string {}", v),
             ByteCodeLiteral::Bool(v) => write!(f, "bool {}", v),
-            ByteCodeLiteral::Array(ref elements) => write!(f, "[{}]", join(elements.iter(), ", ")),
         }
     }
 }
@@ -53,7 +51,6 @@ impl fmt::Display for ByteCodeProperty
 #[derive(Debug, Clone)]
 pub enum Instruction
 {
-    Load{dst: Var, src: Var},
     Store{dst: Var, src: Var},
     StoreLit{dst: Var, lit: ByteCodeLiteral},
     StoreFunc{dst: Var, func: String},
@@ -73,14 +70,6 @@ pub enum Instruction
     Branch(BasicBlockRef),
     BranchIf{cond: Var, on_true: BasicBlockRef, on_false: BasicBlockRef},
     Delete(Var),
-}
-
-pub fn load_instr(dst: &Var, src: &Var) -> Instruction
-{
-    Instruction::Load{
-        dst: dst.clone(),
-        src: src.clone(),
-    }
 }
 
 pub fn store_instr(dst: &Var, src: &Var) -> Instruction
@@ -192,10 +181,6 @@ impl fmt::Display for Instruction
     {
         match *self
         {
-            Instruction::Load{ref dst, ref src} => {
-                writeln!(f, "  load {} {}", dst, src)
-            },
-
             Instruction::Store{ref dst, ref src} => {
                 writeln!(f, "  str {} {}", dst, src)
             },

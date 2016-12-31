@@ -29,9 +29,6 @@ fn get_dst(func: &mut ByteCodeFunction, typ: &Type) -> Var
 {
     assert!(*typ != Type::Unknown);
     if let Some(dst) = func.get_destination() {
-        if dst.typ != *typ {
-            panic!("Internal compiler error: dst.typ ({}) != *typ ({}) in get_dst", dst.typ, typ);
-        }
         return dst;
     }
 
@@ -40,11 +37,14 @@ fn get_dst(func: &mut ByteCodeFunction, typ: &Type) -> Var
 
 fn array_lit_to_bc(func: &mut ByteCodeFunction, a: &ArrayLiteral, dst: &Var)
 {
-    let vars = a.elements.iter()
-        .map(|e| to_bc(func, e))
-        .collect();
-
-    func.add(store_lit_instr(dst, ByteCodeLiteral::Array(vars)));
+    let element_type = a.array_type.get_element_type().expect("Invalid array type");
+    let ep = stack_alloc(func, &ptr_type(element_type), None);
+    for (idx, element) in a.elements.iter().enumerate() {
+        func.add(load_member_instr(&ep, &dst, idx));
+        func.push_destination(Some(ep.clone()));
+        expr_to_bc(func, element);
+        func.pop_destination();
+    }
 }
 
 fn call_to_bc(func: &mut ByteCodeFunction, c: &Call, self_arg: Option<Var>) -> Var
@@ -579,10 +579,7 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
         Expression::New(ref n) => {
             let dst = get_dst(func, &n.typ);
             func.add(Instruction::HeapAlloc(dst.clone()));
-            let inner_type = dst.typ.get_element_type().expect("Expecting a pointer type here");
-            let dereffed = stack_alloc(func, &inner_type, None);
-            func.add(load_instr(&dereffed, &dst));
-            func.push_destination(Some(dereffed));
+            func.push_destination(Some(dst.clone()));
             expr_to_bc(func, &n.inner);
             func.pop_destination();
             Some(dst)
