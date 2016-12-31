@@ -51,7 +51,10 @@ fn run(prog: &str, dump: bool) -> Result<i64, ExecutionError>
     match result
     {
         Value::Int(r) => Ok(r),
-        _ => Err(ExecutionError(format!("Expecting int return type, got {}", result))),
+        _ => {
+            let msg = format!("Expecting int return type, got {}", result);
+            Err(ExecutionError(msg))
+        },
     }
 }
 
@@ -59,7 +62,7 @@ fn run(prog: &str, dump: bool) -> Result<i64, ExecutionError>
 #[test]
 fn test_number()
 {
-    assert!(run(r#"
+    assert_eq!(run(r#"
 main() -> int = 5
-    "#, false) == Ok(5));
+    "#, true), Ok(5));
 }

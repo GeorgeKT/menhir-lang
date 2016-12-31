@@ -201,7 +201,7 @@ impl<'a> Interpreter<'a>
     fn add_variable(&mut self, name: &str, v: Value) -> Result<(), ExecutionError>
     {
         let mut sf = self.stack.last_mut().expect("Empty stack");
-        if sf.vars.get(name).is_none() {
+        if sf.vars.get(name).is_some() {
             Err(ExecutionError(format!("Variable {} already exists", name)))
         } else {
             sf.vars.insert(name.into(), ValueRef::new(v));
@@ -249,7 +249,7 @@ impl<'a> Interpreter<'a>
     {
         match lit
         {
-            &ByteCodeLiteral::Int(v) => Ok(Value::UInt(v)),
+            &ByteCodeLiteral::Int(v) => Ok(Value::Int(v as i64)),
             &ByteCodeLiteral::Float(ref num) => {
                 match num.parse::<f64>()
                 {
@@ -431,7 +431,7 @@ impl<'a> Interpreter<'a>
 
     fn execute_instruction(&mut self, instr: &Instruction) -> Result<Action, ExecutionError>
     {
-        println!("{}", instr);
+        print!("{}", instr);
         match *instr
         {
             Instruction::Load{ref dst, ref src} => {
