@@ -6,7 +6,7 @@ use itertools::free::join;
 use bytecode::*;
 use parser::Operator;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ExecutionError(pub String);
 
 #[derive(Debug, Clone)]
@@ -14,6 +14,7 @@ pub enum ValueRef
 {
     Owner(Rc<RefCell<Value>>),
     Ptr(Weak<RefCell<Value>>),
+    Null,
 }
 impl ValueRef
 {
@@ -33,6 +34,9 @@ impl ValueRef
                 } else {
                     Err(ExecutionError(format!("Dangling pointer, owner of element pointed to is gone")))
                 }
+            }
+            ValueRef::Null => {
+                Err(ExecutionError(format!("Dangling pointer, pointer has been deleted")))
             }
         }
     }
@@ -61,6 +65,9 @@ impl ValueRef
                     Err(ExecutionError(format!("Dangling pointer, owner of element pointed to is gone")))
                 }
             }
+            ValueRef::Null => {
+                Err(ExecutionError(format!("Dangling pointer, pointer has been deleted")))
+            }
         }
     }
 }
@@ -84,7 +91,11 @@ impl fmt::Display for ValueRef
                     println!("Danging pointer access");
                     Err(fmt::Error)
                 }
-            }
+            },
+
+            ValueRef::Null => {
+                write!(f, "null")
+            },
         }
     }
 }
@@ -209,16 +220,29 @@ impl<'a> Interpreter<'a>
         Err(ExecutionError(format!("Unknown variable {}", name)))
     }
 
-    fn update_variable(&mut self, name: &str, new_value: Value) -> Result<(), ExecutionError>
+    fn apply_on_variable<Op>(&mut self, name: &str, op: Op) -> Result<(), ExecutionError>
+        where Op: FnOnce(&mut ValueRef) -> Result<(), ExecutionError>
     {
         for sf in self.stack.iter_mut().rev() {
-            if let Some(v) = sf.vars.get_mut(name) {
-                *v = ValueRef::new(new_value);
-                return Ok(())
+            if let Some(ref mut v) = sf.vars.get_mut(name) {
+                return op(v)
             }
         }
 
         Err(ExecutionError(format!("Unknown variable {}", name)))
+    }
+
+    fn update_variable(&mut self, name: &str, new_value: Value) -> Result<(), ExecutionError>
+    {
+        self.replace_variable(name, ValueRef::new(new_value))
+    }
+
+    fn replace_variable(&mut self, name: &str, vr: ValueRef) -> Result<(), ExecutionError>
+    {
+        self.apply_on_variable(name, |v: &mut ValueRef| {
+            *v = vr;
+            Ok(())
+        })
     }
 
     fn make_value(&self, lit: &ByteCodeLiteral) -> Result<Value, ExecutionError>
@@ -359,19 +383,63 @@ impl<'a> Interpreter<'a>
         })
     }
 
+    fn load(&mut self, dst: &str, src: &str) -> Result<Action, ExecutionError>
+    {
+        let var = self.get_variable(&src)?;
+        let inner_ptr = var.apply(|v: &Value|{
+            match *v
+            {
+                Value::Pointer(ref inner) => {
+                    Ok(inner.to_ptr())
+                },
+                _ => Err(ExecutionError(format!("load can only work on pointers")))
+            }
+        })?;
+
+        self.replace_variable(dst, inner_ptr)?;
+        Ok(Action::Continue)
+    }
+
+    fn store(&mut self, dst: &str, src: &str) -> Result<Action, ExecutionError>
+    {
+        let new_value = self.get_variable(src)?.clone_value()?;
+        self.apply_on_variable(dst, |v: &mut ValueRef| {
+            match *v
+            {
+                ValueRef::Owner(ref mut inner) => {
+                    let mut inner = inner.borrow_mut();
+                    *inner = new_value;
+                    Ok(())
+                }
+
+                ValueRef::Ptr(ref mut inner) => {
+                    if let Some(rv) = inner.upgrade() {
+                        let mut inner = rv.borrow_mut();
+                        *inner = new_value;
+                        Ok(())
+                    } else {
+                        Err(ExecutionError(format!("Store on dangling pointer")))
+                    }
+                },
+
+                ValueRef::Null => Err(ExecutionError(format!("Store on deleted pointer"))),
+            }
+        })?;
+
+        Ok(Action::Continue)
+    }
+
     fn execute_instruction(&mut self, instr: &Instruction) -> Result<Action, ExecutionError>
     {
         println!("{}", instr);
         match *instr
         {
             Instruction::Load{ref dst, ref src} => {
-                panic!("  load {} {}", dst, src)
+                self.load(&dst.name, &src.name)
             },
 
             Instruction::Store{ref dst, ref src} => {
-                let v = self.get_variable(&src.name)?;
-                self.update_variable(&dst.name, v.clone_value()?)?;
-                Ok(Action::Continue)
+                self.store(&dst.name, &src.name)
             },
 
             Instruction::StoreLit{ref dst, ref lit} => {
@@ -414,7 +482,8 @@ impl<'a> Interpreter<'a>
             },
 
             Instruction::HeapAlloc(ref var) => {
-                panic!("  halloc {}", var)
+                self.update_variable(&var.name, Value::Pointer(ValueRef::new(Value::Uninitialized)))?;
+                Ok(Action::Continue)
             },
 
             Instruction::Return(ref var) => {
@@ -434,7 +503,8 @@ impl<'a> Interpreter<'a>
             },
 
             Instruction::Delete(ref var) => {
-                panic!("  delete {}", var)
+                self.replace_variable(&var.name, ValueRef::Null)?;
+                Ok(Action::Continue)
             },
 
             Instruction::Slice{ref dst, ref src, ref start, ref len} => {

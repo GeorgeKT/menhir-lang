@@ -2,6 +2,8 @@ mod compiler;
 mod function;
 mod instruction;
 mod interpreter;
+#[cfg(test)]
+mod tests;
 
 use std::fmt;
 pub use self::compiler::*;
