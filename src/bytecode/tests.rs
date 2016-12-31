@@ -1,7 +1,6 @@
 use std::io::Cursor;
 use typechecker::{type_check_module};
 use ast::{TreePrinter};
-use span::Span;
 use parser::*;
 use bytecode::*;
 use compileerror::*;
@@ -14,8 +13,7 @@ fn generate_byte_code(prog: &str, dump: bool) -> CompileResult<ByteCodeModule>
 
     if dump {
         println!("Before type check");
-        println!("-----------------");
-        md.print(0);
+        md.print(2);
         println!("-----------------");
     }
 
@@ -23,15 +21,13 @@ fn generate_byte_code(prog: &str, dump: bool) -> CompileResult<ByteCodeModule>
 
     if dump {
         println!("After type check");
-        println!("-----------------");
-        md.print(0);
+        md.print(2);
         println!("-----------------");
     }
 
     let bc_mod = compile_to_byte_code(&md);
     if dump {
-        println!("ByteCode");
-        println!("-----------------");
+        println!("ByteCode:");
         println!("{}", bc_mod);
         println!("-----------------");
     }
@@ -58,11 +54,72 @@ fn run(prog: &str, dump: bool) -> Result<i64, ExecutionError>
     }
 }
 
+struct Test
+{
+    name: &'static str,
+    ret: i64,
+    debug: bool,
+    code: &'static str,
+}
+
+
+const ALL_TESTS: [Test; 6] = [
+    Test{
+        name: "number",
+        ret: 5,
+        debug: false,
+        code: "main() -> int = 5"
+    },
+
+    Test{
+        name: "unary sub",
+        ret: -5,
+        debug: false,
+        code: "main() -> int = -5"
+    },
+
+    Test{
+        name: "unary not",
+        ret: 8,
+        debug: false,
+        code: "main() -> int = if !true: 7 else 8"
+    },
+
+    Test{
+        name: "arithmethic operators",
+        ret: 4 + 35 - 3 + 1,
+        debug: false,
+        code: "main() -> int = 4 + 5 * 7 - 9 / 3 + 5 % 4",
+    },
+
+    Test{
+        name: "boolean operators",
+        ret: 1,
+        debug: false,
+        code: "main() -> int = if 4 < 5 * 7 && 9 / 3 > 5 % 4: 1 else 0"
+    },
+
+    Test{
+        name: "call",
+        ret: 13,
+        debug: true,
+        code: r#"
+            add(a: int, b: int) -> int = a + b
+            main() -> int = add(6, 7)
+        "#
+    }
+];
+
 
 #[test]
-fn test_number()
+fn test_all()
 {
-    assert_eq!(run(r#"
-main() -> int = 5
-    "#, true), Ok(5));
+    for test in &ALL_TESTS
+    {
+        println!("#### start {} ####", test.name);
+        assert_eq!(run(test.code, test.debug), Ok(test.ret));
+        println!("#### end   {} ####", test.name);
+    }
+
+    //assert!(false);
 }

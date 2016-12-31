@@ -319,10 +319,10 @@ impl<'a> Interpreter<'a>
             (Operator::LessThan, Value::Float(l), Value::Float(r)) => Value::Bool(l < r),
             (Operator::LessThan, Value::Char(l), Value::Char(r)) => Value::Bool(l < r),
 
-            (Operator::GreaterThan, Value::Int(l), Value::Int(r)) => Value::Bool(l < r),
-            (Operator::GreaterThan, Value::UInt(l), Value::UInt(r)) => Value::Bool(l < r),
-            (Operator::GreaterThan, Value::Float(l), Value::Float(r)) => Value::Bool(l < r),
-            (Operator::GreaterThan, Value::Char(l), Value::Char(r)) => Value::Bool(l < r),
+            (Operator::GreaterThan, Value::Int(l), Value::Int(r)) => Value::Bool(l > r),
+            (Operator::GreaterThan, Value::UInt(l), Value::UInt(r)) => Value::Bool(l > r),
+            (Operator::GreaterThan, Value::Float(l), Value::Float(r)) => Value::Bool(l > r),
+            (Operator::GreaterThan, Value::Char(l), Value::Char(r)) => Value::Bool(l > r),
 
             (Operator::LessThanEquals, Value::Int(l), Value::Int(r)) => Value::Bool(l <= r),
             (Operator::LessThanEquals, Value::UInt(l), Value::UInt(r)) => Value::Bool(l <= r),
@@ -338,12 +338,14 @@ impl<'a> Interpreter<'a>
             (Operator::Equals, Value::UInt(l), Value::UInt(r)) => Value::Bool(l == r),
             (Operator::Equals, Value::Float(l), Value::Float(r)) => Value::Bool(l == r),
             (Operator::Equals, Value::Char(l), Value::Char(r)) => Value::Bool(l == r),
+            (Operator::Equals, Value::Bool(l), Value::Bool(r)) => Value::Bool(l == r),
             (Operator::Equals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l == *r),
 
             (Operator::NotEquals, Value::Int(l), Value::Int(r)) => Value::Bool(l != r),
             (Operator::NotEquals, Value::UInt(l), Value::UInt(r)) => Value::Bool(l != r),
             (Operator::NotEquals, Value::Float(l), Value::Float(r)) => Value::Bool(l != r),
             (Operator::NotEquals, Value::Char(l), Value::Char(r)) => Value::Bool(l != r),
+            (Operator::NotEquals, Value::Bool(l), Value::Bool(r)) => Value::Bool(l != r),
             (Operator::NotEquals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l != *r),
 
             (Operator::And, Value::Bool(l), Value::Bool(r)) => Value::Bool(l && r),
@@ -357,9 +359,17 @@ impl<'a> Interpreter<'a>
         Ok(Action::Continue)
     }
 
-    fn call(&self, _dst: &str, _name: &str, _args: &Vec<Var>) -> Result<Action, ExecutionError>
+    fn call(&mut self, dst: &str, name: &str, args: &Vec<Var>) -> Result<Action, ExecutionError>
     {
-        panic!("NYI");
+        let mut function_args = Vec::new();
+        for arg in args {
+            let arg_value = self.get_variable(&arg.name)?.clone_value()?;
+            function_args.push(arg_value);
+        }
+
+        let result = self.run_function(name, function_args)?;
+        self.replace_variable(dst, result)?;
+        Ok(Action::Continue)
     }
 
     fn ret(&mut self, name: &str) -> Result<Action, ExecutionError>
@@ -541,12 +551,12 @@ impl<'a> Interpreter<'a>
         }
     }
 
-    fn run(&mut self, func: &ByteCodeFunction, args: Vec<(String, Value)>) -> Result<ValueRef, ExecutionError>
+    fn run(&mut self, func: &ByteCodeFunction, args: Vec<Value>) -> Result<ValueRef, ExecutionError>
     {
         println!("{}:", func.sig.name);
         self.stack.push(StackFrame::new());
-        for (name, val) in args {
-            self.add_variable(&name, val)?;
+        for (idx, val) in args.into_iter().enumerate() {
+            self.add_variable(&func.sig.args[idx].name, val)?;
         }
 
         let mut bb_ref = 0;
@@ -563,9 +573,9 @@ impl<'a> Interpreter<'a>
         Ok(sf.result.clone())
     }
 
-    pub fn run_function(&mut self, function: &str, args: Vec<(String, Value)>) -> Result<ValueRef, ExecutionError>
+    pub fn run_function(&mut self, function: &str, args: Vec<Value>) -> Result<ValueRef, ExecutionError>
     {
-        match self.module.functions.iter().find(|func| func.sig.name == function)
+        match self.module.functions.get(function)
         {
             Some(ref func) => {
                 self.run(func, args)

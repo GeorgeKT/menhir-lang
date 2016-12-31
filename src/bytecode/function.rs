@@ -159,10 +159,12 @@ impl ByteCodeFunction
         f
     }
 
+/*
     pub fn is_empty(&self) -> bool
     {
         self.blocks.get(&0).map(|bb| bb.instructions.is_empty()).unwrap_or(false)
     }
+*/
 
     pub fn add(&mut self, inst: Instruction)
     {
