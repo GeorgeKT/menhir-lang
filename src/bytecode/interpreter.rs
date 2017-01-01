@@ -525,6 +525,7 @@ impl<'a> Interpreter<'a>
     {
         let start_value = self.get_int(start)? as usize;
         let len_value = self.get_int(len)? as usize;
+        println!("> slice {} {} {} {}", dst, array, start_value, len_value);
         let slice = self.get_variable(array)?.apply(|vr: &Value| {
             match *vr
             {
