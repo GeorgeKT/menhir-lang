@@ -28,7 +28,7 @@ impl fmt::Display for ByteCodeLiteral
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum ByteCodeProperty
 {
     Len,

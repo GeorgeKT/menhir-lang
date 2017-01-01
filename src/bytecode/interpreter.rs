@@ -218,6 +218,18 @@ impl Value
 
         }
     }
+
+    fn get_property(&self, prop: ByteCodeProperty) -> Result<Value, ExecutionError>
+    {
+        match (self, prop)
+        {
+            (&Value::Array(ref a), ByteCodeProperty::Len) => Ok(Value::Int(a.len() as i64)),
+            (&Value::Slice(ref a), ByteCodeProperty::Len) => Ok(Value::Int(a.len() as i64)),
+            (&Value::Sum(idx, _), ByteCodeProperty::SumTypeIndex) => Ok(Value::Int(idx as i64)),
+            (&Value::Enum(idx), ByteCodeProperty::SumTypeIndex) => Ok(Value::Int(idx as i64)),
+            _  => Err(ExecutionError(format!("Unknown property {}", prop))),
+        }
+    }
 }
 
 struct StackFrame
@@ -473,11 +485,77 @@ impl<'a> Interpreter<'a>
                     }
                 },
 
+                Value::Slice(ref slice) => {
+                    if member_index < slice.len() {
+                        Ok(slice[member_index].to_ptr())
+                    } else {
+                        Err(ExecutionError(format!("Slice index out of bounds")))
+                    }
+                },
+
                 _ => Err(ExecutionError(format!("Load member not supported on {}", value)))
             }
         })?;
 
         self.replace_variable(dst, vr)?;
+        Ok(Action::Continue)
+    }
+
+    fn get_property(&mut self, dst: &str, obj: &str, prop: ByteCodeProperty) -> Result<Action, ExecutionError>
+    {
+        let obj = self.get_variable(obj)?;
+        let val = obj.apply(|vr: &Value| vr.get_property(prop))?;
+        self.update_variable(dst, val)?;
+        Ok(Action::Continue)
+    }
+
+    fn get_int(&self, name: &str) -> Result<i64, ExecutionError>
+    {
+        self.get_variable(name)?
+            .apply(|vr: &Value| {
+                if let &Value::Int(v) = vr {
+                    Ok(v)
+                } else {
+                    Err(ExecutionError(format!("{} is not an integer", name)))
+                }
+            })
+    }
+
+    fn slice(&mut self, dst: &str, array: &str, start: &str, len: &str) -> Result<Action, ExecutionError>
+    {
+        let start_value = self.get_int(start)? as usize;
+        let len_value = self.get_int(len)? as usize;
+        let slice = self.get_variable(array)?.apply(|vr: &Value| {
+            match *vr
+            {
+                Value::Array(ref arr) => {
+                    if start_value + len_value > arr.len() {
+                        return Err(ExecutionError(format!("Slice index out of bounds")));
+                    }
+
+                    let mut slice = Vec::new();
+                    for element in &arr[start_value .. (start_value + len_value)] {
+                        slice.push(element.to_ptr());
+                    }
+                    Ok(Value::Slice(slice))
+                },
+
+                Value::Slice(ref slice) => {
+                    if start_value + len_value > slice.len() {
+                        return Err(ExecutionError(format!("Slice index out of bounds")));
+                    }
+
+                    let subslice = &slice[start_value .. (start_value + len_value)];
+                    Ok(Value::Slice(subslice.iter().map(|e| e.clone()).collect()))
+                },
+
+                _ => {
+                    Err(ExecutionError(format!("{} is not an array or slice", array)))
+                },
+            }
+        })?;
+
+        self.update_variable(dst, slice)?;
         Ok(Action::Continue)
     }
 
@@ -506,7 +584,7 @@ impl<'a> Interpreter<'a>
             },
 
             Instruction::GetProperty{ref dst, ref obj, ref prop} => {
-                panic!("  getp {} {}.{}", dst, obj, prop)
+                self.get_property(&dst.name, &obj.name, *prop)
             },
 
             Instruction::SetProperty{ref dst, ref prop, ref val} => {
@@ -557,7 +635,7 @@ impl<'a> Interpreter<'a>
             },
 
             Instruction::Slice{ref dst, ref src, ref start, ref len} => {
-                panic!("  slice {} {} {} {}", dst, src, start, len)
+                self.slice(&dst.name, &src.name, &start.name, &len.name)
             },
 
             Instruction::StartScope => {

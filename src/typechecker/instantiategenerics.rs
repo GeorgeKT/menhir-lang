@@ -193,6 +193,11 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             Ok(delete(inner, n.span.clone()))
         },
 
+        Expression::ArrayToSlice(ref ats) => {
+            let inner = substitute_expr(generic_args, &ats.inner)?;
+            Ok(array_to_slice(inner, ats.span.clone()))
+        }
+
         Expression::Void => Ok(Expression::Void),
     }
 }
@@ -338,6 +343,10 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
             resolve_generics(new_functions, module, &n.inner)
         },
 
+        Expression::ArrayToSlice(ref ats) => {
+            resolve_generics(new_functions, module, &ats.inner)
+        }
+
         _ => Ok(()),
     }
 }
@@ -418,6 +427,21 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
             for e in &mut b.expressions {
                 replace_generic_calls(new_functions, e)?;
             }
+            Ok(())
+        },
+
+        Expression::New(ref mut n) => {
+            replace_generic_calls(new_functions, &mut n.inner)?;
+            Ok(())
+        },
+
+        Expression::Delete(ref mut d) => {
+            replace_generic_calls(new_functions, &mut d.inner)?;
+            Ok(())
+        },
+
+        Expression::ArrayToSlice(ref mut ats) => {
+            replace_generic_calls(new_functions, &mut ats.inner)?;
             Ok(())
         },
         _ => Ok(()),

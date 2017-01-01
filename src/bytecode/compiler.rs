@@ -617,6 +617,16 @@ fn expr_to_bc(func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
             let match_expr = i.to_match();
             Some(match_to_bc(func, &match_expr))
         },
+
+        Expression::ArrayToSlice(ref ats) => {
+            let dst = get_dst(func, &ats.slice_type);
+            let array_var = to_bc(func, &ats.inner);
+            let start = make_lit(func, ByteCodeLiteral::Int(0), Type::Int);
+            let end = stack_alloc(func, &Type::Int, None);
+            func.add(get_prop_instr(&end, &array_var, ByteCodeProperty::Len));
+            func.add(slice_instr(&dst, &array_var, start, end));
+            Some(dst)
+        },
     }
 }
 

@@ -1,6 +1,7 @@
 use span::Span;
 use ast::*;
 
+
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
 {
@@ -19,6 +20,7 @@ pub enum Expression
     MemberAccess(MemberAccess),
     New(Box<NewExpression>),
     Delete(Box<DeleteExpression>),
+    ArrayToSlice(Box<ArrayToSlice>),
     Void,
 }
 
@@ -71,6 +73,7 @@ impl Expression
             Expression::MemberAccess(ref sma) => sma.span.clone(),
             Expression::New(ref n) => n.span.clone(),
             Expression::Delete(ref d) => d.span.clone(),
+            Expression::ArrayToSlice(ref a) => a.inner.span(),
             Expression::Void => Span::default(),
         }
     }
@@ -134,6 +137,10 @@ impl TreePrinter for Expression
             Expression::MemberAccess(ref sma) => sma.print(level),
             Expression::New(ref n) => n.print(level),
             Expression::Delete(ref n) => n.print(level),
+            Expression::ArrayToSlice(ref inner) => {
+                println!("{}array to slice (type: {})", p, inner.slice_type);
+                inner.inner.print(level + 1)
+            },
             Expression::Void => println!("{}void", p),
         }
     }

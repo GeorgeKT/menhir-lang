@@ -192,8 +192,9 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> TypeCheckResul
             }
             else
             {
-                if let Some(conversion_expr) = expected_arg_type.convert(&arg_type, &c.args[idx])
+                if let Some(mut conversion_expr) = expected_arg_type.convert(&arg_type, &c.args[idx])
                 {
+                    type_check_expression(ctx, &mut conversion_expr, &None)?;
                     c.args[idx] = conversion_expr;
                 }
                 else
@@ -821,6 +822,19 @@ fn type_check_delete(ctx: &mut TypeCheckerContext, d: &mut DeleteExpression, typ
     }
 }
 
+fn type_check_array_to_slice(ctx: &mut TypeCheckerContext, ats: &mut ArrayToSlice, type_hint: &Option<Type>) -> TypeCheckResult
+{
+    let t = type_check_expression(ctx, &mut ats.inner, type_hint)?;
+    match t
+    {
+        Type::Array(at) => {
+            ats.slice_type = slice_type(at.element_type.clone());
+            valid(ats.slice_type.clone())
+        },
+        _ => err(&ats.span, ErrorCode::TypeError, format!("array to slice expression must have an array as input")),
+    }
+}
+
 pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: &Option<Type>) -> CompileResult<Type>
 {
     let type_check_result = match *e
@@ -846,6 +860,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::MemberAccess(ref mut sma) => type_check_member_access(ctx, sma),
         Expression::New(ref mut n) => type_check_new(ctx, n, type_hint),
         Expression::Delete(ref mut d) => type_check_delete(ctx, d, type_hint),
+        Expression::ArrayToSlice(ref mut ats) => type_check_array_to_slice(ctx, ats, type_hint),
         Expression::Void => valid(Type::Void),
     };
 

@@ -3,7 +3,7 @@ use std::ops::Deref;
 use std::hash::{Hasher, Hash};
 use std::rc::Rc;
 use itertools::free::join;
-use ast::{Expression, TreePrinter, MemberAccessType, Property, prefix};
+use ast::{Expression, TreePrinter, MemberAccessType, Property, prefix, array_to_slice};
 use span::Span;
 use parser::Operator;
 
@@ -169,10 +169,13 @@ impl Type
     }
 
     // If possible generate a conversion expression
-    pub fn convert(&self, from_type: &Type, _expr: &Expression) -> Option<Expression>
+    pub fn convert(&self, from_type: &Type, expr: &Expression) -> Option<Expression>
     {
         match (self, from_type)
         {
+            (&Type::Slice(ref st), &Type::Array(ref at)) if st.element_type == at.element_type => {
+                Some(array_to_slice(expr.clone(), expr.span()))
+            },
             _ => None,
         }
     }
@@ -181,6 +184,7 @@ impl Type
     {
         match (self, dst_type)
         {
+            (&Type::Array(ref at), &Type::Slice(ref st)) => at.element_type == st.element_type,
             _ => false,
         }
     }

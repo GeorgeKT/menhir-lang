@@ -1,13 +1,7 @@
-import io
+sum(v: int[]) -> int =
+    match v:
+        [] => 0,
+        [head | tail] => head + sum(tail)
 
 main() -> int =
-    match open("/tmp/foo", WriteOnly):
-        Ok{file} => (
-            write(file, "Hello World!");
-            close(file);
-            0
-        ),
-        Err{err} => (
-            println("Failed to open /tmp/foo");
-            1
-        )
+    let x = [2, 3, 4] in sum(x)
