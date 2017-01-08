@@ -63,7 +63,7 @@ struct Test
 }
 
 
-const ALL_TESTS: [Test; 11] = [
+const ALL_TESTS: [Test; 12] = [
     Test{
         name: "number",
         ret: 5,
@@ -172,6 +172,21 @@ const ALL_TESTS: [Test; 11] = [
 
             main() -> int =
                 let x = [2, 3, 4] in sum(x)
+        "#
+    },
+
+    Test{
+        name: "array recursive iteration 2",
+        ret: 49,
+        debug: false,
+        code: r#"
+            sum(v: int[]) -> int =
+                match v:
+                    [] => 0,
+                    [head | tail] => head + sum(tail)
+
+            main() -> int =
+                let y = 7, x = [y; 7] in sum(x)
         "#
     }
 ];

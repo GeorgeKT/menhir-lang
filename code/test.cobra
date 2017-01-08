@@ -4,4 +4,4 @@ sum(v: int[]) -> int =
         [head | tail] => head + sum(tail)
 
 main() -> int =
-    let x = [2, 3, 4] in sum(x)
+    let y = 7, x = [y; 7] in sum(x)

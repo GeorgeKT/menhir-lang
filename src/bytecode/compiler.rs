@@ -171,7 +171,6 @@ fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef) -> Option<Var>
         match func.get_destination()
         {
             Some(var) => {
-                assert!(var.typ == v.typ);
                 func.add(store_instr(&var, &v));
                 Some(var)
             },
