@@ -1,8 +1,9 @@
 use std::fmt;
 use std::collections::{BTreeMap, HashMap};
 use itertools::free::join;
-use ast::{Type, FunctionSignature};
+use ast::{Type, FunctionSignature, sig};
 use bytecode::instruction::Instruction;
+use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Var
@@ -159,12 +160,17 @@ impl ByteCodeFunction
         f
     }
 
-/*
-    pub fn is_empty(&self) -> bool
+    pub fn exit() -> ByteCodeFunction
     {
-        self.blocks.get(&0).map(|bb| bb.instructions.is_empty()).unwrap_or(false)
+        let function_sig = sig("exit", Type::Void, vec![], Span::default());
+        let mut function = ByteCodeFunction::new(&function_sig);
+        let entry = function.create_basic_block();
+        function.add_basic_block(entry);
+        function.add(Instruction::Exit);
+        function.add(Instruction::Exit);
+        function.add(Instruction::Exit);
+        function
     }
-*/
 
     pub fn add(&mut self, inst: Instruction)
     {

@@ -161,7 +161,7 @@ const ALL_TESTS: [Test; 11] = [
     },
 
     Test{
-        name: "array iteration",
+        name: "array recursive iteration",
         ret: 9,
         debug: true,
         code: r#"

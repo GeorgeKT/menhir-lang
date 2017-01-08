@@ -11,3 +11,4 @@ rustc-serialize = "0.3"
 libffi = "0.4"
 itertools = "0.4.16"
 uuid = { version = "0.2", features = ["v4"] }
+shrust = "0.0.4"

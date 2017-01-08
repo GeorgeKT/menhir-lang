@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 use ast::*;
 use bytecode::*;
 use parser::Operator;
@@ -651,15 +652,16 @@ pub fn compile_to_byte_code(md: &Module) -> ByteCodeModule
     let mut ll_mod = ByteCodeModule{
         name: md.name.clone(),
         functions: HashMap::new(),
+        exit_function: Rc::new(ByteCodeFunction::exit()),
     };
 
     for func in md.externals.values() {
-        ll_mod.functions.insert(func.sig.name.clone(), ByteCodeFunction::new(&func.sig));
+        ll_mod.functions.insert(func.sig.name.clone(), Rc::new(ByteCodeFunction::new(&func.sig)));
     }
 
     for func in md.functions.values() {
         if !func.is_generic() {
-            ll_mod.functions.insert(func.sig.name.clone(), func_to_bc(&func.sig, &func.expression));
+            ll_mod.functions.insert(func.sig.name.clone(), Rc::new(func_to_bc(&func.sig, &func.expression)));
         }
     }
 

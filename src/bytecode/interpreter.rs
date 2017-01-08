@@ -1,273 +1,63 @@
-use std::fmt;
-use std::rc::{Weak, Rc};
-use std::cell::RefCell;
 use std::collections::HashMap;
-use itertools::free::join;
-use ast::Type;
 use bytecode::*;
 use parser::Operator;
+
+const RETURN_VALUE : &'static str = "@RETURN_VALUE@";
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct ExecutionError(pub String);
 
 #[derive(Debug, Clone)]
-pub enum ValueRef
+struct ReturnAddress
 {
-    Owner(Rc<RefCell<Value>>),
-    Ptr(Weak<RefCell<Value>>),
-    Null,
-}
-impl ValueRef
-{
-    fn new(v: Value) -> ValueRef
-    {
-        ValueRef::Owner(Rc::new(RefCell::new(v)))
-    }
-
-    fn clone_value(&self) -> Result<Value, ExecutionError>
-    {
-        match *self
-        {
-            ValueRef::Owner(ref v) => Ok(v.borrow().clone()),
-            ValueRef::Ptr(ref v) => {
-                if let Some(rv) = v.upgrade() {
-                    Ok(rv.borrow().clone())
-                } else {
-                    Err(ExecutionError(format!("Dangling pointer, owner of element pointed to is gone")))
-                }
-            }
-            ValueRef::Null => {
-                Err(ExecutionError(format!("Dangling pointer, pointer has been deleted")))
-            }
-        }
-    }
-
-    fn to_ptr(&self) -> ValueRef
-    {
-        if let ValueRef::Owner(ref v) = *self {
-            ValueRef::Ptr(Rc::downgrade(v))
-        } else {
-            self.clone()
-        }
-    }
-
-    fn apply<Op, R>(&self, op: Op) -> Result<R, ExecutionError>
-        where Op: Fn(&Value) -> Result<R, ExecutionError>, R: Sized
-    {
-        match *self
-        {
-            ValueRef::Owner(ref v) => {
-                op(&v.borrow())
-            },
-            ValueRef::Ptr(ref v) => {
-                if let Some(rv) = v.upgrade() {
-                    op(&rv.borrow())
-                } else {
-                    Err(ExecutionError(format!("Dangling pointer, owner of element pointed to is gone")))
-                }
-            }
-            ValueRef::Null => {
-                Err(ExecutionError(format!("Dangling pointer, pointer has been deleted")))
-            }
-        }
-    }
-}
-
-impl fmt::Display for ValueRef
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
-    {
-        match *self
-        {
-            ValueRef::Owner(ref v) => {
-                let inner = v.borrow();
-                write!(f, "{}", *inner)
-            },
-
-            ValueRef::Ptr(ref v) => {
-                if let Some(rv) = v.upgrade() {
-                    let inner = rv.borrow();
-                    write!(f, "{}", *inner)
-                } else {
-                    println!("Danging pointer access");
-                    Err(fmt::Error)
-                }
-            },
-
-            ValueRef::Null => {
-                write!(f, "null")
-            },
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum Value
-{
-    Uninitialized,
-    Void,
-    Int(i64),
-    UInt(u64),
-    Float(f64),
-    Char(char),
-    Bool(bool),
-    String(String),
-    Array(Vec<ValueRef>),
-    Slice(Vec<ValueRef>),
-    Func(String),
-    Struct(Vec<ValueRef>),
-    Sum(usize, Box<ValueRef>),
-    Enum(usize),
-    Pointer(ValueRef),
-}
-
-impl fmt::Display for Value
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
-    {
-        match *self
-        {
-            Value::Uninitialized => write!(f, "uninitialized"),
-            Value::Void => write!(f, "void"),
-            Value::Int(v) => write!(f, "int {}", v),
-            Value::UInt(v) => write!(f, "uint {}", v),
-            Value::Float(v) => write!(f, "float {}", v),
-            Value::Char(v) => write!(f, "char {}", v),
-            Value::Bool(v) => write!(f, "bool {}", v),
-            Value::Array(ref v) => write!(f, "[{}]", join(v.iter(), ", ")),
-            Value::String(ref s) => write!(f, "\"{}\"", s),
-            Value::Slice(ref v) => write!(f, "[{}]", join(v.iter(), ", ")),
-            Value::Func(ref v) => write!(f, "func {}", v),
-            Value::Struct(ref v) => write!(f, "{{{}}}", join(v.iter(), ", ")),
-            Value::Sum(idx, ref v) => write!(f, "sum {} {}", idx, v),
-            Value::Enum(idx) => write!(f, "enum {}", idx),
-            Value::Pointer(ref v) => write!(f, "pointer {}", v),
-        }
-    }
-}
-
-impl Value
-{
-    pub fn to_exit_code(&self) -> i32
-    {
-        match *self
-        {
-            Value::Int(v) => v as i32,
-            Value::Bool(v) => if v == true {0i32} else {1i32},
-            _ => 1i32,
-        }
-    }
-
-    pub fn from_literal(lit: &ByteCodeLiteral) -> Result<Value, ExecutionError>
-    {
-        match lit
-        {
-            &ByteCodeLiteral::Int(v) => Ok(Value::Int(v as i64)),
-            &ByteCodeLiteral::Float(ref num) => {
-                match num.parse::<f64>()
-                {
-                    Ok(f) => Ok(Value::Float(f)),
-                    Err(_) => Err(ExecutionError(format!("{} is not a valid floating point number", num))),
-                }
-            },
-            &ByteCodeLiteral::Char(v) => Ok(Value::Char(v as char)),
-            &ByteCodeLiteral::String(ref s) => Ok(Value::String(s.clone())),
-            &ByteCodeLiteral::Bool(v) => Ok(Value::Bool(v)),
-        }
-    }
-
-    pub fn from_type(typ: &Type) -> Result<Value, ExecutionError>
-    {
-        match *typ
-        {
-            Type::Unknown | Type::Unresolved(_) | Type::Generic(_) => panic!("Types must be known before the interpreter can run"),
-            Type::Void => Ok(Value::Void),
-            Type::Int => Ok(Value::Int(0)),
-            Type::UInt => Ok(Value::UInt(0)),
-            Type::Float => Ok(Value::Float(0.0)),
-            Type::Char => Ok(Value::Char('x')),
-            Type::Bool => Ok(Value::Bool(false)),
-            Type::String => Ok(Value::String(String::default())),
-            Type::Array(ref at) => {
-                let mut array = Vec::with_capacity(at.len);
-                for _ in 0..at.len {
-                    let element = Value::from_type(&at.element_type)?;
-                    array.push(ValueRef::new(element));
-                }
-                Ok(Value::Array(array))
-            },
-            Type::Slice(_) => Ok(Value::Slice(Vec::new())),
-            Type::Func(_) => Ok(Value::Func(String::new())),
-            Type::Struct(ref st) => {
-                let mut members = Vec::new();
-                for m in &st.members {
-                    let member = Value::from_type(&m.typ)?;
-                    members.push(ValueRef::new(member));
-                }
-                Ok(Value::Struct(members))
-            },
-            Type::Enum(_) => Ok(Value::Enum(0)),
-            Type::Sum(ref st) => {
-                let first_case = Value::from_type(&st.cases[0].typ)?;
-                Ok(Value::Sum(0, Box::new(ValueRef::new(first_case))))
-            },
-            Type::Pointer(ref inner) => {
-                let inner = Value::from_type(inner)?;
-                Ok(Value::Pointer(ValueRef::new(inner)))
-            },
-
-        }
-    }
-
-    fn get_property(&self, prop: ByteCodeProperty) -> Result<Value, ExecutionError>
-    {
-        match (self, prop)
-        {
-            (&Value::Array(ref a), ByteCodeProperty::Len) => Ok(Value::Int(a.len() as i64)),
-            (&Value::Slice(ref a), ByteCodeProperty::Len) => Ok(Value::Int(a.len() as i64)),
-            (&Value::Sum(idx, _), ByteCodeProperty::SumTypeIndex) => Ok(Value::Int(idx as i64)),
-            (&Value::Enum(idx), ByteCodeProperty::SumTypeIndex) => Ok(Value::Int(idx as i64)),
-            _  => Err(ExecutionError(format!("Unknown property {}", prop))),
-        }
-    }
+    address: ByteCodeIndex,
+    result_destination: String,
 }
 
 struct StackFrame
 {
     vars: HashMap<String, ValueRef>,
-    result: ValueRef,
+    return_address: Option<ReturnAddress>
 }
 
 impl StackFrame
 {
+    pub fn with_return_address(return_address: ByteCodeIndex, result_destination: String) -> StackFrame
+    {
+        StackFrame{
+            vars: HashMap::new(),
+            return_address: Some(ReturnAddress{
+                address: return_address,
+                result_destination: result_destination,
+            })
+        }
+    }
+
     pub fn new() -> StackFrame
     {
         StackFrame{
             vars: HashMap::new(),
-            result: ValueRef::new(Value::Void),
+            return_address: None,
         }
     }
 }
 
-struct Interpreter<'a>
+pub struct Interpreter
 {
-    module: &'a ByteCodeModule,
     stack: Vec<StackFrame>,
 }
 
-enum Action
+pub enum StepResult
 {
-    Continue,
-    Jump(BasicBlockRef),
-    Return,
+    Continue(ByteCodeIndex),
+    Exit(Value),
 }
 
-impl<'a> Interpreter<'a>
+impl Interpreter
 {
-    pub fn new(module: &ByteCodeModule) -> Interpreter
+    pub fn new() -> Interpreter
     {
         Interpreter{
-            module: module,
             stack: Vec::new(),
         }
     }
@@ -319,7 +109,7 @@ impl<'a> Interpreter<'a>
         })
     }
 
-    fn unary_op(&mut self, dst: &str, op: Operator, var: &str) -> Result<Action, ExecutionError>
+    fn unary_op(&mut self, dst: &str, op: Operator, var: &str) -> Result<(), ExecutionError>
     {
         let val = self.get_variable(var)?;
         let result = val.apply(|v: &Value| {
@@ -334,10 +124,10 @@ impl<'a> Interpreter<'a>
         })?;
 
         self.update_variable(dst, result)?;
-        Ok(Action::Continue)
+        Ok(())
     }
 
-    fn binary_op(&mut self, dst: &str, op: Operator, left: &str, right: &str) -> Result<Action, ExecutionError>
+    fn binary_op(&mut self, dst: &str, op: Operator, left: &str, right: &str) -> Result<(), ExecutionError>
     {
         let left = self.get_variable(left)?.clone_value()?;
         let right = self.get_variable(right)?.clone_value()?;
@@ -405,44 +195,69 @@ impl<'a> Interpreter<'a>
 
 
         self.update_variable(dst, value)?;
-        Ok(Action::Continue)
+        Ok(())
     }
 
-    fn call(&mut self, dst: &str, name: &str, args: &Vec<Var>) -> Result<Action, ExecutionError>
+    fn call(&mut self, dst: &str, name: &str, args: &Vec<String>, index: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
     {
-        let mut function_args = Vec::new();
-        for arg in args {
-            let arg_value = self.get_variable(&arg.name)?.clone_value()?;
-            function_args.push(arg_value);
+        let func = module.functions.get(name).ok_or(ExecutionError(format!("Unknown function {}", name)))?;
+        println!("{}:", func.sig.name);
+
+        let return_address = index.next();
+        self.stack.push(StackFrame::with_return_address(return_address, dst.into()));
+
+        for (idx, arg) in args.iter().enumerate() {
+            let arg_value = self.get_variable(arg)?.clone_value()?;
+            self.add_variable(&func.sig.args[idx].name, arg_value)?;
         }
 
-        let result = self.run_function(name, function_args)?;
-        self.replace_variable(dst, result)?;
-        Ok(Action::Continue)
+        Ok(StepResult::Continue(ByteCodeIndex::new(func.clone(), 0, 0)))
     }
 
-    fn ret(&mut self, name: &str) -> Result<Action, ExecutionError>
+    fn pop_until_end_of_function(&mut self) -> Result<ReturnAddress, ExecutionError>
     {
-        let val = self.get_variable(name)?.clone();
-        let mut sf = self.stack.last_mut().expect("Empty stack");
-        sf.result = val;
-        Ok(Action::Return)
+        while let Some(sf) = self.stack.pop() {
+            if let Some(return_address) = sf.return_address {
+                return Ok(return_address.clone());
+            }
+        }
+
+        Err(ExecutionError("Reached bottom of the stack".into()))
     }
 
-    fn branch_if(&self, var: &str, on_true: BasicBlockRef, on_false: BasicBlockRef) ->  Result<Action, ExecutionError>
+    fn ret(&mut self, name: Option<&str>) -> Result<StepResult, ExecutionError>
+    {
+        let return_address = match name
+        {
+            Some(name) => {
+                let result = self.get_variable(name)?.clone();
+                let return_address = self.pop_until_end_of_function()?;
+                self.replace_variable(&return_address.result_destination, result)?;
+                return_address
+            }
+
+            None => {
+                self.pop_until_end_of_function()?
+            }
+        };
+
+        Ok(StepResult::Continue(return_address.address))
+    }
+
+    fn branch_if(&self, var: &str, on_true: BasicBlockRef, on_false: BasicBlockRef, index: &ByteCodeIndex) -> Result<StepResult, ExecutionError>
     {
         let val = self.get_variable(var)?;
         val.apply(|v: &Value| {
             match v
             {
-                &Value::Bool(true) => Ok(Action::Jump(on_true)),
-                &Value::Bool(false) => Ok(Action::Jump(on_false)),
+                &Value::Bool(true) => Ok(StepResult::Continue(index.jump(on_true))),
+                &Value::Bool(false) => Ok(StepResult::Continue(index.jump(on_false))),
                 _ => Err(ExecutionError(format!("brif operand {} is not a boolean", var))),
             }
         })
     }
 
-    fn store(&mut self, dst: &str, src: &str) -> Result<Action, ExecutionError>
+    fn store(&mut self, dst: &str, src: &str) -> Result<(), ExecutionError>
     {
         let new_value = self.get_variable(src)?.clone_value()?;
         self.apply_on_variable(dst, |v: &mut ValueRef| {
@@ -468,10 +283,10 @@ impl<'a> Interpreter<'a>
             }
         })?;
 
-        Ok(Action::Continue)
+        Ok(())
     }
 
-    fn load_member(&mut self, dst: &str, obj: &str, member_index: usize) -> Result<Action, ExecutionError>
+    fn load_member(&mut self, dst: &str, obj: &str, member_index: usize) -> Result<(), ExecutionError>
     {
         let obj = self.get_variable(obj)?;
         let vr = obj.apply(|value: &Value| {
@@ -498,15 +313,15 @@ impl<'a> Interpreter<'a>
         })?;
 
         self.replace_variable(dst, vr)?;
-        Ok(Action::Continue)
+        Ok(())
     }
 
-    fn get_property(&mut self, dst: &str, obj: &str, prop: ByteCodeProperty) -> Result<Action, ExecutionError>
+    fn get_property(&mut self, dst: &str, obj: &str, prop: ByteCodeProperty) -> Result<(), ExecutionError>
     {
         let obj = self.get_variable(obj)?;
         let val = obj.apply(|vr: &Value| vr.get_property(prop))?;
         self.update_variable(dst, val)?;
-        Ok(Action::Continue)
+        Ok(())
     }
 
     fn get_int(&self, name: &str) -> Result<i64, ExecutionError>
@@ -521,7 +336,7 @@ impl<'a> Interpreter<'a>
             })
     }
 
-    fn slice(&mut self, dst: &str, array: &str, start: &str, len: &str) -> Result<Action, ExecutionError>
+    fn slice(&mut self, dst: &str, array: &str, start: &str, len: &str) -> Result<(), ExecutionError>
     {
         let start_value = self.get_int(start)? as usize;
         let len_value = self.get_int(len)? as usize;
@@ -557,35 +372,42 @@ impl<'a> Interpreter<'a>
         })?;
 
         self.update_variable(dst, slice)?;
-        Ok(Action::Continue)
+        Ok(())
     }
 
-    fn execute_instruction(&mut self, instr: &Instruction) -> Result<Action, ExecutionError>
+    fn execute_instruction(&mut self, instr: &Instruction, index: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
     {
-        print!("{}", instr);
         match *instr
         {
+            Instruction::Exit => {
+                let return_value = self.get_variable(RETURN_VALUE)?.clone_value()?;
+                Ok(StepResult::Exit(return_value))
+            },
+
             Instruction::Store{ref dst, ref src} => {
-                self.store(&dst.name, &src.name)
+                self.store(&dst.name, &src.name)?;
+                Ok(StepResult::Continue(index.next()))
             },
 
             Instruction::StoreLit{ref dst, ref lit} => {
                 let v = Value::from_literal(lit)?;
                 self.update_variable(&dst.name, v)?;
-                Ok(Action::Continue)
+                Ok(StepResult::Continue(index.next()))
             },
 
             Instruction::StoreFunc{ref dst, ref func} => {
                 self.update_variable(&dst.name, Value::Func(func.clone()))?;
-                Ok(Action::Continue)
+                Ok(StepResult::Continue(index.next()))
             },
 
             Instruction::LoadMember{ref dst, ref obj, member_index} => {
-                self.load_member(&dst.name, &obj.name, member_index)
+                self.load_member(&dst.name, &obj.name, member_index)?;
+                Ok(StepResult::Continue(index.next()))
             },
 
             Instruction::GetProperty{ref dst, ref obj, ref prop} => {
-                self.get_property(&dst.name, &obj.name, *prop)
+                self.get_property(&dst.name, &obj.name, *prop)?;
+                Ok(StepResult::Continue(index.next()))
             },
 
             Instruction::SetProperty{ref dst, ref prop, ref val} => {
@@ -593,123 +415,118 @@ impl<'a> Interpreter<'a>
             },
 
             Instruction::UnaryOp{ref dst, op, ref src} => {
-                self.unary_op(&dst.name, op, &src.name)
+                self.unary_op(&dst.name, op, &src.name)?;
+                Ok(StepResult::Continue(index.next()))
             },
 
             Instruction::BinaryOp{ref dst, op, ref left, ref right} => {
-                self.binary_op(&dst.name, op, &left.name, &right.name)
+                self.binary_op(&dst.name, op, &left.name, &right.name)?;
+                Ok(StepResult::Continue(index.next()))
             },
 
             Instruction::Call{ref dst, ref func, ref args} => {
-                self.call(&dst.name, func, args)
+                self.call(&dst.name, func, &args.iter().map(|a| a.name.clone()).collect(), index, module)
             },
 
             Instruction::StackAlloc(ref var) => {
                 self.add_variable(&var.name, Value::from_type(&var.typ)?)?;
-                Ok(Action::Continue)
+                Ok(StepResult::Continue(index.next()))
             },
 
             Instruction::HeapAlloc(ref var) => {
                 self.update_variable(&var.name, Value::Pointer(ValueRef::new(Value::Uninitialized)))?;
-                Ok(Action::Continue)
+                Ok(StepResult::Continue(index.next()))
             },
 
             Instruction::Return(ref var) => {
-                self.ret(&var.name)
+                self.ret(Some(&var.name))
             },
 
             Instruction::ReturnVoid => {
-                Ok(Action::Return)
+                self.ret(None)
             },
 
             Instruction::Branch(bb) => {
-                Ok(Action::Jump(bb))
+                Ok(StepResult::Continue(index.jump(bb)))
             },
 
             Instruction::BranchIf{ref cond, on_true, on_false} => {
-                self.branch_if(&cond.name, on_true, on_false)
+                self.branch_if(&cond.name, on_true, on_false, index)
             },
 
             Instruction::Delete(ref var) => {
                 self.replace_variable(&var.name, ValueRef::Null)?;
-                Ok(Action::Continue)
+                Ok(StepResult::Continue(index.next()))
             },
 
             Instruction::Slice{ref dst, ref src, ref start, ref len} => {
-                self.slice(&dst.name, &src.name, &start.name, &len.name)
+                self.slice(&dst.name, &src.name, &start.name, &len.name)?;
+                Ok(StepResult::Continue(index.next()))
             },
 
             Instruction::StartScope => {
                 self.stack.push(StackFrame::new());
-                Ok(Action::Continue)
+                Ok(StepResult::Continue(index.next()))
             },
 
             Instruction::EndScope => {
                 self.stack.pop();
-                Ok(Action::Continue)
+                Ok(StepResult::Continue(index.next()))
             },
         }
     }
 
-    fn run_bb(&mut self, func: &ByteCodeFunction, bb_ref: BasicBlockRef) -> Result<Action, ExecutionError>
+
+    pub fn run_function(&mut self, function: &str, args: Vec<Value>, module: &ByteCodeModule) -> Result<Value, ExecutionError>
     {
-        if let Some(ref bb) = func.blocks.get(&bb_ref) {
-            for inst in &bb.instructions {
-                let action = self.execute_instruction(inst)?;
-                if let Action::Continue = action {
-                    continue;
-                } else {
-                    return Ok(action);
+        let mut index = self.start(function, args, module)?;
+        loop {
+            print!("{}", index);
+            let sr = self.step(&index, module)?;
+            index = match sr {
+                StepResult::Continue(new_index) => new_index,
+                StepResult::Exit(return_value) => {
+                    return Ok(return_value)
                 }
             }
-
-            Ok(Action::Continue)
-        } else {
-            Err(ExecutionError(format!("Cannot execute basic block {} of function {}", bb_ref, func.sig.name)))
         }
     }
 
-    fn run(&mut self, func: &ByteCodeFunction, args: Vec<Value>) -> Result<ValueRef, ExecutionError>
+    pub fn start(&mut self, function: &str, args: Vec<Value>, module: &ByteCodeModule) -> Result<ByteCodeIndex, ExecutionError>
     {
-        println!("{}:", func.sig.name);
-        self.stack.push(StackFrame::new());
-        for (idx, val) in args.into_iter().enumerate() {
-            self.add_variable(&func.sig.args[idx].name, val)?;
+        let bottom_frame = StackFrame::new();
+        self.stack.push(bottom_frame);
+
+        let mut call_args = Vec::new();
+        for arg in &args {
+            let name = format!("arg0");
+            self.add_variable(&name, arg.clone())?;
+            call_args.push(name);
         }
 
-        let mut bb_ref = 0;
-        loop {
-            match self.run_bb(func, bb_ref)?
-            {
-                Action::Continue => {bb_ref += 1;},
-                Action::Jump(bb) => {bb_ref = bb},
-                Action::Return => break,
-            }
-        }
-
-        let sf = self.stack.pop().expect("Empty stack");
-        println!("end");
-        Ok(sf.result.clone())
-    }
-
-    pub fn run_function(&mut self, function: &str, args: Vec<Value>) -> Result<ValueRef, ExecutionError>
-    {
-        match self.module.functions.get(function)
+        self.add_variable(RETURN_VALUE, Value::Void)?;
+        match self.call(RETURN_VALUE, function, &call_args, &ByteCodeIndex::new(module.exit_function.clone(), 0, 0), module)?
         {
-            Some(ref func) => {
-                self.run(func, args)
-            },
+            StepResult::Continue(index) => Ok(index),
+            StepResult::Exit(_) => Err(ExecutionError("Unexpected exit".into()))
+        }
+    }
 
-            None => {
-                Err(ExecutionError(format!("Unknown function {}", function)))
-            }
+    pub fn step(&mut self, s: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
+    {
+        let bb = s.function.blocks.get(&s.basic_block)
+            .ok_or(ExecutionError(format!("Function does not have basic block {}", s.basic_block)))?;
+
+        if let Some(ref instruction) = bb.instructions.get(s.instruction) {
+            self.execute_instruction(instruction, s, module)
+        } else {
+            Err(ExecutionError(format!("Instruction index out of bounds")))
         }
     }
 }
 
 pub fn run_byte_code(module: &ByteCodeModule, function: &str) -> Result<Value, ExecutionError>
 {
-    let mut interpreter = Interpreter::new(module);
-    let vr = interpreter.run_function(function, vec![])?;
-    vr.clone_value()
+    let mut interpreter = Interpreter::new();
+    interpreter.run_function(function, vec![], module)
 }

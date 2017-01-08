@@ -70,6 +70,7 @@ pub enum Instruction
     Branch(BasicBlockRef),
     BranchIf{cond: Var, on_true: BasicBlockRef, on_false: BasicBlockRef},
     Delete(Var),
+    Exit,
 }
 
 pub fn store_instr(dst: &Var, src: &Var) -> Instruction
@@ -181,6 +182,10 @@ impl fmt::Display for Instruction
     {
         match *self
         {
+            Instruction::Exit => {
+                writeln!(f, "  exit")
+            },
+
             Instruction::Store{ref dst, ref src} => {
                 writeln!(f, "  str {} {}", dst, src)
             },

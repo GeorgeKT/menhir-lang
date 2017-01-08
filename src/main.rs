@@ -5,6 +5,7 @@ extern crate docopt;
 extern crate rustc_serialize;
 extern crate itertools;
 extern crate uuid;
+extern crate shrust;
 
 mod ast;
 #[macro_use]
@@ -22,7 +23,7 @@ use std::process::exit;
 use docopt::Docopt;
 use parser::{ParserOptions, parse_file};
 use typechecker::{type_check_module};
-use bytecode::{compile_to_byte_code, run_byte_code};
+use bytecode::{compile_to_byte_code, run_byte_code, debug_byte_code};
 
 
 static USAGE: &'static str =  "
@@ -35,8 +36,9 @@ options:
                                                A comma separated list of these values is also supported.
   -O, --optimize                               Optimize the code.
   -I <imports>, --imports=<imports>            Directory to look for imports, use a comma separated list for more then one.
-  -o <output-file>, --output=<output-file>     Name of binary to create (by default input-file without the extensions)
-  -i --interpret                               Execute the code in the interpreter
+  -o <output-file>, --output=<output-file>     Name of binary to create (by default input-file without the extensions).
+  -i --interpret                               Execute the code in the interpreter.
+  -d --debug                                   Run the interpreter in debug mode.
 ";
 
 
@@ -49,6 +51,7 @@ struct Args
     flag_output: Option<String>,
     flag_imports: Option<String>,
     flag_interpret: Option<bool>,
+    flag_debug: Option<bool>,
 }
 
 
@@ -70,6 +73,7 @@ fn main()
 
     let input_file = args.arg_input_file.expect("Missing input file argument");
     let run_interpreter = args.flag_interpret.unwrap_or(false);
+    let run_debugger = args.flag_debug.unwrap_or(false);
     let _output_file = args.flag_output.unwrap_or(default_output_file(&input_file));
     let dump_flags = args.flag_dump.unwrap_or_default();
 
@@ -110,8 +114,20 @@ fn main()
             println!("------\n");
         }
 
-        if run_interpreter {
-            match run_byte_code(&bc_mod, "main")
+        if !run_debugger && !run_interpreter {
+            /*
+            llvm_init();
+            let mut ctx = codegen(&bc_mod)?;
+            link(&mut ctx, &opts)
+            */
+            panic!("NYI");
+        } else {
+            let ret = if run_debugger {
+                debug_byte_code(&bc_mod, "main")
+            } else {
+                run_byte_code(&bc_mod, "main")
+            };
+            match ret
             {
                 Ok(ret) => {
                     exit(ret.to_exit_code())
@@ -121,13 +137,6 @@ fn main()
                     exit(-1);
                 }
             }
-        } else {
-            /*
-            llvm_init();
-            let mut ctx = codegen(&bc_mod)?;
-            link(&mut ctx, &opts)
-            */
-            panic!("NYI");
         }
 
         Ok(())
