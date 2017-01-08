@@ -63,7 +63,7 @@ struct Test
 }
 
 
-const ALL_TESTS: [Test; 14] = [
+const ALL_TESTS: [Test; 16] = [
     Test{
         name: "number",
         ret: 5,
@@ -205,12 +205,37 @@ const ALL_TESTS: [Test; 14] = [
     Test{
         name: "lambda",
         ret: 10,
-        debug: true,
+        debug: false,
         code: r#"
             apply(x: int, fn: (int) -> int) -> int =
                 fn(x)
 
             main() -> int = apply(5, @(x) -> x * 2)
+        "#
+    },
+
+    Test{
+        name: "lambda var",
+        ret: 15,
+        debug: false,
+        code: r#"
+            apply(x: int, fn: (int) -> int) -> int =
+                fn(x)
+
+            main() -> int =
+                let triple = @(x) -> x * 3 in apply(5, triple)
+        "#
+    },
+
+    Test{
+        name: "func var",
+        ret: 15,
+        debug: false,
+        code: r#"
+            triple(x: int) -> int = x * 3
+
+            main() -> int =
+                let f = triple in f(5)
         "#
     }
 ];

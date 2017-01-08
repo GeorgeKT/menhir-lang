@@ -187,15 +187,15 @@ impl fmt::Display for Instruction
             },
 
             Instruction::Store{ref dst, ref src} => {
-                writeln!(f, "  str {} {}", dst, src)
+                writeln!(f, "  store {} {}", dst, src)
             },
 
             Instruction::StoreLit{ref dst, ref lit} => {
-                writeln!(f, "  strlit {} {}", dst, lit)
+                writeln!(f, "  storelit {} {}", dst, lit)
             },
 
             Instruction::StoreFunc{ref dst, ref func} => {
-                writeln!(f, "  strfunc {} {}", dst, func)
+                writeln!(f, "  storefunc {} {}", dst, func)
             },
 
             Instruction::LoadMember{ref dst, ref obj, member_index} => {

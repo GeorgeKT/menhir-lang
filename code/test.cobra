@@ -1,4 +1,5 @@
 apply(x: int, fn: (int) -> int) -> int =
     fn(x)
 
-main() -> int = apply(5, @(x) -> x * 2)
+main() -> int =
+    let triple = @(x) -> x * 3 in apply(5, triple)

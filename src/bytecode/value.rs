@@ -1,4 +1,5 @@
 use std::fmt;
+use std::rc::Rc;
 use itertools::free::join;
 use ast::Type;
 use super::*;
@@ -16,7 +17,7 @@ pub enum Value
     String(String),
     Array(Vec<ValueRef>),
     Slice(Vec<ValueRef>),
-    Func(String),
+    Func(Rc<ByteCodeFunction>),
     Struct(Vec<ValueRef>),
     Sum(usize, Box<ValueRef>),
     Enum(usize),
@@ -99,7 +100,7 @@ impl Value
                 Ok(Value::Array(array))
             },
             Type::Slice(_) => Ok(Value::Slice(Vec::new())),
-            Type::Func(_) => Ok(Value::Func(String::new())),
+            Type::Func(_) => Ok(Value::Void), // Use void, seeing that we can't fill in the function pointer yet
             Type::Struct(ref st) => {
                 let mut members = Vec::new();
                 for m in &st.members {

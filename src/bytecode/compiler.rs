@@ -189,6 +189,7 @@ fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef) -> Option<Var>
                 add_name_ref(func, nr)
             }
         },
+
         Type::Enum(ref et) => {
             if let Some(idx) = et.index_of(&nr.name) {
                 // enums are integers
@@ -199,6 +200,18 @@ fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef) -> Option<Var>
                 add_name_ref(func, nr)
             }
         },
+
+        Type::Func(_) => {
+            match func.get_destination()
+            {
+                Some(dst) => {
+                    func.add(store_func_instr(&dst, &nr.name));
+                    Some(dst)
+                },
+                None => Some(Var::named(&nr.name, nr.typ.clone())),
+            }
+        },
+
         _ => {
             add_name_ref(func, nr)
         }
@@ -220,7 +233,6 @@ fn member_access_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction,
     match (var_typ, &sma.right)
     {
         (&Type::Struct(_), &MemberAccessType::Name(ref field)) => {
-
             func.add(load_member_instr(dst, &var, field.index));
         },
 
@@ -595,10 +607,10 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         },
 
         Expression::Lambda(ref l) => {
-            let lambda = func_to_bc(&l.sig, bc_mod, &l.expr);
-            bc_mod.functions.insert(l.sig.name.clone(), Rc::new(lambda));
+            let lambda = Rc::new(func_to_bc(&l.sig, bc_mod, &l.expr));
+            bc_mod.functions.insert(l.sig.name.clone(), lambda.clone());
             let dst = get_dst(func, &l.sig.get_type());
-            func.add(store_func_instr(&dst, &l.sig.name));
+            func.add(store_func_instr(&dst, &lambda.sig.name));
             Some(dst)
         },
 

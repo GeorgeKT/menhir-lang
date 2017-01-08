@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
+use std::rc::Rc;
 use bytecode::*;
 use parser::Operator;
 
@@ -217,23 +218,8 @@ impl Interpreter
         Ok(())
     }
 
-    fn call(&mut self, dst: &str, name: &str, args: &Vec<String>, index: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
+    fn call(&mut self, dst: &str, func: Rc<ByteCodeFunction>, args: &Vec<String>, index: &ByteCodeIndex) -> Result<StepResult, ExecutionError>
     {
-        let func = match module.functions.get(name) {
-            Some(f) => f,
-            None => {
-                let var = self.get_variable(name)?;
-                var.apply(|v: &Value| match v {
-                    &Value::Func(ref func_name) => {
-                        module.functions.get(func_name)
-                            .ok_or(ExecutionError(format!("Unknown function {}", func_name)))
-                    },
-
-                    _ => Err(ExecutionError(format!("Unknown function {}", name))),
-                })?
-            }
-        };
-
         println!("{}:", func.sig.name);
         let return_address = index.next();
         self.stack.push(StackFrame::with_return_address(return_address, dst.into()));
@@ -377,6 +363,23 @@ impl Interpreter
         Ok(())
     }
 
+    fn get_function(&self, func: &str, module: &ByteCodeModule) -> Result<Rc<ByteCodeFunction>, ExecutionError>
+    {
+        match module.functions.get(func) {
+            Some(f) => Ok(f.clone()),
+            None => {
+                let v = self.get_variable(func)?;
+                v.apply(|val: &Value|
+                    if let &Value::Func(ref f) = val {
+                        Ok(f.clone())
+                    } else {
+                        Err(ExecutionError(format!("{} is not callable", func)))
+                    }
+                )
+            }
+        }
+    }
+
     fn execute_instruction(&mut self, instr: &Instruction, index: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
     {
         match *instr
@@ -399,7 +402,8 @@ impl Interpreter
             },
 
             Instruction::StoreFunc{ref dst, ref func} => {
-                self.store(&dst.name, Value::Func(func.clone()))?;
+                let func = self.get_function(func, module)?;
+                self.store(&dst.name, Value::Func(func))?;
                 Ok(StepResult::Continue(index.next()))
             },
 
@@ -428,7 +432,8 @@ impl Interpreter
             },
 
             Instruction::Call{ref dst, ref func, ref args} => {
-                self.call(&dst.name, func, &args.iter().map(|a| a.name.clone()).collect(), index, module)
+                let func = self.get_function(func, module)?;
+                self.call(&dst.name, func, &args.iter().map(|a| a.name.clone()).collect(), index)
             },
 
             Instruction::StackAlloc(ref var) => {
@@ -497,6 +502,7 @@ impl Interpreter
 
     pub fn start(&mut self, function: &str, args: Vec<Value>, module: &ByteCodeModule) -> Result<ByteCodeIndex, ExecutionError>
     {
+        let func = module.functions.get(function).ok_or(ExecutionError(format!("Unknown function {}", function)))?;
         let bottom_frame = StackFrame::new();
         self.stack.push(bottom_frame);
 
@@ -508,7 +514,7 @@ impl Interpreter
         }
 
         self.add_variable(RETURN_VALUE, Value::Void)?;
-        match self.call(RETURN_VALUE, function, &call_args, &ByteCodeIndex::new(module.exit_function.clone(), 0, 0), module)?
+        match self.call(RETURN_VALUE, func.clone(), &call_args, &ByteCodeIndex::new(module.exit_function.clone(), 0, 0))?
         {
             StepResult::Continue(index) => Ok(index),
             StepResult::Exit(_) => Err(ExecutionError("Unexpected exit".into()))
