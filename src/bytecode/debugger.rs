@@ -86,7 +86,6 @@ fn quit(io: &mut ShellIO, _dc: &mut DebuggerContext) -> ExecResult
 
 fn step(io: &mut ShellIO, dc: &mut DebuggerContext) -> ExecResult
 {
-
     dc.index = match dc.interpreter.step(&dc.index, &dc.module)
     {
         Ok(StepResult::Continue(new_index)) => {
@@ -108,12 +107,34 @@ fn step(io: &mut ShellIO, dc: &mut DebuggerContext) -> ExecResult
     Ok(())
 }
 
+fn print(io: &mut ShellIO, dc: &mut DebuggerContext, args: &[&str]) -> ExecResult
+{
+    match dc.interpreter.get_variable(args[0])
+    {
+        Ok(ref v) => {
+            writeln!(io, "{} = {}", args[0], v)?;
+            Ok(())
+        },
+
+        Err(ref e) => {
+            writeln!(io, "{}", e)?;
+            Ok(())
+        }
+    }
+}
+
+fn cont(io: &mut ShellIO, dc: &mut DebuggerContext) -> ExecResult
+{
+    loop {
+        step(io, dc)?;
+    }
+}
 
 pub fn debug_byte_code(module: &ByteCodeModule, function: &str) -> Result<Value, ExecutionError>
 {
     let mut interpreter = Interpreter::new();
     let index = interpreter.start(function, vec![], module)?;
-    println!("{}", index);
+    print!("{}", index);
     let mut shell = Shell::new(DebuggerContext{
         interpreter: interpreter,
         index: index,
@@ -124,8 +145,12 @@ pub fn debug_byte_code(module: &ByteCodeModule, function: &str) -> Result<Value,
     shell.new_command_noargs("h", "Print help", help);
     shell.new_command_noargs("quit", "Quit", quit);
     shell.new_command_noargs("q", "Quit", quit);
-    shell.new_command_noargs("step", "Quit", step);
-    shell.new_command_noargs("s", "Quit", step);
+    shell.new_command_noargs("step", "Step", step);
+    shell.new_command_noargs("s", "Step", step);
+    shell.new_command_noargs("cont", "Continue", cont);
+    shell.new_command_noargs("c", "Continue", cont);
+    shell.new_command("print", "Print", 1, print);
+    shell.new_command("p", "Print", 1, print);
     shell.run_loop(&mut ShellIO::default());
     Ok(Value::Int(5))
 }

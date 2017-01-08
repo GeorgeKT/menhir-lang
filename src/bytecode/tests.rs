@@ -163,7 +163,7 @@ const ALL_TESTS: [Test; 11] = [
     Test{
         name: "array recursive iteration",
         ret: 9,
-        debug: true,
+        debug: false,
         code: r#"
             sum(v: int[]) -> int =
                 match v:
@@ -187,5 +187,5 @@ fn test_all()
         println!("#### end {} ####", test.name);
     }
 
-    assert!(false);
+    //assert!(false);
 }

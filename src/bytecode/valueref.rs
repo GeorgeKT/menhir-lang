@@ -64,6 +64,27 @@ impl ValueRef
             }
         }
     }
+
+    pub fn apply_mut<Op, R>(&mut self, op: Op) -> Result<R, ExecutionError>
+        where Op: FnOnce(&mut Value) -> Result<R, ExecutionError>, R: Sized
+    {
+        match *self
+        {
+            ValueRef::Owner(ref v) => {
+                op(&mut v.borrow_mut())
+            },
+            ValueRef::Ptr(ref v) => {
+                if let Some(rv) = v.upgrade() {
+                    op(&mut rv.borrow_mut())
+                } else {
+                    Err(ExecutionError(format!("Dangling pointer, owner of element pointed to is gone")))
+                }
+            }
+            ValueRef::Null => {
+                Err(ExecutionError(format!("Dangling pointer, pointer has been deleted")))
+            }
+        }
+    }
 }
 
 impl fmt::Display for ValueRef

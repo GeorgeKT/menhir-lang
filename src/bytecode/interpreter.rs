@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 use bytecode::*;
 use parser::Operator;
 
@@ -6,6 +7,14 @@ const RETURN_VALUE : &'static str = "@RETURN_VALUE@";
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct ExecutionError(pub String);
+
+impl fmt::Display for ExecutionError
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
+    {
+        write!(f, "{}", self.0)
+    }
+}
 
 #[derive(Debug, Clone)]
 struct ReturnAddress
@@ -73,7 +82,7 @@ impl Interpreter
         }
     }
 
-    fn get_variable(&self, name: &str) -> Result<ValueRef, ExecutionError>
+    pub fn get_variable(&self, name: &str) -> Result<ValueRef, ExecutionError>
     {
         for sf in self.stack.iter().rev() {
             if let Some(v) = sf.vars.get(name) {
@@ -106,6 +115,16 @@ impl Interpreter
         self.apply_on_variable(name, |v: &mut ValueRef| {
             *v = vr;
             Ok(())
+        })
+    }
+
+    fn store(&mut self, name: &str, val: Value) -> Result<(), ExecutionError>
+    {
+        self.apply_on_variable(name, |vr: &mut ValueRef| {
+            vr.apply_mut(|v: &mut Value| {
+                *v = val;
+                Ok(())
+            })
         })
     }
 
@@ -257,35 +276,6 @@ impl Interpreter
         })
     }
 
-    fn store(&mut self, dst: &str, src: &str) -> Result<(), ExecutionError>
-    {
-        let new_value = self.get_variable(src)?.clone_value()?;
-        self.apply_on_variable(dst, |v: &mut ValueRef| {
-            match *v
-            {
-                ValueRef::Owner(ref mut inner) => {
-                    let mut inner = inner.borrow_mut();
-                    *inner = new_value;
-                    Ok(())
-                }
-
-                ValueRef::Ptr(ref mut inner) => {
-                    if let Some(rv) = inner.upgrade() {
-                        let mut inner = rv.borrow_mut();
-                        *inner = new_value;
-                        Ok(())
-                    } else {
-                        Err(ExecutionError(format!("Store on dangling pointer")))
-                    }
-                },
-
-                ValueRef::Null => Err(ExecutionError(format!("Store on deleted pointer"))),
-            }
-        })?;
-
-        Ok(())
-    }
-
     fn load_member(&mut self, dst: &str, obj: &str, member_index: usize) -> Result<(), ExecutionError>
     {
         let obj = self.get_variable(obj)?;
@@ -340,7 +330,6 @@ impl Interpreter
     {
         let start_value = self.get_int(start)? as usize;
         let len_value = self.get_int(len)? as usize;
-        println!("> slice {} {} {} {}", dst, array, start_value, len_value);
         let slice = self.get_variable(array)?.apply(|vr: &Value| {
             match *vr
             {
@@ -385,18 +374,19 @@ impl Interpreter
             },
 
             Instruction::Store{ref dst, ref src} => {
-                self.store(&dst.name, &src.name)?;
+                let new_value = self.get_variable(&src.name)?.clone_value()?;
+                self.store(&dst.name, new_value)?;
                 Ok(StepResult::Continue(index.next()))
             },
 
             Instruction::StoreLit{ref dst, ref lit} => {
                 let v = Value::from_literal(lit)?;
-                self.update_variable(&dst.name, v)?;
+                self.store(&dst.name, v)?;
                 Ok(StepResult::Continue(index.next()))
             },
 
             Instruction::StoreFunc{ref dst, ref func} => {
-                self.update_variable(&dst.name, Value::Func(func.clone()))?;
+                self.store(&dst.name, Value::Func(func.clone()))?;
                 Ok(StepResult::Continue(index.next()))
             },
 
