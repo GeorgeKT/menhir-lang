@@ -31,7 +31,7 @@ impl fmt::Display for ByteCodeModule
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
-        for func in self.functions.values() {
+        for (_, func) in &self.functions {
             func.fmt(f)?;
             writeln!(f, " ")?;
         }

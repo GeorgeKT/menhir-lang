@@ -219,9 +219,22 @@ impl Interpreter
 
     fn call(&mut self, dst: &str, name: &str, args: &Vec<String>, index: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
     {
-        let func = module.functions.get(name).ok_or(ExecutionError(format!("Unknown function {}", name)))?;
-        println!("{}:", func.sig.name);
+        let func = match module.functions.get(name) {
+            Some(f) => f,
+            None => {
+                let var = self.get_variable(name)?;
+                var.apply(|v: &Value| match v {
+                    &Value::Func(ref func_name) => {
+                        module.functions.get(func_name)
+                            .ok_or(ExecutionError(format!("Unknown function {}", func_name)))
+                    },
 
+                    _ => Err(ExecutionError(format!("Unknown function {}", name))),
+                })?
+            }
+        };
+
+        println!("{}:", func.sig.name);
         let return_address = index.next();
         self.stack.push(StackFrame::with_return_address(return_address, dst.into()));
 

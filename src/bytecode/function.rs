@@ -126,7 +126,6 @@ pub struct ByteCodeFunction
     pub sig: FunctionSignature,
     pub blocks: BTreeMap<BasicBlockRef, BasicBlock>,
     pub block_order: Vec<BasicBlockRef>,
-    pub lambdas: Vec<ByteCodeFunction>,
     current_bb: usize,
     bb_counter: usize,
     var_counter: usize,
@@ -143,7 +142,6 @@ impl ByteCodeFunction
             sig: sig.clone(),
             blocks: BTreeMap::new(),
             block_order: Vec::new(),
-            lambdas: Vec::new(),
             current_bb: 0,
             bb_counter: 0,
             var_counter: 0,
@@ -270,11 +268,6 @@ impl fmt::Display for ByteCodeFunction
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
-        for lambda in &self.lambdas {
-            lambda.fmt(f)?;
-            writeln!(f, "")?;
-        }
-
         writeln!(f, "{}({}) -> {}:",
             self.sig.name,
             join(self.sig.args.iter().map(|arg| format!("{}: {}", arg.name, arg.typ)), ", "),

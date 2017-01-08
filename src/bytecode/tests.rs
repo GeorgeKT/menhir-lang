@@ -63,7 +63,7 @@ struct Test
 }
 
 
-const ALL_TESTS: [Test; 12] = [
+const ALL_TESTS: [Test; 14] = [
     Test{
         name: "number",
         ret: 5,
@@ -187,6 +187,30 @@ const ALL_TESTS: [Test; 12] = [
 
             main() -> int =
                 let y = 7, x = [y; 7] in sum(x)
+        "#
+    },
+
+    Test{
+        name: "generics",
+        ret: 11,
+        debug: false,
+        code: r#"
+            add(x: $a, y: $a) -> $a = x + y
+            mul(x: $a, y: $a) -> $a = x * y
+            combine(x: $a, y: $a) -> $a = add(x, y) + mul(x, y)
+            main() -> int = combine(3, 2)
+        "#
+    },
+
+    Test{
+        name: "lambda",
+        ret: 10,
+        debug: true,
+        code: r#"
+            apply(x: int, fn: (int) -> int) -> int =
+                fn(x)
+
+            main() -> int = apply(5, @(x) -> x * 2)
         "#
     }
 ];

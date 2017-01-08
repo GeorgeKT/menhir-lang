@@ -1,7 +1,4 @@
-sum(v: int[]) -> int =
-    match v:
-        [] => 0,
-        [head | tail] => head + sum(tail)
+apply(x: int, fn: (int) -> int) -> int =
+    fn(x)
 
-main() -> int =
-    let y = 7, x = [y; 7] in sum(x)
+main() -> int = apply(5, @(x) -> x * 2)
