@@ -14,6 +14,7 @@ mod compileerror;
 mod bytecode;
 mod parser;
 mod typechecker;
+#[cfg(test)] mod testcode;
 mod span;
 
 

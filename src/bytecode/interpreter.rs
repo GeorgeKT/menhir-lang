@@ -305,6 +305,14 @@ impl Interpreter
                     }
                 },
 
+                Value::Sum(idx, ref inner) => {
+                    if member_index == idx {
+                        Ok(inner.to_ptr())
+                    } else {
+                        Err(ExecutionError(format!("Wrong sum type index")))
+                    }
+                },
+
                 _ => Err(ExecutionError(format!("Load member not supported on {}", value)))
             }
         })?;
@@ -319,6 +327,25 @@ impl Interpreter
         let val = obj.apply(|vr: &Value| vr.get_property(prop))?;
         self.update_variable(dst, val)?;
         Ok(())
+    }
+
+    fn set_property(&mut self, obj: &str, prop: &ByteCodeProperty, val: usize) -> Result<(), ExecutionError>
+    {
+        self.apply_on_variable(obj, |vr: &mut ValueRef|
+            vr.apply_mut(|v: &mut Value|
+                match (prop, v) {
+                    (&ByteCodeProperty::SumTypeIndex, &mut Value::Sum(ref mut idx, _)) => {
+                        *idx = val;
+                        Ok(())
+                    },
+                    (&ByteCodeProperty::SumTypeIndex, &mut Value::Enum(ref mut idx)) => {
+                        *idx = val;
+                        Ok(())
+                    },
+                    _ => Err(ExecutionError(format!("Setting property {} not support on {}", prop, obj)))
+                }
+            )
+        )
     }
 
     fn get_int(&self, name: &str) -> Result<i64, ExecutionError>
@@ -390,6 +417,7 @@ impl Interpreter
 
     fn execute_instruction(&mut self, instr: &Instruction, index: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
     {
+        let next = Ok(StepResult::Continue(index.next()));
         match *instr
         {
             Instruction::Exit => {
@@ -400,49 +428,50 @@ impl Interpreter
             Instruction::Store{ref dst, ref src} => {
                 let new_value = self.get_variable(&src.name)?.clone_value()?;
                 self.store(&dst.name, new_value)?;
-                Ok(StepResult::Continue(index.next()))
+                next
             },
 
             Instruction::StoreLit{ref dst, ref lit} => {
                 let v = Value::from_literal(lit)?;
                 self.store(&dst.name, v)?;
-                Ok(StepResult::Continue(index.next()))
+                next
             },
 
             Instruction::StoreFunc{ref dst, ref func} => {
                 let func = self.get_function(func, module)?;
                 self.store(&dst.name, Value::Func(func))?;
-                Ok(StepResult::Continue(index.next()))
+                next
             },
 
             Instruction::Load{ref dst, ref ptr} => {
                 let new_value = self.get_variable(&ptr.name)?.clone_value()?;
                 self.update_variable(&dst.name, new_value)?;
-                Ok(StepResult::Continue(index.next()))
+                next
             },
 
             Instruction::LoadMember{ref dst, ref obj, member_index} => {
                 self.load_member(&dst.name, &obj.name, member_index)?;
-                Ok(StepResult::Continue(index.next()))
+                next
             },
 
             Instruction::GetProperty{ref dst, ref obj, ref prop} => {
                 self.get_property(&dst.name, &obj.name, *prop)?;
-                Ok(StepResult::Continue(index.next()))
+                next
             },
 
-            Instruction::SetProperty{ref dst, ref prop, ref val} => {
-                panic!("  setp {} {} {}", dst, prop, val)
+            Instruction::SetProperty{ref obj, ref prop, ref val} => {
+                self.set_property(&obj.name, prop, *val)?;
+                next
             },
 
             Instruction::UnaryOp{ref dst, op, ref src} => {
                 self.unary_op(&dst.name, op, &src.name)?;
-                Ok(StepResult::Continue(index.next()))
+                next
             },
 
             Instruction::BinaryOp{ref dst, op, ref left, ref right} => {
                 self.binary_op(&dst.name, op, &left.name, &right.name)?;
-                Ok(StepResult::Continue(index.next()))
+                next
             },
 
             Instruction::Call{ref dst, ref func, ref args} => {
@@ -452,12 +481,12 @@ impl Interpreter
 
             Instruction::StackAlloc(ref var) => {
                 self.add_variable(&var.name, Value::from_type(&var.typ)?)?;
-                Ok(StepResult::Continue(index.next()))
+                next
             },
 
             Instruction::HeapAlloc(ref var) => {
                 self.update_variable(&var.name, Value::Pointer(ValueRef::new(Value::Uninitialized)))?;
-                Ok(StepResult::Continue(index.next()))
+                next
             },
 
             Instruction::Return(ref var) => {
@@ -478,22 +507,22 @@ impl Interpreter
 
             Instruction::Delete(ref var) => {
                 self.replace_variable(&var.name, ValueRef::Null)?;
-                Ok(StepResult::Continue(index.next()))
+                next
             },
 
             Instruction::Slice{ref dst, ref src, ref start, ref len} => {
                 self.slice(&dst.name, &src.name, &start.name, &len.name)?;
-                Ok(StepResult::Continue(index.next()))
+                next
             },
 
             Instruction::StartScope => {
                 self.stack.push(StackFrame::new());
-                Ok(StepResult::Continue(index.next()))
+                next
             },
 
             Instruction::EndScope => {
                 self.stack.pop();
-                Ok(StepResult::Continue(index.next()))
+                next
             },
         }
     }

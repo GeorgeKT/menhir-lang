@@ -42,7 +42,7 @@ impl fmt::Display for ByteCodeProperty
         match *self
         {
             ByteCodeProperty::Len => write!(f, "len"),
-            ByteCodeProperty::SumTypeIndex => write!(f, "sum type index"),
+            ByteCodeProperty::SumTypeIndex => write!(f, "sum_type_index"),
         }
     }
 }
@@ -57,7 +57,7 @@ pub enum Instruction
     Load{dst: Var, ptr: Var},
     LoadMember{dst: Var, obj: Var, member_index: usize},
     GetProperty{dst: Var, obj: Var, prop: ByteCodeProperty},
-    SetProperty{dst: Var, prop: ByteCodeProperty, val: usize},
+    SetProperty{obj: Var, prop: ByteCodeProperty, val: usize},
     UnaryOp{dst: Var, op: Operator, src: Var},
     BinaryOp{dst: Var, op: Operator, left: Var, right: Var},
     Call{dst: Var, func: String, args: Vec<Var>},
@@ -157,10 +157,10 @@ pub fn call_instr(dst: &Var, func: &str, args: Vec<Var>) -> Instruction
     }
 }
 
-pub fn set_prop_instr(dst: &Var, prop: ByteCodeProperty, value: usize) -> Instruction
+pub fn set_prop_instr(obj: &Var, prop: ByteCodeProperty, value: usize) -> Instruction
 {
     Instruction::SetProperty{
-        dst: dst.clone(),
+        obj: obj.clone(),
         prop: prop,
         val: value,
     }
@@ -219,8 +219,8 @@ impl fmt::Display for Instruction
                 writeln!(f, "  getp {} {}.{}", dst, obj, prop)
             },
 
-            Instruction::SetProperty{ref dst, ref prop, ref val} => {
-                writeln!(f, "  setp {} {} {}", dst, prop, val)
+            Instruction::SetProperty{ref obj, ref prop, ref val} => {
+                writeln!(f, "  setp {} {} {}", obj, prop, val)
             },
 
             Instruction::UnaryOp{ref dst, ref op, ref src} => {

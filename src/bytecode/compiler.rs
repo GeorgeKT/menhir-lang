@@ -79,7 +79,7 @@ fn struct_initializer_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunc
         let idx = st.index_of(&si.struct_name).expect("Internal Compiler Error: cannot determine index of sum type case");
         func.add(set_prop_instr(dst, ByteCodeProperty::SumTypeIndex, idx));
 
-        let struct_ptr = func.new_var(ptr_type(st.cases[idx].typ.clone()));
+        let struct_ptr = stack_alloc(func, &ptr_type(st.cases[idx].typ.clone()), None);
         func.add(load_member_instr(&struct_ptr, &dst, idx));
         init_members(bc_mod, func, si, &struct_ptr);
     } else {
@@ -356,7 +356,7 @@ fn struct_pattern_match_to_bc(
         },
         Type::Sum(ref st) => {
             let target_sum_type_index = stack_alloc(func, &Type::Int, None);
-            func.add(get_prop_instr(&target_sum_type_index, &target, ByteCodeProperty::Len));
+            func.add(get_prop_instr(&target_sum_type_index, &target, ByteCodeProperty::SumTypeIndex));
             let idx = st.index_of(&p.name).expect("Internal Compiler Error: cannot determine index of sum type case");
             let sum_type_index = make_lit(func, ByteCodeLiteral::Int(idx as u64), Type::Int);
             let cond = stack_alloc(func, &Type::Bool, None);
