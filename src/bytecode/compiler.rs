@@ -120,8 +120,11 @@ fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &Var, func: &mut B
 {
     for (idx, name) in p.bindings.iter().enumerate() {
         if name != "_" {
-            let v = Var::named(name, ptr_type(p.types[idx].clone()));
-            func.add(load_member_instr(&v, struct_var, idx));
+            let ptr_type = ptr_type(p.types[idx].clone());
+            let ptr = stack_alloc(func, &ptr_type, None);
+            let v = stack_alloc(func, &p.types[idx], Some(name));
+            func.add(load_member_instr(&ptr, struct_var, idx));
+            func.add(load_instr(&v, &ptr));
             func.add_named_var(v);
         }
     }

@@ -1,5 +1,6 @@
-apply(x: int, fn: (int) -> int) -> int =
-    fn(x)
+make_pair(a: int, b: int) -> {int, int} = ${a, b}
 
-main() -> int =
-    let triple = @(x) -> x * 3 in apply(5, triple)
+main() -> int {
+    let {left, right} = make_pair(4, 5);
+    left + right
+}

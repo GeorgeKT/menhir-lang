@@ -63,7 +63,7 @@ struct Test
 }
 
 
-const ALL_TESTS: [Test; 16] = [
+const ALL_TESTS: [Test; 20] = [
     Test{
         name: "number",
         ret: 5,
@@ -236,6 +236,63 @@ const ALL_TESTS: [Test; 16] = [
 
             main() -> int =
                 let f = triple in f(5)
+        "#
+    },
+
+    Test{
+        name: "generic arrays",
+        ret: 22,
+        debug: false,
+        code: r#"
+            fold(v: $a[], accu: $b, fn: ($b, $a) -> $b) -> $b =
+                match v:
+                    [] => accu,
+                    [hd | tail] => fold(tail, fn(accu, hd), fn)
+
+            sum(v: int[]) -> int =
+                fold(v, 0, @(s, el) -> s + el)
+
+            main() -> int =
+                sum([4, 5, 6, 7])
+        "#
+    },
+
+    Test{
+        name: "structs",
+        ret: 50,
+        debug: false,
+        code: r#"
+            type Vec2D = {x: int, y: int}
+
+            dot(a: Vec2D, b: Vec2D) -> int = a.x * b.x + a.y * b.y
+
+            main() -> int = dot(Vec2D{4, 5}, Vec2D{5, 6})
+        "#
+    },
+
+    Test{
+        name: "complex return types",
+        ret: 20,
+        debug: false,
+        code: r#"
+            type Vec2D = {x: int, y: int}
+
+            add(a: Vec2D, b: Vec2D) -> Vec2D = Vec2D{a.x + b.x, a.y + b.y}
+
+            main() -> int =
+                let v = add(Vec2D{4, 5}, Vec2D{5, 6}) in v.x + v.y
+        "#
+    },
+
+    Test{
+        name: "anonymous structs",
+        ret: 9,
+        debug: true,
+        code: r#"
+            make_pair(a: int, b: int) -> {int, int} = ${a, b}
+
+            main() -> int =
+                let {left, right} = make_pair(4, 5) in left + right
         "#
     }
 ];

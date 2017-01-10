@@ -297,6 +297,14 @@ impl Interpreter
                     }
                 },
 
+                Value::Struct(ref members) => {
+                    if member_index < members.len() {
+                        Ok(members[member_index].to_ptr())
+                    } else {
+                        Err(ExecutionError(format!("Struct member index out of bounds")))
+                    }
+                },
+
                 _ => Err(ExecutionError(format!("Load member not supported on {}", value)))
             }
         })?;
@@ -404,6 +412,12 @@ impl Interpreter
             Instruction::StoreFunc{ref dst, ref func} => {
                 let func = self.get_function(func, module)?;
                 self.store(&dst.name, Value::Func(func))?;
+                Ok(StepResult::Continue(index.next()))
+            },
+
+            Instruction::Load{ref dst, ref ptr} => {
+                let new_value = self.get_variable(&ptr.name)?.clone_value()?;
+                self.update_variable(&dst.name, new_value)?;
                 Ok(StepResult::Continue(index.next()))
             },
 
