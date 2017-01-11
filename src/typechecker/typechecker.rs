@@ -849,6 +849,18 @@ fn type_check_address_of(ctx: &mut TypeCheckerContext, a: &mut AddressOfExpressi
     valid(a.typ.clone())
 }
 
+fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign) -> TypeCheckResult
+{
+    let left_type = type_check_expression(ctx, &mut a.left, &None)?;
+    let right_type = type_check_expression(ctx, &mut a.right, &None)?;
+    if left_type != right_type {
+        err(&a.span, ErrorCode::TypeError, format!("left hand and right hand side of an assignment must have the same type (left type: {}, right type: {})", left_type, right_type))
+    } else {
+        a.typ = left_type;
+        valid(right_type)
+    }
+}
+
 pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: &Option<Type>) -> CompileResult<Type>
 {
     let type_check_result = match *e
@@ -876,6 +888,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::Delete(ref mut d) => type_check_delete(ctx, d, type_hint),
         Expression::ArrayToSlice(ref mut ats) => type_check_array_to_slice(ctx, ats, type_hint),
         Expression::AddressOf(ref mut a) => type_check_address_of(ctx, a, type_hint),
+        Expression::Assign(ref mut a) => type_check_assign(ctx, a),
         Expression::Void => valid(Type::Void),
     };
 

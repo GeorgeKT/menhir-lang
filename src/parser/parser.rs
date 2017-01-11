@@ -14,6 +14,7 @@ fn is_end_of_expression(tok: &Token) -> bool
         TokenKind::Number(_) |
         TokenKind::Identifier(_) |
         TokenKind::StringLiteral(_) |
+        TokenKind::Assign |
         TokenKind::OpenParen |
         TokenKind::OpenBracket |
         TokenKind::OpenCurly => false,
@@ -745,6 +746,12 @@ fn parse_expression_continued(tq: &mut TokenQueue, lhs: Expression) -> CompileRe
     let next = tq.pop()?;
     match next.kind
     {
+        TokenKind::Assign => {
+            let rhs = parse_expression(tq)?;
+            let span = lhs.span().expanded(tq.pos());
+            Ok(assign(lhs, rhs, span))
+        },
+
         TokenKind::Operator(Operator::Dot) => {
             tq.push_front(next);
             parse_member_access(tq, lhs)

@@ -7,7 +7,20 @@ pub struct Test
 }
 
 
-pub const ALL_TESTS: [Test; 31] = [
+pub const ALL_TESTS: [Test; 32] = [
+    Test{
+        name: "assignment",
+        ret: 77,
+        debug: true,
+        code: r#"
+            main() -> int {
+                let x = 7;
+                x = x * 11;
+                x
+            }
+        "#
+    },
+
     Test{
         name: "member functions",
         ret: 11,

@@ -1,6 +1,7 @@
 use std::collections::{HashSet, HashMap};
 
 mod arrays;
+mod assign;
 mod block;
 mod call;
 mod expression;
@@ -20,6 +21,7 @@ mod sumtype;
 mod types;
 
 pub use self::arrays::*;
+pub use self::assign::*;
 pub use self::block::*;
 pub use self::call::*;
 pub use self::expression::*;

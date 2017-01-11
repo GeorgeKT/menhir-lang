@@ -22,6 +22,7 @@ pub enum Expression
     Delete(Box<DeleteExpression>),
     ArrayToSlice(Box<ArrayToSlice>),
     AddressOf(Box<AddressOfExpression>),
+    Assign(Box<Assign>),
     Void,
 }
 
@@ -76,6 +77,7 @@ impl Expression
             Expression::Delete(ref d) => d.span.clone(),
             Expression::ArrayToSlice(ref a) => a.inner.span(),
             Expression::AddressOf(ref a) => a.span.clone(),
+            Expression::Assign(ref a) => a.span.clone(),
             Expression::Void => Span::default(),
         }
     }
@@ -101,6 +103,7 @@ impl Expression
             Expression::Delete(_) => Type::Void,
             Expression::ArrayToSlice(ref a) => a.slice_type.clone(),
             Expression::AddressOf(ref a) => ptr_type(a.inner.get_type()),
+            Expression::Assign(ref a) => a.typ.clone(),
             Expression::Void => Type::Void,
         }
     }
@@ -146,6 +149,7 @@ impl TreePrinter for Expression
                 inner.inner.print(level + 1)
             },
             Expression::AddressOf(ref a) => a.print(level),
+            Expression::Assign(ref a) => a.print(level),
             Expression::Void => println!("{}void", p),
         }
     }

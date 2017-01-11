@@ -653,6 +653,13 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
             func.add(address_of_instr(&dst, &inner_var));
             Some(dst)
         },
+
+        Expression::Assign(ref a) => {
+            let r = to_bc(bc_mod, func, &a.right);
+            let l = to_bc(bc_mod, func, &a.left);
+            func.add(store_instr(&l, &r));
+            Some(l)
+        }
     }
 }
 
