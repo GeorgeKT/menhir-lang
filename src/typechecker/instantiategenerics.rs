@@ -213,6 +213,12 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             Ok(assign(l, r, a.span.clone()))
         },
 
+        Expression::While(ref w) => {
+            let c = substitute_expr(generic_args, &w.cond)?;
+            let b = substitute_expr(generic_args, &w.body)?;
+            Ok(while_loop(c, b, w.span.clone()))
+        },
+
         Expression::Void => Ok(Expression::Void),
     }
 }
@@ -369,6 +375,11 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
         Expression::Assign(ref a) => {
             resolve_generics(new_functions, module, &a.left)?;
             resolve_generics(new_functions, module, &a.right)
+        },
+
+        Expression::While(ref w) => {
+            resolve_generics(new_functions, module, &w.cond)?;
+            resolve_generics(new_functions, module, &w.body)
         },
 
         Expression::NameRef(_) |

@@ -500,6 +500,27 @@ fn match_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, m: &Mat
     dst
 }
 
+fn while_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, w: &WhileLoop)
+{
+    let cond_bb = func.create_basic_block();
+    let body_bb = func.create_basic_block();
+    let post_while_bb = func.create_basic_block();
+
+    func.add_basic_block(cond_bb);
+    func.add_basic_block(body_bb);
+
+    func.add(Instruction::Branch(cond_bb));
+    func.set_current_bb(cond_bb);
+    let cond = to_bc(bc_mod, func, &w.cond);
+    func.add(branch_if_instr(&cond, body_bb, post_while_bb));
+    func.set_current_bb(body_bb);
+    expr_to_bc(bc_mod, func, &w.body);
+    func.add(Instruction::Branch(cond_bb));
+
+    func.add_basic_block(post_while_bb);
+    func.set_current_bb(post_while_bb);
+}
+
 fn to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &Expression) -> Var
 {
     expr_to_bc(bc_mod, func, expr).expect("Expression must return a value")
@@ -659,7 +680,12 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
             let l = to_bc(bc_mod, func, &a.left);
             func.add(store_instr(&l, &r));
             Some(l)
-        }
+        },
+
+        Expression::While(ref w) => {
+            while_to_bc(bc_mod, func, w);
+            None
+        },
     }
 }
 

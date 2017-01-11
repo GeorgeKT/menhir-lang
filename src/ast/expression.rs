@@ -23,6 +23,7 @@ pub enum Expression
     ArrayToSlice(Box<ArrayToSlice>),
     AddressOf(Box<AddressOfExpression>),
     Assign(Box<Assign>),
+    While(Box<WhileLoop>),
     Void,
 }
 
@@ -78,6 +79,7 @@ impl Expression
             Expression::ArrayToSlice(ref a) => a.inner.span(),
             Expression::AddressOf(ref a) => a.span.clone(),
             Expression::Assign(ref a) => a.span.clone(),
+            Expression::While(ref w) => w.span.clone(),
             Expression::Void => Span::default(),
         }
     }
@@ -104,7 +106,7 @@ impl Expression
             Expression::ArrayToSlice(ref a) => a.slice_type.clone(),
             Expression::AddressOf(ref a) => ptr_type(a.inner.get_type()),
             Expression::Assign(ref a) => a.typ.clone(),
-            Expression::Void => Type::Void,
+            Expression::Void | Expression::While(_) => Type::Void,
         }
     }
 }
@@ -150,6 +152,7 @@ impl TreePrinter for Expression
             },
             Expression::AddressOf(ref a) => a.print(level),
             Expression::Assign(ref a) => a.print(level),
+            Expression::While(ref w) => w.print(level),
             Expression::Void => println!("{}void", p),
         }
     }

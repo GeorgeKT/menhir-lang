@@ -1,5 +1,9 @@
 main() -> int {
-    let x = 7;
-    x = x * 11;
-    x
+    let x = 0;
+    let y = 0;
+    while x < 10 {
+        y = y + 2;
+        x = x + 1;
+    };
+    y
 }

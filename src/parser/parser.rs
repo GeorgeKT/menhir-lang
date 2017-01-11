@@ -489,7 +489,10 @@ fn parse_let(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 fn parse_if(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 {
     let cond = parse_expression(tq)?;
-    tq.expect(TokenKind::Colon)?;
+    if !tq.is_next(TokenKind::OpenCurly) {
+        tq.expect(TokenKind::Colon)?;
+    }
+
     let on_true = parse_expression(tq)?;
     tq.expect(TokenKind::Else)?;
     let on_false = parse_expression(tq)?;
@@ -637,6 +640,17 @@ fn parse_block(tq: &mut TokenQueue, start: &Span) -> CompileResult<Expression>
     Ok(block(expressions, start.expanded(tq.pos())))
 }
 
+fn parse_while(tq: &mut TokenQueue, start: &Span) -> CompileResult<Expression>
+{
+    let cond = parse_expression(tq)?;
+    if !tq.is_next(TokenKind::OpenCurly) {
+        tq.expect(TokenKind::Colon)?;
+    }
+
+    let body = parse_expression(tq)?;
+    Ok(while_loop(cond, body, start.expanded(tq.pos())))
+}
+
 fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expression>
 {
     match tok.kind
@@ -667,6 +681,10 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
 
         TokenKind::If => {
             parse_if(tq, &tok.span)
+        },
+
+        TokenKind::While => {
+            parse_while(tq, &tok.span)
         },
 
         TokenKind::OpenCurly => {
