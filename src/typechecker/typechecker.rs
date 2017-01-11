@@ -678,7 +678,13 @@ fn find_member_type(members: &Vec<StructMember>, member_name: &str, span: &Span)
 fn member_call_to_call(left: &Expression, call: &Call) -> Expression
 {
     let mut args = Vec::with_capacity(call.args.len() + 1);
-    args.push(left.clone());
+    let first_arg = match left.get_type()
+    {
+        Type::Pointer(_) => left.clone(),
+        _ => address_of(left.clone(), left.span()),
+    };
+
+    args.push(first_arg);
     args.extend(call.args.iter().map(|a| a.clone()));
     Expression::Call(
         Call::new(
@@ -836,6 +842,13 @@ fn type_check_array_to_slice(ctx: &mut TypeCheckerContext, ats: &mut ArrayToSlic
     }
 }
 
+fn type_check_address_of(ctx: &mut TypeCheckerContext, a: &mut AddressOfExpression, type_hint: &Option<Type>) -> TypeCheckResult
+{
+    let t = type_check_expression(ctx, &mut a.inner, type_hint)?;
+    a.typ = ptr_type(t);
+    valid(a.typ.clone())
+}
+
 pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: &Option<Type>) -> CompileResult<Type>
 {
     let type_check_result = match *e
@@ -862,6 +875,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::New(ref mut n) => type_check_new(ctx, n, type_hint),
         Expression::Delete(ref mut d) => type_check_delete(ctx, d, type_hint),
         Expression::ArrayToSlice(ref mut ats) => type_check_array_to_slice(ctx, ats, type_hint),
+        Expression::AddressOf(ref mut a) => type_check_address_of(ctx, a, type_hint),
         Expression::Void => valid(Type::Void),
     };
 

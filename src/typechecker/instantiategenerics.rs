@@ -151,7 +151,9 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             }
             Ok(block(new_expressions, b.span.clone()))
         },
+
         Expression::Literal(ref lit) => Ok(Expression::Literal(lit.clone())),
+
         Expression::NameRef(ref nr) => {
             let new_nr = NameRef{
                 name: nr.name.clone(),
@@ -160,6 +162,7 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             };
             Ok(Expression::NameRef(new_nr))
         },
+
         Expression::StructInitializer(ref si) => {
             let mut nmi = Vec::with_capacity(si.member_initializers.len());
             for e in si.member_initializers.iter() {
@@ -169,6 +172,7 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
 
             Ok(Expression::StructInitializer(struct_initializer(&si.struct_name, nmi, si.span.clone())))
         },
+
         Expression::MemberAccess(ref sma) => {
             let left = substitute_expr(generic_args, &sma.left)?;
             let right = match sma.right
@@ -196,7 +200,12 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
         Expression::ArrayToSlice(ref ats) => {
             let inner = substitute_expr(generic_args, &ats.inner)?;
             Ok(array_to_slice(inner, ats.span.clone()))
-        }
+        },
+
+        Expression::AddressOf(ref a) => {
+            let inner = substitute_expr(generic_args, &a.inner)?;
+            Ok(address_of(inner, a.span.clone()))
+        },
 
         Expression::Void => Ok(Expression::Void),
     }
@@ -347,7 +356,15 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
             resolve_generics(new_functions, module, &ats.inner)
         }
 
-        _ => Ok(()),
+        Expression::AddressOf(ref a) => {
+            resolve_generics(new_functions, module, &a.inner)
+        }
+
+        Expression::NameRef(_) |
+        Expression::If(_) |
+        Expression::MemberAccess(_) |
+        Expression::Literal(_) | 
+        Expression::Void => Ok(()),
     }
 }
 

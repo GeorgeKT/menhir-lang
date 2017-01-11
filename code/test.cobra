@@ -1,2 +1,10 @@
+type Foo {
+    bar: int
+}
+
+Foo.add(self, num: int) -> int {
+    self.bar + num
+}
+
 main() -> int =
-    let x = "Hello" in x.len
+    let f = Foo{7} in f.add(4)

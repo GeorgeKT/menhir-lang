@@ -21,6 +21,7 @@ pub enum Expression
     New(Box<NewExpression>),
     Delete(Box<DeleteExpression>),
     ArrayToSlice(Box<ArrayToSlice>),
+    AddressOf(Box<AddressOfExpression>),
     Void,
 }
 
@@ -74,17 +75,16 @@ impl Expression
             Expression::New(ref n) => n.span.clone(),
             Expression::Delete(ref d) => d.span.clone(),
             Expression::ArrayToSlice(ref a) => a.inner.span(),
+            Expression::AddressOf(ref a) => a.span.clone(),
             Expression::Void => Span::default(),
         }
     }
 
-/*
     pub fn get_type(&self) -> Type
     {
         match *self
         {
             Expression::Literal(ref lit) => lit.get_type(),
-            Expression::ArrayGenerator(ref a) => a.array_type.clone(),
             Expression::UnaryOp(ref op) => op.typ.clone(),
             Expression::BinaryOp(ref op) => op.typ.clone(),
             Expression::Block(ref b) => b.typ.clone(),
@@ -97,9 +97,13 @@ impl Expression
             Expression::If(ref i) => i.typ.clone(),
             Expression::StructInitializer(ref si) => si.typ.clone(),
             Expression::MemberAccess(ref sma) => sma.typ.clone(),
+            Expression::New(ref n) => n.typ.clone(),
+            Expression::Delete(_) => Type::Void,
+            Expression::ArrayToSlice(ref a) => a.slice_type.clone(),
+            Expression::AddressOf(ref a) => ptr_type(a.inner.get_type()),
+            Expression::Void => Type::Void,
         }
     }
-*/
 }
 
 
@@ -141,6 +145,7 @@ impl TreePrinter for Expression
                 println!("{}array to slice (type: {})", p, inner.slice_type);
                 inner.inner.print(level + 1)
             },
+            Expression::AddressOf(ref a) => a.print(level),
             Expression::Void => println!("{}void", p),
         }
     }

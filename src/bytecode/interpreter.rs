@@ -454,6 +454,12 @@ impl Interpreter
                 next
             },
 
+            Instruction::AddressOf{ref dst, ref obj} => {
+                let ptr = self.get_variable(&obj.name)?.to_ptr();
+                self.replace_variable(&dst.name, ptr)?;
+                next
+            },
+
             Instruction::GetProperty{ref dst, ref obj, ref prop} => {
                 self.get_property(&dst.name, &obj.name, *prop)?;
                 next

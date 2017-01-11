@@ -16,6 +16,13 @@ pub struct DeleteExpression
     pub span: Span,
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct AddressOfExpression
+{
+    pub inner: Expression,
+    pub typ: Type,
+    pub span: Span,
+}
 
 pub fn new(inner: Expression, span: Span) -> Expression
 {
@@ -55,6 +62,19 @@ pub fn delete(inner: Expression, span: Span) -> Expression
     )
 }
 
+pub fn address_of(inner: Expression, span: Span) -> Expression
+{
+    Expression::AddressOf(
+        Box::new(
+            AddressOfExpression{
+                inner: inner,
+                typ: Type::Unknown,
+                span: span,
+            }
+        )
+    )
+}
+
 impl TreePrinter for NewExpression
 {
     fn print(&self, level: usize)
@@ -71,6 +91,16 @@ impl TreePrinter for DeleteExpression
     {
         let p = prefix(level);
         println!("{}delete (span: {})", p, self.span);
+        self.inner.print(level + 1)
+    }
+}
+
+impl TreePrinter for AddressOfExpression
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        println!("{}address of (span: {})", p, self.span);
         self.inner.print(level + 1)
     }
 }

@@ -7,7 +7,70 @@ pub struct Test
 }
 
 
-pub const ALL_TESTS: [Test; 27] = [
+pub const ALL_TESTS: [Test; 31] = [
+    Test{
+        name: "member functions",
+        ret: 11,
+        debug: false,
+        code: r#"
+            type Foo {
+                bar: int
+            }
+
+            Foo.add(self, num: int) -> int {
+                self.bar + num
+            }
+
+            main() -> int =
+                let f = Foo{7} in f.add(4)
+        "#
+    },
+
+    Test{
+        name: "char",
+        ret: 8,
+        debug: false,
+        code: r#"
+            foo(c: char) -> int =
+                match c:
+                    'b' => 5,
+                    '\n' => 7,
+                    _ => 3
+
+            main() -> int = foo('b') + foo('c')
+        "#
+    },
+
+    Test{
+        name: "block",
+        ret: 77,
+        debug: false,
+        code: r#"
+            max(a: int, b: int) -> int =
+                if a > b: a
+                else b
+
+            main() -> int {
+                let x = max(10, 11);
+                7 * x
+            }
+        "#
+    },
+
+    Test{
+        name: "if test",
+        ret: 100,
+        debug: false,
+        code: r#"
+            max(a: int, b: int) -> int =
+                if a > b: a
+                else b
+
+            main() -> int =
+                max(100, 10)
+        "#
+    },
+
     Test{
         name: "string length",
         ret: 5,

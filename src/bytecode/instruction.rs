@@ -56,6 +56,7 @@ pub enum Instruction
     StoreFunc{dst: Var, func: String},
     Load{dst: Var, ptr: Var},
     LoadMember{dst: Var, obj: Var, member_index: usize},
+    AddressOf{dst: Var, obj: Var},
     GetProperty{dst: Var, obj: Var, prop: ByteCodeProperty},
     SetProperty{obj: Var, prop: ByteCodeProperty, val: usize},
     UnaryOp{dst: Var, op: Operator, src: Var},
@@ -112,6 +113,14 @@ pub fn load_member_instr(dst: &Var, obj: &Var, member_index: usize) -> Instructi
         dst: dst.clone(),
         obj: obj.clone(),
         member_index: member_index,
+    }
+}
+
+pub fn address_of_instr(dst: &Var, obj: &Var) -> Instruction
+{
+    Instruction::AddressOf{
+        dst: dst.clone(),
+        obj: obj.clone(),
     }
 }
 
@@ -213,6 +222,10 @@ impl fmt::Display for Instruction
 
             Instruction::LoadMember{ref dst, ref obj, member_index} => {
                 writeln!(f, "  loadm {} {}.{}", dst, obj, member_index)
+            },
+
+            Instruction::AddressOf{ref dst, ref obj} => {
+                writeln!(f, "  addr {} {}", dst, obj)
             },
 
             Instruction::GetProperty{ref dst, ref obj, ref prop} => {
