@@ -7,7 +7,17 @@ pub struct Test
 }
 
 
-pub const ALL_TESTS: [Test; 26] = [
+pub const ALL_TESTS: [Test; 27] = [
+    Test{
+        name: "string length",
+        ret: 5,
+        debug: false,
+        code: r#"
+            main() -> int =
+                let x = "Hello" in x.len
+        "#
+    },
+
     Test{
         name: "number",
         ret: 5,

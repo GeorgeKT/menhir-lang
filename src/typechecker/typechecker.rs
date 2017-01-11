@@ -710,7 +710,8 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
             (member_type, None)
         },
 
-        (&mut MemberAccessType::Name(ref mut field), &Type::Array(_)) => {
+        (&mut MemberAccessType::Name(ref mut field), &Type::Array(_)) |
+        (&mut MemberAccessType::Name(ref mut field), &Type::String) => {
             if let Some((typ, member_access_type)) = left_type.get_property_type(&field.name) {
                 (typ, Some(member_access_type))
             } else {

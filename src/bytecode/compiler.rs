@@ -239,7 +239,8 @@ fn member_access_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction,
             func.add(load_member_instr(dst, &var, field.index));
         },
 
-        (&Type::Array(_), &MemberAccessType::Property(Property::Len)) => {
+        (&Type::Array(_), &MemberAccessType::Property(Property::Len)) |
+        (&Type::String, &MemberAccessType::Property(Property::Len)) => {
             func.add(get_prop_instr(dst, &var, ByteCodeProperty::Len));
         },
 
