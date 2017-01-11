@@ -1,7 +1,7 @@
 use llvm::prelude::*;
 use llvm::core::*;
 
-use ast::{Type, ArrayProperty};
+use ast::{Type, Property};
 use codegen::{Context, Array, StructValue, SumTypeValue};
 
 
@@ -127,15 +127,15 @@ impl ValueRef
         }
     }
 
-    pub unsafe fn array_property(&self, ctx: &Context, prop: ArrayProperty) -> ValueRef
+    pub unsafe fn array_property(&self, ctx: &Context, prop: Property) -> ValueRef
     {
         match (self, prop)
         {
-            (&ValueRef::Array(ref ar), ArrayProperty::Len) => {
+            (&ValueRef::Array(ref ar), Property::Len) => {
                 ar.get_length_ptr(ctx)
             },
 
-            (&ValueRef::HeapPtr(_, Type::Array(_)), ArrayProperty::Len) => {
+            (&ValueRef::HeapPtr(_, Type::Array(_)), Property::Len) => {
                 self.deref(ctx).array_property(ctx, prop)
             },
             _ => panic!("Internal Compiler Error: Invalid array property access"),
@@ -168,34 +168,4 @@ impl ValueRef
             _ => panic!("Internal Compiler Error: Attempting to get a sum type case member from a non sum type"),
         }
     }
-
-    pub unsafe fn inc_ref(&self, ctx: &Context)
-    {
-        if let &ValueRef::HeapPtr(_, _) = self {
-            self.deref(ctx).inc_ref(ctx);
-        } else {
-            let arc_inc_ref = ctx.get_builtin("arc_inc_ref");
-            let void_ptr = LLVMBuildBitCast(ctx.builder, self.get(), ctx.resolve_type(&Type::VoidPtr), cstr!("cast_to_void_ptr"));
-            let mut args = vec![
-                void_ptr
-            ];
-            LLVMBuildCall(ctx.builder, arc_inc_ref.function, args.as_mut_ptr(), 1, cstr!(""));
-        }
-    }
-
-
-    pub unsafe fn dec_ref(&self, ctx: &Context)
-    {
-        if let &ValueRef::HeapPtr(_, _) = self {
-            self.deref(ctx).dec_ref(ctx);
-        } else {
-            let arc_dec_ref = ctx.get_builtin("arc_dec_ref");
-            let void_ptr = LLVMBuildBitCast(ctx.builder, self.get(), ctx.resolve_type(&Type::VoidPtr), cstr!("cast_to_void_ptr"));
-            let mut args = vec![
-                void_ptr
-            ];
-            LLVMBuildCall(ctx.builder, arc_dec_ref.function, args.as_mut_ptr(), 1, cstr!(""));
-        }
-    }
-
 }

@@ -117,7 +117,7 @@ pub fn sig(name: &str, ret: Type, args: Vec<Argument>, span: Span) -> FunctionSi
         typ: Type::Unknown,
     }
 }
-
+/*
 pub fn anon_sig(name: &str, ret: &Type, args: &Vec<Type>) -> FunctionSignature
 {
     FunctionSignature{
@@ -128,7 +128,7 @@ pub fn anon_sig(name: &str, ret: &Type, args: &Vec<Type>) -> FunctionSignature
         typ: Type::Unknown,
     }
 }
-
+*/
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ExternalFunction

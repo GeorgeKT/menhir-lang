@@ -288,6 +288,7 @@ impl Context
             Type::Float => LLVMDoubleTypeInContext(self.context),
             Type::Char => LLVMInt8TypeInContext(self.context),
             Type::EmptyArray => self.resolve_type(&array_type(Type::Int)),
+            Type::Pointer(ref inner) => LLVMPointerType(self.resolve_type(&inner), 0),
             Type::Array(ref at) => {
                 let element_type = self.resolve_type(&at.element_type);
                 let mut member_types = vec![

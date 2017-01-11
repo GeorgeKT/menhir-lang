@@ -112,6 +112,8 @@ pub enum TokenKind
     False,
     Type,
     Tilde,
+    New,
+    Delete,
     EOF,
 }
 
@@ -153,6 +155,8 @@ impl Display for TokenKind
             TokenKind::False => write!(fmt, "false"),
             TokenKind::Type => write!(fmt, "type"),
             TokenKind::Tilde => write!(fmt, "~"),
+            TokenKind::New => write!(fmt, "new"),
+            TokenKind::Delete => write!(fmt, "delete"),
             TokenKind::EOF => write!(fmt, "EOF"),
         }
     }

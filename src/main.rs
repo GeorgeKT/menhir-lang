@@ -5,24 +5,26 @@ extern crate docopt;
 extern crate rustc_serialize;
 extern crate itertools;
 extern crate uuid;
+extern crate shrust;
 
 mod ast;
 #[macro_use]
-mod codegen;
+//mod codegen;
 mod compileerror;
 mod bytecode;
 mod parser;
 mod typechecker;
+#[cfg(test)] mod testcode;
 mod span;
 
 
 use std::path::{Path, PathBuf};
 use std::process::exit;
-use codegen::{CodeGenOptions, codegen, link, llvm_init};
+//use codegen::{CodeGenOptions, codegen, link, llvm_init};
 use docopt::Docopt;
 use parser::{ParserOptions, parse_file};
 use typechecker::{type_check_module};
-use bytecode::{compile_to_byte_code, run_byte_code};
+use bytecode::{compile_to_byte_code, run_byte_code, debug_byte_code};
 
 
 static USAGE: &'static str =  "
@@ -35,8 +37,9 @@ options:
                                                A comma separated list of these values is also supported.
   -O, --optimize                               Optimize the code.
   -I <imports>, --imports=<imports>            Directory to look for imports, use a comma separated list for more then one.
-  -o <output-file>, --output=<output-file>     Name of binary to create (by default input-file without the extensions)
-  -i --interpret                               Execute the code in the interpreter
+  -o <output-file>, --output=<output-file>     Name of binary to create (by default input-file without the extensions).
+  -i --interpret                               Execute the code in the interpreter.
+  -d --debug                                   Run the interpreter in debug mode.
 ";
 
 
@@ -49,6 +52,7 @@ struct Args
     flag_output: Option<String>,
     flag_imports: Option<String>,
     flag_interpret: Option<bool>,
+    flag_debug: Option<bool>,
 }
 
 
@@ -70,7 +74,8 @@ fn main()
 
     let input_file = args.arg_input_file.expect("Missing input file argument");
     let run_interpreter = args.flag_interpret.unwrap_or(false);
-    let output_file = args.flag_output.unwrap_or(default_output_file(&input_file));
+    let run_debugger = args.flag_debug.unwrap_or(false);
+    let _output_file = args.flag_output.unwrap_or(default_output_file(&input_file));
     let dump_flags = args.flag_dump.unwrap_or_default();
 
 
@@ -80,14 +85,15 @@ fn main()
             .unwrap_or(Vec::new()),
     };
 
+/*
     let opts = CodeGenOptions{
         dump_ir: dump_flags.contains("ir") || dump_flags.contains("all"),
         build_dir: "build".into(),
         program_name: output_file,
         optimize: args.flag_optimize.unwrap_or(false),
     };
-
-    match parse_file(&parser_options, &input_file).and_then(|mut module| {
+*/
+    let ret = parse_file(&parser_options, &input_file).and_then(|mut module| {
 
         type_check_module(&mut module)?;
 
@@ -109,8 +115,20 @@ fn main()
             println!("------\n");
         }
 
-        if run_interpreter {
-            match run_byte_code(&bc_mod, "main")
+        if !run_debugger && !run_interpreter {
+            /*
+            llvm_init();
+            let mut ctx = codegen(&bc_mod)?;
+            link(&mut ctx, &opts)
+            */
+            panic!("NYI");
+        } else {
+            let ret = if run_debugger {
+                debug_byte_code(&bc_mod, "main")
+            } else {
+                run_byte_code(&bc_mod, "main")
+            };
+            match ret
             {
                 Ok(ret) => {
                     exit(ret.to_exit_code())
@@ -120,13 +138,12 @@ fn main()
                     exit(-1);
                 }
             }
-
-        } else {
-            llvm_init();
-            let mut ctx = codegen(&bc_mod)?;
-            link(&mut ctx, &opts)
         }
-    })
+
+        Ok(())
+    });
+
+    match ret
     {
         Ok(_) => {},
         Err(e) => {

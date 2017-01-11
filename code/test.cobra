@@ -1,13 +1,10 @@
-import io
+type Foo {
+    bar: int
+}
+
+Foo.add(self, num: int) -> int {
+    self.bar + num
+}
 
 main() -> int =
-    match open("/tmp/foo", WriteOnly):
-        Ok{file} => (
-            write(file, "Hello World!");
-            close(file);
-            0
-        ),
-        Err{err} => (
-            println("Failed to open /tmp/foo");
-            1
-        )
+    let f = Foo{7} in f.add(4)

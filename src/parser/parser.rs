@@ -1,5 +1,6 @@
 use std::fs;
 use std::io::Read;
+use std::rc::Rc;
 use ast::*;
 use compileerror::{CompileResult, ErrorCode, err};
 use parser::{TokenQueue, Token, TokenKind, Operator, Lexer, ParserOptions};
@@ -195,20 +196,19 @@ fn parse_generic_arg_list(tq: &mut TokenQueue) -> CompileResult<Vec<Type>>
     Ok(args)
 }
 
-fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
+fn parse_start_of_type(tq: &mut TokenQueue) -> CompileResult<Type>
 {
-    if tq.is_next(TokenKind::Dollar)
+    if tq.is_next(TokenKind::Operator(Operator::Mul))
+    {
+        tq.pop()?;
+        let inner = parse_type(tq)?;
+        Ok(Type::Pointer(Rc::new(inner)))
+    }
+    else if tq.is_next(TokenKind::Dollar)
     {
         tq.pop()?;
         let (name, _span) = tq.expect_identifier()?;
         Ok(Type::Generic(name))
-    }
-    else if tq.is_next(TokenKind::OpenBracket)
-    {
-        tq.pop()?;
-        let at = parse_type(tq)?;
-        tq.expect(TokenKind::CloseBracket)?;
-        Ok(array_type(at))
     }
     else if tq.is_next(TokenKind::OpenParen)
     {
@@ -243,6 +243,24 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
             },
         }
     }
+}
+
+fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
+{
+    let mut typ = parse_start_of_type(tq)?;
+    while tq.is_next(TokenKind::OpenBracket)
+    {
+        tq.pop()?;
+        if tq.is_next(TokenKind::CloseBracket) {
+            tq.pop()?;
+            typ = slice_type(typ);
+        } else {
+            let (len, _span) = tq.expect_int()?;
+            typ = array_type(typ, len as usize);
+        }
+    }
+
+    Ok(typ)
 }
 
 fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool, self_type: &Option<Type>) -> CompileResult<Argument>
@@ -295,16 +313,23 @@ fn parse_external_function(tq: &mut TokenQueue, span: &Span) -> CompileResult<Ex
 
 fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, name: &str, span: &Span) -> CompileResult<Function>
 {
-    let (full_name, self_type) = if name != "main" {
-        if tq.is_next(TokenKind::Operator(Operator::Dot)) {
-            tq.pop()?;
-            let (member_function_name, _) = tq.expect_identifier()?;
-            (namespaced(namespace, &format!("{}.{}", name, member_function_name)), Some(unresolved_type(name, Vec::new())))
-        } else {
-            (namespaced(namespace, name), None)
-        }
-    } else {
-        (name.into(), None)
+    let (full_name, self_type) = match name
+    {
+        "main" => (name.into(), None),
+        _ if name.starts_with("~") => {
+            let self_type = ptr_type(unresolved_type(&name[1..], Vec::new()));
+            (namespaced(namespace, name), Some(self_type))
+        },
+        _ => {
+            if tq.is_next(TokenKind::Operator(Operator::Dot)) {
+                tq.pop()?;
+                let (member_function_name, _) = tq.expect_identifier()?;
+                let self_type = ptr_type(unresolved_type(name, Vec::new()));
+                (namespaced(namespace, &format!("{}.{}", name, member_function_name)), Some(self_type))
+            } else {
+                (namespaced(namespace, name), None)
+            }
+        },
     };
 
     tq.expect(TokenKind::OpenParen)?;
@@ -695,6 +720,16 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
             parse_number(&n, &tok.span).map(|n| Expression::Literal(n))
         },
 
+        TokenKind::New => {
+            let inner = parse_expression(tq)?;
+            Ok(new(inner, tok.span.expanded(tq.pos())))
+        },
+
+        TokenKind::Delete => {
+            let inner = parse_expression(tq)?;
+            Ok(delete(inner, tok.span.expanded(tq.pos())))
+        },
+
         TokenKind::Operator(op) => parse_unary_expression(tq, op, &tok.span),
 
         _ => err(&tok.span, ErrorCode::UnexpectedToken, format!("Unexpected token '{}'", tok)),
@@ -763,6 +798,14 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
     let mut module = Module::new(name);
     let namespace = name;
 
+    let add_function = |module: &mut Module, func: Function| -> CompileResult<()> {
+        if module.functions.contains_key(&func.sig.name) {
+            return err(&func.span, ErrorCode::RedefinitionOfFunction, format!("Function {} redefined", func.sig.name));
+        }
+        module.functions.insert(func.sig.name.clone(), func);
+        Ok(())
+    };
+
     while !tq.is_next(TokenKind::EOF)
     {
         let tok = tq.pop()?;
@@ -801,12 +844,16 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
                 }
             },
 
+            TokenKind::Tilde => {
+                let (type_name, span) = tq.expect_identifier()?;
+                let func_name = format!("~{}", type_name);
+                let func = parse_function_declaration(&mut tq, namespace, &func_name, &span)?;
+                add_function(&mut module, func)?;
+            },
+
             TokenKind::Identifier(ref id) => {
                 let func = parse_function_declaration(&mut tq, namespace, &id, &tok.span)?;
-                if module.functions.contains_key(&func.sig.name) {
-                    return err(&func.span, ErrorCode::RedefinitionOfFunction, format!("Function {} redefined", func.sig.name));
-                }
-                module.functions.insert(func.sig.name.clone(), func);
+                add_function(&mut module, func)?;
             }
             _ => {
                 return err(&tok.span, ErrorCode::ExpressionNotAllowedAtTopLevel,

@@ -1,13 +1,10 @@
-extern print(s: string) -> int
-extern println(s: string) -> int
 extern close(fd: int) -> int
 
 type File {
     fd: int,
 }
 
-File.destroy(self) {
-    println("I'm a destructor");
+~File(self) {
     close(self.fd);
 }
 
@@ -15,8 +12,21 @@ File.read(self, bytes: int) -> string {
     "data"
 }
 
+type Box {
+    inner: *$a,
+}
+
+box(inner: *$a) -> Box<$a> {
+    Box{inner}
+}
+
+~Box(self) {
+    delete self.inner;
+}
+
 main() -> int {
-    let f = File{1};
-    println(f.read(10));
+    let f = box(new File{1});
+    let a = new 5;
+    delete a;
     0
 }

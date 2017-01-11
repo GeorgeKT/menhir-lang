@@ -1,10 +1,22 @@
+use std::fmt;
 use ast::*;
 use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
-pub enum ArrayProperty
+pub enum Property
 {
     Len,
+}
+
+impl fmt::Display for Property
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
+    {
+        match *self
+        {
+            Property::Len => write!(f, "len"),
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -27,7 +39,7 @@ pub enum MemberAccessType
 {
     Call(Call),
     Name(Field),
-    ArrayProperty(ArrayProperty),
+    Property(Property),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -61,10 +73,10 @@ impl TreePrinter for MemberAccess
         {
             MemberAccessType::Call(ref call) => call.print(level + 1),
             MemberAccessType::Name(ref field) => println!("{} .{} (idx {})", p, field.name, field.index),
-            MemberAccessType::ArrayProperty(ref prop) => {
+            MemberAccessType::Property(ref prop) => {
                 match prop
                 {
-                    &ArrayProperty::Len => println!("{} .len", p),
+                    &Property::Len => println!("{} .len", p),
                 }
             }
         }

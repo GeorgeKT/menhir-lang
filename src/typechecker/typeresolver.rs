@@ -16,20 +16,41 @@ enum ResolveMode
     Forced,
 }
 
+fn resolve_type_helper(ctx: &TypeCheckerContext, typ: &Type) -> (Option<Type>, TypeResolved)
+{
+    match *typ
+    {
+        Type::Unresolved(ref ut) => {
+            if let Some(r) = ctx.resolve_type(&ut.name) {
+                (Some(r.typ), TypeResolved::Yes)
+            } else {
+                (None, TypeResolved::No)
+            }
+        },
+
+        Type::Pointer(ref inner) => {
+            let r = resolve_type_helper(ctx, inner);
+            if let (Some(typ), TypeResolved::Yes) = r {
+                (Some(ptr_type(typ)), TypeResolved::Yes)
+            } else {
+                r
+            }
+        },
+
+        _ => (None, TypeResolved::Yes),
+    }
+}
+
 fn resolve_type(ctx: &TypeCheckerContext, typ: &mut Type) -> TypeResolved
 {
-    let resolved = if let Type::Unresolved(ref ut) = *typ {
-        if let Some(r) = ctx.resolve_type(&ut.name) {
-            r
-        } else {
-            return TypeResolved::No;
-        }
-    } else {
-        return TypeResolved::Yes;
-    };
-
-    *typ = resolved.typ;
-    TypeResolved::Yes
+    match resolve_type_helper(ctx, typ)
+    {
+        (Some(resolved_typ), TypeResolved::Yes) => {
+            *typ = resolved_typ;
+            TypeResolved::Yes
+        },
+        (_, result) => result, 
+    }
 }
 
 fn resolve_function_args_and_ret_type(ctx: &mut TypeCheckerContext, sig: &mut FunctionSignature) -> CompileResult<()>

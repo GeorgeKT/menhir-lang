@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use itertools::free::join;
-use ast::{func_type, array_type, struct_type, struct_member, sum_type, sum_type_case, Type};
+use ast::{func_type, array_type, slice_type, struct_type, struct_member, sum_type, sum_type_case, ptr_type, Type};
 use compileerror::{CompileResult, ErrorCode, err};
 use span::Span;
 
@@ -44,13 +44,19 @@ impl GenericMapper
         match *generic
         {
             Type::Array(ref at) => {
-                array_type(self.substitute(&at.element_type))
+                array_type(self.substitute(&at.element_type), at.len)
             },
+
+            Type::Slice(ref st) => {
+                slice_type(self.substitute(&st.element_type))
+            },
+
             Type::Func(ref ft) => {
                 func_type(
                     ft.args.iter().map(|t| self.substitute(t)).collect(),
                     self.substitute(&ft.return_type))
             },
+
             Type::Struct(ref st) => {
                 struct_type(
                     &st.name,
@@ -59,6 +65,7 @@ impl GenericMapper
                         .collect()
                 )
             },
+
             Type::Sum(ref st) => {
                 sum_type(
                     &st.name,
@@ -67,6 +74,11 @@ impl GenericMapper
                         .collect()
                 )
             },
+
+            Type::Pointer(ref inner) => {
+                ptr_type(self.substitute(inner))
+            },
+
             _ => generic.clone(),
         }
     }
@@ -100,21 +112,37 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
         Type::Unknown => {
             Ok(actual.clone())
         },
+
         Type::Generic(_) => {
             known_types.add(&new_generic, actual, span)?;
             Ok(actual.clone())
         },
+
+        Type::Slice(ref generic_st) => {
+            match *actual
+            {
+                Type::Slice(ref actual_st) => {
+                    known_types.add(&generic_st.element_type, &actual_st.element_type, span)?;
+                    let new_el_type = fill_in_generics(&actual_st.element_type, &generic_st.element_type, known_types, span)?;
+                    Ok(slice_type(new_el_type))
+                }
+
+                _ => map_err(),
+            }
+        },
+
         Type::Array(ref generic_at) => {
             match *actual
             {
                 Type::Array(ref actual_at) => {
                     known_types.add(&generic_at.element_type, &actual_at.element_type, span)?;
                     let new_el_type = fill_in_generics(&actual_at.element_type, &generic_at.element_type, known_types, span)?;
-                    Ok(array_type(new_el_type))
+                    Ok(array_type(new_el_type, actual_at.len))
                 },
                 _ => map_err(),
             }
         },
+
         Type::Func(ref generic_ft) => {
             match *actual {
                 Type::Func(ref actual_ft) => {
@@ -134,6 +162,7 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
                 _ => map_err(),
             }
         },
+
         Type::Struct(ref generic_st) => {
             match *actual {
                 Type::Struct(ref actual_st) => {
@@ -156,6 +185,7 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
                 _ => map_err(),
             }
         },
+
         Type::Sum(ref generic_st) => {
             match *actual {
                 Type::Sum(ref actual_st) => {
@@ -178,6 +208,17 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
                 _ => map_err(),
             }
         },
+
+        Type::Pointer(ref generic_inner) => {
+            match *actual {
+                Type::Pointer(ref actual_inner) => {
+                    let inner = fill_in_generics(actual_inner, generic_inner, known_types, span)?;
+                    Ok(ptr_type(inner))
+                },
+                _ => map_err(),
+            }
+        },
+
         _ => map_err(),
     }
 }
@@ -186,7 +227,7 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
 mod tests
 {
     use super::*;
-    use ast::{Type, array_type, func_type, string_type};
+    use ast::{Type, array_type, slice_type, func_type, string_type, ptr_type};
     use span::Span;
 
     fn gen_type(name: &str) -> Type
@@ -207,11 +248,11 @@ mod tests
     fn test_slice()
     {
         let mut tm = GenericMapper::new();
-        let ga = array_type(gen_type("a"));
-        let r = fill_in_generics(&array_type(Type::Int), &ga, &mut tm, &Span::default());
+        let ga = slice_type(gen_type("a"));
+        let r = fill_in_generics(&slice_type(Type::Int), &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
-        assert!(r == Ok(array_type(Type::Int)));
+        assert!(r == Ok(slice_type(Type::Int)));
         assert!(tm.substitute(&gen_type("a")) == Type::Int);
     }
 
@@ -219,11 +260,24 @@ mod tests
     fn test_array()
     {
         let mut tm = GenericMapper::new();
-        let ga = array_type(gen_type("a"));
-        let r = fill_in_generics(&array_type(Type::Int), &ga, &mut tm, &Span::default());
+        let ga = array_type(gen_type("a"), 10);
+        let r = fill_in_generics(&array_type(Type::Int, 10), &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
-        assert!(r == Ok(array_type(Type::Int)));
+        assert!(r == Ok(array_type(Type::Int, 10)));
+        assert!(tm.substitute(&gen_type("a")) == Type::Int);
+    }
+
+    #[test]
+    fn test_pointer()
+    {
+        let mut tm = GenericMapper::new();
+        let gptr = ptr_type(gen_type("a"));
+        let aptr = ptr_type(Type::Int);
+        let r = fill_in_generics(&aptr, &gptr, &mut tm, &Span::default());
+        println!("tm: {:?}", tm);
+        println!("r: {:?}", r);
+        assert!(r == Ok(ptr_type(Type::Int)));
         assert!(tm.substitute(&gen_type("a")) == Type::Int);
     }
 
@@ -276,11 +330,11 @@ mod tests
     {
         let mut tm = GenericMapper::new();
         let ga = gen_type("a");
-        let r = fill_in_generics(&array_type(Type::Int), &ga, &mut tm, &Span::default());
+        let r = fill_in_generics(&array_type(Type::Int, 10), &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
-        assert!(r == Ok(array_type(Type::Int)));
-        assert!(tm.substitute(&ga) == array_type(Type::Int));
+        assert!(r == Ok(array_type(Type::Int, 10)));
+        assert!(tm.substitute(&ga) == array_type(Type::Int, 10));
     }
 
     #[test]

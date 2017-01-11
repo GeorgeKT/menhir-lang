@@ -70,11 +70,14 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction)
                 ctx.add_function(Rc::new(fi));
             },
             _ => {
+                panic!("Fix this !!!!");
+                /*
                 if arg.typ.allocate_on_heap() {
                     ctx.add_variable(&arg.name, ValueRef::new(var, &arg.typ));
                 } else {
                     ctx.add_variable(&arg.name, ValueRef::Const(var));
                 }
+                */
             },
         }
     }

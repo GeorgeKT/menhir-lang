@@ -1,6 +1,5 @@
 use std::fmt;
 use itertools::free::join;
-use ast::{ArrayProperty, Type};
 use parser::Operator;
 use bytecode::function::{BasicBlockRef, Var};
 
@@ -12,7 +11,6 @@ pub enum ByteCodeLiteral
     Char(u8),
     String(String),
     Bool(bool),
-    Array(Vec<Var>),
 }
 
 impl fmt::Display for ByteCodeLiteral
@@ -26,86 +24,103 @@ impl fmt::Display for ByteCodeLiteral
             ByteCodeLiteral::Char(v) => write!(f, "char {}", v),
             ByteCodeLiteral::String(ref v) => write!(f, "string {}", v),
             ByteCodeLiteral::Bool(v) => write!(f, "bool {}", v),
-            ByteCodeLiteral::Array(ref elements) => write!(f, "[{}]", join(elements.iter(), ", ")),
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum ByteCodeExpression
+#[derive(Debug, Clone, Copy)]
+pub enum ByteCodeProperty
 {
-    Literal(ByteCodeLiteral),
-    UnaryOp(Operator, Var),
-    BinaryOp(Operator, Var, Var),
-    Call(String, Vec<Var>),
-    StructMember(Var, usize),
-    SumTypeIndex(Var),
-    SumTypeStruct(Var, usize),
-    SumTypeCase(usize),
-    ArrayProperty(Var, ArrayProperty),
-    ArrayHead(Var),
-    ArrayTail(Var),
-    Ref(Var),
-    Func(String),
-    HeapAlloc(Type),
+    Len,
+    SumTypeIndex,
 }
 
-impl fmt::Display for ByteCodeExpression
+impl fmt::Display for ByteCodeProperty
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
         match *self
         {
-            ByteCodeExpression::Literal(ref l) => l.fmt(f),
-            ByteCodeExpression::UnaryOp(op, ref v) => write!(f, "{} {}", op, v),
-            ByteCodeExpression::BinaryOp(op, ref a, ref b) => write!(f, "{} {} {}", a, op, b),
-            ByteCodeExpression::Call(ref name, ref args) => write!(f, "{}({})", name, join(args.iter(), ", ")),
-            ByteCodeExpression::StructMember(ref obj, index) => write!(f, "{}.{}", obj, index),
-            ByteCodeExpression::SumTypeIndex(ref obj) => write!(f, "sum type index {}", obj),
-            ByteCodeExpression::SumTypeStruct(ref obj, index) => write!(f, "{}.{}", obj, index),
-            ByteCodeExpression::SumTypeCase(index) => write!(f, "sum type case {}", index),
-            ByteCodeExpression::ArrayProperty(ref array, ref property) => write!(f, "{}.{:?}", array, property),
-            ByteCodeExpression::ArrayHead(ref array) => write!(f, "head {}", array),
-            ByteCodeExpression::ArrayTail(ref array) => write!(f, "tail {}", array),
-            ByteCodeExpression::Ref(ref obj) => write!(f, "ref {}", obj),
-            ByteCodeExpression::Func(ref func) => write!(f, "func {}", func),
-            ByteCodeExpression::HeapAlloc(ref typ) => write!(f, "heap_alloc {}", typ),
+            ByteCodeProperty::Len => write!(f, "len"),
+            ByteCodeProperty::SumTypeIndex => write!(f, "sum_type_index"),
         }
     }
 }
 
+
 #[derive(Debug, Clone)]
 pub enum Instruction
 {
-    //SetArrayElement{var: Var, index: ByteCodeExpression, value: ByteCodeExpression},
-    Alloc(Var),
-    SetStructMember{obj: Var, member_index: usize, value: Var},
+    Store{dst: Var, src: Var},
+    StoreLit{dst: Var, lit: ByteCodeLiteral},
+    StoreFunc{dst: Var, func: String},
+    Load{dst: Var, ptr: Var},
+    LoadMember{dst: Var, obj: Var, member_index: usize},
+    AddressOf{dst: Var, obj: Var},
+    GetProperty{dst: Var, obj: Var, prop: ByteCodeProperty},
+    SetProperty{obj: Var, prop: ByteCodeProperty, val: usize},
+    UnaryOp{dst: Var, op: Operator, src: Var},
+    BinaryOp{dst: Var, op: Operator, left: Var, right: Var},
+    Call{dst: Var, func: String, args: Vec<Var>},
+    Slice{dst: Var, src: Var, start: Var, len: Var},
+    StackAlloc(Var),
+    HeapAlloc(Var),
     StartScope,
     EndScope,
-    Bind{name: String, var: Var},
-    Set{var: Var, expr: ByteCodeExpression},
     Return(Var),
     ReturnVoid,
     Branch(BasicBlockRef),
     BranchIf{cond: Var, on_true: BasicBlockRef, on_false: BasicBlockRef},
-    IncRef(Var),
-    DecRef(Var),
+    Delete(Var),
+    Exit,
 }
 
-pub fn set_instr(var: &Var, e: ByteCodeExpression) -> Instruction
+pub fn store_instr(dst: &Var, src: &Var) -> Instruction
 {
-    Instruction::Set{
-        var: var.clone(),
-        expr: e,
+    Instruction::Store{
+        dst: dst.clone(),
+        src: src.clone(),
     }
 }
 
-pub fn set_struct_member_instr(obj: &Var, index: usize, e: &Var) -> Instruction
+pub fn store_lit_instr(dst: &Var, lit: ByteCodeLiteral) -> Instruction
 {
-    Instruction::SetStructMember{
+    Instruction::StoreLit{
+        dst: dst.clone(),
+        lit: lit,
+    }
+}
+
+pub fn store_func_instr(dst: &Var, func: &str) -> Instruction
+{
+    Instruction::StoreFunc{
+        dst: dst.clone(),
+        func: func.into(),
+    }
+}
+
+pub fn load_instr(dst: &Var, ptr: &Var) -> Instruction
+{
+    Instruction::Load{
+        dst: dst.clone(),
+        ptr: ptr.clone()
+    }
+}
+
+pub fn load_member_instr(dst: &Var, obj: &Var, member_index: usize) -> Instruction
+{
+    Instruction::LoadMember{
+        dst: dst.clone(),
         obj: obj.clone(),
-        member_index: index,
-        value: e.clone(),
+        member_index: member_index,
+    }
+}
+
+pub fn address_of_instr(dst: &Var, obj: &Var) -> Instruction
+{
+    Instruction::AddressOf{
+        dst: dst.clone(),
+        obj: obj.clone(),
     }
 }
 
@@ -114,11 +129,22 @@ pub fn ret_instr(var: &Var) -> Instruction
     Instruction::Return(var.clone())
 }
 
-pub fn bind_instr(name: &str, var: &Var) -> Instruction
+pub fn unary_op_instr(dst: &Var, op: Operator, src: Var) -> Instruction
 {
-    Instruction::Bind{
-        name: name.into(),
-        var: var.clone(),
+    Instruction::UnaryOp{
+        dst: dst.clone(),
+        op: op,
+        src: src,
+    }
+}
+
+pub fn binary_op_instr(dst: &Var, op: Operator, left: Var, right: Var) -> Instruction
+{
+    Instruction::BinaryOp{
+        dst: dst.clone(),
+        op: op,
+        left: left,
+        right: right,
     }
 }
 
@@ -131,47 +157,135 @@ pub fn branch_if_instr(cond: &Var, on_true: BasicBlockRef, on_false: BasicBlockR
     }
 }
 
+pub fn call_instr(dst: &Var, func: &str, args: Vec<Var>) -> Instruction
+{
+    Instruction::Call{
+        dst: dst.clone(),
+        func: func.into(),
+        args: args
+    }
+}
+
+pub fn set_prop_instr(obj: &Var, prop: ByteCodeProperty, value: usize) -> Instruction
+{
+    Instruction::SetProperty{
+        obj: obj.clone(),
+        prop: prop,
+        val: value,
+    }
+}
+
+pub fn get_prop_instr(dst: &Var, obj: &Var, prop: ByteCodeProperty) -> Instruction
+{
+    Instruction::GetProperty{
+        dst: dst.clone(),
+        obj: obj.clone(),
+        prop: prop,
+    }
+}
+
+pub fn slice_instr(dst: &Var, src: &Var, start: Var, len: Var) -> Instruction
+{
+    Instruction::Slice{
+        dst: dst.clone(),
+        src: src.clone(),
+        start: start,
+        len: len,
+    }
+}
+
 impl fmt::Display for Instruction
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
         match *self
         {
-            Instruction::Alloc(ref var) => {
-                writeln!(f, "  alloc {}", var)
+            Instruction::Exit => {
+                writeln!(f, "  exit")
             },
-            Instruction::SetStructMember{ref obj, member_index, ref value} => {
-                writeln!(f, "  set {}.{} = {}", obj, member_index, value)
+
+            Instruction::Store{ref dst, ref src} => {
+                writeln!(f, "  store {} {}", dst, src)
             },
+
+            Instruction::StoreLit{ref dst, ref lit} => {
+                writeln!(f, "  storelit {} {}", dst, lit)
+            },
+
+            Instruction::StoreFunc{ref dst, ref func} => {
+                writeln!(f, "  storefunc {} {}", dst, func)
+            },
+
+            Instruction::Load{ref dst, ref ptr} => {
+                writeln!(f, "  load {} {}", dst, ptr)
+            },
+
+            Instruction::LoadMember{ref dst, ref obj, member_index} => {
+                writeln!(f, "  loadm {} {}.{}", dst, obj, member_index)
+            },
+
+            Instruction::AddressOf{ref dst, ref obj} => {
+                writeln!(f, "  addr {} {}", dst, obj)
+            },
+
+            Instruction::GetProperty{ref dst, ref obj, ref prop} => {
+                writeln!(f, "  getp {} {}.{}", dst, obj, prop)
+            },
+
+            Instruction::SetProperty{ref obj, ref prop, ref val} => {
+                writeln!(f, "  setp {} {} {}", obj, prop, val)
+            },
+
+            Instruction::UnaryOp{ref dst, ref op, ref src} => {
+                writeln!(f, "  uop {} {} {}", dst, op, src)
+            },
+
+            Instruction::BinaryOp{ref dst, ref op, ref left, ref right} => {
+                writeln!(f, "  bop {} {} {} {}", dst, op, left, right)
+            },
+
+            Instruction::Call{ref dst, ref func, ref args} => {
+                writeln!(f, "  call {} {} {}", dst, func, join(args.iter(), " "))
+            },
+
+            Instruction::StackAlloc(ref var) => {
+                writeln!(f, "  salloc {}", var)
+            },
+
+            Instruction::HeapAlloc(ref var) => {
+                writeln!(f, "  halloc {}", var)
+            },
+
             Instruction::StartScope => {
                 writeln!(f, "  scope start")
             },
+
             Instruction::EndScope => {
                 writeln!(f, "  scope end")
             },
-            Instruction::Bind{ref name, ref var} => {
-                writeln!(f, "  bind {} = {}", name, var.name)
-            },
-            Instruction::Set{ref var, ref expr} => {
-                writeln!(f, "  set {} = {}", var, expr)
-            },
+
             Instruction::Return(ref var) => {
                 writeln!(f, "  ret {}", var)
             },
+
             Instruction::ReturnVoid => {
                 writeln!(f, "  ret void")
             },
+
             Instruction::Branch(ref name) => {
                 writeln!(f, "  br {}", name)
             },
+
             Instruction::BranchIf{ref cond, ref on_true, ref on_false} => {
                 writeln!(f, "  brif {} ? {} : {} ", cond, on_true, on_false)
             },
-            Instruction::IncRef(ref v) => {
-                writeln!(f, "  incref {}", v.name)
+
+            Instruction::Delete(ref var) => {
+                writeln!(f, "  delete {}", var)
             },
-            Instruction::DecRef(ref v) => {
-                writeln!(f, "  decref {}", v.name)
+
+            Instruction::Slice{ref dst, ref src, ref start, ref len} => {
+                writeln!(f, "  slice {} {} {} {}", dst, src, start, len)
             },
         }
     }

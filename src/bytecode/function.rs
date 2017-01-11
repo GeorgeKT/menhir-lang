@@ -1,8 +1,9 @@
 use std::fmt;
 use std::collections::{BTreeMap, HashMap};
 use itertools::free::join;
-use ast::{Type, FunctionSignature};
+use ast::{Type, FunctionSignature, sig};
 use bytecode::instruction::Instruction;
+use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Var
@@ -42,7 +43,7 @@ impl fmt::Display for Var
 pub struct Scope
 {
     named_vars: HashMap<String, Var>,
-    to_dec_ref: Vec<Var>,
+    to_cleanup: Vec<Var>,
 }
 
 impl Scope
@@ -51,7 +52,7 @@ impl Scope
     {
         Scope{
             named_vars: HashMap::new(),
-            to_dec_ref: Vec::new(),
+            to_cleanup: Vec::new(),
         }
     }
 
@@ -60,28 +61,29 @@ impl Scope
         self.named_vars.insert(var.name.clone(), var);
     }
 
-    pub fn add_dec_ref_target(&mut self, v: &Var) -> bool
+/*
+    pub fn add_cleanup_target(&mut self, v: &Var) -> bool
     {
         if self.named_vars.get(&v.name).is_none() {
             false
         } else {
-            self.to_dec_ref.push(v.clone());
+            self.to_cleanup.push(v.clone());
             true
         }
     }
 
-    pub fn remove_dec_ref_target(&mut self, v: &Var) -> bool
+    pub fn remove_cleanup_target(&mut self, v: &Var) -> bool
     {
-        let len = self.to_dec_ref.len();
-        self.to_dec_ref.retain(|e| e != v);
-        self.to_dec_ref.len() < len
+        let len = self.to_cleanup.len();
+        self.to_cleanup.retain(|e| e != v);
+        self.to_cleanup.len() < len
     }
-
-    pub fn cleanup(&self, func: &mut ByteCodeFunction)
+*/
+    pub fn cleanup(&self, _func: &mut ByteCodeFunction)
     {
         // Cleanup in reverse construction order
-        for v in self.to_dec_ref.iter().rev() {
-            func.add(Instruction::DecRef(v.clone()));
+        for _v in self.to_cleanup.iter().rev() {
+            panic!("TODO: add destructor calls");
         }
     }
 }
@@ -124,7 +126,6 @@ pub struct ByteCodeFunction
     pub sig: FunctionSignature,
     pub blocks: BTreeMap<BasicBlockRef, BasicBlock>,
     pub block_order: Vec<BasicBlockRef>,
-    pub lambdas: Vec<ByteCodeFunction>,
     current_bb: usize,
     bb_counter: usize,
     var_counter: usize,
@@ -141,7 +142,6 @@ impl ByteCodeFunction
             sig: sig.clone(),
             blocks: BTreeMap::new(),
             block_order: Vec::new(),
-            lambdas: Vec::new(),
             current_bb: 0,
             bb_counter: 0,
             var_counter: 0,
@@ -158,9 +158,16 @@ impl ByteCodeFunction
         f
     }
 
-    pub fn is_empty(&self) -> bool
+    pub fn exit() -> ByteCodeFunction
     {
-        self.blocks.get(&0).map(|bb| bb.instructions.is_empty()).unwrap_or(false)
+        let function_sig = sig("exit", Type::Void, vec![], Span::default());
+        let mut function = ByteCodeFunction::new(&function_sig);
+        let entry = function.create_basic_block();
+        function.add_basic_block(entry);
+        function.add(Instruction::Exit);
+        function.add(Instruction::Exit);
+        function.add(Instruction::Exit);
+        function
     }
 
     pub fn add(&mut self, inst: Instruction)
@@ -168,7 +175,7 @@ impl ByteCodeFunction
         // Pop final scope before returning
         match inst
         {
-            Instruction::Return(_) => self.pop_scope(),
+            Instruction::Return(_) | Instruction::ReturnVoid => self.pop_scope(),
             _ => (),
         }
 
@@ -245,31 +252,22 @@ impl ByteCodeFunction
         scope.add_named_var(var);
     }
 
-    pub fn add_dec_ref_target(&mut self, v: &Var)
+/*
+    pub fn add_cleanup_target(&mut self, v: &Var)
     {
         for scope in self.scopes.iter_mut().rev() {
-            if scope.add_dec_ref_target(v) {
+            if scope.add_cleanup_target(v) {
                 break;
             }
         }
     }
-
-    pub fn remove_dec_ref_target(&mut self, v: &Var) -> bool
-    {
-        let scope = self.scopes.last_mut().expect("Empty Scope Stack");
-        scope.remove_dec_ref_target(v)
-    }
+    */
 }
 
 impl fmt::Display for ByteCodeFunction
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
-        for lambda in &self.lambdas {
-            lambda.fmt(f)?;
-            writeln!(f, "")?;
-        }
-
         writeln!(f, "{}({}) -> {}:",
             self.sig.name,
             join(self.sig.args.iter().map(|arg| format!("{}: {}", arg.name, arg.typ)), ", "),

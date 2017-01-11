@@ -35,15 +35,9 @@ fn replace_by(e: Expression) -> TypeCheckResult
     Ok(TypeCheckAction::ReplaceBy(e))
 }
 
-
 fn invalid_unary_operator<T>(span: &Span, op: Operator) -> CompileResult<T>
 {
     err(span, ErrorCode::InvalidUnaryOperator, format!("{} is not a valid unary operator", op))
-}
-
-fn expected_numeric_operands<T>(span: &Span, op: Operator) -> CompileResult<T>
-{
-    err(span, ErrorCode::TypeError, format!("Operator {} expects two numeric expression as operands", op))
 }
 
 fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> TypeCheckResult
@@ -86,67 +80,36 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
         return valid(left_type);
     }
 
+    if left_type != right_type {
+        return err(&b.span, ErrorCode::TypeError, format!("Operator {} expects operands of the same type", b.operator));
+    }
+
+    if !left_type.is_operator_supported(b.operator) {
+        return err(&b.span, ErrorCode::TypeError, format!("Operator {} is not supported on {}", b.operator, left_type));
+    }
+
     match b.operator
     {
-        Operator::Add => {
-            match addition_type(&left_type, &right_type)
-            {
-                Some(t) => {
-                    b.typ = t.clone();
-                    valid(t)
-                },
-                None => err(&b.span, ErrorCode::TypeError,
-                    format!("Addition is not supported on operands of type {} and {}", left_type, right_type))
-            }
-        },
-
+        Operator::Add |
         Operator::Sub |
         Operator::Mul |
-        Operator::Div =>
-            if !left_type.is_numeric() || !right_type.is_numeric() {
-                expected_numeric_operands(&b.span, b.operator)
-            } else if left_type != right_type {
-                err(&b.span, ErrorCode::TypeError, format!("Operator {} expects operands of the same type", b.operator))
-            } else {
-                b.typ = right_type;
-                valid(left_type)
-            },
+        Operator::Mod |
+        Operator::Div => {
+            b.typ = right_type;
+            valid(left_type)
+        },
 
         Operator::LessThan |
         Operator::GreaterThan |
         Operator::LessThanEquals |
-        Operator::GreaterThanEquals =>
-            if !left_type.is_numeric() || !right_type.is_numeric() {
-                expected_numeric_operands(&b.span, b.operator)
-            } else if left_type != right_type {
-                err(&b.span, ErrorCode::TypeError, format!("Operator {} expects operands of the same type", b.operator))
-            } else {
-                b.typ = Type::Bool;
-                valid(Type::Bool)
-            },
-
-        Operator::Mod =>
-            if !left_type.is_integer() || !right_type.is_integer() {
-                err(&b.span, ErrorCode::TypeError, format!("Operator {} expects two integer expressions as operands", b.operator))
-            } else {
-                b.typ = Type::Int;
-                valid(Type::Int)
-            },
-        Operator::Equals | Operator::NotEquals =>
-            if left_type != right_type {
-                err(&b.span, ErrorCode::TypeError, format!("Operator {} expects two expressions of the same type as operands", b.operator))
-            } else {
-                b.typ = Type::Bool;
-                valid(Type::Bool)
-            },
-
-        Operator::And | Operator::Or =>
-            if !left_type.is_bool() || !right_type.is_bool() {
-                err(&b.span, ErrorCode::TypeError, format!("Operator {} expects two boolean expressions as operands", b.operator))
-            } else {
-                b.typ = Type::Bool;
-                valid(Type::Bool)
-            },
+        Operator::GreaterThanEquals |
+        Operator::Equals |
+        Operator::NotEquals |
+        Operator::And |
+        Operator::Or => {
+            b.typ = Type::Bool;
+            valid(Type::Bool)
+        },
         _ => err(&b.span, ErrorCode::InvalidBinaryOperator, format!("Operator {} is not a binary operator", b.operator))
     }
 }
@@ -154,7 +117,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
 fn type_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLiteral) -> TypeCheckResult
 {
     if a.elements.is_empty() {
-        a.array_type = Type::EmptyArray;
+        a.array_type = array_type(Type::Int, 0);
         return valid(a.array_type.clone());
     }
 
@@ -168,7 +131,7 @@ fn type_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLiteral) 
         }
     }
 
-    let array_type = array_type(array_element_type);
+    let array_type = array_type(array_element_type, a.elements.len());
     if a.array_type == Type::Unknown {
         a.array_type = array_type;
     } else if a.array_type != array_type {
@@ -177,28 +140,6 @@ fn type_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLiteral) 
 
     valid(a.array_type.clone())
 }
-
-fn type_check_array_generator(ctx: &mut TypeCheckerContext, a: &mut ArrayGenerator) -> TypeCheckResult
-{
-    ctx.push_stack();
-
-    // At the moment assume iterable is an array, in the future expand to all iterators
-    let it_type = type_check_expression(ctx, &mut a.iterable, &None)?;
-    let it_element_type = match it_type.get_element_type()
-    {
-        Some(Type::Unknown) => return err(&a.span, ErrorCode::TypeError, format!("Extract expression with empty array is pointless")),
-        Some(et) => et,
-        None => return err(&a.span, ErrorCode::TypeError, format!("Iterable expression in array generator is not an array")),
-    };
-
-    ctx.add(&a.var, it_element_type, &a.span)?;
-
-    let element_type = type_check_expression(ctx, &mut a.left, &None)?;
-    a.array_type = array_type(element_type);
-    ctx.pop_stack();
-    valid(a.array_type.clone())
-}
-
 
 fn resolve_generic_args_in_call(ctx: &mut TypeCheckerContext, ft: &FuncType, c: &mut Call) -> CompileResult<Vec<Type>>
 {
@@ -251,8 +192,9 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> TypeCheckResul
             }
             else
             {
-                if let Some(conversion_expr) = expected_arg_type.convert(&arg_type, &c.args[idx])
+                if let Some(mut conversion_expr) = expected_arg_type.convert(&arg_type, &c.args[idx])
                 {
+                    type_check_expression(ctx, &mut conversion_expr, &None)?;
                     c.args[idx] = conversion_expr;
                 }
                 else
@@ -333,7 +275,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Ty
 
                 ctx.push_stack();
                 ctx.add(&ap.head, element_type.clone(), &ap.span)?;
-                ctx.add(&ap.tail, array_type(element_type.clone()), &ap.span)?;
+                ctx.add(&ap.tail, slice_type(element_type.clone()), &ap.span)?;
                 let ct = infer_case_type(ctx, &mut c.to_execute, &return_type)?;
                 ctx.pop_stack();
                 ct
@@ -567,7 +509,7 @@ fn type_check_let_binding(ctx: &mut TypeCheckerContext, b: &mut LetBinding) -> T
             }
             else
             {
-                return err(&b.init.span(), ErrorCode::TypeError, 
+                return err(&b.init.span(), ErrorCode::TypeError,
                     format!("Expression does not return a struct type"));
             }
         },
@@ -736,7 +678,13 @@ fn find_member_type(members: &Vec<StructMember>, member_name: &str, span: &Span)
 fn member_call_to_call(left: &Expression, call: &Call) -> Expression
 {
     let mut args = Vec::with_capacity(call.args.len() + 1);
-    args.push(left.clone());
+    let first_arg = match left.get_type()
+    {
+        Type::Pointer(_) => left.clone(),
+        _ => address_of(left.clone(), left.span()),
+    };
+
+    args.push(first_arg);
     args.extend(call.args.iter().map(|a| a.clone()));
     Expression::Call(
         Call::new(
@@ -752,8 +700,15 @@ fn member_call_to_call(left: &Expression, call: &Call) -> Expression
 fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess) -> TypeCheckResult
 {
     let left_type = type_check_expression(ctx, &mut sma.left, &None)?;
+    // member access through pointer is the same as a normal member access
+    let left_type_ref = if let Type::Pointer(ref inner) = left_type {
+        use std::ops::Deref;
+        inner.deref()
+    } else {
+        &left_type
+    };
 
-    let (typ, new_right) = match (&mut sma.right, &left_type)
+    let (typ, new_right) = match (&mut sma.right, left_type_ref)
     {
         (&mut MemberAccessType::Name(ref mut field), &Type::Struct(ref st)) => {
             let (member_idx, member_type) = find_member_type(&st.members, &field.name, &sma.span)?;
@@ -761,7 +716,8 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
             (member_type, None)
         },
 
-        (&mut MemberAccessType::Name(ref mut field), &Type::Array(_)) => {
+        (&mut MemberAccessType::Name(ref mut field), &Type::Array(_)) |
+        (&mut MemberAccessType::Name(ref mut field), &Type::String) => {
             if let Some((typ, member_access_type)) = left_type.get_property_type(&field.name) {
                 (typ, Some(member_access_type))
             } else {
@@ -856,6 +812,43 @@ fn type_check_block(ctx: &mut TypeCheckerContext, b: &mut Block, type_hint: &Opt
     valid(b.typ.clone())
 }
 
+fn type_check_new(ctx: &mut TypeCheckerContext, n: &mut NewExpression, type_hint: &Option<Type>) -> TypeCheckResult
+{
+    let typ = type_check_expression(ctx, &mut n.inner, type_hint)?;
+    n.typ = ptr_type(typ);
+    valid(n.typ.clone())
+}
+
+fn type_check_delete(ctx: &mut TypeCheckerContext, d: &mut DeleteExpression, type_hint: &Option<Type>) -> TypeCheckResult
+{
+    let typ = type_check_expression(ctx, &mut d.inner, type_hint)?;
+    match typ
+    {
+        Type::Pointer(_) => valid(Type::Void),
+        _ => err(&d.span, ErrorCode::TypeError, format!("delete expression expects a pointer argument, argument has type {}", typ)),
+    }
+}
+
+fn type_check_array_to_slice(ctx: &mut TypeCheckerContext, ats: &mut ArrayToSlice, type_hint: &Option<Type>) -> TypeCheckResult
+{
+    let t = type_check_expression(ctx, &mut ats.inner, type_hint)?;
+    match t
+    {
+        Type::Array(at) => {
+            ats.slice_type = slice_type(at.element_type.clone());
+            valid(ats.slice_type.clone())
+        },
+        _ => err(&ats.span, ErrorCode::TypeError, format!("array to slice expression must have an array as input")),
+    }
+}
+
+fn type_check_address_of(ctx: &mut TypeCheckerContext, a: &mut AddressOfExpression, type_hint: &Option<Type>) -> TypeCheckResult
+{
+    let t = type_check_expression(ctx, &mut a.inner, type_hint)?;
+    a.typ = ptr_type(t);
+    valid(a.typ.clone())
+}
+
 pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: &Option<Type>) -> CompileResult<Type>
 {
     let type_check_result = match *e
@@ -864,7 +857,6 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::BinaryOp(ref mut op) => type_check_binary_op(ctx, op),
         Expression::Literal(Literal::Array(ref mut a)) => type_check_array_literal(ctx, a),
         Expression::Literal(ref lit) => valid(lit.get_type()),
-        Expression::ArrayGenerator(ref mut a) => type_check_array_generator(ctx, a),
         Expression::Call(ref mut c) => type_check_call(ctx, c),
         Expression::NameRef(ref mut nr) => type_check_name(ctx, nr, type_hint),
         Expression::Match(ref mut m) => type_check_match(ctx, m),
@@ -880,6 +872,10 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::Block(ref mut b) => type_check_block(ctx, b, type_hint),
         Expression::StructInitializer(ref mut si) => type_check_struct_initializer(ctx, si),
         Expression::MemberAccess(ref mut sma) => type_check_member_access(ctx, sma),
+        Expression::New(ref mut n) => type_check_new(ctx, n, type_hint),
+        Expression::Delete(ref mut d) => type_check_delete(ctx, d, type_hint),
+        Expression::ArrayToSlice(ref mut ats) => type_check_array_to_slice(ctx, ats, type_hint),
+        Expression::AddressOf(ref mut a) => type_check_address_of(ctx, a, type_hint),
         Expression::Void => valid(Type::Void),
     };
 

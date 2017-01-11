@@ -53,18 +53,9 @@ fn test_wrong_type_bin_op()
 #[test]
 fn test_arrays()
 {
-	assert!(type_check("[4] + [5]").is_ok());
-	assert!(type_check("4 + [5]").is_ok());
-	assert!(type_check("[4] + 5").is_ok());
-	assert!(type_check("4 + [5.7]").unwrap_err().error == ErrorCode::TypeError);
-	assert!(type_check("[4] + [5.7]").unwrap_err().error == ErrorCode::TypeError);
-	assert!(type_check("4 + []").is_ok());
-	assert!(type_check("[4] + []").is_ok());
 	assert!(type_check("[4, 5.7]").unwrap_err().error == ErrorCode::TypeError);
 	assert!(type_check("[4, 5, 7]").is_ok());
 	assert!(type_check("[4; 10]").is_ok());
-	//assert!(type_check("let v = [1, 2] in [x * 2 | x <- v]").is_ok());
-	//assert!(type_check("let v = [1.0, 2.0] in [x * 2 | x <- v]").unwrap_err().error == ErrorCode::TypeError);
 }
 
 #[test]
@@ -78,14 +69,14 @@ fn test_function()
 fn test_match()
 {
 	assert!(type_check_mod(r#"
-foo(x: [int]) -> int =
+foo(x: int[]) -> int =
 	match x:
 		[] => 0,
 		[head | tail] => head + foo(tail)
 "#).is_ok());
 
 	assert!(type_check_mod(r#"
-foo(x: [int]) -> int =
+foo(x: int[]) -> int =
 	match x:
 		7 => 0,
 		[head | tail] => head + foo(tail)
@@ -112,6 +103,6 @@ let x = 6 in x + y
 "#).unwrap_err().error == ErrorCode::UnknownName);
 
 	assert!(type_check(r#"
-let x = [6, 7] in x + x
+let x = [6, 7] in x.len
 "#).is_ok());
 }

@@ -101,12 +101,6 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             substitute_array_literal(generic_args, a).map(|al| Expression::Literal(al))
         },
 
-        Expression::ArrayGenerator(ref a) => {
-            let iterable = substitute_expr(generic_args, &a.iterable)?;
-            let left = substitute_expr(generic_args, &a.left)?;
-            Ok(array_generator(left, &a.var, iterable, a.span.clone()))
-        },
-
         Expression::Call(ref c) => {
             let new_c = substitute_call(generic_args, c)?;
             Ok(Expression::Call(new_c))
@@ -157,7 +151,9 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             }
             Ok(block(new_expressions, b.span.clone()))
         },
+
         Expression::Literal(ref lit) => Ok(Expression::Literal(lit.clone())),
+
         Expression::NameRef(ref nr) => {
             let new_nr = NameRef{
                 name: nr.name.clone(),
@@ -166,6 +162,7 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             };
             Ok(Expression::NameRef(new_nr))
         },
+
         Expression::StructInitializer(ref si) => {
             let mut nmi = Vec::with_capacity(si.member_initializers.len());
             for e in si.member_initializers.iter() {
@@ -175,6 +172,7 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
 
             Ok(Expression::StructInitializer(struct_initializer(&si.struct_name, nmi, si.span.clone())))
         },
+
         Expression::MemberAccess(ref sma) => {
             let left = substitute_expr(generic_args, &sma.left)?;
             let right = match sma.right
@@ -188,6 +186,27 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
 
             Ok(member_access(left, right, sma.span.clone()))
         },
+
+        Expression::New(ref n) => {
+            let inner = substitute_expr(generic_args, &n.inner)?;
+            Ok(new_with_type(inner, generic_args.substitute(&n.typ), n.span.clone()))
+        },
+
+        Expression::Delete(ref n) => {
+            let inner = substitute_expr(generic_args, &n.inner)?;
+            Ok(delete(inner, n.span.clone()))
+        },
+
+        Expression::ArrayToSlice(ref ats) => {
+            let inner = substitute_expr(generic_args, &ats.inner)?;
+            Ok(array_to_slice(inner, ats.span.clone()))
+        },
+
+        Expression::AddressOf(ref a) => {
+            let inner = substitute_expr(generic_args, &a.inner)?;
+            Ok(address_of(inner, a.span.clone()))
+        },
+
         Expression::Void => Ok(Expression::Void),
     }
 }
@@ -270,11 +289,6 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
             Ok(())
         },
 
-        Expression::ArrayGenerator(ref a) => {
-            resolve_generics(new_functions, module, &a.iterable)?;
-            resolve_generics(new_functions, module, &a.left)
-        },
-
         Expression::Call(ref c) => {
             for a in c.args.iter() {
                 resolve_generics(new_functions, module, a)?;
@@ -308,6 +322,14 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
             resolve_generics(new_functions, module, &l.expression)
         },
 
+        Expression::LetBindings(ref l) => {
+            for b in l.bindings.iter() {
+                resolve_generics(new_functions, module, &b.init)?
+            }
+
+            Ok(())
+        },
+
         Expression::StructInitializer(ref si) => {
             for mi in si.member_initializers.iter() {
                 resolve_generics(new_functions, module, mi)?;
@@ -321,7 +343,28 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
             }
             Ok(())
         },
-        _ => Ok(()),
+
+        Expression::New(ref n) => {
+            resolve_generics(new_functions, module, &n.inner)
+        },
+
+        Expression::Delete(ref n) => {
+            resolve_generics(new_functions, module, &n.inner)
+        },
+
+        Expression::ArrayToSlice(ref ats) => {
+            resolve_generics(new_functions, module, &ats.inner)
+        }
+
+        Expression::AddressOf(ref a) => {
+            resolve_generics(new_functions, module, &a.inner)
+        }
+
+        Expression::NameRef(_) |
+        Expression::If(_) |
+        Expression::MemberAccess(_) |
+        Expression::Literal(_) | 
+        Expression::Void => Ok(()),
     }
 }
 
@@ -354,11 +397,6 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
                 replace_generic_calls(new_functions, el)?;
             }
             Ok(())
-        },
-
-        Expression::ArrayGenerator(ref mut a) => {
-            replace_generic_calls(new_functions, &mut a.iterable)?;
-            replace_generic_calls(new_functions, &mut a.left)
         },
 
         Expression::Call(ref mut call) => {
@@ -395,10 +433,32 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
             replace_generic_calls(new_functions, &mut l.expression)
         },
 
+        Expression::LetBindings(ref mut l) => {
+            for b in l.bindings.iter_mut() {
+                replace_generic_calls(new_functions, &mut b.init)?
+            }
+            Ok(())
+        },
+
         Expression::Block(ref mut b) => {
             for e in &mut b.expressions {
                 replace_generic_calls(new_functions, e)?;
             }
+            Ok(())
+        },
+
+        Expression::New(ref mut n) => {
+            replace_generic_calls(new_functions, &mut n.inner)?;
+            Ok(())
+        },
+
+        Expression::Delete(ref mut d) => {
+            replace_generic_calls(new_functions, &mut d.inner)?;
+            Ok(())
+        },
+
+        Expression::ArrayToSlice(ref mut ats) => {
+            replace_generic_calls(new_functions, &mut ats.inner)?;
             Ok(())
         },
         _ => Ok(()),

@@ -1,11 +1,11 @@
 use span::Span;
 use ast::*;
 
+
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
 {
     Literal(Literal),
-    ArrayGenerator(Box<ArrayGenerator>),
     UnaryOp(Box<UnaryOp>),
     BinaryOp(Box<BinaryOp>),
     Block(Box<Block>),
@@ -18,6 +18,10 @@ pub enum Expression
     LetBindings(Box<LetBindingList>),
     StructInitializer(StructInitializer),
     MemberAccess(MemberAccess),
+    New(Box<NewExpression>),
+    Delete(Box<DeleteExpression>),
+    ArrayToSlice(Box<ArrayToSlice>),
+    AddressOf(Box<AddressOfExpression>),
     Void,
 }
 
@@ -56,7 +60,6 @@ impl Expression
         match *self
         {
             Expression::Literal(ref lit) => lit.span(),
-            Expression::ArrayGenerator(ref a) => a.span.clone(),
             Expression::UnaryOp(ref op) => op.span.clone(),
             Expression::BinaryOp(ref op) => op.span.clone(),
             Expression::Block(ref b) => b.span.clone(),
@@ -69,17 +72,19 @@ impl Expression
             Expression::If(ref i) => i.span.clone(),
             Expression::StructInitializer(ref si) => si.span.clone(),
             Expression::MemberAccess(ref sma) => sma.span.clone(),
+            Expression::New(ref n) => n.span.clone(),
+            Expression::Delete(ref d) => d.span.clone(),
+            Expression::ArrayToSlice(ref a) => a.inner.span(),
+            Expression::AddressOf(ref a) => a.span.clone(),
             Expression::Void => Span::default(),
         }
     }
 
-/*
     pub fn get_type(&self) -> Type
     {
         match *self
         {
             Expression::Literal(ref lit) => lit.get_type(),
-            Expression::ArrayGenerator(ref a) => a.array_type.clone(),
             Expression::UnaryOp(ref op) => op.typ.clone(),
             Expression::BinaryOp(ref op) => op.typ.clone(),
             Expression::Block(ref b) => b.typ.clone(),
@@ -92,9 +97,13 @@ impl Expression
             Expression::If(ref i) => i.typ.clone(),
             Expression::StructInitializer(ref si) => si.typ.clone(),
             Expression::MemberAccess(ref sma) => sma.typ.clone(),
+            Expression::New(ref n) => n.typ.clone(),
+            Expression::Delete(_) => Type::Void,
+            Expression::ArrayToSlice(ref a) => a.slice_type.clone(),
+            Expression::AddressOf(ref a) => ptr_type(a.inner.get_type()),
+            Expression::Void => Type::Void,
         }
     }
-*/
 }
 
 
@@ -106,8 +115,6 @@ impl TreePrinter for Expression
         match *self
         {
             Expression::Literal(ref lit) => lit.print(level),
-
-            Expression::ArrayGenerator(ref a) => a.print(level),
             Expression::UnaryOp(ref op) => {
                 println!("{}unary {} ({})", p, op.operator, op.span);
                 op.expression.print(level + 1)
@@ -132,6 +139,13 @@ impl TreePrinter for Expression
             Expression::If(ref i) => i.print(level),
             Expression::StructInitializer(ref si) => si.print(level),
             Expression::MemberAccess(ref sma) => sma.print(level),
+            Expression::New(ref n) => n.print(level),
+            Expression::Delete(ref n) => n.print(level),
+            Expression::ArrayToSlice(ref inner) => {
+                println!("{}array to slice (type: {})", p, inner.slice_type);
+                inner.inner.print(level + 1)
+            },
+            Expression::AddressOf(ref a) => a.print(level),
             Expression::Void => println!("{}void", p),
         }
     }
