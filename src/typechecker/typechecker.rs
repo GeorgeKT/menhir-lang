@@ -76,22 +76,22 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
     let left_type = type_check_expression(ctx, &mut b.left, &None)?;
     let right_type = type_check_expression(ctx, &mut b.right, &None)?;
 
-    if b.operator == Operator::Or && left_type.is_optional_of(&right_type) {
-        b.typ = right_type.clone();
-        return valid(right_type);
-    }
-
     if left_type.is_generic() || right_type.is_generic() {
         return valid(left_type);
     }
 
-    if left_type != right_type {
-        return err(&b.span, ErrorCode::TypeError, format!("Operator {} expects operands of the same type", b.operator));
-    }
+    let basic_checks = |span: &Span, operator: Operator, left_type: &Type, right_type: &Type| {
+        if left_type != right_type {
+            return err(span, ErrorCode::TypeError, format!("Operator {} expects operands of the same type", operator));
+        }
 
-    if !left_type.is_operator_supported(b.operator) {
-        return err(&b.span, ErrorCode::TypeError, format!("Operator {} is not supported on {}", b.operator, left_type));
-    }
+        if !left_type.is_operator_supported(operator) {
+            return err(&span, ErrorCode::TypeError, format!("Operator {} is not supported on {}", operator, left_type));
+        }
+
+        Ok(())
+    };
+
 
     match b.operator
     {
@@ -100,6 +100,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
         Operator::Mul |
         Operator::Mod |
         Operator::Div => {
+            basic_checks(&b.span, b.operator, &left_type, &right_type)?;
             b.typ = right_type;
             valid(left_type)
         },
@@ -108,10 +109,27 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
         Operator::GreaterThan |
         Operator::LessThanEquals |
         Operator::GreaterThanEquals |
-        Operator::Equals |
-        Operator::NotEquals |
-        Operator::And |
+        Operator::And => {
+            basic_checks(&b.span, b.operator, &left_type, &right_type)?;
+            b.typ = Type::Bool;
+            valid(Type::Bool)
+        },
+
         Operator::Or => {
+            if left_type.is_optional_of(&right_type) {
+                b.typ = right_type.clone();
+                valid(right_type)
+            } else {
+                basic_checks(&b.span, b.operator, &left_type, &right_type)?;
+                b.typ = Type::Bool;
+                valid(Type::Bool)
+            }
+        },
+        Operator::Equals |
+        Operator::NotEquals => {
+            if left_type != Type::Nil && right_type != Type::Nil {
+                basic_checks(&b.span, b.operator, &left_type, &right_type)?;
+            }
             b.typ = Type::Bool;
             valid(Type::Bool)
         },
@@ -224,7 +242,6 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> TypeCheckResul
     }
 }
 
-
 fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> TypeCheckResult
 {
     ctx.push_stack();
@@ -236,8 +253,13 @@ fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> Type
     let et = type_check_expression(ctx, &mut fun.expression, &None)?;
     ctx.pop_stack();
     if et != fun.sig.return_type {
-        return err(&fun.span, ErrorCode::TypeError, format!("Function {} has return type {}, but it is returning an expression of type {}",
-            fun.sig.name, fun.sig.return_type, et));
+        if let Some(expression) = fun.sig.return_type.convert(&et, &fun.expression) {
+            fun.expression = expression;
+        } else {
+            return err(&fun.span, ErrorCode::TypeError, format!("Function {} has return type {}, but it is returning an expression of type {}",
+                fun.sig.name, fun.sig.return_type, et));
+        }
+
     }
 
     fun.type_checked = true;
