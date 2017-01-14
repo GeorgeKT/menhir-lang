@@ -7,7 +7,7 @@ pub struct Test
 }
 
 
-pub const ALL_TESTS: [Test; 36] = [
+pub const ALL_TESTS: [Test; 37] = [
     Test{
         name: "optional",
         ret: 42,
@@ -41,13 +41,27 @@ pub const ALL_TESTS: [Test; 36] = [
     Test{
         name: "optional if",
         ret: 42,
-        debug: true,
+        debug: false,
         code: r#"
             foo() -> ?int = 77
 
             main() -> int {
                 let a = foo();
                 if a != nil: 42 else 0
+            }
+        "#
+    },
+
+    Test{
+        name: "optional if 2",
+        ret: 42,
+        debug: true,
+        code: r#"
+            foo() -> ?int = 77
+
+            main() -> int {
+                let a = foo();
+                if a: 42 else 0
             }
         "#
     },

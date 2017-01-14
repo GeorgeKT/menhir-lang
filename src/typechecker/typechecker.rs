@@ -613,9 +613,13 @@ fn type_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> TypeCh
 
 fn type_check_if(ctx: &mut TypeCheckerContext, i: &mut IfExpression) -> TypeCheckResult
 {
-    let cond_type = type_check_expression(ctx, &mut i.condition, &Some(Type::Bool))?;
+    let cond_type = type_check_expression(ctx, &mut i.condition, &None)?;
     if cond_type != Type::Bool {
-        return err(&i.condition.span(), ErrorCode::TypeError, format!("Condition of an if expression needs to be a boolean expression"));
+        if let Some(condition) = Type::Bool.convert(&cond_type, &i.condition) {
+            i.condition = condition;
+        } else {
+            return err(&i.condition.span(), ErrorCode::TypeError, format!("Condition of an if expression needs to be a boolean expression, or something convertible to boolean"));
+        }
     }
 
     let on_true_type = type_check_expression(ctx, &mut i.on_true, &None)?;

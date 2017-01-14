@@ -24,12 +24,17 @@ pub struct BinaryOp
 
 pub fn bin_op(op: Operator, left: Expression, right: Expression, span: Span) -> Expression
 {
+    bin_op_with_type(op, left, right, span, Type::Unknown)
+}
+
+pub fn bin_op_with_type(op: Operator, left: Expression, right: Expression, span: Span, typ: Type) -> Expression
+{
     Expression::BinaryOp(Box::new(BinaryOp{
         operator: op,
         left: left,
         right: right,
         span: span,
-        typ: Type::Unknown,
+        typ: typ,
     }))
 }
 

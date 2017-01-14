@@ -3,7 +3,7 @@ use std::ops::Deref;
 use std::hash::{Hasher, Hash};
 use std::rc::Rc;
 use itertools::free::join;
-use ast::{Expression, TreePrinter, MemberAccessType, Property, prefix, array_to_slice, to_optional};
+use ast::{Expression, TreePrinter, MemberAccessType, Property, prefix, array_to_slice, to_optional, bin_op_with_type};
 use span::Span;
 use parser::Operator;
 
@@ -186,6 +186,10 @@ impl Type
 
             (&Type::Optional(_), &Type::Nil) => {
                 Some(to_optional(expr.clone(), self.clone()))
+            },
+
+            (&Type::Bool, &Type::Optional(_)) => {
+                Some(bin_op_with_type(Operator::NotEquals, expr.clone(), Expression::Nil(Span::default()), expr.span(), Type::Bool))
             },
 
             _ => None,
