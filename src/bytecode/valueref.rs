@@ -95,13 +95,13 @@ impl fmt::Display for ValueRef
         {
             ValueRef::Owner(ref v) => {
                 let inner = v.borrow();
-                write!(f, "{}", *inner)
+                write!(f, "*({})", *inner)
             },
 
             ValueRef::Ptr(ref v) => {
                 if let Some(rv) = v.upgrade() {
                     let inner = rv.borrow();
-                    write!(f, "{}", *inner)
+                    write!(f, "*({})", *inner)
                 } else {
                     println!("Danging pointer access");
                     Err(fmt::Error)

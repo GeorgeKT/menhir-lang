@@ -127,6 +127,11 @@ impl Interpreter
                 match *v
                 {
                     Value::Optional(ref mut inner) => *inner = Box::new(val),
+                    Value::Pointer(ref mut inner) =>
+                        inner.apply_mut(|inner_v: &mut Value| {
+                            *inner_v = val;
+                            Ok(())
+                        })?,
                     _ => *v = val,
                 }
                 Ok(())
@@ -204,6 +209,10 @@ impl Interpreter
             (Operator::Equals, Value::Char(l), Value::Char(r)) => Value::Bool(l == r),
             (Operator::Equals, Value::Bool(l), Value::Bool(r)) => Value::Bool(l == r),
             (Operator::Equals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l == *r),
+            (Operator::Equals, Value::Optional(ref inner), Value::Nil) => Value::Bool(inner.is_nil()),
+            (Operator::Equals, Value::Nil, Value::Nil) => Value::Bool(true),
+            (Operator::Equals, _, Value::Nil) => Value::Bool(false),
+            (Operator::Equals, Value::Nil, _) => Value::Bool(false),
 
             (Operator::NotEquals, Value::Int(l), Value::Int(r)) => Value::Bool(l != r),
             (Operator::NotEquals, Value::UInt(l), Value::UInt(r)) => Value::Bool(l != r),
@@ -211,6 +220,10 @@ impl Interpreter
             (Operator::NotEquals, Value::Char(l), Value::Char(r)) => Value::Bool(l != r),
             (Operator::NotEquals, Value::Bool(l), Value::Bool(r)) => Value::Bool(l != r),
             (Operator::NotEquals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l != *r),
+            (Operator::NotEquals, Value::Optional(ref inner), Value::Nil) => Value::Bool(!inner.is_nil()),
+            (Operator::NotEquals, Value::Nil, Value::Nil) => Value::Bool(false),
+            (Operator::NotEquals, _, Value::Nil) => Value::Bool(true),
+            (Operator::NotEquals, Value::Nil, _) => Value::Bool(true),
 
             (Operator::And, Value::Bool(l), Value::Bool(r)) => Value::Bool(l && r),
             (Operator::Or, Value::Bool(l), Value::Bool(r)) => Value::Bool(l || r),
@@ -291,46 +304,8 @@ impl Interpreter
     fn load_member(&mut self, dst: &str, obj: &str, member_index: usize) -> Result<(), ExecutionError>
     {
         let obj = self.get_variable(obj)?;
-        let vr = obj.apply(|value: &Value| {
-            match *value
-            {
-                Value::Array(ref arr) => {
-                    if member_index < arr.len() {
-                        Ok(arr[member_index].to_ptr())
-                    } else {
-                        Err(ExecutionError(format!("Array index out of bounds")))
-                    }
-                },
-
-                Value::Slice(ref slice) => {
-                    if member_index < slice.len() {
-                        Ok(slice[member_index].to_ptr())
-                    } else {
-                        Err(ExecutionError(format!("Slice index out of bounds")))
-                    }
-                },
-
-                Value::Struct(ref members) => {
-                    if member_index < members.len() {
-                        Ok(members[member_index].to_ptr())
-                    } else {
-                        Err(ExecutionError(format!("Struct member index out of bounds")))
-                    }
-                },
-
-                Value::Sum(idx, ref inner) => {
-                    if member_index == idx {
-                        Ok(inner.to_ptr())
-                    } else {
-                        Err(ExecutionError(format!("Wrong sum type index")))
-                    }
-                },
-
-                _ => Err(ExecutionError(format!("Load member not supported on {}", value)))
-            }
-        })?;
-
-        self.replace_variable(dst, vr)?;
+        let vr = obj.apply(|value: &Value| value.get_member_ptr(member_index))?;
+        self.replace_variable(dst, ValueRef::new(vr))?;
         Ok(())
     }
 
@@ -428,6 +403,21 @@ impl Interpreter
         }
     }
 
+    fn load(&mut self, dst: &str, ptr: &str) -> Result<(), ExecutionError>
+    {
+        let ptr = self.get_variable(ptr)?;
+        let new_value = ptr.apply(|v: &Value| {
+            match *v
+            {
+                Value::Optional(ref inner) => Ok(inner.deref().clone()),
+                Value::Pointer(ref inner) => inner.clone_value(),
+                _ => Err(ExecutionError(format!("Load can only be performed on pointers and optionals"))),
+            }
+        })?;
+
+        self.update_variable(&dst, new_value)
+    }
+
     fn execute_instruction(&mut self, instr: &Instruction, index: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
     {
         let next = Ok(StepResult::Continue(index.next()));
@@ -457,8 +447,7 @@ impl Interpreter
             },
 
             Instruction::Load{ref dst, ref ptr} => {
-                let new_value = self.get_variable(&ptr.name)?.clone_value()?;
-                self.update_variable(&dst.name, new_value)?;
+                self.load(&dst.name, &ptr.name)?;
                 next
             },
 

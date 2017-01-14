@@ -1,5 +1,10 @@
-unwrap_or(opt: ?int, default: int) -> int =
-    opt || default
+type Foo {
+    bar: int
+}
+
+Foo.add(self, num: int) -> int {
+    self.bar + num
+}
 
 main() -> int =
-    unwrap_or(41, 1) + unwrap_or(nil, 1)
+    let f = Foo{7} in f.add(4)

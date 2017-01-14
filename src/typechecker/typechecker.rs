@@ -244,7 +244,6 @@ fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> Type
     valid(fun.sig.typ.clone())
 }
 
-
 fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> TypeCheckResult
 {
     let target_type = type_check_expression(ctx, &mut m.target, &None)?;
@@ -357,7 +356,30 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Ty
 
             Pattern::Any(_) => {
                 infer_case_type(ctx, &mut c.to_execute, &return_type)?
-            }
+            },
+
+            Pattern::Nil(ref span) => {
+                if !target_type.is_optional() {
+                    return err(span, ErrorCode::TypeError,
+                        format!("Cannot match type {} to nil, only optionals can be matched to nil", target_type));
+                }
+
+                infer_case_type(ctx, &mut c.to_execute, &return_type)?
+            },
+
+            Pattern::Optional(ref mut o) => {
+                if !target_type.is_optional() {
+                    return err(&o.span, ErrorCode::TypeError,
+                        format!("Cannot match type {} to optional pattern", target_type));
+                }
+
+                o.inner_type = target_type.get_element_type().expect("Optional type expected");
+                ctx.push_stack();
+                ctx.add(&o.binding, o.inner_type.clone(), &o.span)?;
+                let ct = infer_case_type(ctx, &mut c.to_execute, &return_type)?;
+                ctx.pop_stack();
+                ct
+            },
         };
 
         if return_type == Type::Unknown {

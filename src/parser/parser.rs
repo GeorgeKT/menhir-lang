@@ -424,6 +424,16 @@ pub fn parse_pattern(tq: &mut TokenQueue) -> CompileResult<Pattern>
                 Ok(Pattern::Name(NameRef::new(id, tok.span)))
             }
         },
+
+        TokenKind::QuestionMark => {
+            let (name, name_span) = tq.expect_identifier()?;
+            Ok(optional_pattern(name, tok.span.expanded(name_span.end)))
+        },
+
+        TokenKind::Nil => {
+            Ok(Pattern::Nil(tok.span))
+        },
+
         _ => err(&tok.span, ErrorCode::UnexpectedToken, format!("Unexpected token '{}'", tok)),
     }
 }

@@ -116,6 +116,27 @@ fn check_bool_match_is_exhaustive(m: &MatchExpression) -> CompileResult<()>
     }
 }
 
+fn check_optional_match_is_exhaustive(m: &MatchExpression) -> CompileResult<()>
+{
+    let mut optional_seen = false;
+    let mut nil_seen = false;
+    for c in m.cases.iter() {
+        match c.pattern
+        {
+            Pattern::Optional(_) => optional_seen = true,
+            Pattern::Nil(_) => nil_seen = true,
+            Pattern::Any(_) => return Ok(()),
+            _ => (),
+        }
+    }
+
+    if !optional_seen || !nil_seen {
+        err(&m.span, ErrorCode::IncompletePatternMatch, format!("Incomplete pattern match, not all possible optionals are matched again"))
+    } else {
+        Ok(())
+    }
+}
+
 pub fn check_match_is_exhaustive(m: &MatchExpression, target_type: &Type) -> CompileResult<()>
 {
     let any_match_seen = check_any_match(m)?;
@@ -145,7 +166,11 @@ pub fn check_match_is_exhaustive(m: &MatchExpression, target_type: &Type) -> Com
         Type::Bool => {
             check_bool_match_is_exhaustive(m)
         },
-        
+
+        Type::Optional(_) => {
+            check_optional_match_is_exhaustive(m)
+        },
+
         _ => {
             if !any_match_seen {
                 err(&m.span, ErrorCode::IncompletePatternMatch, format!("Incomplete pattern match for type {}", target_type))

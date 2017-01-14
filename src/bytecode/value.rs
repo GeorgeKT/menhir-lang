@@ -142,6 +142,52 @@ impl Value
         }
     }
 
+    pub fn get_member_ptr(&self, member_index: usize) -> Result<Value, ExecutionError>
+    {
+        match *self
+        {
+            Value::Array(ref arr) => {
+                if member_index < arr.len() {
+                    Ok(Value::Pointer(arr[member_index].to_ptr()))
+                } else {
+                    Err(ExecutionError(format!("Array index out of bounds")))
+                }
+            },
+
+            Value::Slice(ref slice) => {
+                if member_index < slice.len() {
+                    Ok(Value::Pointer(slice[member_index].to_ptr()))
+                } else {
+                    Err(ExecutionError(format!("Slice index out of bounds")))
+                }
+            },
+
+            Value::Struct(ref members) => {
+                if member_index < members.len() {
+                    Ok(Value::Pointer(members[member_index].to_ptr()))
+                } else {
+                    Err(ExecutionError(format!("Struct member index out of bounds")))
+                }
+            },
+
+            Value::Sum(idx, ref inner) => {
+                if member_index == idx {
+                    Ok(Value::Pointer(inner.to_ptr()))
+                } else {
+                    Err(ExecutionError(format!("Wrong sum type index")))
+                }
+            },
+
+            Value::Pointer(ref inner) => {
+                inner.apply(|v: &Value| {
+                    v.get_member_ptr(member_index)
+                })
+            },
+
+            _ => Err(ExecutionError(format!("Load member not supported on {}", self)))
+        }
+    }
+
     pub fn is_nil(&self) -> bool
     {
         if let Value::Nil = *self {

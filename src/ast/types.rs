@@ -155,6 +155,7 @@ impl Type
             Type::Slice(ref at) => Some(at.element_type.clone()),
             Type::String => Some(Type::Char),
             Type::Pointer(ref inner) => Some(inner.deref().clone()),
+            Type::Optional(ref inner) => Some(inner.deref().clone()),
             _ => None,
         }
     }
@@ -289,6 +290,15 @@ impl Type
     {
         if let Type::Optional(ref inner_type) = *self {
             *inner_type.deref() == *other_type
+        } else {
+            false
+        }
+    }
+
+    pub fn is_optional(&self) -> bool
+    {
+        if let Type::Optional(_) = *self {
+            true
         } else {
             false
         }
