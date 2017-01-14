@@ -86,6 +86,7 @@ impl Lexer
             '$' => {self.add(TokenKind::Dollar, span); Ok(())},
             ';' => {self.add(TokenKind::SemiColon, span); Ok(())},
             '~' => {self.add(TokenKind::Tilde, span); Ok(())},
+            '?' => {self.add(TokenKind::QuestionMark, span); Ok(())},
             '0'...'9' => {self.start(c, LexState::Number); Ok(())},
             '\"' => {self.start(c, LexState::InString); Ok(())},
             '\'' => {self.start(c, LexState::InChar); Ok(())},
@@ -120,6 +121,7 @@ impl Lexer
             "new" => TokenKind::New,
             "delete" => TokenKind::Delete,
             "while" => TokenKind::While,
+            "nil" => TokenKind::Nil,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
         };
 
@@ -195,7 +197,6 @@ impl Lexer
             ":" => Ok(TokenKind::Colon),
             "::" => Ok(TokenKind::DoubleColon),
             "|" => Ok(TokenKind::Pipe),
-            "<-" => Ok(TokenKind::Operator(Operator::Extract)),
             "." => Ok(TokenKind::Operator(Operator::Dot)),
             _ => err(&self.current_single_span(), ErrorCode::InvalidOperator, format!("Invalid operator {}", self.data)),
         }

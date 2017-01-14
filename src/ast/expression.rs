@@ -3,6 +3,13 @@ use ast::*;
 
 
 #[derive(Debug, Eq, PartialEq, Clone)]
+pub struct ToOptional
+{
+    pub inner: Expression,
+    pub optional_type: Type,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
 {
     Literal(Literal),
@@ -24,7 +31,17 @@ pub enum Expression
     AddressOf(Box<AddressOfExpression>),
     Assign(Box<Assign>),
     While(Box<WhileLoop>),
+    Nil(Span),
+    ToOptional(Box<ToOptional>),
     Void,
+}
+
+pub fn to_optional(e: Expression, typ: Type) -> Expression
+{
+    Expression::ToOptional(Box::new(ToOptional{
+        inner: e,
+        optional_type: typ
+    }))
 }
 
 
@@ -80,6 +97,8 @@ impl Expression
             Expression::AddressOf(ref a) => a.span.clone(),
             Expression::Assign(ref a) => a.span.clone(),
             Expression::While(ref w) => w.span.clone(),
+            Expression::Nil(ref span) => span.clone(),
+            Expression::ToOptional(ref t) => t.inner.span(),
             Expression::Void => Span::default(),
         }
     }
@@ -106,6 +125,8 @@ impl Expression
             Expression::ArrayToSlice(ref a) => a.slice_type.clone(),
             Expression::AddressOf(ref a) => ptr_type(a.inner.get_type()),
             Expression::Assign(ref a) => a.typ.clone(),
+            Expression::Nil(_) => Type::Nil,
+            Expression::ToOptional(ref t) => optional_type(t.inner.get_type()),
             Expression::Void | Expression::While(_) => Type::Void,
         }
     }
@@ -153,6 +174,11 @@ impl TreePrinter for Expression
             Expression::AddressOf(ref a) => a.print(level),
             Expression::Assign(ref a) => a.print(level),
             Expression::While(ref w) => w.print(level),
+            Expression::Nil(_) => println!("{}nil", p),
+            Expression::ToOptional(ref t) => {
+                println!("{}to_optional (type: {})", p, t.optional_type);
+                t.inner.print(level + 1)
+            },
             Expression::Void => println!("{}void", p),
         }
     }

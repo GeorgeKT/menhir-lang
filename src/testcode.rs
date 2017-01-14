@@ -7,7 +7,20 @@ pub struct Test
 }
 
 
-pub const ALL_TESTS: [Test; 33] = [
+pub const ALL_TESTS: [Test; 34] = [
+    Test{
+        name: "optional",
+        ret: 42,
+        debug: true,
+        code: r#"
+        unwrap_or(opt: ?int, default: int) -> int =
+            opt || default
+
+        main() -> int =
+            unwrap_or(41, 1) + unwrap_or(nil, 1)
+        "#
+    },
+
     Test{
         name: "while",
         ret: 20,

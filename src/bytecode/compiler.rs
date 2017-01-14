@@ -696,6 +696,15 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
             while_to_bc(bc_mod, func, w);
             None
         },
+
+        Expression::Nil(_) => {
+            let dst = get_dst(func, &Type::Nil);
+            Some(dst)
+        },
+
+        Expression::ToOptional(_) => {
+            panic!("NYI")
+        },
     }
 }
 

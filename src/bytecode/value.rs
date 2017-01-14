@@ -9,6 +9,7 @@ pub enum Value
 {
     Uninitialized,
     Void,
+    Nil,
     Int(i64),
     UInt(u64),
     Float(f64),
@@ -22,6 +23,7 @@ pub enum Value
     Sum(usize, Box<ValueRef>),
     Enum(usize),
     Pointer(ValueRef),
+    Optional(Option<Box<Value>>),
 }
 
 impl fmt::Display for Value
@@ -45,6 +47,9 @@ impl fmt::Display for Value
             Value::Sum(idx, ref v) => write!(f, "sum {} {}", idx, v),
             Value::Enum(idx) => write!(f, "enum {}", idx),
             Value::Pointer(ref v) => write!(f, "pointer {}", v),
+            Value::Optional(Some(ref v)) => write!(f, "optional {}", v),
+            Value::Optional(None) => write!(f, "optional nil"),
+            Value::Nil => write!(f, "nil"),
         }
     }
 }
@@ -118,7 +123,10 @@ impl Value
                 let inner = Value::from_type(inner)?;
                 Ok(Value::Pointer(ValueRef::new(inner)))
             },
-
+            Type::Optional(ref _inner) => {
+                Ok(Value::Optional(None))
+            },
+            Type::Nil => Ok(Value::Nil),
         }
     }
 

@@ -76,6 +76,11 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
     let left_type = type_check_expression(ctx, &mut b.left, &None)?;
     let right_type = type_check_expression(ctx, &mut b.right, &None)?;
 
+    if b.operator == Operator::Or && left_type.is_optional_of(&right_type) {
+        b.typ = right_type.clone();
+        return valid(right_type);
+    }
+
     if left_type.is_generic() || right_type.is_generic() {
         return valid(left_type);
     }
@@ -902,6 +907,11 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::Assign(ref mut a) => type_check_assign(ctx, a),
         Expression::While(ref mut w) => type_check_while(ctx, w),
         Expression::Void => valid(Type::Void),
+        Expression::Nil(_) => valid(Type::Nil),
+        Expression::ToOptional(ref mut t) => {
+            type_check_expression(ctx, &mut t.inner, &None)?;
+            valid(t.optional_type.clone())
+        },
     };
 
     match type_check_result
