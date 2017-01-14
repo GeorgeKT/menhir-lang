@@ -119,6 +119,7 @@ impl Lexer
             "extern" => TokenKind::Extern,
             "new" => TokenKind::New,
             "delete" => TokenKind::Delete,
+            "while" => TokenKind::While,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
         };
 

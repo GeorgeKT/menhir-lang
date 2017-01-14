@@ -58,7 +58,7 @@ fn run(prog: &str, dump: bool) -> Result<i64, ExecutionError>
 fn test_all()
 {
     use testcode::ALL_TESTS;
-    for test in &ALL_TESTS
+    for test in &ALL_TESTS[..]
     {
         println!("#### start {} ####", test.name);
         assert_eq!(run(test.code, test.debug), Ok(test.ret));

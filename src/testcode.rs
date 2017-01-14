@@ -7,11 +7,28 @@ pub struct Test
 }
 
 
-pub const ALL_TESTS: [Test; 32] = [
+pub const ALL_TESTS: [Test; 33] = [
+    Test{
+        name: "while",
+        ret: 20,
+        debug: false,
+        code: r#"
+            main() -> int {
+                let x = 0;
+                let y = 0;
+                while x < 10 {
+                    y = y + 2;
+                    x = x + 1;
+                }
+                y
+            }
+        "#
+    },
+
     Test{
         name: "assignment",
         ret: 77,
-        debug: true,
+        debug: false,
         code: r#"
             main() -> int {
                 let x = 7;

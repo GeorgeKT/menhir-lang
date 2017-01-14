@@ -861,6 +861,17 @@ fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign) -> TypeCheckR
     }
 }
 
+fn type_check_while(ctx: &mut TypeCheckerContext, w: &mut WhileLoop) -> TypeCheckResult
+{
+    let cond_type = type_check_expression(ctx, &mut w.cond, &None)?;
+    if cond_type != Type::Bool {
+        return err(&w.cond.span(), ErrorCode::TypeError, format!("While loop conditions must be boolean expressions"));
+    }
+
+    type_check_expression(ctx, &mut w.body, &None)?;
+    valid(Type::Void)
+}
+
 pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: &Option<Type>) -> CompileResult<Type>
 {
     let type_check_result = match *e
@@ -889,6 +900,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::ArrayToSlice(ref mut ats) => type_check_array_to_slice(ctx, ats, type_hint),
         Expression::AddressOf(ref mut a) => type_check_address_of(ctx, a, type_hint),
         Expression::Assign(ref mut a) => type_check_assign(ctx, a),
+        Expression::While(ref mut w) => type_check_while(ctx, w),
         Expression::Void => valid(Type::Void),
     };
 

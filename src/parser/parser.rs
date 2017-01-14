@@ -489,7 +489,10 @@ fn parse_let(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 fn parse_if(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 {
     let cond = parse_expression(tq)?;
-    tq.expect(TokenKind::Colon)?;
+    if !tq.is_next(TokenKind::OpenCurly) {
+        tq.expect(TokenKind::Colon)?;
+    }
+
     let on_true = parse_expression(tq)?;
     tq.expect(TokenKind::Else)?;
     let on_false = parse_expression(tq)?;
@@ -630,11 +633,35 @@ fn parse_member_access(tq: &mut TokenQueue, left_expr: Expression) -> CompileRes
 
 fn parse_block(tq: &mut TokenQueue, start: &Span) -> CompileResult<Expression>
 {
-    let (mut expressions, list_end) = parse_list(tq, TokenKind::SemiColon, TokenKind::CloseCurly, parse_expression)?;
-    if list_end == ListEnd::Separator {
+    let mut ends_with_semicolon = false;
+    let mut expressions = Vec::new();
+    while !tq.is_next(TokenKind::CloseCurly)
+    {
+        let e = parse_expression(tq)?;
+        expressions.push(e);
+        ends_with_semicolon = false;
+        while tq.is_next(TokenKind::SemiColon) {
+            tq.pop()?;
+            ends_with_semicolon = true;
+        }
+    }
+
+    tq.expect(TokenKind::CloseCurly)?;
+    if ends_with_semicolon {
         expressions.push(Expression::Void);
     }
     Ok(block(expressions, start.expanded(tq.pos())))
+}
+
+fn parse_while(tq: &mut TokenQueue, start: &Span) -> CompileResult<Expression>
+{
+    let cond = parse_expression(tq)?;
+    if !tq.is_next(TokenKind::OpenCurly) {
+        tq.expect(TokenKind::Colon)?;
+    }
+
+    let body = parse_expression(tq)?;
+    Ok(while_loop(cond, body, start.expanded(tq.pos())))
 }
 
 fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expression>
@@ -667,6 +694,10 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
 
         TokenKind::If => {
             parse_if(tq, &tok.span)
+        },
+
+        TokenKind::While => {
+            parse_while(tq, &tok.span)
         },
 
         TokenKind::OpenCurly => {
