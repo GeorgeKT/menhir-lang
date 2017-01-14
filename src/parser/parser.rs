@@ -633,8 +633,21 @@ fn parse_member_access(tq: &mut TokenQueue, left_expr: Expression) -> CompileRes
 
 fn parse_block(tq: &mut TokenQueue, start: &Span) -> CompileResult<Expression>
 {
-    let (mut expressions, list_end) = parse_list(tq, TokenKind::SemiColon, TokenKind::CloseCurly, parse_expression)?;
-    if list_end == ListEnd::Separator {
+    let mut ends_with_semicolon = false;
+    let mut expressions = Vec::new();
+    while !tq.is_next(TokenKind::CloseCurly)
+    {
+        let e = parse_expression(tq)?;
+        expressions.push(e);
+        ends_with_semicolon = false;
+        while tq.is_next(TokenKind::SemiColon) {
+            tq.pop()?;
+            ends_with_semicolon = true;
+        }
+    }
+
+    tq.expect(TokenKind::CloseCurly)?;
+    if ends_with_semicolon {
         expressions.push(Expression::Void);
     }
     Ok(block(expressions, start.expanded(tq.pos())))

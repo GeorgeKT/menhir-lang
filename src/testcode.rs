@@ -19,7 +19,7 @@ pub const ALL_TESTS: [Test; 33] = [
                 while x < 10 {
                     y = y + 2;
                     x = x + 1;
-                };
+                }
                 y
             }
         "#
