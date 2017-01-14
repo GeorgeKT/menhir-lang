@@ -44,15 +44,19 @@ pub struct Scope
 {
     named_vars: HashMap<String, Var>,
     to_cleanup: Vec<Var>,
+    insert_block: BasicBlockRef,
+    insert_position: usize,
 }
 
 impl Scope
 {
-    pub fn new() -> Scope
+    pub fn new(insert_block: BasicBlockRef, insert_position: usize) -> Scope
     {
         Scope{
             named_vars: HashMap::new(),
             to_cleanup: Vec::new(),
+            insert_block: insert_block,
+            insert_position: insert_position,
         }
     }
 
@@ -145,7 +149,7 @@ impl ByteCodeFunction
             current_bb: 0,
             bb_counter: 0,
             var_counter: 0,
-            scopes: vec![Scope::new()],
+            scopes: vec![Scope::new(0, 0)],
             destinations: Vec::new(),
         };
 
@@ -170,17 +174,35 @@ impl ByteCodeFunction
         function
     }
 
-    pub fn add(&mut self, inst: Instruction)
+    fn add_instruction(&mut self, inst: Instruction)
     {
-        // Pop final scope before returning
-        match inst
-        {
-            Instruction::Return(_) | Instruction::ReturnVoid => self.pop_scope(),
-            _ => (),
-        }
-
         let idx = self.current_bb;
         self.blocks.get_mut(&idx).map(|bb| bb.instructions.push(inst));
+    }
+
+    pub fn add(&mut self, inst: Instruction)
+    {
+        match inst
+        {
+            Instruction::Return(_) | Instruction::ReturnVoid => {
+                // Pop final scope before returning
+                self.pop_scope();
+                self.add_instruction(inst);
+            },
+
+            Instruction::StackAlloc(_) => {
+                let mut scope = self.scopes.last_mut().expect("Empty scope stack");
+                let insert_position = scope.insert_position;
+                self.blocks
+                    .get_mut(&scope.insert_block)
+                    .map(|bb| bb.instructions.insert(insert_position, inst));
+                scope.insert_position += 1;
+            },
+
+            _ => {
+                self.add_instruction(inst);
+            },
+        }
     }
 
     pub fn create_basic_block(&mut self) -> BasicBlockRef
@@ -214,7 +236,11 @@ impl ByteCodeFunction
 
     pub fn push_scope(&mut self)
     {
-        self.scopes.push(Scope::new());
+        let idx = self.current_bb;
+        let insert_position = self.blocks.get_mut(&idx)
+            .map(|bb| bb.instructions.len() + 1)
+            .expect("Unknown block");
+        self.scopes.push(Scope::new(self.current_bb, insert_position));
         self.add(Instruction::StartScope);
     }
 

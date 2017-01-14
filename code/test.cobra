@@ -1,9 +1,9 @@
-main() -> int {
-    let x = 0;
-    let y = 0;
-    while x < 10 {
-        y = y + 2;
-        x = x + 1;
-    };
-    y
-}
+type Option = Some{int} | None
+
+unwrap_or(opt: Option, default: int) -> int =
+    match opt:
+        Some{i} => i,
+        None => default
+
+main() -> int =
+    unwrap_or(Some{5}, 1) + unwrap_or(None, 1)
