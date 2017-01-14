@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
+use std::ops::Deref;
 use bytecode::*;
 use parser::Operator;
 
@@ -123,7 +124,11 @@ impl Interpreter
     {
         self.apply_on_variable(name, |vr: &mut ValueRef| {
             vr.apply_mut(|v: &mut Value| {
-                *v = val;
+                match *v
+                {
+                    Value::Optional(ref mut inner) => *inner = Box::new(val),
+                    _ => *v = val,
+                }
                 Ok(())
             })
         })
@@ -209,6 +214,14 @@ impl Interpreter
 
             (Operator::And, Value::Bool(l), Value::Bool(r)) => Value::Bool(l && r),
             (Operator::Or, Value::Bool(l), Value::Bool(r)) => Value::Bool(l || r),
+
+            (Operator::Or, Value::Optional(inner), right) => {
+                if inner.is_nil() {
+                    right
+                } else {
+                    inner.deref().clone()
+                }
+            }
 
             _ => return Err(ExecutionError(format!("Operator {} not supported on these operands", op))),
         };

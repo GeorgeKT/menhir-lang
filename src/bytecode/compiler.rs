@@ -702,8 +702,13 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
             Some(dst)
         },
 
-        Expression::ToOptional(_) => {
-            panic!("NYI")
+        Expression::ToOptional(ref t) => {
+            let dst = get_dst(func, &t.optional_type);
+            func.push_destination(None);
+            let inner = to_bc(bc_mod, func, &t.inner);
+            func.pop_destination();
+            func.add(store_instr(&dst, &inner));
+            Some(dst)
         },
     }
 }

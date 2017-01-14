@@ -1,9 +1,5 @@
-main() -> int {
-    let x = 0;
-    let y = 0;
-    while x < 10 {
-        y = y + 2;
-        x = x + 1;
-    }
-    y
-}
+unwrap_or(opt: ?int, default: int) -> int =
+    opt || default
+
+main() -> int =
+    unwrap_or(41, 1) + unwrap_or(nil, 1)

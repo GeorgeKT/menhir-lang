@@ -23,7 +23,7 @@ pub enum Value
     Sum(usize, Box<ValueRef>),
     Enum(usize),
     Pointer(ValueRef),
-    Optional(Option<Box<Value>>),
+    Optional(Box<Value>),
 }
 
 impl fmt::Display for Value
@@ -47,8 +47,7 @@ impl fmt::Display for Value
             Value::Sum(idx, ref v) => write!(f, "sum {} {}", idx, v),
             Value::Enum(idx) => write!(f, "enum {}", idx),
             Value::Pointer(ref v) => write!(f, "pointer {}", v),
-            Value::Optional(Some(ref v)) => write!(f, "optional {}", v),
-            Value::Optional(None) => write!(f, "optional nil"),
+            Value::Optional(ref v) => write!(f, "optional {}", v),
             Value::Nil => write!(f, "nil"),
         }
     }
@@ -124,7 +123,7 @@ impl Value
                 Ok(Value::Pointer(ValueRef::new(inner)))
             },
             Type::Optional(ref _inner) => {
-                Ok(Value::Optional(None))
+                Ok(Value::Optional(Box::new(Value::Nil)))
             },
             Type::Nil => Ok(Value::Nil),
         }
@@ -140,6 +139,15 @@ impl Value
             (&Value::Sum(idx, _), ByteCodeProperty::SumTypeIndex) => Ok(Value::Int(idx as i64)),
             (&Value::Enum(idx), ByteCodeProperty::SumTypeIndex) => Ok(Value::Int(idx as i64)),
             _  => Err(ExecutionError(format!("Unknown property {}", prop))),
+        }
+    }
+
+    pub fn is_nil(&self) -> bool
+    {
+        if let Value::Nil = *self {
+            true
+        } else {
+            false
         }
     }
 }
