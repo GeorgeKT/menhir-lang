@@ -1,6 +1,6 @@
 use std::fmt;
 use itertools::free::join;
-use parser::Operator;
+use ast::Operator;
 use bytecode::function::{BasicBlockRef, Var};
 
 #[derive(Debug, Clone)]

@@ -139,13 +139,11 @@ fn main()
                 }
             }
         }
-
-        Ok(())
     });
 
     match ret
     {
-        Ok(_) => {},
+        Ok(()) => {},
         Err(e) => {
             e.print();
             exit(-1);

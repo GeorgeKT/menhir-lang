@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use ast::*;
 use bytecode::*;
-use parser::Operator;
+
 
 fn stack_alloc(func: &mut ByteCodeFunction, typ: &Type, name: Option<&str>) -> Var
 {

@@ -3,9 +3,9 @@ use std::ops::Deref;
 use std::hash::{Hasher, Hash};
 use std::rc::Rc;
 use itertools::free::join;
-use ast::{Expression, TreePrinter, MemberAccessType, Property, prefix, array_to_slice, to_optional, bin_op_with_type};
+use ast::{Expression, TreePrinter, MemberAccessType, Property, Operator, prefix, array_to_slice, to_optional, bin_op_with_type};
 use span::Span;
-use parser::Operator;
+
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct SumTypeCase

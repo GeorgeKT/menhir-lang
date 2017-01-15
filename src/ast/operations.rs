@@ -1,6 +1,5 @@
-use ast::{Expression, Type};
+use ast::{Expression, Type, Operator};
 use span::{Span};
-use parser::{Operator};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct UnaryOp

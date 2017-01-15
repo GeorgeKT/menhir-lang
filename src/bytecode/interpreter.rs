@@ -3,7 +3,7 @@ use std::fmt;
 use std::rc::Rc;
 use std::ops::Deref;
 use bytecode::*;
-use parser::Operator;
+use ast::Operator;
 
 const RETURN_VALUE : &'static str = "@RETURN_VALUE@";
 

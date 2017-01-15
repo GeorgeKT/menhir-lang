@@ -90,12 +90,10 @@ impl CompileError
                     let carets = repeat_string("^", self.span.end.offset);
                     println!("     {}{}", prefix, carets);
                 }
-                else if line_idx > self.span.start.line && line_idx < self.span.end.line
+                else if line_idx > self.span.start.line && line_idx < self.span.end.line && !line.is_empty()
                 {
-                    if !line.is_empty() {
-                        let carets = repeat_string("^", line.len());
-                        println!("     {}{}", prefix, carets);
-                    }
+                    let carets = repeat_string("^", line.len());
+                    println!("     {}{}", prefix, carets);
                 }
 
                 if line_idx >= self.span.end.line + 3 {break;}

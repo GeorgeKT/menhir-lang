@@ -1,6 +1,5 @@
 use ast::*;
 use compileerror::{CompileResult, CompileError, ErrorCode, err, unknown_name};
-use parser::{Operator};
 use typechecker::{TypeCheckerContext, instantiate_generics, fill_in_generics, resolve_types, check_match_is_exhaustive};
 use span::Span;
 
