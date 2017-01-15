@@ -1001,7 +1001,13 @@ pub fn type_check_module(module: &mut Module) -> CompileResult<()>
         let mut ctx = TypeCheckerContext::new();
         resolve_types(&mut ctx, module)?;
 
-        for ref mut f in module.functions.values_mut() {
+        for global in module.globals.values_mut() {
+            if global.typ == Type::Unknown {
+                type_check_let_binding(&mut ctx, global)?;
+            }
+        }
+
+        for f in module.functions.values_mut() {
             if !f.type_checked {
                 type_check_function(&mut ctx, f)?;
             }

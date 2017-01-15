@@ -202,8 +202,7 @@ pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module) -> Compi
             break;
         }
     }
-
-
+    
     for f in module.functions.values_mut() {
         resolve_function_args_and_ret_type(ctx, &mut f.sig)?;
         ctx.add(&f.sig.name, f.sig.typ.clone(), &f.sig.span)?;
