@@ -1,6 +1,7 @@
 use std::io::Cursor;
 use ast::*;
 use parser::*;
+use super::lexer::Lexer;
 use span::{Pos, Span};
 
 fn span(sl: usize, so: usize, el: usize, eo: usize) -> Span

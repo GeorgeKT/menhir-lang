@@ -1,22 +1,16 @@
 use std::collections::HashMap;
-use std::fmt;
 use std::rc::Rc;
 use std::ops::Deref;
 use bytecode::*;
-use parser::Operator;
+use ast::Operator;
+use super::function::*;
+use super::instruction::*;
+use super::value::Value;
+use super::valueref::ValueRef;
+use super::debugger::ByteCodeIndex;
 
 const RETURN_VALUE : &'static str = "@RETURN_VALUE@";
 
-#[derive(Debug, Eq, PartialEq)]
-pub struct ExecutionError(pub String);
-
-impl fmt::Display for ExecutionError
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
-    {
-        write!(f, "{}", self.0)
-    }
-}
 
 #[derive(Debug, Clone)]
 struct ReturnAddress
@@ -149,7 +143,7 @@ impl Interpreter
                 (Operator::Sub, &Value::UInt(num)) => Ok(Value::Int(-(num as i64))),
                 (Operator::Sub, &Value::Float(num)) => Ok(Value::Float(-num)),
                 (Operator::Not, &Value::Bool(b)) => Ok(Value::Bool(!b)),
-                _ => Err(ExecutionError(format!("Invalid unary op"))),
+                _ => Err(ExecutionError(format!("Invalid unary op {}", op))),
             }
         })?;
 
@@ -157,6 +151,7 @@ impl Interpreter
         Ok(())
     }
 
+    #[cfg_attr(feature = "cargo-clippy", allow(float_cmp, match_same_arms))]
     fn binary_op(&mut self, dst: &str, op: Operator, left: &str, right: &str) -> Result<(), ExecutionError>
     {
         let left = self.get_variable(left)?.clone_value()?;
@@ -211,7 +206,7 @@ impl Interpreter
             (Operator::Equals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l == *r),
             (Operator::Equals, Value::Optional(ref inner), Value::Nil) => Value::Bool(inner.is_nil()),
             (Operator::Equals, Value::Nil, Value::Nil) => Value::Bool(true),
-            (Operator::Equals, _, Value::Nil) => Value::Bool(false),
+            (Operator::Equals, _, Value::Nil) |
             (Operator::Equals, Value::Nil, _) => Value::Bool(false),
 
             (Operator::NotEquals, Value::Int(l), Value::Int(r)) => Value::Bool(l != r),
@@ -222,7 +217,7 @@ impl Interpreter
             (Operator::NotEquals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l != *r),
             (Operator::NotEquals, Value::Optional(ref inner), Value::Nil) => Value::Bool(!inner.is_nil()),
             (Operator::NotEquals, Value::Nil, Value::Nil) => Value::Bool(false),
-            (Operator::NotEquals, _, Value::Nil) => Value::Bool(true),
+            (Operator::NotEquals, _, Value::Nil) |
             (Operator::NotEquals, Value::Nil, _) => Value::Bool(true),
 
             (Operator::And, Value::Bool(l), Value::Bool(r)) => Value::Bool(l && r),
@@ -244,7 +239,7 @@ impl Interpreter
         Ok(())
     }
 
-    fn call(&mut self, dst: &str, func: Rc<ByteCodeFunction>, args: &Vec<String>, index: &ByteCodeIndex) -> Result<StepResult, ExecutionError>
+    fn call(&mut self, dst: &str, func: Rc<ByteCodeFunction>, args: &[String], index: &ByteCodeIndex) -> Result<StepResult, ExecutionError>
     {
         println!("{}:", func.sig.name);
         let return_address = index.next();
@@ -292,10 +287,10 @@ impl Interpreter
     {
         let val = self.get_variable(var)?;
         val.apply(|v: &Value| {
-            match v
+            match *v
             {
-                &Value::Bool(true) => Ok(StepResult::Continue(index.jump(on_true))),
-                &Value::Bool(false) => Ok(StepResult::Continue(index.jump(on_false))),
+                Value::Bool(true) => Ok(StepResult::Continue(index.jump(on_true))),
+                Value::Bool(false) => Ok(StepResult::Continue(index.jump(on_false))),
                 _ => Err(ExecutionError(format!("brif operand {} is not a boolean", var))),
             }
         })
@@ -322,11 +317,8 @@ impl Interpreter
         self.apply_on_variable(obj, |vr: &mut ValueRef|
             vr.apply_mut(|v: &mut Value|
                 match (prop, v) {
+                    (&ByteCodeProperty::SumTypeIndex, &mut Value::Enum(ref mut idx)) |
                     (&ByteCodeProperty::SumTypeIndex, &mut Value::Sum(ref mut idx, _)) => {
-                        *idx = val;
-                        Ok(())
-                    },
-                    (&ByteCodeProperty::SumTypeIndex, &mut Value::Enum(ref mut idx)) => {
                         *idx = val;
                         Ok(())
                     },
@@ -340,7 +332,7 @@ impl Interpreter
     {
         self.get_variable(name)?
             .apply(|vr: &Value| {
-                if let &Value::Int(v) = vr {
+                if let Value::Int(v) = *vr {
                     Ok(v)
                 } else {
                     Err(ExecutionError(format!("{} is not an integer", name)))
@@ -357,7 +349,7 @@ impl Interpreter
             {
                 Value::Array(ref arr) => {
                     if start_value + len_value > arr.len() {
-                        return Err(ExecutionError(format!("Slice index out of bounds")));
+                        return Err(ExecutionError(format!("Slice index {} out of bounds", start_value + len_value)));
                     }
 
                     let mut slice = Vec::new();
@@ -369,11 +361,11 @@ impl Interpreter
 
                 Value::Slice(ref slice) => {
                     if start_value + len_value > slice.len() {
-                        return Err(ExecutionError(format!("Slice index out of bounds")));
+                        return Err(ExecutionError(format!("Slice index {} out of bounds", start_value + len_value)));
                     }
 
                     let subslice = &slice[start_value .. (start_value + len_value)];
-                    Ok(Value::Slice(subslice.iter().map(|e| e.clone()).collect()))
+                    Ok(Value::Slice(subslice.iter().cloned().collect()))
                 },
 
                 _ => {
@@ -393,7 +385,7 @@ impl Interpreter
             None => {
                 let v = self.get_variable(func)?;
                 v.apply(|val: &Value|
-                    if let &Value::Func(ref f) = val {
+                    if let Value::Func(ref f) = *val {
                         Ok(f.clone())
                     } else {
                         Err(ExecutionError(format!("{} is not callable", func)))
@@ -411,11 +403,11 @@ impl Interpreter
             {
                 Value::Optional(ref inner) => Ok(inner.deref().clone()),
                 Value::Pointer(ref inner) => inner.clone_value(),
-                _ => Err(ExecutionError(format!("Load can only be performed on pointers and optionals"))),
+                _ => Err(ExecutionError(format!("Load can only be performed on pointers and optionals, not on {}", v))),
             }
         })?;
 
-        self.update_variable(&dst, new_value)
+        self.update_variable(dst, new_value)
     }
 
     fn execute_instruction(&mut self, instr: &Instruction, index: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
@@ -484,7 +476,8 @@ impl Interpreter
 
             Instruction::Call{ref dst, ref func, ref args} => {
                 let func = self.get_function(func, module)?;
-                self.call(&dst.name, func, &args.iter().map(|a| a.name.clone()).collect(), index)
+                let args = args.iter().map(|a| a.name.clone()).collect::<Vec<_>>();
+                self.call(&dst.name, func, &args, index)
             },
 
             Instruction::StackAlloc(ref var) => {
@@ -553,13 +546,13 @@ impl Interpreter
 
     pub fn start(&mut self, function: &str, args: Vec<Value>, module: &ByteCodeModule) -> Result<ByteCodeIndex, ExecutionError>
     {
-        let func = module.functions.get(function).ok_or(ExecutionError(format!("Unknown function {}", function)))?;
+        let func = module.functions.get(function).ok_or_else(|| ExecutionError(format!("Unknown function {}", function)))?;
         let bottom_frame = StackFrame::new();
         self.stack.push(bottom_frame);
 
         let mut call_args = Vec::new();
         for arg in &args {
-            let name = format!("arg0");
+            let name = "arg0".to_string();
             self.add_variable(&name, arg.clone())?;
             call_args.push(name);
         }
@@ -575,12 +568,12 @@ impl Interpreter
     pub fn step(&mut self, s: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
     {
         let bb = s.function.blocks.get(&s.basic_block)
-            .ok_or(ExecutionError(format!("Function does not have basic block {}", s.basic_block)))?;
+            .ok_or_else(|| ExecutionError(format!("Function does not have basic block {}", s.basic_block)))?;
 
-        if let Some(ref instruction) = bb.instructions.get(s.instruction) {
+        if let Some(instruction) = bb.instructions.get(s.instruction) {
             self.execute_instruction(instruction, s, module)
         } else {
-            Err(ExecutionError(format!("Instruction index out of bounds")))
+            Err(ExecutionError(format!("Instruction index {} out of bounds", s.instruction)))
         }
     }
 }

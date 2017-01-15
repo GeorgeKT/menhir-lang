@@ -16,6 +16,7 @@ mod matchexpression;
 mod memberaccess;
 mod nameref;
 mod operations;
+mod operator;
 mod pattern;
 mod structs;
 mod sumtype;
@@ -37,6 +38,7 @@ pub use self::matchexpression::*;
 pub use self::memberaccess::*;
 pub use self::nameref::NameRef;
 pub use self::operations::*;
+pub use self::operator::*;
 pub use self::pattern::*;
 pub use self::structs::*;
 pub use self::sumtype::*;
@@ -57,6 +59,9 @@ pub trait TreePrinter
 {
     fn print(&self, level: usize);
 }
+
+pub type GenericMapping = HashMap<Type, Type>;
+
 
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -152,15 +157,15 @@ impl TreePrinter for Module
     {
         let p = prefix(level);
         println!("{}Module: {}", p, self.name);
-        for ref t in self.types.values() {
+        for t in self.types.values() {
             t.print(level + 1);
         }
 
-        for ref func in self.externals.values() {
+        for func in self.externals.values() {
             func.print(level + 1);
         }
 
-        for ref func in self.functions.values() {
+        for func in self.functions.values() {
             func.print(level + 1);
         }
     }

@@ -31,10 +31,10 @@ impl Literal
     {
         match *self
         {
-            Literal::Int(ref span, _) => span.clone(),
-            Literal::Float(ref span, _) => span.clone(),
-            Literal::Bool(ref span, _) => span.clone(),
-            Literal::Char(ref span, _) => span.clone(),
+            Literal::Int(ref span, _) |
+            Literal::Float(ref span, _) |
+            Literal::Bool(ref span, _) |
+            Literal::Char(ref span, _) |
             Literal::String(ref span, _) => span.clone(),
             Literal::Array(ref a) => a.span.clone(),
         }

@@ -9,7 +9,7 @@ fn check_any_match(m: &MatchExpression) -> CompileResult<bool>
     for (idx, c) in m.cases.iter().enumerate() {
         if let Pattern::Any(ref span) = c.pattern {
             if idx != m.cases.len() - 1 {
-                return err(span, ErrorCode::UnreachablePatternMatch, format!("A pattern match with _ must always be the last one in a match statement"));
+                return err(span, ErrorCode::UnreachablePatternMatch, "A pattern match with _ must always be the last one in a match statement");
             } else {
                 any_match_seen = true;
             }
@@ -23,18 +23,18 @@ fn check_array_match_is_exhaustive(m: &MatchExpression, any_match_seen: bool) ->
     let mut empty_array_seen = false;
     let mut head_tail_seen = false;
 
-    for c in m.cases.iter() {
+    for c in &m.cases {
         match c.pattern {
             Pattern::EmptyArray(_) => {
                 if empty_array_seen {
-                    return err(&c.span, ErrorCode::DuplicatePatternMatch, format!("Duplicate pattern match, pattern match for [] already exists"));
+                    return err(&c.span, ErrorCode::DuplicatePatternMatch, "Duplicate pattern match, pattern match for [] already exists");
                 } else {
                     empty_array_seen = true;
                 }
             },
             Pattern::Array(_) => {
                 if head_tail_seen {
-                    return err(&c.span, ErrorCode::DuplicatePatternMatch, format!("Duplicate pattern match, pattern match already exists"));
+                    return err(&c.span, ErrorCode::DuplicatePatternMatch, "Duplicate pattern match, pattern match already exists");
                 } else {
                     head_tail_seen = true;
                 }
@@ -46,7 +46,7 @@ fn check_array_match_is_exhaustive(m: &MatchExpression, any_match_seen: bool) ->
     if any_match_seen || (empty_array_seen && head_tail_seen) {
         Ok(())
     } else {
-        err(&m.span, ErrorCode::IncompletePatternMatch, format!("Incomplete pattern match"))
+        err(&m.span, ErrorCode::IncompletePatternMatch, "Incomplete pattern match")
     }
 }
 
@@ -64,7 +64,7 @@ fn check_sum_match_is_exhaustive<ST: SumTypeCaseIndexOf>(m: &MatchExpression, st
         }
     };
 
-    for c in m.cases.iter() {
+    for c in &m.cases {
         match c.pattern
         {
             Pattern::Name(ref nr) => {
@@ -78,7 +78,7 @@ fn check_sum_match_is_exhaustive<ST: SumTypeCaseIndexOf>(m: &MatchExpression, st
     }
 
     if !any_match_seen && indexes.len() != st.num_cases() {
-        return err(&m.span, ErrorCode::IncompletePatternMatch, format!("Incomplete pattern match, not all cases are handled"));
+        return err(&m.span, ErrorCode::IncompletePatternMatch, "Incomplete pattern match, not all cases are handled");
     }
     Ok(())
 }
@@ -87,30 +87,25 @@ fn check_bool_match_is_exhaustive(m: &MatchExpression) -> CompileResult<()>
 {
     let mut true_seen = false;
     let mut false_seen = false;
-    for c in m.cases.iter() {
-        match c.pattern
+    for c in &m.cases {
+        if let Pattern::Literal(Literal::Bool(_, v)) = c.pattern
         {
-            Pattern::Literal(Literal::Bool(_, v)) => {
-                if v {
-                    if true_seen {
-                        return err(&c.span, ErrorCode::DuplicatePatternMatch, format!("Duplicate pattern match, pattern match for true already exists"));
-                    } else {
-                        true_seen = true;
-                    }
+            if v {
+                if true_seen {
+                    return err(&c.span, ErrorCode::DuplicatePatternMatch, "Duplicate pattern match, pattern match for true already exists");
                 } else {
-                    if false_seen {
-                        return err(&c.span, ErrorCode::DuplicatePatternMatch, format!("Duplicate pattern match, pattern match for false already exists"));
-                    } else {
-                        false_seen = true;
-                    }
+                    true_seen = true;
                 }
-            },
-            _ => (),
+            } else if false_seen {
+                return err(&c.span, ErrorCode::DuplicatePatternMatch, "Duplicate pattern match, pattern match for false already exists");
+            } else {
+                false_seen = true;
+            }
         }
     }
 
     if !true_seen || !false_seen {
-        err(&m.span, ErrorCode::IncompletePatternMatch, format!("Incomplete pattern match, not all boolean values are matched against"))
+        err(&m.span, ErrorCode::IncompletePatternMatch, "Incomplete pattern match, not all boolean values are matched against")
     } else {
         Ok(())
     }
@@ -120,7 +115,7 @@ fn check_optional_match_is_exhaustive(m: &MatchExpression) -> CompileResult<()>
 {
     let mut optional_seen = false;
     let mut nil_seen = false;
-    for c in m.cases.iter() {
+    for c in &m.cases {
         match c.pattern
         {
             Pattern::Optional(_) => optional_seen = true,
@@ -131,7 +126,7 @@ fn check_optional_match_is_exhaustive(m: &MatchExpression) -> CompileResult<()>
     }
 
     if !optional_seen || !nil_seen {
-        err(&m.span, ErrorCode::IncompletePatternMatch, format!("Incomplete pattern match, not all possible optionals are matched again"))
+        err(&m.span, ErrorCode::IncompletePatternMatch, "Incomplete pattern match, not all possible optionals are matched again")
     } else {
         Ok(())
     }
@@ -156,8 +151,8 @@ pub fn check_match_is_exhaustive(m: &MatchExpression, target_type: &Type) -> Com
         },
 
         Type::Struct(_) => {
-            if m.cases.len() != 0 {
-                err(&m.span, ErrorCode::DuplicatePatternMatch, format!("Duplicate pattern match, structs can only have one pattern match"))
+            if !m.cases.is_empty() {
+                err(&m.span, ErrorCode::DuplicatePatternMatch, "Duplicate pattern match, structs can only have one pattern match")
             } else {
                 Ok(())
             }

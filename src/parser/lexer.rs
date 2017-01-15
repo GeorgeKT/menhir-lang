@@ -1,7 +1,9 @@
 use std::io::{Read, BufReader, BufRead};
 use std::mem;
 use compileerror::{CompileResult, ErrorCode, err};
-use parser::{TokenQueue, TokenKind, Operator, Token};
+use super::tokenqueue::TokenQueue;
+use super::tokens::{TokenKind, Token};
+use ast::Operator;
 use span::{Span, Pos};
 
 
@@ -30,9 +32,9 @@ pub struct Lexer
 
 fn is_operator_start(c: char) -> bool
 {
-    for &op in ['+', '-', '*', '/', '%', '>', '<', '=', '!', '.', '|', '&', ':'].iter()
+    for op in &['+', '-', '*', '/', '%', '>', '<', '=', '!', '.', '|', '&', ':']
     {
-        if op == c {return true;}
+        if *op == c {return true;}
     }
 
     false
@@ -136,7 +138,7 @@ impl Lexer
 
     fn current_single_span(&self) -> Span
     {
-        Span::single(&self.file_name, self.pos.clone())
+        Span::single(&self.file_name, self.pos)
     }
 
     fn identifier(&mut self, c: char) -> CompileResult<()>
@@ -231,7 +233,7 @@ impl Lexer
             {
                 'r' => self.data.push('\r'),
                 'n' => self.data.push('\n'),
-                't' => self.data.push('\n'),
+                't' => self.data.push('\t'),
                 _   => self.data.push(c),
             }
         }
@@ -269,7 +271,7 @@ impl Lexer
             let mut span = self.current_span();
             span.end.offset += 1; // Need to include the single quote
             if self.data.len() != 1 {
-                return err(&span, ErrorCode::InvalidCharLiteral, format!("Invalid char literal"));
+                return err(&span, ErrorCode::InvalidCharLiteral, "Invalid char literal");
             }
 
             let c = self.data.chars().nth(0).expect("Invalid char literal");
@@ -331,7 +333,9 @@ impl Lexer
 mod tests
 {
     use std::io::Cursor;
-    use parser::*;
+    use ast::Operator;
+    use parser::lexer::Lexer;
+    use parser::tokens::*;
     use span::*;
 
     fn tok(kind: TokenKind, sline: usize, soffset: usize, eline: usize, eoffset: usize) -> Token

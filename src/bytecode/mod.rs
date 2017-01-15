@@ -12,13 +12,19 @@ use std::fmt;
 use std::rc::Rc;
 use std::collections::HashMap;
 
-pub use self::compiler::*;
-pub use self::debugger::*;
-pub use self::function::*;
-pub use self::instruction::*;
-pub use self::interpreter::*;
-pub use self::value::*;
-pub use self::valueref::*;
+use self::function::ByteCodeFunction;
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct ExecutionError(pub String);
+
+impl fmt::Display for ExecutionError
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
+    {
+        write!(f, "{}", self.0)
+    }
+}
+
 
 pub struct ByteCodeModule
 {
@@ -31,10 +37,14 @@ impl fmt::Display for ByteCodeModule
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
-        for (_, func) in &self.functions {
+        for func in self.functions.values() {
             func.fmt(f)?;
             writeln!(f, " ")?;
         }
         Ok(())
     }
 }
+
+pub use self::compiler::compile_to_byte_code;
+pub use self::interpreter::run_byte_code;
+pub use self::debugger::debug_byte_code;

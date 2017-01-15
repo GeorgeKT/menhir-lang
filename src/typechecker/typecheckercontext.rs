@@ -39,7 +39,7 @@ impl StackFrame
     pub fn resolve_type(&self, name: &str) -> Option<ResolvedName>
     {
         let name_with_double_colons = format!("::{}", name);
-        for (symbol_name, typ) in self.symbols.iter() {
+        for (symbol_name, typ) in &self.symbols {
             if symbol_name == name || symbol_name.ends_with(&name_with_double_colons) {
                 return Some(ResolvedName::new(symbol_name, typ.clone()));
             }

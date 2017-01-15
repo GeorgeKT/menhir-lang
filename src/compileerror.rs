@@ -8,6 +8,7 @@ use std::fmt;
 use ast::Type;
 use span::Span;
 
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ErrorCode
 {
@@ -90,12 +91,10 @@ impl CompileError
                     let carets = repeat_string("^", self.span.end.offset);
                     println!("     {}{}", prefix, carets);
                 }
-                else if line_idx > self.span.start.line && line_idx < self.span.end.line
+                else if line_idx > self.span.start.line && line_idx < self.span.end.line && !line.is_empty()
                 {
-                    if !line.is_empty() {
-                        let carets = repeat_string("^", line.len());
-                        println!("     {}{}", prefix, carets);
-                    }
+                    let carets = repeat_string("^", line.len());
+                    println!("     {}{}", prefix, carets);
                 }
 
                 if line_idx >= self.span.end.line + 3 {break;}
@@ -106,9 +105,9 @@ impl CompileError
 
 pub type CompileResult<T> = Result<T, CompileError>;
 
-pub fn err<T: Sized>(span: &Span, e: ErrorCode, msg: String) -> CompileResult<T>
+pub fn err<T: Sized, Msg: Into<String>>(span: &Span, e: ErrorCode, msg: Msg) -> CompileResult<T>
 {
-    Err(CompileError::new(span, e, msg))
+    Err(CompileError::new(span, e, msg.into()))
 }
 
 pub fn unknown_name(span: &Span, name: &str) -> CompileError

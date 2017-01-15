@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use ast::*;
 use bytecode::*;
-use parser::Operator;
+use super::function::*;
+use super::instruction::*;
+
 
 fn stack_alloc(func: &mut ByteCodeFunction, typ: &Type, name: Option<&str>) -> Var
 {
@@ -41,7 +43,7 @@ fn array_lit_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, a: 
     let element_type = a.array_type.get_element_type().expect("Invalid array type");
     let ep = stack_alloc(func, &ptr_type(element_type), None);
     for (idx, element) in a.elements.iter().enumerate() {
-        func.add(load_member_instr(&ep, &dst, idx));
+        func.add(load_member_instr(&ep, dst, idx));
         func.push_destination(Some(ep.clone()));
         expr_to_bc(bc_mod, func, element);
         func.pop_destination();
@@ -80,7 +82,7 @@ fn struct_initializer_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunc
         func.add(set_prop_instr(dst, ByteCodeProperty::SumTypeIndex, idx));
 
         let struct_ptr = stack_alloc(func, &ptr_type(st.cases[idx].typ.clone()), None);
-        func.add(load_member_instr(&struct_ptr, &dst, idx));
+        func.add(load_member_instr(&struct_ptr, dst, idx));
         init_members(bc_mod, func, si, &struct_ptr);
     } else {
         init_members(bc_mod, func, si, dst);
@@ -282,7 +284,7 @@ fn name_pattern_match_to_bc(
             let idx = st.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
             let cv = make_lit(func, ByteCodeLiteral::Int(idx as u64), Type::Int);
             let sum_type_index = stack_alloc(func, &Type::Int, None);
-            func.add(get_prop_instr(&sum_type_index, &target, ByteCodeProperty::SumTypeIndex));
+            func.add(get_prop_instr(&sum_type_index, target, ByteCodeProperty::SumTypeIndex));
             let cond = stack_alloc(func, &Type::Bool, None);
             func.add(binary_op_instr(&cond, Operator::Equals, sum_type_index, cv));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
@@ -366,7 +368,7 @@ fn struct_pattern_match_to_bc(
         },
         Type::Sum(ref st) => {
             let target_sum_type_index = stack_alloc(func, &Type::Int, None);
-            func.add(get_prop_instr(&target_sum_type_index, &target, ByteCodeProperty::SumTypeIndex));
+            func.add(get_prop_instr(&target_sum_type_index, target, ByteCodeProperty::SumTypeIndex));
             let idx = st.index_of(&p.name).expect("Internal Compiler Error: cannot determine index of sum type case");
             let sum_type_index = make_lit(func, ByteCodeLiteral::Int(idx as u64), Type::Int);
             let cond = stack_alloc(func, &Type::Bool, None);
@@ -377,7 +379,7 @@ fn struct_pattern_match_to_bc(
 
             func.push_scope();
             let struct_ptr = stack_alloc(func, &ptr_type(st.cases[idx].typ.clone()), None);
-            func.add(load_member_instr(&struct_ptr, &target, idx));
+            func.add(load_member_instr(&struct_ptr, target, idx));
 
             add_struct_pattern_bindings(p, &struct_ptr, func);
         },
@@ -439,7 +441,7 @@ fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc
                     let len = stack_alloc(func, &Type::Int, None);
                     let zero = make_lit(func, ByteCodeLiteral::Int(0), Type::Int);
                     let cond = stack_alloc(func, &Type::Bool, None);
-                    func.add(get_prop_instr(&len, &target, ByteCodeProperty::Len));
+                    func.add(get_prop_instr(&len, target, ByteCodeProperty::Len));
                     func.add(binary_op_instr(&cond, Operator::Equals, len, zero));
                     func.add(branch_if_instr(&cond, match_case_bb, next_bb))
                 },
@@ -506,7 +508,7 @@ fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc
             func.push_scope();
 
             let binding = stack_alloc(func, &o.inner_type, Some(&o.binding));
-            func.add(load_instr(&binding, &target));
+            func.add(load_instr(&binding, target));
             func.add_named_var(binding);
             match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, true);
         },
@@ -742,8 +744,8 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
 
 fn func_to_bc(sig: &FunctionSignature, bc_mod: &mut ByteCodeModule, expression: &Expression) -> ByteCodeFunction
 {
-    let mut llfunc = ByteCodeFunction::new(&sig);
-    match expr_to_bc(bc_mod, &mut llfunc, &expression)
+    let mut llfunc = ByteCodeFunction::new(sig);
+    match expr_to_bc(bc_mod, &mut llfunc, expression)
     {
         Some(var) => {
             llfunc.add(ret_instr(&var));

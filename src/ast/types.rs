@@ -1,13 +1,12 @@
 use std::fmt;
 use std::ops::Deref;
-use std::hash::{Hasher, Hash};
 use std::rc::Rc;
 use itertools::free::join;
-use ast::{Expression, TreePrinter, MemberAccessType, Property, prefix, array_to_slice, to_optional, bin_op_with_type};
+use ast::{Expression, TreePrinter, MemberAccessType, Property, Operator, prefix, array_to_slice, to_optional, bin_op_with_type};
 use span::Span;
-use parser::Operator;
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct SumTypeCase
 {
     pub name: String,
@@ -20,7 +19,7 @@ pub trait SumTypeCaseIndexOf
     fn num_cases(&self) -> usize;
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct SumType
 {
     pub name: String,
@@ -40,7 +39,7 @@ impl SumTypeCaseIndexOf for SumType
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct EnumType
 {
     pub name: String,
@@ -60,48 +59,48 @@ impl SumTypeCaseIndexOf for EnumType
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct StructMember
 {
     pub name: String,
     pub typ: Type,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct StructType
 {
     pub name: String,
     pub members: Vec<StructMember>,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct FuncType
 {
     pub args: Vec<Type>,
     pub return_type: Type,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct ArrayType
 {
     pub element_type: Type,
     pub len: usize,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct SliceType
 {
     pub element_type: Type,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct UnresolvedType
 {
     pub name: String,
     pub generic_args: Vec<Type>,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub enum Type
 {
     Void,
@@ -140,8 +139,8 @@ impl Type
     {
         match *self
         {
-            Type::Array(_) => true,
-            Type::Slice(_) => true,
+            Type::Array(_) |
+            Type::Slice(_) |
             Type::String => true,
             _ => false,
         }
@@ -154,7 +153,7 @@ impl Type
             Type::Array(ref at) => Some(at.element_type.clone()),
             Type::Slice(ref at) => Some(at.element_type.clone()),
             Type::String => Some(Type::Char),
-            Type::Pointer(ref inner) => Some(inner.deref().clone()),
+            Type::Pointer(ref inner) |
             Type::Optional(ref inner) => Some(inner.deref().clone()),
             _ => None,
         }
@@ -224,10 +223,9 @@ impl Type
         {
             Type::Int | Type::UInt => op == Operator::Mod || GENERAL_NUMERIC_OPERATORS.contains(&op),
             Type::Float => GENERAL_NUMERIC_OPERATORS.contains(&op),
-            Type::Char => COMPARISON_OPERATORS.contains(&op),
+            Type::Char | Type::Pointer(_) => COMPARISON_OPERATORS.contains(&op),
             Type::Bool => COMPARISON_OPERATORS.contains(&op) || op == Operator::And || op == Operator::Or || op == Operator::Not,
             Type::String => op == Operator::Equals || op == Operator::NotEquals,
-            Type::Pointer(_) => COMPARISON_OPERATORS.contains(&op),
             _ => false,
         }
     }
@@ -475,14 +473,5 @@ pub fn to_primitive(name: &str) -> Option<Type>
         "bool" => Some(Type::Bool),
         "char" => Some(Type::Char),
         _ => None,
-    }
-}
-
-impl Hash for Type
-{
-    fn hash<H>(&self, state: &mut H) where H: Hasher
-    {
-        let s = format!("{}", self);
-        s.hash(state);
     }
 }

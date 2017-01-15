@@ -2,7 +2,10 @@ use std::io::prelude::*;
 use std::fmt;
 use std::rc::Rc;
 use shrust::{Shell, ShellIO, ExecResult, ExecError};
-use bytecode::*;
+use bytecode::{ExecutionError, ByteCodeModule};
+use super::function::*;
+use super::interpreter::*;
+use super::value::Value;
 
 
 #[derive(Debug, Clone)]
@@ -86,7 +89,7 @@ fn quit(io: &mut ShellIO, _dc: &mut DebuggerContext) -> ExecResult
 
 fn step(io: &mut ShellIO, dc: &mut DebuggerContext) -> ExecResult
 {
-    dc.index = match dc.interpreter.step(&dc.index, &dc.module)
+    dc.index = match dc.interpreter.step(&dc.index, dc.module)
     {
         Ok(StepResult::Continue(new_index)) => {
             write!(io, "{}", new_index)?;
