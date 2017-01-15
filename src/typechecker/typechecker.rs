@@ -40,7 +40,7 @@ fn invalid_unary_operator<T>(span: &Span, op: Operator) -> CompileResult<T>
     err(span, ErrorCode::InvalidUnaryOperator, format!("{} is not a valid unary operator", op))
 }
 
-fn convert_type(dst_type: &Type, src_type: &Type, expr: &mut Expression) -> CompileResult<()>
+fn convert_type(ctx: &mut TypeCheckerContext, dst_type: &Type, src_type: &Type, expr: &mut Expression) -> CompileResult<()>
 {
     if *dst_type == *src_type {
         return Ok(());
@@ -48,6 +48,7 @@ fn convert_type(dst_type: &Type, src_type: &Type, expr: &mut Expression) -> Comp
 
     if let Some(nex_expression) = dst_type.convert(src_type, expr) {
         *expr = nex_expression;
+        assert!(type_check_expression(ctx, expr, &None)? == *dst_type);
         Ok(())
     } else {
         err(&expr.span(), ErrorCode::TypeError, format!("Expecting an expression of type {} or something convertible to, but found one of type {}", src_type, dst_type))
@@ -89,7 +90,7 @@ fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> TypeChe
 fn type_check_with_conversion(ctx: &mut TypeCheckerContext, e: &mut Expression, expected_type: &Type) -> CompileResult<()>
 {
     let typ = type_check_expression(ctx, e, &None)?;
-    convert_type(expected_type, &typ, e)
+    convert_type(ctx, expected_type, &typ, e)
 }
 
 fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeCheckResult
@@ -236,8 +237,7 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> TypeCheckResul
         {
             let expected_arg_type = c.generic_args.substitute(&ft.args[idx]);
             let arg_type = &arg_types[idx];
-            convert_type(&expected_arg_type, arg_type, &mut c.args[idx])?;
-            type_check_expression(ctx, &mut c.args[idx], &None)?;
+            convert_type(ctx, &expected_arg_type, arg_type, &mut c.args[idx])?;
         }
 
         if ft.return_type.is_generic() {
