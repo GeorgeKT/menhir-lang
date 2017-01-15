@@ -2,7 +2,7 @@ use std::io::prelude::*;
 use std::fmt;
 use std::rc::Rc;
 use shrust::{Shell, ShellIO, ExecResult, ExecError};
-use bytecode::*;
+use bytecode::{ExecutionError, ByteCodeModule};
 use super::function::*;
 use super::interpreter::*;
 use super::value::Value;

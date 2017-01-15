@@ -8,6 +8,7 @@ use std::fmt;
 use ast::Type;
 use span::Span;
 
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ErrorCode
 {

@@ -1,7 +1,9 @@
 use std::io::{Read, BufReader, BufRead};
 use std::mem;
 use compileerror::{CompileResult, ErrorCode, err};
-use parser::{TokenQueue, TokenKind, Operator, Token};
+use super::tokenqueue::TokenQueue;
+use super::tokens::{TokenKind, Token};
+use ast::Operator;
 use span::{Span, Pos};
 
 
@@ -331,7 +333,9 @@ impl Lexer
 mod tests
 {
     use std::io::Cursor;
-    use parser::*;
+    use ast::Operator;
+    use parser::lexer::Lexer;
+    use parser::tokens::*;
     use span::*;
 
     fn tok(kind: TokenKind, sline: usize, soffset: usize, eline: usize, eoffset: usize) -> Token
