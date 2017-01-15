@@ -1,10 +1,7 @@
-type Foo {
-    bar: int
-}
+foo(valid: bool) -> ?int = if valid: 77 else nil
 
-Foo.add(self, num: int) -> int {
-    self.bar + num
+main() -> int {
+    let a = foo(true);
+    let b = foo(false);
+    if a && b: 42 else 10
 }
-
-main() -> int =
-    let f = Foo{7} in f.add(4)

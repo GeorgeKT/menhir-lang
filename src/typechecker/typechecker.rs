@@ -40,6 +40,21 @@ fn invalid_unary_operator<T>(span: &Span, op: Operator) -> CompileResult<T>
     err(span, ErrorCode::InvalidUnaryOperator, format!("{} is not a valid unary operator", op))
 }
 
+fn convert_type(dst_type: &Type, src_type: &Type, expr: &mut Expression) -> CompileResult<()>
+{
+    if *dst_type == *src_type {
+        return Ok(());
+    }
+
+    if let Some(nex_expression) = dst_type.convert(src_type, expr) {
+        *expr = nex_expression;
+        Ok(())
+    } else {
+        err(&expr.span(), ErrorCode::TypeError, format!("Expecting an expression of type {} or something convertible to, but found one of type {}", src_type, dst_type))
+    }
+}
+
+
 fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> TypeCheckResult
 {
     let e_type = type_check_expression(ctx, &mut u.expression, &None)?;
@@ -71,16 +86,22 @@ fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> TypeChe
     }
 }
 
+fn type_check_with_conversion(ctx: &mut TypeCheckerContext, e: &mut Expression, expected_type: &Type) -> CompileResult<()>
+{
+    let typ = type_check_expression(ctx, e, &None)?;
+    convert_type(expected_type, &typ, e)
+}
+
 fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeCheckResult
 {
     let left_type = type_check_expression(ctx, &mut b.left, &None)?;
     let right_type = type_check_expression(ctx, &mut b.right, &None)?;
-
     if left_type.is_generic() || right_type.is_generic() {
         return valid(left_type);
     }
 
-    let basic_checks = |span: &Span, operator: Operator, left_type: &Type, right_type: &Type| {
+    fn basic_bin_op_checks(span: &Span, operator: Operator, left_type: &Type, right_type: &Type) -> CompileResult<()>
+    {
         if left_type != right_type {
             return err(span, ErrorCode::TypeError, format!("Operator {} expects operands of the same type", operator));
         }
@@ -90,17 +111,16 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
         }
 
         Ok(())
-    };
-
+    }
 
     match b.operator
     {
         Operator::Add |
         Operator::Sub |
         Operator::Mul |
-        Operator::Mod |
-        Operator::Div => {
-            basic_checks(&b.span, b.operator, &left_type, &right_type)?;
+        Operator::Div |
+        Operator::Mod => {
+            basic_bin_op_checks(&b.span, b.operator, &left_type, &right_type)?;
             b.typ = right_type;
             valid(left_type)
         },
@@ -108,9 +128,15 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
         Operator::LessThan |
         Operator::GreaterThan |
         Operator::LessThanEquals |
-        Operator::GreaterThanEquals |
+        Operator::GreaterThanEquals => {
+            basic_bin_op_checks(&b.span, b.operator, &left_type, &right_type)?;
+            b.typ = Type::Bool;
+            valid(Type::Bool)
+        },
+
         Operator::And => {
-            basic_checks(&b.span, b.operator, &left_type, &right_type)?;
+            type_check_with_conversion(ctx, &mut b.left, &Type::Bool)?;
+            type_check_with_conversion(ctx, &mut b.right, &Type::Bool)?;
             b.typ = Type::Bool;
             valid(Type::Bool)
         },
@@ -120,7 +146,8 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
                 b.typ = right_type.clone();
                 valid(right_type)
             } else {
-                basic_checks(&b.span, b.operator, &left_type, &right_type)?;
+                type_check_with_conversion(ctx, &mut b.left, &Type::Bool)?;
+                type_check_with_conversion(ctx, &mut b.right, &Type::Bool)?;
                 b.typ = Type::Bool;
                 valid(Type::Bool)
             }
@@ -128,7 +155,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
         Operator::Equals |
         Operator::NotEquals => {
             if left_type != Type::Nil && right_type != Type::Nil {
-                basic_checks(&b.span, b.operator, &left_type, &right_type)?;
+                basic_bin_op_checks(&b.span, b.operator, &left_type, &right_type)?;
             }
             b.typ = Type::Bool;
             valid(Type::Bool)
@@ -209,24 +236,8 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> TypeCheckResul
         {
             let expected_arg_type = c.generic_args.substitute(&ft.args[idx]);
             let arg_type = &arg_types[idx];
-            if *arg_type == expected_arg_type
-            {
-                continue
-            }
-            else
-            {
-                if let Some(mut conversion_expr) = expected_arg_type.convert(&arg_type, &c.args[idx])
-                {
-                    type_check_expression(ctx, &mut conversion_expr, &None)?;
-                    c.args[idx] = conversion_expr;
-                }
-                else
-                {
-                    return err(&c.args[idx].span(), ErrorCode::TypeError,
-                        format!("Argument {} has the wrong type, function {} expects the type {}, argument provided has type {}",
-                            idx, c.callee.name, expected_arg_type, arg_type))
-                }
-            }
+            convert_type(&expected_arg_type, arg_type, &mut c.args[idx])?;
+            type_check_expression(ctx, &mut c.args[idx], &None)?;
         }
 
         if ft.return_type.is_generic() {
@@ -613,25 +624,38 @@ fn type_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> TypeCh
 
 fn type_check_if(ctx: &mut TypeCheckerContext, i: &mut IfExpression) -> TypeCheckResult
 {
-    let cond_type = type_check_expression(ctx, &mut i.condition, &None)?;
-    if cond_type != Type::Bool {
-        if let Some(condition) = Type::Bool.convert(&cond_type, &i.condition) {
-            i.condition = condition;
-        } else {
-            return err(&i.condition.span(), ErrorCode::TypeError, format!("Condition of an if expression needs to be a boolean expression, or something convertible to boolean"));
-        }
-    }
+    type_check_with_conversion(ctx, &mut i.condition, &Type::Bool)?;
 
     let on_true_type = type_check_expression(ctx, &mut i.on_true, &None)?;
     let on_false_type = type_check_expression(ctx, &mut i.on_false, &None)?;
-    if on_true_type != on_false_type {
-        return err(&i.condition.span(), ErrorCode::TypeError,
-            format!("then and else expression of an if expression need to be of the same type, then has type {}, else has type {}", on_true_type, on_false_type)
-        );
+    if on_true_type != on_false_type
+    {
+        if on_true_type == Type::Nil
+        {
+            let optional_type = optional_type(on_false_type);
+            type_check_with_conversion(ctx, &mut i.on_false, &optional_type)?;
+            i.typ = optional_type.clone();
+            valid(optional_type)
+        }
+        else if on_false_type == Type::Nil
+        {
+            let optional_type = optional_type(on_true_type);
+            type_check_with_conversion(ctx, &mut i.on_true, &optional_type)?;
+            i.typ = optional_type.clone();
+            valid(optional_type)
+        }
+        else
+        {
+            return err(&i.condition.span(), ErrorCode::TypeError,
+                format!("then and else expression of an if expression need to be of the same type, then has type {}, else has type {}", on_true_type, on_false_type)
+            );
+        }
     }
-
-    i.typ = on_true_type;
-    valid(on_false_type)
+    else
+    {
+        i.typ = on_true_type;
+        valid(on_false_type)
+    }
 }
 
 fn type_check_struct_members_in_initializer(ctx: &mut TypeCheckerContext, st: &StructType, si: &mut StructInitializer) -> CompileResult<Type>
