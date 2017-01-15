@@ -211,6 +211,12 @@ fn parse_start_of_type(tq: &mut TokenQueue) -> CompileResult<Type>
         let (name, _span) = tq.expect_identifier()?;
         Ok(Type::Generic(name))
     }
+    else if tq.is_next(TokenKind::QuestionMark)
+    {
+        tq.pop()?;
+        let inner = parse_type(tq)?;
+        Ok(Type::Optional(Rc::new(inner)))
+    }
     else if tq.is_next(TokenKind::OpenParen)
     {
         // Function signature: (a, b) -> c
@@ -418,6 +424,16 @@ pub fn parse_pattern(tq: &mut TokenQueue) -> CompileResult<Pattern>
                 Ok(Pattern::Name(NameRef::new(id, tok.span)))
             }
         },
+
+        TokenKind::QuestionMark => {
+            let (name, name_span) = tq.expect_identifier()?;
+            Ok(optional_pattern(name, tok.span.expanded(name_span.end)))
+        },
+
+        TokenKind::Nil => {
+            Ok(Pattern::Nil(tok.span))
+        },
+
         _ => err(&tok.span, ErrorCode::UnexpectedToken, format!("Unexpected token '{}'", tok)),
     }
 }
@@ -668,6 +684,10 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
 {
     match tok.kind
     {
+        TokenKind::Nil => {
+            Ok(Expression::Nil(tok.span))
+        },
+
         TokenKind::True => {
             Ok(Expression::Literal(Literal::Bool(tok.span, true)))
         },

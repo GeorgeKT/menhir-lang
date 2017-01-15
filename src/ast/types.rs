@@ -3,7 +3,7 @@ use std::ops::Deref;
 use std::hash::{Hasher, Hash};
 use std::rc::Rc;
 use itertools::free::join;
-use ast::{Expression, TreePrinter, MemberAccessType, Property, prefix, array_to_slice};
+use ast::{Expression, TreePrinter, MemberAccessType, Property, prefix, array_to_slice, to_optional, bin_op_with_type};
 use span::Span;
 use parser::Operator;
 
@@ -121,6 +121,8 @@ pub enum Type
     Struct(Rc<StructType>),
     Sum(Rc<SumType>),
     Enum(Rc<EnumType>),
+    Optional(Rc<Type>),
+    Nil,
 }
 
 #[derive(Debug,  Eq, PartialEq, Clone)]
@@ -153,6 +155,7 @@ impl Type
             Type::Slice(ref at) => Some(at.element_type.clone()),
             Type::String => Some(Type::Char),
             Type::Pointer(ref inner) => Some(inner.deref().clone()),
+            Type::Optional(ref inner) => Some(inner.deref().clone()),
             _ => None,
         }
     }
@@ -176,6 +179,19 @@ impl Type
             (&Type::Slice(ref st), &Type::Array(ref at)) if st.element_type == at.element_type => {
                 Some(array_to_slice(expr.clone(), expr.span()))
             },
+
+            (&Type::Optional(ref inner), _) if *inner.deref() == *from_type => {
+                Some(to_optional(expr.clone(), self.clone()))
+            },
+
+            (&Type::Optional(_), &Type::Nil) => {
+                Some(to_optional(expr.clone(), self.clone()))
+            },
+
+            (&Type::Bool, &Type::Optional(_)) => {
+                Some(bin_op_with_type(Operator::NotEquals, expr.clone(), Expression::Nil(Span::default()), expr.span(), Type::Bool))
+            },
+
             _ => None,
         }
     }
@@ -185,6 +201,8 @@ impl Type
         match (self, dst_type)
         {
             (&Type::Array(ref at), &Type::Slice(ref st)) => at.element_type == st.element_type,
+            (&Type::Nil, &Type::Optional(_)) => true,
+            (_, &Type::Optional(ref inner)) => *inner.deref() == *dst_type,
             _ => false,
         }
     }
@@ -271,6 +289,24 @@ impl Type
             _ => None,
         }
     }
+
+    pub fn is_optional_of(&self, other_type: &Type) -> bool
+    {
+        if let Type::Optional(ref inner_type) = *self {
+            *inner_type.deref() == *other_type
+        } else {
+            false
+        }
+    }
+
+    pub fn is_optional(&self) -> bool
+    {
+        if let Type::Optional(_) = *self {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 pub fn func_type(args: Vec<Type>, ret: Type) -> Type
@@ -338,6 +374,11 @@ pub fn ptr_type(inner: Type) -> Type
     Type::Pointer(Rc::new(inner))
 }
 
+pub fn optional_type(inner: Type) -> Type
+{
+    Type::Optional(Rc::new(inner))
+}
+
 pub fn struct_member(name: &str, typ: Type) -> StructMember
 {
     StructMember{name: name.into(), typ: typ}
@@ -388,6 +429,8 @@ impl fmt::Display for Type
             Type::Struct(ref st) => write!(f, "{{{}}}", join(st.members.iter(), ", ")),
             Type::Sum(ref st) => write!(f, "{}", join(st.cases.iter().map(|m| &m.typ), " | ")),
             Type::Enum(ref st) => write!(f, "{}", join(st.cases.iter(), " | ")),
+            Type::Optional(ref inner) => write!(f, "?{}", inner),
+            Type::Nil => write!(f, "nil"),
         }
     }
 }

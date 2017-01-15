@@ -1,9 +1,7 @@
+foo(valid: bool) -> ?int = if valid: 77 else nil
+
 main() -> int {
-    let x = 0;
-    let y = 0;
-    while x < 10 {
-        y = y + 2;
-        x = x + 1;
-    }
-    y
+    let a = foo(true);
+    let b = foo(false);
+    if a && b: 42 else 10
 }

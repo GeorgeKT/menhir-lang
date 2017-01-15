@@ -236,7 +236,9 @@ fn member_access_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction,
     match (var_typ, &sma.right)
     {
         (&Type::Struct(_), &MemberAccessType::Name(ref field)) => {
-            func.add(load_member_instr(dst, &var, field.index));
+            let ptr = stack_alloc(func, &ptr_type(sma.typ.clone()), None);
+            func.add(load_member_instr(&ptr, &var, field.index));
+            func.add(load_instr(dst, &ptr));
         },
 
         (&Type::Array(_), &MemberAccessType::Property(Property::Len)) |
@@ -319,11 +321,13 @@ fn array_pattern_match_to_bc(
     match_case_bb: BasicBlockRef,
     next_bb: BasicBlockRef)
 {
-    let head_type = ptr_type(seq.typ.get_element_type().expect("Invalid array type"));
+    let head_type = seq.typ.get_element_type().expect("Invalid array type");
     let head = stack_alloc(func, &head_type, Some(&ap.head));
-    func.add(load_member_instr(&head, seq, 0));
+    let head_ptr = stack_alloc(func, &ptr_type(head_type.clone()), None);
+    func.add(load_member_instr(&head_ptr, seq, 0));
+    func.add(load_instr(&head, &head_ptr));
 
-    let tail = stack_alloc(func, &slice_type(head_type.clone()), Some(&ap.tail));
+    let tail = stack_alloc(func, &slice_type(head_type), Some(&ap.tail));
     let tail_start = make_lit(func, ByteCodeLiteral::Int(1), Type::Int);
     let tail_len = stack_alloc(func, &Type::Int, None);
     let seq_len = stack_alloc(func, &Type::Int, None);
@@ -482,7 +486,30 @@ fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc
 
         Pattern::Struct(ref p) => {
             struct_pattern_match_to_bc(bc_mod, func, mc, target, match_end_bb, match_case_bb, next_bb, p);
-        }
+        },
+
+        Pattern::Nil(_) => {
+            let cond = stack_alloc(func, &Type::Bool, None);
+            let nil = stack_alloc(func, &Type::Nil, None);
+            func.add(binary_op_instr(&cond, Operator::Equals, target.clone(), nil));
+            func.add(branch_if_instr(&cond, match_case_bb, next_bb));
+            match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false);
+        },
+
+        Pattern::Optional(ref o) => {
+            let cond = stack_alloc(func, &Type::Bool, None);
+            let nil = stack_alloc(func, &Type::Nil, None);
+            func.add(binary_op_instr(&cond, Operator::NotEquals, target.clone(), nil));
+            func.add(branch_if_instr(&cond, match_case_bb, next_bb));
+
+            func.set_current_bb(match_case_bb);
+            func.push_scope();
+
+            let binding = stack_alloc(func, &o.inner_type, Some(&o.binding));
+            func.add(load_instr(&binding, &target));
+            func.add_named_var(binding);
+            match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, true);
+        },
     }
 }
 
@@ -695,6 +722,20 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         Expression::While(ref w) => {
             while_to_bc(bc_mod, func, w);
             None
+        },
+
+        Expression::Nil(_) => {
+            let dst = get_dst(func, &Type::Nil);
+            Some(dst)
+        },
+
+        Expression::ToOptional(ref t) => {
+            let dst = get_dst(func, &t.optional_type);
+            func.push_destination(None);
+            let inner = to_bc(bc_mod, func, &t.inner);
+            func.pop_destination();
+            func.add(store_instr(&dst, &inner));
+            Some(dst)
         },
     }
 }

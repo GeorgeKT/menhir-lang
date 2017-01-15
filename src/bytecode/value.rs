@@ -9,6 +9,7 @@ pub enum Value
 {
     Uninitialized,
     Void,
+    Nil,
     Int(i64),
     UInt(u64),
     Float(f64),
@@ -22,6 +23,7 @@ pub enum Value
     Sum(usize, Box<ValueRef>),
     Enum(usize),
     Pointer(ValueRef),
+    Optional(Box<Value>),
 }
 
 impl fmt::Display for Value
@@ -45,6 +47,8 @@ impl fmt::Display for Value
             Value::Sum(idx, ref v) => write!(f, "sum {} {}", idx, v),
             Value::Enum(idx) => write!(f, "enum {}", idx),
             Value::Pointer(ref v) => write!(f, "pointer {}", v),
+            Value::Optional(ref v) => write!(f, "optional {}", v),
+            Value::Nil => write!(f, "nil"),
         }
     }
 }
@@ -118,7 +122,10 @@ impl Value
                 let inner = Value::from_type(inner)?;
                 Ok(Value::Pointer(ValueRef::new(inner)))
             },
-
+            Type::Optional(ref _inner) => {
+                Ok(Value::Optional(Box::new(Value::Nil)))
+            },
+            Type::Nil => Ok(Value::Nil),
         }
     }
 
@@ -132,6 +139,61 @@ impl Value
             (&Value::Sum(idx, _), ByteCodeProperty::SumTypeIndex) => Ok(Value::Int(idx as i64)),
             (&Value::Enum(idx), ByteCodeProperty::SumTypeIndex) => Ok(Value::Int(idx as i64)),
             _  => Err(ExecutionError(format!("Unknown property {}", prop))),
+        }
+    }
+
+    pub fn get_member_ptr(&self, member_index: usize) -> Result<Value, ExecutionError>
+    {
+        match *self
+        {
+            Value::Array(ref arr) => {
+                if member_index < arr.len() {
+                    Ok(Value::Pointer(arr[member_index].to_ptr()))
+                } else {
+                    Err(ExecutionError(format!("Array index out of bounds")))
+                }
+            },
+
+            Value::Slice(ref slice) => {
+                if member_index < slice.len() {
+                    Ok(Value::Pointer(slice[member_index].to_ptr()))
+                } else {
+                    Err(ExecutionError(format!("Slice index out of bounds")))
+                }
+            },
+
+            Value::Struct(ref members) => {
+                if member_index < members.len() {
+                    Ok(Value::Pointer(members[member_index].to_ptr()))
+                } else {
+                    Err(ExecutionError(format!("Struct member index out of bounds")))
+                }
+            },
+
+            Value::Sum(idx, ref inner) => {
+                if member_index == idx {
+                    Ok(Value::Pointer(inner.to_ptr()))
+                } else {
+                    Err(ExecutionError(format!("Wrong sum type index")))
+                }
+            },
+
+            Value::Pointer(ref inner) => {
+                inner.apply(|v: &Value| {
+                    v.get_member_ptr(member_index)
+                })
+            },
+
+            _ => Err(ExecutionError(format!("Load member not supported on {}", self)))
+        }
+    }
+
+    pub fn is_nil(&self) -> bool
+    {
+        if let Value::Nil = *self {
+            true
+        } else {
+            false
         }
     }
 }

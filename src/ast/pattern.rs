@@ -27,6 +27,15 @@ pub struct StructPattern
     pub span: Span,
 }
 
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct OptionalPattern
+{
+    pub binding: String,
+    pub span: Span,
+    pub inner_type: Type,
+}
+
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Pattern
 {
@@ -36,6 +45,8 @@ pub enum Pattern
     Name(NameRef),
     Struct(StructPattern),
     Any(Span),
+    Nil(Span),
+    Optional(OptionalPattern),
 }
 
 impl Pattern
@@ -50,6 +61,8 @@ impl Pattern
             Pattern::Name(ref n) => n.span.clone(),
             Pattern::Struct(ref s) => s.span.clone(),
             Pattern::Any(ref span) => span.clone(),
+            Pattern::Nil(ref span) => span.clone(),
+            Pattern::Optional(ref o) => o.span.clone(),
         }
     }
 }
@@ -79,6 +92,15 @@ pub fn struct_pattern(name: &str, bindings: Vec<String>, types: Vec<Type>, typ: 
     }
 }
 
+pub fn optional_pattern(binding: String, span: Span) -> Pattern
+{
+    Pattern::Optional(OptionalPattern{
+        binding: binding.into(),
+        span: span,
+        inner_type: Type::Unknown,
+    })
+}
+
 impl TreePrinter for Pattern
 {
     fn print(&self, level: usize)
@@ -92,6 +114,8 @@ impl TreePrinter for Pattern
             Pattern::Name(ref n) => println!("{}name pattern {} ({})", p, n.name, n.span),
             Pattern::Struct(ref s) => println!("{}struct pattern {}{{{}}} (span: {}, type: {})", p, s.name, join(s.bindings.iter(), ","), s.span, s.typ),
             Pattern::Any(ref span) => println!("{}any pattern ({})", p, span),
+            Pattern::Nil(ref span) => println!("{}nil pattern ({})", p, span),
+            Pattern::Optional(ref o) => println!("{}optional pattern {} ({})", p, o.binding, o.span),
         }
     }
 }

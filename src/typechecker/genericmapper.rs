@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use itertools::free::join;
-use ast::{func_type, array_type, slice_type, struct_type, struct_member, sum_type, sum_type_case, ptr_type, Type};
+use ast::*;
 use compileerror::{CompileResult, ErrorCode, err};
 use span::Span;
 
@@ -79,6 +79,10 @@ impl GenericMapper
                 ptr_type(self.substitute(inner))
             },
 
+            Type::Optional(ref inner) => {
+                optional_type(self.substitute(&inner))
+            },
+
             _ => generic.clone(),
         }
     }
@@ -107,117 +111,90 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
     let map_err = || {
         err(span, ErrorCode::GenericTypeSubstitutionError, format!("Cannot map argument type {} on type {}", actual, new_generic))
     };
-    match new_generic
+
+    match (&new_generic, actual)
     {
-        Type::Unknown => {
+        (&Type::Unknown, _) => {
             Ok(actual.clone())
         },
 
-        Type::Generic(_) => {
+        (&Type::Generic(_), _) => {
             known_types.add(&new_generic, actual, span)?;
             Ok(actual.clone())
         },
 
-        Type::Slice(ref generic_st) => {
-            match *actual
-            {
-                Type::Slice(ref actual_st) => {
-                    known_types.add(&generic_st.element_type, &actual_st.element_type, span)?;
-                    let new_el_type = fill_in_generics(&actual_st.element_type, &generic_st.element_type, known_types, span)?;
-                    Ok(slice_type(new_el_type))
+        (&Type::Slice(ref generic_st), &Type::Slice(ref actual_st)) => {
+            known_types.add(&generic_st.element_type, &actual_st.element_type, span)?;
+            let new_el_type = fill_in_generics(&actual_st.element_type, &generic_st.element_type, known_types, span)?;
+            Ok(slice_type(new_el_type))
+        },
+
+        (&Type::Array(ref generic_at), &Type::Array(ref actual_at)) => {
+            known_types.add(&generic_at.element_type, &actual_at.element_type, span)?;
+            let new_el_type = fill_in_generics(&actual_at.element_type, &generic_at.element_type, known_types, span)?;
+            Ok(array_type(new_el_type, actual_at.len))
+        },
+
+        (&Type::Func(ref generic_ft), &Type::Func(ref actual_ft)) => {
+            if generic_ft.args.len() != actual_ft.args.len() {
+                return map_err();
+            }
+
+            let mut new_args = Vec::with_capacity(generic_ft.args.len());
+            for (ga, aa) in generic_ft.args.iter().zip(actual_ft.args.iter()) {
+                let na = fill_in_generics(aa, ga, known_types, span)?;
+                new_args.push(na);
+            }
+
+            let nr = fill_in_generics(&actual_ft.return_type, &generic_ft.return_type, known_types, span)?;
+            Ok(func_type(new_args, nr))
+        },
+
+        (&Type::Struct(ref generic_st), &Type::Struct(ref actual_st))  => {
+            if generic_st.members.len() != actual_st.members.len() {
+                return map_err();
+            }
+
+            let mut new_members = Vec::with_capacity(generic_st.members.len());
+            for (ga, aa) in generic_st.members.iter().zip(actual_st.members.iter()) {
+                if aa.name != ga.name {
+                    return map_err();
                 }
 
-                _ => map_err(),
+                let nt = fill_in_generics(&aa.typ, &ga.typ, known_types, span)?;
+                new_members.push(struct_member(&aa.name, nt));
             }
+
+            Ok(struct_type(&actual_st.name, new_members))
         },
 
-        Type::Array(ref generic_at) => {
-            match *actual
-            {
-                Type::Array(ref actual_at) => {
-                    known_types.add(&generic_at.element_type, &actual_at.element_type, span)?;
-                    let new_el_type = fill_in_generics(&actual_at.element_type, &generic_at.element_type, known_types, span)?;
-                    Ok(array_type(new_el_type, actual_at.len))
-                },
-                _ => map_err(),
+        (&Type::Sum(ref generic_st), &Type::Sum(ref actual_st)) => {
+            if generic_st.cases.len() != actual_st.cases.len() {
+                return map_err();
             }
+
+            let mut new_cases = Vec::with_capacity(actual_st.cases.len());
+            for (ga, aa) in generic_st.cases.iter().zip(actual_st.cases.iter()) {
+                if aa.name != ga.name {
+                    return map_err();
+                }
+
+                let nt = fill_in_generics(&aa.typ, &ga.typ, known_types, span)?;
+                new_cases.push(sum_type_case(&aa.name, nt));
+            }
+
+            Ok(sum_type(&actual_st.name, new_cases))
         },
 
-        Type::Func(ref generic_ft) => {
-            match *actual {
-                Type::Func(ref actual_ft) => {
-                    if generic_ft.args.len() != actual_ft.args.len() {
-                        return map_err();
-                    }
-
-                    let mut new_args = Vec::with_capacity(generic_ft.args.len());
-                    for (ga, aa) in generic_ft.args.iter().zip(actual_ft.args.iter()) {
-                        let na = fill_in_generics(aa, ga, known_types, span)?;
-                        new_args.push(na);
-                    }
-
-                    let nr = fill_in_generics(&actual_ft.return_type, &generic_ft.return_type, known_types, span)?;
-                    Ok(func_type(new_args, nr))
-                },
-                _ => map_err(),
-            }
+        (&Type::Pointer(ref generic_inner), &Type::Pointer(ref actual_inner)) => {
+            let inner = fill_in_generics(actual_inner, generic_inner, known_types, span)?;
+            Ok(ptr_type(inner))
         },
 
-        Type::Struct(ref generic_st) => {
-            match *actual {
-                Type::Struct(ref actual_st) => {
-                    if generic_st.members.len() != actual_st.members.len() {
-                        return map_err();
-                    }
-
-                    let mut new_members = Vec::with_capacity(generic_st.members.len());
-                    for (ga, aa) in generic_st.members.iter().zip(actual_st.members.iter()) {
-                        if aa.name != ga.name {
-                            return map_err();
-                        }
-
-                        let nt = fill_in_generics(&aa.typ, &ga.typ, known_types, span)?;
-                        new_members.push(struct_member(&aa.name, nt));
-                    }
-
-                    Ok(struct_type(&actual_st.name, new_members))
-                },
-                _ => map_err(),
-            }
-        },
-
-        Type::Sum(ref generic_st) => {
-            match *actual {
-                Type::Sum(ref actual_st) => {
-                    if generic_st.cases.len() != actual_st.cases.len() {
-                        return map_err();
-                    }
-
-                    let mut new_cases = Vec::with_capacity(actual_st.cases.len());
-                    for (ga, aa) in generic_st.cases.iter().zip(actual_st.cases.iter()) {
-                        if aa.name != ga.name {
-                            return map_err();
-                        }
-
-                        let nt = fill_in_generics(&aa.typ, &ga.typ, known_types, span)?;
-                        new_cases.push(sum_type_case(&aa.name, nt));
-                    }
-
-                    Ok(sum_type(&actual_st.name, new_cases))
-                },
-                _ => map_err(),
-            }
-        },
-
-        Type::Pointer(ref generic_inner) => {
-            match *actual {
-                Type::Pointer(ref actual_inner) => {
-                    let inner = fill_in_generics(actual_inner, generic_inner, known_types, span)?;
-                    Ok(ptr_type(inner))
-                },
-                _ => map_err(),
-            }
-        },
+        (&Type::Optional(ref generic_inner), &Type::Optional(ref actual_inner)) => {
+            let inner = fill_in_generics(actual_inner, generic_inner, known_types, span)?;
+            Ok(optional_type(inner))
+        }
 
         _ => map_err(),
     }

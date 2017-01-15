@@ -7,7 +7,80 @@ pub struct Test
 }
 
 
-pub const ALL_TESTS: [Test; 33] = [
+pub const ALL_TESTS: [Test; 38] = [
+    Test{
+        name: "optional",
+        ret: 42,
+        debug: false,
+        code: r#"
+            unwrap_or(opt: ?int, default: int) -> int =
+                opt || default
+
+            main() -> int =
+                unwrap_or(41, 1) + unwrap_or(nil, 1)
+        "#
+    },
+
+    Test{
+        name: "optional match",
+        ret: 42,
+        debug: false,
+        code: r#"
+            unwrap_or(opt: ?int, default: int) -> int {
+                match opt:
+                    ?value => value,
+                    nil => default
+            }
+
+            main() -> int {
+                unwrap_or(41, 1) + unwrap_or(nil, 1)
+            }
+        "#
+    },
+
+    Test{
+        name: "optional if",
+        ret: 42,
+        debug: false,
+        code: r#"
+            foo() -> ?int = 77
+
+            main() -> int {
+                let a = foo();
+                if a != nil: 42 else 0
+            }
+        "#
+    },
+
+    Test{
+        name: "optional if 2",
+        ret: 42,
+        debug: false,
+        code: r#"
+            foo() -> ?int = 77
+
+            main() -> int {
+                let a = foo();
+                if a: 42 else 0
+            }
+        "#
+    },
+
+    Test{
+        name: "optional if 3",
+        ret: 10,
+        debug: true,
+        code: r#"
+            foo(valid: bool) -> ?int = if valid: 77 else nil
+
+            main() -> int {
+                let a = foo(true);
+                let b = foo(false);
+                if a && b: 42 else 10
+            }
+        "#
+    },
+
     Test{
         name: "while",
         ret: 20,

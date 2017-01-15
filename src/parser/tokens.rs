@@ -18,7 +18,6 @@ pub enum Operator
     Not,
     And,
     Or,
-    Extract, // <-
     Dot,
 }
 
@@ -37,7 +36,6 @@ impl Operator
             Operator::GreaterThanEquals | Operator::Equals | Operator::NotEquals => TOP_PRECEDENCE - 300,
             Operator::And => TOP_PRECEDENCE - 400,
             Operator::Or => TOP_PRECEDENCE - 500,
-            Operator::Extract => TOP_PRECEDENCE - 600,
         }
     }
 
@@ -71,7 +69,6 @@ impl Display for Operator
             Operator::Not => write!(fmt, "!"),
             Operator::And => write!(fmt, "&&"),
             Operator::Or => write!(fmt, "||"),
-            Operator::Extract => write!(fmt, "<-"),
             Operator::Dot => write!(fmt, "."),
         }
     }
@@ -115,6 +112,8 @@ pub enum TokenKind
     Tilde,
     New,
     Delete,
+    QuestionMark,
+    Nil,
     EOF,
 }
 
@@ -159,6 +158,8 @@ impl Display for TokenKind
             TokenKind::Tilde => write!(fmt, "~"),
             TokenKind::New => write!(fmt, "new"),
             TokenKind::Delete => write!(fmt, "delete"),
+            TokenKind::QuestionMark => write!(fmt, "?"),
+            TokenKind::Nil => write!(fmt, "nil"),
             TokenKind::EOF => write!(fmt, "EOF"),
         }
     }
