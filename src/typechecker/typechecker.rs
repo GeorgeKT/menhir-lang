@@ -48,7 +48,7 @@ fn convert_type(ctx: &mut TypeCheckerContext, dst_type: &Type, src_type: &Type, 
 
     if let Some(nex_expression) = dst_type.convert(src_type, expr) {
         *expr = nex_expression;
-        assert!(type_check_expression(ctx, expr, &None)? == *dst_type);
+        assert_eq!(type_check_expression(ctx, expr, &None)?, *dst_type);
         Ok(())
     } else {
         err(&expr.span(), ErrorCode::TypeError, format!("Expecting an expression of type {} or something convertible to, but found one of type {}", src_type, dst_type))
