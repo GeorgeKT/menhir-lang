@@ -30,9 +30,9 @@ pub struct Lexer
 
 fn is_operator_start(c: char) -> bool
 {
-    for &op in ['+', '-', '*', '/', '%', '>', '<', '=', '!', '.', '|', '&', ':'].iter()
+    for op in &['+', '-', '*', '/', '%', '>', '<', '=', '!', '.', '|', '&', ':']
     {
-        if op == c {return true;}
+        if *op == c {return true;}
     }
 
     false
@@ -136,7 +136,7 @@ impl Lexer
 
     fn current_single_span(&self) -> Span
     {
-        Span::single(&self.file_name, self.pos.clone())
+        Span::single(&self.file_name, self.pos)
     }
 
     fn identifier(&mut self, c: char) -> CompileResult<()>

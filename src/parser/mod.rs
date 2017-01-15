@@ -127,7 +127,7 @@ fn combine_binary_op(op: Operator, lhs: Expression, rhs: Expression) -> Expressi
 {
     if lhs.is_binary_op() && lhs.precedence() < op.precedence()
     {
-        let bop = lhs.to_binary_op().expect("Not a binary op");
+        let bop = lhs.extract_binary_op().expect("Not a binary op");
         let nrhs = combine_binary_op(op, bop.right.clone(), rhs);
         let span = Span::merge(&bop.left.span(), &nrhs.span());
         bin_op(bop.operator, bop.left.clone(), nrhs, span)

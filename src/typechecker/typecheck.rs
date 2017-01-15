@@ -291,7 +291,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Ty
         let infer_case_type = |ctx: &mut TypeCheckerContext, e: &mut Expression, return_type: &Type| {
             let tt = type_check_expression(ctx, e, &None)?;
             if *return_type != Type::Unknown && *return_type != tt {
-                return err(&e.span(), ErrorCode::TypeError, format!("Expressions in match statements must return the same type"));
+                err(&e.span(), ErrorCode::TypeError, format!("Expressions in match statements must return the same type"))
             } else {
                 Ok(tt)
             }
@@ -650,9 +650,9 @@ fn type_check_if(ctx: &mut TypeCheckerContext, i: &mut IfExpression) -> TypeChec
         }
         else
         {
-            return err(&i.condition.span(), ErrorCode::TypeError,
+            err(&i.condition.span(), ErrorCode::TypeError,
                 format!("then and else expression of an if expression need to be of the same type, then has type {}, else has type {}", on_true_type, on_false_type)
-            );
+            )
         }
     }
     else

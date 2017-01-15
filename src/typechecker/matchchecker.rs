@@ -97,12 +97,10 @@ fn check_bool_match_is_exhaustive(m: &MatchExpression) -> CompileResult<()>
                     } else {
                         true_seen = true;
                     }
+                } else if false_seen {
+                    return err(&c.span, ErrorCode::DuplicatePatternMatch, format!("Duplicate pattern match, pattern match for false already exists"));
                 } else {
-                    if false_seen {
-                        return err(&c.span, ErrorCode::DuplicatePatternMatch, format!("Duplicate pattern match, pattern match for false already exists"));
-                    } else {
-                        false_seen = true;
-                    }
+                    false_seen = true;
                 }
             },
             _ => (),

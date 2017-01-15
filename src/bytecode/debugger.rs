@@ -89,7 +89,7 @@ fn quit(io: &mut ShellIO, _dc: &mut DebuggerContext) -> ExecResult
 
 fn step(io: &mut ShellIO, dc: &mut DebuggerContext) -> ExecResult
 {
-    dc.index = match dc.interpreter.step(&dc.index, &dc.module)
+    dc.index = match dc.interpreter.step(&dc.index, dc.module)
     {
         Ok(StepResult::Continue(new_index)) => {
             write!(io, "{}", new_index)?;

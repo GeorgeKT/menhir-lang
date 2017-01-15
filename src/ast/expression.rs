@@ -65,7 +65,7 @@ impl Expression
         }
     }
 
-    pub fn to_binary_op(self) -> Option<Box<BinaryOp>>
+    pub fn extract_binary_op(self) -> Option<Box<BinaryOp>>
     {
         match self
         {
@@ -121,13 +121,12 @@ impl Expression
             Expression::StructInitializer(ref si) => si.typ.clone(),
             Expression::MemberAccess(ref sma) => sma.typ.clone(),
             Expression::New(ref n) => n.typ.clone(),
-            Expression::Delete(_) => Type::Void,
             Expression::ArrayToSlice(ref a) => a.slice_type.clone(),
             Expression::AddressOf(ref a) => ptr_type(a.inner.get_type()),
             Expression::Assign(ref a) => a.typ.clone(),
             Expression::Nil(_) => Type::Nil,
             Expression::ToOptional(ref t) => optional_type(t.inner.get_type()),
-            Expression::Void | Expression::While(_) => Type::Void,
+            Expression::Void | Expression::While(_) | Expression::Delete(_) => Type::Void,
         }
     }
 }

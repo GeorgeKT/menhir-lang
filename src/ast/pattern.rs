@@ -60,7 +60,7 @@ impl Pattern
             Pattern::EmptyArray(ref a) => a.span.clone(),
             Pattern::Name(ref n) => n.span.clone(),
             Pattern::Struct(ref s) => s.span.clone(),
-            Pattern::Any(ref span) => span.clone(),
+            Pattern::Any(ref span) |
             Pattern::Nil(ref span) => span.clone(),
             Pattern::Optional(ref o) => o.span.clone(),
         }

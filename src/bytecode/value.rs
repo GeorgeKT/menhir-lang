@@ -63,26 +63,26 @@ impl Value
         match *self
         {
             Value::Int(v) => v as i32,
-            Value::Bool(v) => if v == true {0i32} else {1i32},
+            Value::Bool(v) => if v {0i32} else {1i32},
             _ => 1i32,
         }
     }
 
     pub fn from_literal(lit: &ByteCodeLiteral) -> Result<Value, ExecutionError>
     {
-        match lit
+        match *lit
         {
-            &ByteCodeLiteral::Int(v) => Ok(Value::Int(v as i64)),
-            &ByteCodeLiteral::Float(ref num) => {
+            ByteCodeLiteral::Int(v) => Ok(Value::Int(v as i64)),
+            ByteCodeLiteral::Float(ref num) => {
                 match num.parse::<f64>()
                 {
                     Ok(f) => Ok(Value::Float(f)),
                     Err(_) => Err(ExecutionError(format!("{} is not a valid floating point number", num))),
                 }
             },
-            &ByteCodeLiteral::Char(v) => Ok(Value::Char(v as char)),
-            &ByteCodeLiteral::String(ref s) => Ok(Value::String(s.clone())),
-            &ByteCodeLiteral::Bool(v) => Ok(Value::Bool(v)),
+            ByteCodeLiteral::Char(v) => Ok(Value::Char(v as char)),
+            ByteCodeLiteral::String(ref s) => Ok(Value::String(s.clone())),
+            ByteCodeLiteral::Bool(v) => Ok(Value::Bool(v)),
         }
     }
 
@@ -91,7 +91,8 @@ impl Value
         match *typ
         {
             Type::Unknown | Type::Unresolved(_) | Type::Generic(_) => panic!("Types must be known before the interpreter can run"),
-            Type::Void => Ok(Value::Void),
+            Type::Void |
+            Type::Func(_) => Ok(Value::Void), // Use void, seeing that we can't fill in the function pointer yet
             Type::Int => Ok(Value::Int(0)),
             Type::UInt => Ok(Value::UInt(0)),
             Type::Float => Ok(Value::Float(0.0)),
@@ -107,7 +108,6 @@ impl Value
                 Ok(Value::Array(array))
             },
             Type::Slice(_) => Ok(Value::Slice(Vec::new())),
-            Type::Func(_) => Ok(Value::Void), // Use void, seeing that we can't fill in the function pointer yet
             Type::Struct(ref st) => {
                 let mut members = Vec::new();
                 for m in &st.members {
@@ -136,7 +136,7 @@ impl Value
     {
         match (self, prop)
         {
-            (&Value::Array(ref a), ByteCodeProperty::Len) => Ok(Value::Int(a.len() as i64)),
+            (&Value::Array(ref a), ByteCodeProperty::Len) |
             (&Value::Slice(ref a), ByteCodeProperty::Len) => Ok(Value::Int(a.len() as i64)),
             (&Value::String(ref s), ByteCodeProperty::Len) => Ok(Value::Int(s.len() as i64)),
             (&Value::Sum(idx, _), ByteCodeProperty::SumTypeIndex) => Ok(Value::Int(idx as i64)),
@@ -153,7 +153,7 @@ impl Value
                 if member_index < arr.len() {
                     Ok(Value::Pointer(arr[member_index].to_ptr()))
                 } else {
-                    Err(ExecutionError(format!("Array index out of bounds")))
+                    Err(ExecutionError(format!("Array index {} out of bounds", member_index)))
                 }
             },
 
@@ -161,7 +161,7 @@ impl Value
                 if member_index < slice.len() {
                     Ok(Value::Pointer(slice[member_index].to_ptr()))
                 } else {
-                    Err(ExecutionError(format!("Slice index out of bounds")))
+                    Err(ExecutionError(format!("Slice index {} out of bounds", member_index)))
                 }
             },
 
@@ -169,7 +169,7 @@ impl Value
                 if member_index < members.len() {
                     Ok(Value::Pointer(members[member_index].to_ptr()))
                 } else {
-                    Err(ExecutionError(format!("Struct member index out of bounds")))
+                    Err(ExecutionError(format!("Struct member index {} out of bounds", member_index)))
                 }
             },
 
@@ -177,7 +177,7 @@ impl Value
                 if member_index == idx {
                     Ok(Value::Pointer(inner.to_ptr()))
                 } else {
-                    Err(ExecutionError(format!("Wrong sum type index")))
+                    Err(ExecutionError(format!("Wrong sum type index {}", member_index)))
                 }
             },
 

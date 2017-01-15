@@ -74,9 +74,9 @@ impl TreePrinter for MemberAccess
             MemberAccessType::Call(ref call) => call.print(level + 1),
             MemberAccessType::Name(ref field) => println!("{} .{} (idx {})", p, field.name, field.index),
             MemberAccessType::Property(ref prop) => {
-                match prop
+                match *prop
                 {
-                    &Property::Len => println!("{} .len", p),
+                    Property::Len => println!("{} .len", p),
                 }
             }
         }

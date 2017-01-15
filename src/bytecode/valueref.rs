@@ -11,6 +11,7 @@ pub enum ValueRef
     Ptr(Weak<RefCell<Value>>),
     Null,
 }
+
 impl ValueRef
 {
     pub fn new(v: Value) -> ValueRef
@@ -27,11 +28,11 @@ impl ValueRef
                 if let Some(rv) = v.upgrade() {
                     Ok(rv.borrow().clone())
                 } else {
-                    Err(ExecutionError(format!("Dangling pointer, owner of element pointed to is gone")))
+                    Err(ExecutionError("Dangling pointer, owner of element pointed to is gone".into()))
                 }
             }
             ValueRef::Null => {
-                Err(ExecutionError(format!("Dangling pointer, pointer has been deleted")))
+                Err(ExecutionError("Dangling pointer, pointer has been deleted".into()))
             }
         }
     }
@@ -57,11 +58,11 @@ impl ValueRef
                 if let Some(rv) = v.upgrade() {
                     op(&rv.borrow())
                 } else {
-                    Err(ExecutionError(format!("Dangling pointer, owner of element pointed to is gone")))
+                    Err(ExecutionError("Dangling pointer, owner of element pointed to is gone".into()))
                 }
             }
             ValueRef::Null => {
-                Err(ExecutionError(format!("Dangling pointer, pointer has been deleted")))
+                Err(ExecutionError("Dangling pointer, pointer has been deleted".into()))
             }
         }
     }
@@ -78,11 +79,11 @@ impl ValueRef
                 if let Some(rv) = v.upgrade() {
                     op(&mut rv.borrow_mut())
                 } else {
-                    Err(ExecutionError(format!("Dangling pointer, owner of element pointed to is gone")))
+                    Err(ExecutionError("Dangling pointer, owner of element pointed to is gone".into()))
                 }
             }
             ValueRef::Null => {
-                Err(ExecutionError(format!("Dangling pointer, pointer has been deleted")))
+                Err(ExecutionError("Dangling pointer, pointer has been deleted".into()))
             }
         }
     }

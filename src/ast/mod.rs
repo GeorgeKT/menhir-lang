@@ -157,15 +157,15 @@ impl TreePrinter for Module
     {
         let p = prefix(level);
         println!("{}Module: {}", p, self.name);
-        for ref t in self.types.values() {
+        for t in self.types.values() {
             t.print(level + 1);
         }
 
-        for ref func in self.externals.values() {
+        for func in self.externals.values() {
             func.print(level + 1);
         }
 
-        for ref func in self.functions.values() {
+        for func in self.functions.values() {
             func.print(level + 1);
         }
     }
