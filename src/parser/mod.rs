@@ -495,7 +495,7 @@ fn parse_lambda(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
     Ok(lambda(args, expr, span.expanded(tq.pos())))
 }
 
-fn parse_let(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
+fn parse_let_bindings(tq: &mut TokenQueue) -> CompileResult<Vec<LetBinding>>
 {
     let mut bindings = Vec::new();
     while !tq.is_next(TokenKind::In) && !tq.is_next(TokenKind::SemiColon) && !tq.is_next(TokenKind::CloseParen)
@@ -516,6 +516,19 @@ fn parse_let(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
         eat_comma(tq)?;
     }
 
+    Ok(bindings)
+}
+
+fn parse_global_let_bindings(tq: &mut TokenQueue) -> CompileResult<Vec<LetBinding>>
+{
+    let bindings = parse_let_bindings(tq)?;
+    tq.expect(TokenKind::SemiColon)?;
+    Ok(bindings)
+}
+
+fn parse_let(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
+{
+    let bindings = parse_let_bindings(tq)?;
     if tq.is_next(TokenKind::In)
     {
         tq.expect(TokenKind::In)?;
@@ -877,6 +890,30 @@ fn parse_import(options: &ParserOptions, import_name: &str) -> CompileResult<Mod
     err(&Span::default(), ErrorCode::FileNotFound, format!("Unable to find file for import {}", import_name))
 }
 
+fn add_globals(module: &mut Module, tq: &mut TokenQueue) -> CompileResult<()>
+{
+    let lb = parse_global_let_bindings(tq)?;
+    for b in lb.into_iter() {
+        let name = match b.binding_type {
+            LetBindingType::Struct(_) =>  {
+                return err(&b.span, ErrorCode::SyntaxError, "let struct bindings now allowed in globals");
+            },
+
+            LetBindingType::Name(ref name) => {
+                if module.globals.contains_key(&name[..]) {
+                    return err(&b.span, ErrorCode::RedefinitionOfVariable, format!("Global {} already defined in this module", name));
+                }
+
+                name.clone()
+            },
+        };
+
+        module.globals.insert(name, b);
+    }
+
+    Ok(())
+}
+
 pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, name: &str, file_name: &str) -> CompileResult<Module>
 {
     let mut tq = Lexer::new(file_name).read(input)?;
@@ -896,6 +933,10 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
         let tok = tq.pop()?;
         match tok.kind
         {
+            TokenKind::Let => {
+                add_globals(&mut module, &mut tq)?;
+            },
+
             TokenKind::Type => {
                 let sd = parse_type_declaration(&mut tq, namespace, &tok.span)?;
                 if module.types.contains_key(sd.name()) {

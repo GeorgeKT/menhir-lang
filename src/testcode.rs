@@ -7,7 +7,19 @@ pub struct Test
 }
 
 
-pub const ALL_TESTS: [Test; 38] = [
+pub const ALL_TESTS: [Test; 39] = [
+    Test{
+        name: "globals",
+        ret: 42,
+        debug: true,
+        code: r#"
+            let THE_ANSWER = 42;
+            main() -> int {
+                THE_ANSWER
+            }
+        "#
+    },
+
     Test{
         name: "optional",
         ret: 42,
