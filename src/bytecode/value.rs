@@ -139,7 +139,7 @@ impl Value
             (&Value::Array(ref a), ByteCodeProperty::Len) |
             (&Value::Slice(ref a), ByteCodeProperty::Len) => Ok(Value::Int(a.len() as i64)),
             (&Value::String(ref s), ByteCodeProperty::Len) => Ok(Value::Int(s.len() as i64)),
-            (&Value::Sum(idx, _), ByteCodeProperty::SumTypeIndex) => Ok(Value::Int(idx as i64)),
+            (&Value::Sum(idx, _), ByteCodeProperty::SumTypeIndex) |
             (&Value::Enum(idx), ByteCodeProperty::SumTypeIndex) => Ok(Value::Int(idx as i64)),
             _  => Err(ExecutionError(format!("Unknown property {}", prop))),
         }

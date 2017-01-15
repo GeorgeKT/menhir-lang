@@ -107,7 +107,7 @@ fn resolve_sum_case_types(ctx: &mut TypeCheckerContext, st: &mut SumTypeDeclarat
     }
 
     let mut case_types = Vec::with_capacity(st.cases.len());
-    for c in st.cases.iter_mut()
+    for c in &mut st.cases
     {
         if let Some(ref mut sd) = c.data
         {
@@ -160,13 +160,13 @@ fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: Re
                     match s.typ
                     {
                         Type::Enum(ref et) => {
-                            for c in et.cases.iter()
+                            for c in &et.cases
                             {
                                 ctx.add(c, s.typ.clone(), &s.span)?;
                             }
                         },
                         Type::Sum(ref st) => {
-                            for c in st.cases.iter()
+                            for c in &st.cases
                             {
                                 ctx.add(&c.name, s.typ.clone(), &s.span)?;
                             }
@@ -204,12 +204,12 @@ pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module) -> Compi
     }
 
 
-    for ref mut f in module.functions.values_mut() {
+    for f in module.functions.values_mut() {
         resolve_function_args_and_ret_type(ctx, &mut f.sig)?;
         ctx.add(&f.sig.name, f.sig.typ.clone(), &f.sig.span)?;
     }
 
-    for ref mut f in module.externals.values_mut() {
+    for f in module.externals.values_mut() {
         resolve_function_args_and_ret_type(ctx, &mut f.sig)?;
         ctx.add(&f.sig.name, f.sig.typ.clone(), &f.sig.span)?;
     }

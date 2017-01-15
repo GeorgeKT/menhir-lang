@@ -308,8 +308,7 @@ fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool, self_typ
         if let Some(ref t) = *self_type {
             t.clone()
         } else {
-            return err(&span, ErrorCode::SelfTypeUnknown,
-                format!("Cannot determine type of self argument"));
+            return err(&span, ErrorCode::SelfTypeUnknown, "Cannot determine type of self argument");
         }
     } else if type_is_optional {
         Type::Generic(name.clone()) // If the type is not known threat it as generic arg
@@ -351,7 +350,7 @@ fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, name: &str, 
     let (full_name, self_type) = match name
     {
         "main" => (name.into(), None),
-        _ if name.starts_with("~") => {
+        _ if name.starts_with('~') => {
             let self_type = ptr_type(unresolved_type(&name[1..], Vec::new()));
             (namespaced(namespace, name), Some(self_type))
         },
@@ -410,7 +409,7 @@ pub fn parse_pattern(tq: &mut TokenQueue) -> CompileResult<Pattern>
     let tok = tq.pop()?;
     match tok.kind
     {
-        TokenKind::Number(ref num) => parse_number(num, &tok.span).map(|lit| Pattern::Literal(lit)),
+        TokenKind::Number(ref num) => parse_number(num, &tok.span).map(Pattern::Literal),
         TokenKind::True => Ok(Pattern::Literal(Literal::Bool(tok.span, true))),
         TokenKind::False => Ok(Pattern::Literal(Literal::Bool(tok.span, false))),
         TokenKind::CharLiteral(c) => Ok(Pattern::Literal(Literal::Char(tok.span, c as u8))),
@@ -438,7 +437,7 @@ pub fn parse_pattern(tq: &mut TokenQueue) -> CompileResult<Pattern>
         },
 
         TokenKind::OpenCurly => {
-            parse_struct_pattern(tq, "", &tok.span).map(|p| Pattern::Struct(p))
+            parse_struct_pattern(tq, "", &tok.span).map(Pattern::Struct)
         },
 
         TokenKind::Identifier(id) => {
@@ -447,7 +446,7 @@ pub fn parse_pattern(tq: &mut TokenQueue) -> CompileResult<Pattern>
             }
             else if tq.is_next(TokenKind::OpenCurly) {
                 tq.pop()?;
-                parse_struct_pattern(tq, &id, &tok.span).map(|p| Pattern::Struct(p))
+                parse_struct_pattern(tq, &id, &tok.span).map(Pattern::Struct)
             } else {
                 Ok(Pattern::Name(NameRef::new(id, tok.span)))
             }
@@ -601,7 +600,7 @@ fn parse_sum_type(tq: &mut TokenQueue, namespace: &str, name: &str, span: &Span)
         }
     }
 
-    Ok(sum_type_decl(&namespaced(namespace, &name), cases, span.expanded(tq.pos())))
+    Ok(sum_type_decl(&namespaced(namespace, name), cases, span.expanded(tq.pos())))
 }
 
 fn namespaced(namespace: &str, name: &str) -> String
@@ -753,7 +752,7 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
         },
 
         TokenKind::OpenBracket => {
-            parse_array_literal(tq, &tok.span).map(|al| Expression::Literal(al))
+            parse_array_literal(tq, &tok.span).map(Expression::Literal)
         },
 
         TokenKind::OpenParen => {
@@ -771,7 +770,7 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
             if tq.is_next(TokenKind::OpenParen)
             {
                 tq.pop()?;
-                let call = parse_function_call(tq, nr).map(|c| Expression::Call(c))?;
+                let call = parse_function_call(tq, nr).map(Expression::Call)?;
                 if tq.is_next(TokenKind::Operator(Operator::Dot)) {
                     parse_member_access(tq, call)
                 } else {
@@ -797,7 +796,7 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
         },
 
         TokenKind::Number(n) => {
-            parse_number(&n, &tok.span).map(|n| Expression::Literal(n))
+            parse_number(&n, &tok.span).map(Expression::Literal)
         },
 
         TokenKind::New => {
@@ -938,7 +937,7 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
             },
 
             TokenKind::Identifier(ref id) => {
-                let func = parse_function_declaration(&mut tq, namespace, &id, &tok.span)?;
+                let func = parse_function_declaration(&mut tq, namespace, id, &tok.span)?;
                 add_function(&mut module, func)?;
             }
             _ => {

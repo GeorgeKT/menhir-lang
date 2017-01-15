@@ -50,7 +50,7 @@ impl TokenQueue
             self.last_pos = tok.span.end;
             Ok(tok)
         } else {
-            err(&Span::default(), ErrorCode::UnexpectedEOF, format!("Unexpected end of file"))
+            err(&Span::default(), ErrorCode::UnexpectedEOF, "Unexpected end of file")
         }
     }
 
@@ -61,7 +61,7 @@ impl TokenQueue
 
     pub fn peek_at(&self, index: usize) -> Option<&Token>
     {
-        self.tokens.iter().nth(index)
+        self.tokens.get(index)
     }
 
     pub fn expect(&mut self, kind: TokenKind) -> CompileResult<Token>

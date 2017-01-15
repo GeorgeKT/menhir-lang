@@ -104,9 +104,9 @@ impl CompileError
 
 pub type CompileResult<T> = Result<T, CompileError>;
 
-pub fn err<T: Sized>(span: &Span, e: ErrorCode, msg: String) -> CompileResult<T>
+pub fn err<T: Sized, Msg: Into<String>>(span: &Span, e: ErrorCode, msg: Msg) -> CompileResult<T>
 {
-    Err(CompileError::new(span, e, msg))
+    Err(CompileError::new(span, e, msg.into()))
 }
 
 pub fn unknown_name(span: &Span, name: &str) -> CompileError

@@ -231,7 +231,7 @@ impl Lexer
             {
                 'r' => self.data.push('\r'),
                 'n' => self.data.push('\n'),
-                't' => self.data.push('\n'),
+                't' => self.data.push('\t'),
                 _   => self.data.push(c),
             }
         }
@@ -269,7 +269,7 @@ impl Lexer
             let mut span = self.current_span();
             span.end.offset += 1; // Need to include the single quote
             if self.data.len() != 1 {
-                return err(&span, ErrorCode::InvalidCharLiteral, format!("Invalid char literal"));
+                return err(&span, ErrorCode::InvalidCharLiteral, "Invalid char literal");
             }
 
             let c = self.data.chars().nth(0).expect("Invalid char literal");

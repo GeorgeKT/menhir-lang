@@ -151,7 +151,7 @@ impl Interpreter
         Ok(())
     }
 
-    #[cfg_attr(feature = "cargo-clippy", allow(float_cmp))]
+    #[cfg_attr(feature = "cargo-clippy", allow(float_cmp, match_same_arms))]
     fn binary_op(&mut self, dst: &str, op: Operator, left: &str, right: &str) -> Result<(), ExecutionError>
     {
         let left = self.get_variable(left)?.clone_value()?;

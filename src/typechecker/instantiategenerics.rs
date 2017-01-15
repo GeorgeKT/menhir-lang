@@ -52,7 +52,7 @@ pub fn make_concrete_type(mapping: &GenericMapping, generic: &Type) -> Type
         },
 
         Type::Optional(ref inner) => {
-            optional_type(make_concrete_type(mapping, &inner))
+            optional_type(make_concrete_type(mapping, inner))
         },
 
         _ => generic.clone(),
@@ -60,10 +60,10 @@ pub fn make_concrete_type(mapping: &GenericMapping, generic: &Type) -> Type
 }
 
 
-fn subsitute_let_bindings(generic_args: &GenericMapping, lb: &Vec<LetBinding>) -> CompileResult<Vec<LetBinding>>
+fn subsitute_let_bindings(generic_args: &GenericMapping, lb: &[LetBinding]) -> CompileResult<Vec<LetBinding>>
 {
     let mut bindings = Vec::with_capacity(lb.len());
-    for b in lb.iter() {
+    for b in lb {
         let binding_expr = substitute_expr(generic_args, &b.init)?;
         let new_binding = match b.binding_type
         {
@@ -113,7 +113,7 @@ fn substitute_pattern(generic_args: &GenericMapping, p: &Pattern) -> CompileResu
         },
 
         Pattern::Literal(Literal::Array(ref al)) => {
-            substitute_array_literal(generic_args, al).map(|al| Pattern::Literal(al))
+            substitute_array_literal(generic_args, al).map(Pattern::Literal)
         },
 
         _ => Ok(p.clone()),
@@ -123,7 +123,7 @@ fn substitute_pattern(generic_args: &GenericMapping, p: &Pattern) -> CompileResu
 fn substitute_array_literal(generic_args: &GenericMapping, al: &ArrayLiteral) -> CompileResult<Literal>
 {
     let mut new_elements = Vec::with_capacity(al.elements.len());
-    for el in al.elements.iter() {
+    for el in &al.elements {
         new_elements.push(substitute_expr(generic_args, el)?);
     }
     Ok(array_lit(new_elements, al.span.clone()))
@@ -132,7 +132,7 @@ fn substitute_array_literal(generic_args: &GenericMapping, al: &ArrayLiteral) ->
 fn substitute_call(generic_args: &GenericMapping, c: &Call) -> CompileResult<Call>
 {
     let mut new_args = Vec::with_capacity(c.args.len());
-    for a in c.args.iter() {
+    for a in &c.args {
         new_args.push(substitute_expr(generic_args, a)?);
     }
 
@@ -155,7 +155,7 @@ fn substitute_expr(generic_args: &GenericMapping, e: &Expression) -> CompileResu
         },
 
         Expression::Literal(Literal::Array(ref a)) => {
-            substitute_array_literal(generic_args, a).map(|al| Expression::Literal(al))
+            substitute_array_literal(generic_args, a).map(Expression::Literal)
         },
 
         Expression::Call(ref c) => {
@@ -172,7 +172,7 @@ fn substitute_expr(generic_args: &GenericMapping, e: &Expression) -> CompileResu
         Expression::Match(ref m) => {
             let target = substitute_expr(generic_args, &m.target)?;
             let mut cases = Vec::with_capacity(m.cases.len());
-            for c in m.cases.iter()
+            for c in &m.cases
             {
                 let pattern = substitute_pattern(generic_args, &c.pattern)?;
                 let to_execute = substitute_expr(generic_args, &c.to_execute)?;
@@ -222,7 +222,7 @@ fn substitute_expr(generic_args: &GenericMapping, e: &Expression) -> CompileResu
 
         Expression::StructInitializer(ref si) => {
             let mut nmi = Vec::with_capacity(si.member_initializers.len());
-            for e in si.member_initializers.iter() {
+            for e in &si.member_initializers {
                 let new_e = substitute_expr(generic_args, e)?;
                 nmi.push(new_e);
             }
@@ -324,7 +324,7 @@ fn resolve_generic_call(new_functions: &mut FunctionMap, module: &Module, call: 
         None => {
             err(&call.span, ErrorCode::UnknownName, format!("Unknown function {}", call.callee.name))
         },
-        Some(ref func) => {
+        Some(func) => {
             let name = new_func_name(&func.sig.name, &call.generic_args);
             if !new_functions.contains_key(&name) && !module.functions.contains_key(&name) {
                 let new_func = instantiate(func, &call.generic_args)?;
@@ -341,7 +341,7 @@ fn resolve_generics_in_pattern(new_functions: &mut FunctionMap, module: &Module,
     match *p
     {
         Pattern::Literal(Literal::Array(ref al)) => {
-            for el in al.elements.iter() {
+            for el in &al.elements {
                 resolve_generics(new_functions, module, el)?;
             }
             Ok(())
@@ -361,14 +361,14 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
         },
 
         Expression::Literal(Literal::Array(ref a)) => {
-            for el in a.elements.iter() {
+            for el in &a.elements {
                 resolve_generics(new_functions, module, el)?;
             }
             Ok(())
         },
 
         Expression::Call(ref c) => {
-            for a in c.args.iter() {
+            for a in &c.args {
                 resolve_generics(new_functions, module, a)?;
             }
             if !c.generic_args.is_empty() {
@@ -380,7 +380,7 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
 
         Expression::Match(ref m) => {
             resolve_generics(new_functions, module, &m.target)?;
-            for c in m.cases.iter()
+            for c in &m.cases
             {
                 resolve_generics_in_pattern(new_functions, module, &c.pattern)?;
                 resolve_generics(new_functions, module, &c.to_execute)?;
@@ -393,7 +393,7 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
         },
 
         Expression::Let(ref l) => {
-            for b in l.bindings.iter() {
+            for b in &l.bindings {
                 resolve_generics(new_functions, module, &b.init)?
             }
 
@@ -401,7 +401,7 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
         },
 
         Expression::LetBindings(ref l) => {
-            for b in l.bindings.iter() {
+            for b in &l.bindings {
                 resolve_generics(new_functions, module, &b.init)?
             }
 
@@ -409,7 +409,7 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
         },
 
         Expression::StructInitializer(ref si) => {
-            for mi in si.member_initializers.iter() {
+            for mi in &si.member_initializers {
                 resolve_generics(new_functions, module, mi)?;
             }
             Ok(())
@@ -466,7 +466,7 @@ fn replace_generic_calls_in_pattern(new_functions: &FunctionMap, p: &mut Pattern
     match *p
     {
         Pattern::Literal(Literal::Array(ref mut al)) => {
-            for el in al.elements.iter_mut() {
+            for el in &mut al.elements {
                 replace_generic_calls(new_functions, el)?;
             }
             Ok(())
@@ -486,14 +486,14 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
         },
 
         Expression::Literal(Literal::Array(ref mut a)) => {
-            for el in a.elements.iter_mut() {
+            for el in &mut a.elements {
                 replace_generic_calls(new_functions, el)?;
             }
             Ok(())
         },
 
         Expression::Call(ref mut call) => {
-            for a in call.args.iter_mut() {
+            for a in &mut call.args {
                 replace_generic_calls(new_functions, a)?;
             }
 
@@ -510,7 +510,7 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
 
         Expression::Match(ref mut m) => {
             replace_generic_calls(new_functions, &mut m.target)?;
-            for c in m.cases.iter_mut()
+            for c in &mut m.cases
             {
                 replace_generic_calls_in_pattern(new_functions, &mut c.pattern)?;
                 replace_generic_calls(new_functions, &mut c.to_execute)?;
@@ -519,7 +519,7 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
         },
 
         Expression::Let(ref mut l) => {
-            for b in l.bindings.iter_mut() {
+            for b in &mut l.bindings {
                 replace_generic_calls(new_functions, &mut b.init)?
             }
 
@@ -527,7 +527,7 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
         },
 
         Expression::LetBindings(ref mut l) => {
-            for b in l.bindings.iter_mut() {
+            for b in &mut l.bindings {
                 replace_generic_calls(new_functions, &mut b.init)?
             }
             Ok(())
@@ -564,14 +564,14 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
 pub fn instantiate_generics(module: &mut Module) -> CompileResult<()>
 {
     let mut new_functions = FunctionMap::new();
-    for (_, ref f) in module.functions.iter()
+    for f in module.functions.values()
     {
         if !f.generics_resolved && !f.is_generic() {
             resolve_generics(&mut new_functions, module, &f.expression)?;
         }
     }
 
-    for (_, ref mut f) in module.functions.iter_mut()
+    for f in module.functions.values_mut()
     {
         if !f.generics_resolved && !f.is_generic() {
             replace_generic_calls(&new_functions, &mut f.expression)?;
