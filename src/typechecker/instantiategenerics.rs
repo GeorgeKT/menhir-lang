@@ -1,9 +1,66 @@
 use std::collections::HashMap;
+use itertools::free::join;
 use ast::*;
 use compileerror::{CompileResult, ErrorCode, err};
-use typechecker::GenericMapper;
 
-fn subsitute_let_bindings(generic_args: &GenericMapper, lb: &Vec<LetBinding>) -> CompileResult<Vec<LetBinding>>
+pub fn make_concrete_type(mapping: &GenericMapping, generic: &Type) -> Type
+{
+    if !generic.is_generic() {
+        return generic.clone();
+    }
+
+    if let Some(t) = mapping.get(generic) {
+        return t.clone();
+    }
+
+    match *generic
+    {
+        Type::Array(ref at) => {
+            array_type(make_concrete_type(mapping, &at.element_type), at.len)
+        },
+
+        Type::Slice(ref st) => {
+            slice_type(make_concrete_type(mapping, &st.element_type))
+        },
+
+        Type::Func(ref ft) => {
+            func_type(
+                ft.args.iter().map(|t| make_concrete_type(mapping, t)).collect(),
+                make_concrete_type(mapping, &ft.return_type))
+        },
+
+        Type::Struct(ref st) => {
+            struct_type(
+                &st.name,
+                st.members.iter()
+                    .map(|m| struct_member(&m.name, make_concrete_type(mapping, &m.typ)))
+                    .collect()
+            )
+        },
+
+        Type::Sum(ref st) => {
+            sum_type(
+                &st.name,
+                st.cases.iter()
+                    .map(|c| sum_type_case(&c.name, make_concrete_type(mapping, &c.typ)))
+                    .collect()
+            )
+        },
+
+        Type::Pointer(ref inner) => {
+            ptr_type(make_concrete_type(mapping, inner))
+        },
+
+        Type::Optional(ref inner) => {
+            optional_type(make_concrete_type(mapping, &inner))
+        },
+
+        _ => generic.clone(),
+    }
+}
+
+
+fn subsitute_let_bindings(generic_args: &GenericMapping, lb: &Vec<LetBinding>) -> CompileResult<Vec<LetBinding>>
 {
     let mut bindings = Vec::with_capacity(lb.len());
     for b in lb.iter() {
@@ -27,18 +84,18 @@ fn subsitute_let_bindings(generic_args: &GenericMapper, lb: &Vec<LetBinding>) ->
     Ok(bindings)
 }
 
-fn substitute_struct_pattern(generic_args: &GenericMapper, p: &StructPattern) -> StructPattern
+fn substitute_struct_pattern(generic_args: &GenericMapping, p: &StructPattern) -> StructPattern
 {
     struct_pattern(
         &p.name,
         p.bindings.clone(),
-        p.types.iter().map(|t| generic_args.substitute(t)).collect(),
-        generic_args.substitute(&p.typ),
+        p.types.iter().map(|t| make_concrete_type(generic_args, t)).collect(),
+        make_concrete_type(generic_args, &p.typ),
         p.span.clone()
     )
 }
 
-fn substitute_pattern(generic_args: &GenericMapper, p: &Pattern) -> CompileResult<Pattern>
+fn substitute_pattern(generic_args: &GenericMapping, p: &Pattern) -> CompileResult<Pattern>
 {
     match *p
     {
@@ -50,7 +107,7 @@ fn substitute_pattern(generic_args: &GenericMapper, p: &Pattern) -> CompileResul
             let new_nr = NameRef{
                 name: nr.name.clone(),
                 span: nr.span.clone(),
-                typ: generic_args.substitute(&nr.typ),
+                typ: make_concrete_type(generic_args, &nr.typ),
             };
             Ok(Pattern::Name(new_nr))
         },
@@ -63,7 +120,7 @@ fn substitute_pattern(generic_args: &GenericMapper, p: &Pattern) -> CompileResul
     }
 }
 
-fn substitute_array_literal(generic_args: &GenericMapper, al: &ArrayLiteral) -> CompileResult<Literal>
+fn substitute_array_literal(generic_args: &GenericMapping, al: &ArrayLiteral) -> CompileResult<Literal>
 {
     let mut new_elements = Vec::with_capacity(al.elements.len());
     for el in al.elements.iter() {
@@ -72,7 +129,7 @@ fn substitute_array_literal(generic_args: &GenericMapper, al: &ArrayLiteral) -> 
     Ok(array_lit(new_elements, al.span.clone()))
 }
 
-fn substitute_call(generic_args: &GenericMapper, c: &Call) -> CompileResult<Call>
+fn substitute_call(generic_args: &GenericMapping, c: &Call) -> CompileResult<Call>
 {
     let mut new_args = Vec::with_capacity(c.args.len());
     for a in c.args.iter() {
@@ -82,7 +139,7 @@ fn substitute_call(generic_args: &GenericMapper, c: &Call) -> CompileResult<Call
     Ok(Call::new(c.callee.clone(), new_args, c.span.clone()))
 }
 
-fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResult<Expression>
+fn substitute_expr(generic_args: &GenericMapping, e: &Expression) -> CompileResult<Expression>
 {
     match *e
     {
@@ -107,7 +164,7 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
         },
 
         Expression::Lambda(ref l) => {
-            let args: Vec<Argument> = l.sig.args.iter().map(|a| Argument::new(a.name.clone(), generic_args.substitute(&a.typ), a.span.clone())).collect();
+            let args: Vec<Argument> = l.sig.args.iter().map(|a| Argument::new(a.name.clone(), make_concrete_type(generic_args, &a.typ), a.span.clone())).collect();
             let expr = substitute_expr(generic_args, &l.expr)?;
             Ok(lambda(args, expr, l.span.clone()))
         },
@@ -158,7 +215,7 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
             let new_nr = NameRef{
                 name: nr.name.clone(),
                 span: nr.span.clone(),
-                typ: generic_args.substitute(&nr.typ),
+                typ: make_concrete_type(generic_args, &nr.typ),
             };
             Ok(Expression::NameRef(new_nr))
         },
@@ -189,7 +246,7 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
 
         Expression::New(ref n) => {
             let inner = substitute_expr(generic_args, &n.inner)?;
-            Ok(new_with_type(inner, generic_args.substitute(&n.typ), n.span.clone()))
+            Ok(new_with_type(inner, make_concrete_type(generic_args, &n.typ), n.span.clone()))
         },
 
         Expression::Delete(ref n) => {
@@ -232,20 +289,20 @@ fn substitute_expr(generic_args: &GenericMapper, e: &Expression) -> CompileResul
     }
 }
 
-fn new_func_name(func_name: &str, generic_args: &GenericMapper) -> String
+fn new_func_name(func_name: &str, generic_args: &GenericMapping) -> String
 {
-    format!("{}{}", func_name, generic_args.to_string())
+    format!("{}{}", func_name, join(generic_args.values(), ","))
 }
 
-fn instantiate(func: &Function, generic_args: &GenericMapper) -> CompileResult<Function>
+fn instantiate(func: &Function, generic_args: &GenericMapping) -> CompileResult<Function>
 {
     let arg_types = func.sig.args.iter()
-        .map(|arg| generic_args.substitute(&arg.typ))
+        .map(|arg| make_concrete_type(generic_args, &arg.typ))
         .collect();
     let args = func.sig.args.iter()
-        .map(|arg| Argument::new(arg.name.clone(), generic_args.substitute(&arg.typ), arg.span.clone()))
+        .map(|arg| Argument::new(arg.name.clone(), make_concrete_type(generic_args, &arg.typ), arg.span.clone()))
         .collect();
-    let return_type = generic_args.substitute(&func.sig.return_type);
+    let return_type = make_concrete_type(generic_args, &func.sig.return_type);
     let sig = FunctionSignature{
         name: new_func_name(&func.sig.name, generic_args),
         return_type: return_type.clone(),

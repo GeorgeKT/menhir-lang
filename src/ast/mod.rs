@@ -60,6 +60,9 @@ pub trait TreePrinter
     fn print(&self, level: usize);
 }
 
+pub type GenericMapping = HashMap<Type, Type>;
+
+
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum TypeDeclaration

@@ -1,6 +1,5 @@
-use ast::{Expression, Type, NameRef, TreePrinter, prefix};
+use ast::{GenericMapping, Expression, Type, NameRef, TreePrinter, prefix};
 use span::{Span};
-use typechecker::GenericMapper;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Call
@@ -8,7 +7,7 @@ pub struct Call
     pub callee: NameRef,
     pub args: Vec<Expression>,
     pub span: Span,
-    pub generic_args: GenericMapper,
+    pub generic_args: GenericMapping,
     pub return_type: Type,
 }
 
@@ -20,7 +19,7 @@ impl Call
             callee: callee,
             args: args,
             span: span,
-            generic_args: GenericMapper::new(),
+            generic_args: GenericMapping::new(),
             return_type: Type::Unknown,
         }
     }

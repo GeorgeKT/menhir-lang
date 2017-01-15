@@ -1,5 +1,5 @@
 use ast::*;
-use typechecker::TypeCheckerContext;
+use super::typecheckercontext::TypeCheckerContext;
 use compileerror::{CompileResult, unknown_name};
 
 #[derive(Eq, PartialEq, Debug)]
@@ -49,7 +49,7 @@ fn resolve_type(ctx: &TypeCheckerContext, typ: &mut Type) -> TypeResolved
             *typ = resolved_typ;
             TypeResolved::Yes
         },
-        (_, result) => result, 
+        (_, result) => result,
     }
 }
 

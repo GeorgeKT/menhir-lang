@@ -1,6 +1,5 @@
-use ast::{Expression, TreePrinter, Type, prefix};
+use ast::{Expression, TreePrinter, GenericMapping, Type, prefix};
 use span::{Span};
-use typechecker::GenericMapper;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct StructMemberDeclaration
@@ -45,7 +44,7 @@ pub struct StructInitializer
     pub member_initializers: Vec<Expression>,
     pub span: Span,
     pub typ: Type,
-    pub generic_args: GenericMapper,
+    pub generic_args: GenericMapping,
 }
 
 pub fn struct_initializer(struct_name: &str, member_initializers: Vec<Expression>, span: Span) -> StructInitializer
@@ -55,7 +54,7 @@ pub fn struct_initializer(struct_name: &str, member_initializers: Vec<Expression
         member_initializers: member_initializers,
         span: span,
         typ: Type::Unknown,
-        generic_args: GenericMapper::new(),
+        generic_args: GenericMapping::new(),
     }
 }
 
