@@ -133,69 +133,69 @@ mod tests
     #[test]
     fn test_simple()
     {
-        let mut tm = GenericMapper::new();
+        let mut tm = GenericMapping::new();
         let ga = gen_type("a");
         assert!(fill_in_generics(&Type::Int, &ga, &mut tm, &Span::default()) == Ok(Type::Int));
-        assert!(tm.substitute(&ga) == Type::Int);
+        assert!(make_concrete_type(&tm, &ga) == Type::Int);
     }
 
     #[test]
     fn test_slice()
     {
-        let mut tm = GenericMapper::new();
+        let mut tm = GenericMapping::new();
         let ga = slice_type(gen_type("a"));
         let r = fill_in_generics(&slice_type(Type::Int), &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
         assert!(r == Ok(slice_type(Type::Int)));
-        assert!(tm.substitute(&gen_type("a")) == Type::Int);
+        assert!(make_concrete_type(&tm, &gen_type("a")) == Type::Int);
     }
 
     #[test]
     fn test_array()
     {
-        let mut tm = GenericMapper::new();
+        let mut tm = GenericMapping::new();
         let ga = array_type(gen_type("a"), 10);
         let r = fill_in_generics(&array_type(Type::Int, 10), &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
         assert!(r == Ok(array_type(Type::Int, 10)));
-        assert!(tm.substitute(&gen_type("a")) == Type::Int);
+        assert!(make_concrete_type(&tm, &gen_type("a")) == Type::Int);
     }
 
     #[test]
     fn test_pointer()
     {
-        let mut tm = GenericMapper::new();
+        let mut tm = GenericMapping::new();
         let gptr = ptr_type(gen_type("a"));
         let aptr = ptr_type(Type::Int);
         let r = fill_in_generics(&aptr, &gptr, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
         assert!(r == Ok(ptr_type(Type::Int)));
-        assert!(tm.substitute(&gen_type("a")) == Type::Int);
+        assert!(make_concrete_type(&tm, &gen_type("a")) == Type::Int);
     }
 
     #[test]
     fn test_func()
     {
-        let mut tm = GenericMapper::new();
+        let mut tm = GenericMapping::new();
         let ga = func_type(vec![gen_type("a"), gen_type("b"), gen_type("c")], gen_type("d"));
         let aa = func_type(vec![Type::Int, Type::Float, Type::Bool], string_type());
         let r = fill_in_generics(&aa, &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
         assert!(r == Ok(aa));
-        assert!(tm.substitute(&gen_type("a")) == Type::Int);
-        assert!(tm.substitute(&gen_type("b")) == Type::Float);
-        assert!(tm.substitute(&gen_type("c")) == Type::Bool);
-        assert!(tm.substitute(&gen_type("d")) == string_type());
+        assert!(make_concrete_type(&tm, &gen_type("a")) == Type::Int);
+        assert!(make_concrete_type(&tm, &gen_type("b")) == Type::Float);
+        assert!(make_concrete_type(&tm, &gen_type("c")) == Type::Bool);
+        assert!(make_concrete_type(&tm, &gen_type("d")) == string_type());
     }
 
     #[test]
     fn test_func_wrong_args()
     {
-        let mut tm = GenericMapper::new();
+        let mut tm = GenericMapping::new();
         let ga = func_type(vec![gen_type("a"), gen_type("b"), gen_type("c")], gen_type("d"));
         let aa = func_type(vec![Type::Int, Type::Float, Type::Bool, Type::Int], string_type());
         let r = fill_in_generics(&aa, &ga, &mut tm, &Span::default());
@@ -207,38 +207,38 @@ mod tests
     #[test]
     fn test_mixed_func()
     {
-        let mut tm = GenericMapper::new();
+        let mut tm = GenericMapping::new();
         let ga = func_type(vec![gen_type("a"), gen_type("b"), gen_type("c"), Type::Int], gen_type("d"));
         let aa = func_type(vec![Type::Int, Type::Float, Type::Bool, Type::Int], string_type());
         let r = fill_in_generics(&aa, &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
         assert!(r == Ok(aa));
-        assert!(tm.substitute(&gen_type("a")) == Type::Int);
-        assert!(tm.substitute(&gen_type("b")) == Type::Float);
-        assert!(tm.substitute(&gen_type("c")) == Type::Bool);
-        assert!(tm.substitute(&gen_type("d")) == string_type());
+        assert!(make_concrete_type(&tm, &gen_type("a")) == Type::Int);
+        assert!(make_concrete_type(&tm, &gen_type("b")) == Type::Float);
+        assert!(make_concrete_type(&tm, &gen_type("c")) == Type::Bool);
+        assert!(make_concrete_type(&tm, &gen_type("d")) == string_type());
     }
 
     #[test]
     fn test_simple_complex_mix()
     {
-        let mut tm = GenericMapper::new();
+        let mut tm = GenericMapping::new();
         let ga = gen_type("a");
         let r = fill_in_generics(&array_type(Type::Int, 10), &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
         assert!(r == Ok(array_type(Type::Int, 10)));
-        assert!(tm.substitute(&ga) == array_type(Type::Int, 10));
+        assert!(make_concrete_type(&tm, &ga) == array_type(Type::Int, 10));
     }
 
     #[test]
     fn test_with_already_filled_in_map()
     {
-        let mut tm = GenericMapper::new();
-        tm.add(&gen_type("a"), &Type::Int, &Span::default()).unwrap();
-        tm.add(&gen_type("b"), &Type::Float, &Span::default()).unwrap();
-        tm.add(&gen_type("c"), &Type::Bool, &Span::default()).unwrap();
+        let mut tm = GenericMapping::new();
+        add(&mut tm, &gen_type("a"), &Type::Int, &Span::default()).unwrap();
+        add(&mut tm, &gen_type("b"), &Type::Float, &Span::default()).unwrap();
+        add(&mut tm, &gen_type("c"), &Type::Bool, &Span::default()).unwrap();
 
         let ga = func_type(vec![gen_type("a"), gen_type("b")], gen_type("c"));
         let aa = func_type(vec![Type::Unknown, Type::Unknown], Type::Unknown);

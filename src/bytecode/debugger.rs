@@ -3,6 +3,9 @@ use std::fmt;
 use std::rc::Rc;
 use shrust::{Shell, ShellIO, ExecResult, ExecError};
 use bytecode::*;
+use super::function::*;
+use super::interpreter::*;
+use super::value::Value;
 
 
 #[derive(Debug, Clone)]

@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use ast::*;
 use bytecode::*;
+use super::function::*;
+use super::instruction::*;
 
 
 fn stack_alloc(func: &mut ByteCodeFunction, typ: &Type, name: Option<&str>) -> Var

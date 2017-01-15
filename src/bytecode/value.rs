@@ -2,7 +2,10 @@ use std::fmt;
 use std::rc::Rc;
 use itertools::free::join;
 use ast::Type;
-use super::*;
+use super::ExecutionError;
+use super::valueref::ValueRef;
+use super::function::ByteCodeFunction;
+use super::instruction::*;
 
 #[derive(Debug, Clone)]
 pub enum Value

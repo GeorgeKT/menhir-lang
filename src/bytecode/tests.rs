@@ -4,6 +4,7 @@ use ast::{TreePrinter};
 use parser::*;
 use bytecode::*;
 use compileerror::*;
+use super::value::Value;
 
 fn generate_byte_code(prog: &str, dump: bool) -> CompileResult<ByteCodeModule>
 {
