@@ -60,21 +60,22 @@ pub fn make_concrete_type(mapping: &GenericMapping, generic: &Type) -> Type
 }
 
 
-fn subsitute_let_bindings(generic_args: &GenericMapping, lb: &[LetBinding]) -> CompileResult<Vec<LetBinding>>
+fn subsitute_bindings(generic_args: &GenericMapping, lb: &[Binding]) -> CompileResult<Vec<Binding>>
 {
     let mut bindings = Vec::with_capacity(lb.len());
     for b in lb {
         let binding_expr = substitute_expr(generic_args, &b.init)?;
         let new_binding = match b.binding_type
         {
-            LetBindingType::Name(ref name) => {
-                let_name_binding(name.clone(), binding_expr, b.span.clone())
+            BindingType::Name(ref name) => {
+                name_binding(name.clone(), binding_expr, b.mutable, b.span.clone())
             },
 
-            LetBindingType::Struct(ref s) => {
-                let_binding(
-                    LetBindingType::Struct(substitute_struct_pattern(generic_args, s)),
+            BindingType::Struct(ref s) => {
+                binding(
+                    BindingType::Struct(substitute_struct_pattern(generic_args, s)),
                     binding_expr,
+                    b.mutable,
                     b.span.clone()
                 )
             },
@@ -181,15 +182,15 @@ fn substitute_expr(generic_args: &GenericMapping, e: &Expression) -> CompileResu
             Ok(match_expression(target, cases, m.span.clone()))
         },
 
-        Expression::Let(ref l) => {
-            let bindings = subsitute_let_bindings(generic_args, &l.bindings)?;
+        Expression::Binding(ref l) => {
+            let bindings = subsitute_bindings(generic_args, &l.bindings)?;
             let expr = substitute_expr(generic_args, &l.expression)?;
-            Ok(let_expression(bindings, expr, l.span.clone()))
+            Ok(binding_expression(bindings, expr, l.span.clone()))
         },
 
-        Expression::LetBindings(ref l) => {
-            let bindings = subsitute_let_bindings(generic_args, &l.bindings)?;
-            Ok(let_bindings(bindings, l.span.clone()))
+        Expression::Bindings(ref l) => {
+            let nb = subsitute_bindings(generic_args, &l.bindings)?;
+            Ok(bindings(nb, l.span.clone()))
         },
 
         Expression::If(ref i) => {
@@ -392,7 +393,7 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
             resolve_generics(new_functions, module, &l.expr)
         },
 
-        Expression::Let(ref l) => {
+        Expression::Binding(ref l) => {
             for b in &l.bindings {
                 resolve_generics(new_functions, module, &b.init)?
             }
@@ -400,7 +401,7 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
             resolve_generics(new_functions, module, &l.expression)
         },
 
-        Expression::LetBindings(ref l) => {
+        Expression::Bindings(ref l) => {
             for b in &l.bindings {
                 resolve_generics(new_functions, module, &b.init)?
             }
@@ -518,7 +519,7 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
             Ok(())
         },
 
-        Expression::Let(ref mut l) => {
+        Expression::Binding(ref mut l) => {
             for b in &mut l.bindings {
                 replace_generic_calls(new_functions, &mut b.init)?
             }
@@ -526,7 +527,7 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
             replace_generic_calls(new_functions, &mut l.expression)
         },
 
-        Expression::LetBindings(ref mut l) => {
+        Expression::Bindings(ref mut l) => {
             for b in &mut l.bindings {
                 replace_generic_calls(new_functions, &mut b.init)?
             }

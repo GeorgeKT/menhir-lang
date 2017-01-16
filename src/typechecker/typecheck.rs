@@ -543,17 +543,17 @@ fn type_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint: &O
     }
 }
 
-fn type_check_let_binding(ctx: &mut TypeCheckerContext, b: &mut LetBinding) -> TypeCheckResult
+fn type_check_binding(ctx: &mut TypeCheckerContext, b: &mut Binding) -> TypeCheckResult
 {
     b.typ = type_check_expression(ctx, &mut b.init, &None)?;
 
     match b.binding_type
     {
-        LetBindingType::Name(ref name) => {
+        BindingType::Name(ref name) => {
             ctx.add(name, b.typ.clone(), &b.span)?;
         },
 
-        LetBindingType::Struct(ref mut s) => {
+        BindingType::Struct(ref mut s) => {
             s.typ = b.typ.clone();
 
             if let Type::Struct(ref st) = s.typ
@@ -581,11 +581,11 @@ fn type_check_let_binding(ctx: &mut TypeCheckerContext, b: &mut LetBinding) -> T
     valid(b.typ.clone())
 }
 
-fn type_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> TypeCheckResult
+fn type_check_binding_expression(ctx: &mut TypeCheckerContext, l: &mut BindingExpression) -> TypeCheckResult
 {
     ctx.push_stack(false);
     for b in &mut l.bindings {
-        type_check_let_binding(ctx, b)?;
+        type_check_binding(ctx, b)?;
     }
 
     match type_check_expression(ctx, &mut l.expression, &None)
@@ -595,7 +595,7 @@ fn type_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> TypeCh
                 let mut handled = false;
                 for b in &mut l.bindings
                 {
-                    if let LetBindingType::Name(ref b_name) = b.binding_type
+                    if let BindingType::Name(ref b_name) = b.binding_type
                     {
                         if *b_name == *name {
                             // It's one we know, so lets try again with a proper type hint
@@ -956,10 +956,10 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::NameRef(ref mut nr) => type_check_name(ctx, nr, type_hint),
         Expression::Match(ref mut m) => type_check_match(ctx, m),
         Expression::Lambda(ref mut l) => type_check_lambda(ctx, l, type_hint),
-        Expression::Let(ref mut l) => type_check_let(ctx, l),
-        Expression::LetBindings(ref mut l) => {
+        Expression::Binding(ref mut l) => type_check_binding_expression(ctx, l),
+        Expression::Bindings(ref mut l) => {
             for b in &mut l.bindings {
-                type_check_let_binding(ctx, b)?;
+                type_check_binding(ctx, b)?;
             }
             valid(Type::Void)
         },

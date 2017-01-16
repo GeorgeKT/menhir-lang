@@ -495,7 +495,7 @@ fn parse_lambda(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
     Ok(lambda(args, expr, span.expanded(tq.pos())))
 }
 
-fn parse_let_bindings(tq: &mut TokenQueue) -> CompileResult<Vec<LetBinding>>
+fn parse_bindings(tq: &mut TokenQueue, mutable: bool) -> CompileResult<Vec<Binding>>
 {
     let mut bindings = Vec::new();
     while !tq.is_next(TokenKind::In) && !tq.is_next(TokenKind::SemiColon) && !tq.is_next(TokenKind::CloseParen)
@@ -504,33 +504,33 @@ fn parse_let_bindings(tq: &mut TokenQueue) -> CompileResult<Vec<LetBinding>>
             let tok = tq.pop()?;
             let pattern = parse_struct_pattern(tq, "", &tok.span)?;
             let span = pattern.span.clone();
-            (LetBindingType::Struct(pattern), span)
+            (BindingType::Struct(pattern), span)
         } else {
             let (name, span) = tq.expect_identifier()?;
-            (LetBindingType::Name(name), span)
+            (BindingType::Name(name), span)
         };
 
         tq.expect(TokenKind::Assign)?;
         let init = parse_expression(tq)?;
-        bindings.push(let_binding(binding_type, init, span.expanded(tq.pos())));
+        bindings.push(binding(binding_type, init, mutable, span.expanded(tq.pos())));
         eat_comma(tq)?;
     }
 
     Ok(bindings)
 }
 
-fn parse_let(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
+fn parse_binding(tq: &mut TokenQueue, mutable: bool, span: &Span) -> CompileResult<Expression>
 {
-    let bindings = parse_let_bindings(tq)?;
+    let b = parse_bindings(tq, mutable)?;
     if tq.is_next(TokenKind::In)
     {
         tq.expect(TokenKind::In)?;
         let e = parse_expression(tq)?;
-        Ok(let_expression(bindings, e, span.expanded(tq.pos())))
+        Ok(binding_expression(b, e, span.expanded(tq.pos())))
     }
     else
     {
-        Ok(let_bindings(bindings, span.expanded(tq.pos())))
+        Ok(bindings(b, span.expanded(tq.pos())))
     }
 
 }
@@ -742,7 +742,11 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
         },
 
         TokenKind::Let => {
-            parse_let(tq, &tok.span)
+            parse_binding(tq, false, &tok.span)
+        },
+
+        TokenKind::Var => {
+            parse_binding(tq, true, &tok.span)
         },
 
         TokenKind::If => {
@@ -883,7 +887,7 @@ fn parse_import(options: &ParserOptions, import_name: &str) -> CompileResult<Mod
     err(&Span::default(), ErrorCode::FileNotFound, format!("Unable to find file for import {}", import_name))
 }
 
-fn parse_global_let_bindings(module: &mut Module, tq: &mut TokenQueue) -> CompileResult<()>
+fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool) -> CompileResult<()>
 {
     while !tq.is_next(TokenKind::SemiColon)
     {
@@ -895,7 +899,7 @@ fn parse_global_let_bindings(module: &mut Module, tq: &mut TokenQueue) -> Compil
             return err(&span, ErrorCode::RedefinitionOfVariable, format!("Global {} already defined in this module", name));
         }
 
-        module.globals.insert(name.clone(), global_let_binding(name, init, span.expanded(tq.pos())));
+        module.globals.insert(name.clone(), global_binding(name, init, mutable, span.expanded(tq.pos())));
         eat_comma(tq)?;
     }
 
@@ -923,7 +927,11 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
         match tok.kind
         {
             TokenKind::Let => {
-                parse_global_let_bindings(&mut module, &mut tq)?;
+                parse_global_bindings(&mut module, &mut tq, false)?;
+            },
+
+            TokenKind::Var => {
+                parse_global_bindings(&mut module, &mut tq, true)?;
             },
 
             TokenKind::Type => {

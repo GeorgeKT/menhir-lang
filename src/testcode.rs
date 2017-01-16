@@ -99,8 +99,8 @@ pub const ALL_TESTS: [Test; 39] = [
         debug: false,
         code: r#"
             main() -> int {
-                let x = 0;
-                let y = 0;
+                var x = 0;
+                var y = 0;
                 while x < 10 {
                     y = y + 2;
                     x = x + 1;
@@ -116,7 +116,7 @@ pub const ALL_TESTS: [Test; 39] = [
         debug: false,
         code: r#"
             main() -> int {
-                let x = 7;
+                var x = 7;
                 x = x * 11;
                 x
             }

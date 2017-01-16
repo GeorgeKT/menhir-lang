@@ -132,18 +132,18 @@ fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &Var, func: &mut B
     }
 }
 
-fn add_binding(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, b: &LetBinding)
+fn add_binding(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, b: &Binding)
 {
     match b.binding_type
     {
-        LetBindingType::Name(ref name) => {
+        BindingType::Name(ref name) => {
             let dst = stack_alloc(func, &b.typ, Some(name));
             func.push_destination(Some(dst));
             expr_to_bc(bc_mod, func, &b.init);
             func.pop_destination();
         },
 
-        LetBindingType::Struct(ref s) => {
+        BindingType::Struct(ref s) => {
             let dst = stack_alloc(func, &b.typ, None);
             func.push_destination(Some(dst.clone()));
             expr_to_bc(bc_mod, func, &b.init);
@@ -153,7 +153,7 @@ fn add_binding(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, b: &Let
     }
 }
 
-fn let_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, l: &LetExpression) -> Option<Var>
+fn binding_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, l: &BindingExpression) -> Option<Var>
 {
     let dst = get_dst(func, &l.typ);
     func.push_scope();
@@ -642,11 +642,11 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
             block_to_bc(bc_mod, func, b)
         },
 
-        Expression::Let(ref l) => {
-            let_to_bc(bc_mod, func, l)
+        Expression::Binding(ref l) => {
+            binding_to_bc(bc_mod, func, l)
         },
 
-        Expression::LetBindings(ref l) => {
+        Expression::Bindings(ref l) => {
             for b in &l.bindings {
                 add_binding(bc_mod, func, b);
             }
