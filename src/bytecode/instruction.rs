@@ -63,6 +63,7 @@ pub enum Instruction
     BinaryOp{dst: Var, op: Operator, left: Var, right: Var},
     Call{dst: Var, func: String, args: Vec<Var>},
     Slice{dst: Var, src: Var, start: Var, len: Var},
+    GlobalAlloc(Var),
     StackAlloc(Var),
     HeapAlloc(Var),
     StartScope,
@@ -255,6 +256,10 @@ impl fmt::Display for Instruction
             Instruction::HeapAlloc(ref var) => {
                 writeln!(f, "  halloc {}", var)
             },
+
+            Instruction::GlobalAlloc(ref var) => {
+                writeln!(f, "  galloc {}", var)
+            }
 
             Instruction::StartScope => {
                 writeln!(f, "  scope start")

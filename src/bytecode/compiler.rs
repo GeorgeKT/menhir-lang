@@ -758,6 +758,28 @@ fn func_to_bc(sig: &FunctionSignature, bc_mod: &mut ByteCodeModule, expression: 
     llfunc
 }
 
+pub const START_CODE_FUNCTION : &'static str = "@start";
+
+fn generate_start_code(md: &Module, bc_mod: &mut ByteCodeModule) -> ByteCodeFunction
+{
+    use span::Span;
+    let sig = sig(START_CODE_FUNCTION, Type::Int, vec![], Span::default());
+    let mut start_code = ByteCodeFunction::new(&sig);
+
+    for global in md.globals.values() {
+        let dst = Var::named(&global.name, global.typ.clone());
+        start_code.add(Instruction::GlobalAlloc(dst.clone()));
+        start_code.push_destination(Some(dst));
+        expr_to_bc(bc_mod, &mut start_code, &global.init);
+        start_code.pop_destination();
+    }
+
+    let result = stack_alloc(&mut start_code, &Type::Int, None);
+    start_code.add(call_instr(&result, "main", vec![]));
+    start_code.add(ret_instr(&result));
+    start_code
+}
+
 pub fn compile_to_byte_code(md: &Module) -> ByteCodeModule
 {
     let mut ll_mod = ByteCodeModule{
@@ -769,6 +791,9 @@ pub fn compile_to_byte_code(md: &Module) -> ByteCodeModule
     for func in md.externals.values() {
         ll_mod.functions.insert(func.sig.name.clone(), Rc::new(ByteCodeFunction::new(&func.sig)));
     }
+
+    let start_code = Rc::new(generate_start_code(md, &mut ll_mod));
+    ll_mod.functions.insert(START_CODE_FUNCTION.to_string(), start_code);
 
     for func in md.functions.values() {
         if !func.is_generic() {

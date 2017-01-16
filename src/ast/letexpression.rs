@@ -19,6 +19,15 @@ pub struct LetBinding
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
+pub struct GlobalLetBinding
+{
+    pub name: String,
+    pub init: Expression,
+    pub typ: Type,
+    pub span: Span,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct LetBindingList
 {
     pub bindings: Vec<LetBinding>,
@@ -48,6 +57,16 @@ pub fn let_binding(bt: LetBindingType, init: Expression, span: Span) -> LetBindi
 {
     LetBinding{
         binding_type: bt,
+        init: init,
+        typ: Type::Unknown,
+        span: span,
+    }
+}
+
+pub fn global_let_binding(name: String, init: Expression, span: Span) -> GlobalLetBinding
+{
+    GlobalLetBinding{
+        name: name,
         init: init,
         typ: Type::Unknown,
         span: span,
@@ -103,6 +122,16 @@ impl TreePrinter for LetBinding
             },
         }
 
+        self.init.print(level + 1);
+    }
+}
+
+impl TreePrinter for GlobalLetBinding
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        println!("{}global {} ({}) =", p, self.name, self.span);
         self.init.print(level + 1);
     }
 }

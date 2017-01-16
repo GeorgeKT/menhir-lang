@@ -8,6 +8,7 @@ use span::Span;
 pub struct StackFrame
 {
     symbols: HashMap<String, Type>,
+    start_of_function: bool,
 }
 
 pub struct ResolvedName
@@ -29,10 +30,11 @@ impl ResolvedName
 
 impl StackFrame
 {
-    pub fn new() -> StackFrame
+    pub fn new(start_of_function: bool) -> StackFrame
     {
         StackFrame{
             symbols: HashMap::new(),
+            start_of_function: start_of_function,
         }
     }
 
@@ -67,6 +69,7 @@ impl StackFrame
 pub struct TypeCheckerContext
 {
     stack: Vec<StackFrame>,
+    globals: StackFrame,
 }
 
 impl TypeCheckerContext
@@ -74,7 +77,8 @@ impl TypeCheckerContext
     pub fn new() -> TypeCheckerContext
     {
         TypeCheckerContext{
-            stack: vec![StackFrame::new()],
+            stack: vec![],
+            globals: StackFrame::new(false),
         }
     }
 
@@ -85,14 +89,27 @@ impl TypeCheckerContext
             if t.is_some() {
                 return t;
             }
+
+            if sf.start_of_function {
+                break;
+            }
         }
 
-        None
+        self.globals.resolve_type(name)
     }
 
     pub fn add(&mut self, name: &str, t: Type, span: &Span) -> CompileResult<()>
     {
-        self.stack.last_mut().expect("Empty stack").add(name, t, span)
+        if let Some(ref mut sf) = self.stack.last_mut() {
+            sf.add(name, t, span)
+        } else {
+            self.globals.add(name, t, span)
+        }
+    }
+
+    pub fn add_global(&mut self, name: &str, t: Type, span: &Span) -> CompileResult<()>
+    {
+        self.globals.add(name, t, span)
     }
 
     pub fn update(&mut self, name: &str, t: Type)
@@ -100,9 +117,9 @@ impl TypeCheckerContext
         self.stack.last_mut().expect("Empty stack").update(name, t)
     }
 
-    pub fn push_stack(&mut self)
+    pub fn push_stack(&mut self, start_of_function: bool)
     {
-        self.stack.push(StackFrame::new());
+        self.stack.push(StackFrame::new(start_of_function));
     }
 
     pub fn pop_stack(&mut self)

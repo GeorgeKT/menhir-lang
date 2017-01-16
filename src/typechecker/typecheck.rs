@@ -259,7 +259,7 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> TypeCheckResul
 
 fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> TypeCheckResult
 {
-    ctx.push_stack();
+    ctx.push_stack(true);
     for arg in &mut fun.sig.args
     {
         ctx.add(&arg.name, arg.typ.clone(), &arg.span)?;
@@ -314,7 +314,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Ty
 
                 let element_type = target_type.get_element_type().expect("target_type is not an array type");
 
-                ctx.push_stack();
+                ctx.push_stack(false);
                 ctx.add(&ap.head, element_type.clone(), &ap.span)?;
                 ctx.add(&ap.tail, slice_type(element_type.clone()), &ap.span)?;
                 let ct = infer_case_type(ctx, &mut c.to_execute, &return_type)?;
@@ -378,7 +378,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Ty
                             target_type, p.typ));
                 }
 
-                ctx.push_stack();
+                ctx.push_stack(false);
 
                 for (binding, typ) in p.bindings.iter().zip(p.types.iter()) {
                     if binding != "_" {
@@ -411,7 +411,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Ty
                 }
 
                 o.inner_type = target_type.get_element_type().expect("Optional type expected");
-                ctx.push_stack();
+                ctx.push_stack(false);
                 ctx.add(&o.binding, o.inner_type.clone(), &o.span)?;
                 let ct = infer_case_type(ctx, &mut c.to_execute, &return_type)?;
                 ctx.pop_stack();
@@ -433,7 +433,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Ty
 
 fn type_check_lambda_body(ctx: &mut TypeCheckerContext, m: &mut Lambda) -> TypeCheckResult
 {
-    ctx.push_stack();
+    ctx.push_stack(false);
     for arg in &mut m.sig.args {
         ctx.add(&arg.name, arg.typ.clone(), &arg.span)?;
     }
@@ -583,7 +583,7 @@ fn type_check_let_binding(ctx: &mut TypeCheckerContext, b: &mut LetBinding) -> T
 
 fn type_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> TypeCheckResult
 {
-    ctx.push_stack();
+    ctx.push_stack(false);
     for b in &mut l.bindings {
         type_check_let_binding(ctx, b)?;
     }
@@ -878,7 +878,7 @@ fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern
 
 fn type_check_block(ctx: &mut TypeCheckerContext, b: &mut Block, type_hint: &Option<Type>) -> TypeCheckResult
 {
-    ctx.push_stack();
+    ctx.push_stack(false);
     let num = b.expressions.len();
     for (idx, e) in b.expressions.iter_mut().enumerate()
     {
@@ -1003,7 +1003,8 @@ pub fn type_check_module(module: &mut Module) -> CompileResult<()>
 
         for global in module.globals.values_mut() {
             if global.typ == Type::Unknown {
-                type_check_let_binding(&mut ctx, global)?;
+                global.typ = type_check_expression(&mut ctx, &mut global.init, &None)?;
+                ctx.add_global(&global.name, global.typ.clone(), &global.span)?;
             }
         }
 

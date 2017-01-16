@@ -45,6 +45,6 @@ impl fmt::Display for ByteCodeModule
     }
 }
 
-pub use self::compiler::compile_to_byte_code;
+pub use self::compiler::{compile_to_byte_code, START_CODE_FUNCTION};
 pub use self::interpreter::run_byte_code;
 pub use self::debugger::debug_byte_code;

@@ -111,7 +111,7 @@ impl TreePrinter for TypeDeclaration
 pub struct Module
 {
     pub name: String,
-    pub globals: HashMap<String, LetBinding>,
+    pub globals: HashMap<String, GlobalLetBinding>,
     pub functions: HashMap<String, Function>,
     pub externals: HashMap<String, ExternalFunction>,
     pub types: HashMap<String, TypeDeclaration>,

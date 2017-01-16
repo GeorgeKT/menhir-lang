@@ -1,7 +1,5 @@
-foo(valid: bool) -> ?int = if valid: 77 else nil
+unwrap_or(opt: ?int, default: int) -> int =
+    opt || default
 
-main() -> int {
-    let a = foo(true);
-    let b = foo(false);
-    if a && b: 42 else 10
-}
+main() -> int =
+    unwrap_or(41, 1) + unwrap_or(nil, 1)
