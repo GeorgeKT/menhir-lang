@@ -106,3 +106,29 @@ let x = 6 in x + y
 let x = [6, 7] in x.len
 "#).is_ok());
 }
+
+
+#[test]
+fn test_mutability()
+{
+    assert_eq!(
+        type_check_mod(r#"
+            main() -> int {
+                let x = 9;
+                x = 5;
+                x
+            }
+        "#).unwrap_err().error,
+        ErrorCode::TypeError
+    );
+
+    assert!(
+        type_check_mod(r#"
+            main() -> int {
+                var x = 9;
+                x = 5;
+                x
+            }
+            "#).is_ok()
+    );
+}

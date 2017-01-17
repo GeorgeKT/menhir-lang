@@ -1,5 +1,5 @@
-unwrap_or(opt: ?int, default: int) -> int =
-    opt || default
-
-main() -> int =
-    unwrap_or(41, 1) + unwrap_or(nil, 1)
+main() -> int {
+    var x = 7;
+    x = x * 11;
+    x
+}
