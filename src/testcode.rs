@@ -7,7 +7,34 @@ pub struct Test
 }
 
 
-pub const ALL_TESTS: [Test; 38] = [
+pub const ALL_TESTS: [Test; 40] = [
+    Test{
+        name: "mutable arguments",
+        ret: 42,
+        debug: true,
+        code: r#"
+            foo(var a: int) -> int {
+                a = a + 2;
+                a
+            }
+            main() -> int {
+                foo(40)
+            }
+        "#
+    },
+
+    Test{
+        name: "globals",
+        ret: 42,
+        debug: false,
+        code: r#"
+            let THE_ANSWER = 42;
+            main() -> int {
+                THE_ANSWER
+            }
+        "#
+    },
+
     Test{
         name: "optional",
         ret: 42,
@@ -87,8 +114,8 @@ pub const ALL_TESTS: [Test; 38] = [
         debug: false,
         code: r#"
             main() -> int {
-                let x = 0;
-                let y = 0;
+                var x = 0;
+                var y = 0;
                 while x < 10 {
                     y = y + 2;
                     x = x + 1;
@@ -104,7 +131,7 @@ pub const ALL_TESTS: [Test; 38] = [
         debug: false,
         code: r#"
             main() -> int {
-                let x = 7;
+                var x = 7;
                 x = x * 11;
                 x
             }

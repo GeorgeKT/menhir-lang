@@ -227,7 +227,7 @@ fn resolve_generic_args_in_call(ctx: &mut TypeCheckerContext, ft: &FuncType, c: 
 
 fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> TypeCheckResult
 {
-    let resolved = ctx.resolve_type(&c.callee.name).ok_or_else(|| unknown_name(&c.callee.span, &c.callee.name))?;
+    let resolved = ctx.resolve(&c.callee.name).ok_or_else(|| unknown_name(&c.callee.span, &c.callee.name))?;
     c.callee.name = resolved.full_name;
     if let Type::Func(ref ft) = resolved.typ
     {
@@ -259,10 +259,10 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> TypeCheckResul
 
 fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> TypeCheckResult
 {
-    ctx.push_stack();
+    ctx.push_stack(true);
     for arg in &mut fun.sig.args
     {
-        ctx.add(&arg.name, arg.typ.clone(), &arg.span)?;
+        ctx.add(&arg.name, arg.typ.clone(), arg.mutable, &arg.span)?;
     }
 
     let et = type_check_expression(ctx, &mut fun.expression, &None)?;
@@ -314,9 +314,9 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Ty
 
                 let element_type = target_type.get_element_type().expect("target_type is not an array type");
 
-                ctx.push_stack();
-                ctx.add(&ap.head, element_type.clone(), &ap.span)?;
-                ctx.add(&ap.tail, slice_type(element_type.clone()), &ap.span)?;
+                ctx.push_stack(false);
+                ctx.add(&ap.head, element_type.clone(), false, &ap.span)?;
+                ctx.add(&ap.tail, slice_type(element_type.clone()), false, &ap.span)?;
                 let ct = infer_case_type(ctx, &mut c.to_execute, &return_type)?;
                 ctx.pop_stack();
                 ct
@@ -378,11 +378,11 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Ty
                             target_type, p.typ));
                 }
 
-                ctx.push_stack();
+                ctx.push_stack(false);
 
                 for (binding, typ) in p.bindings.iter().zip(p.types.iter()) {
                     if binding != "_" {
-                        ctx.add(binding, typ.clone(), &p.span)?;
+                        ctx.add(binding, typ.clone(), false, &p.span)?;
                     }
                 }
 
@@ -411,8 +411,8 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Ty
                 }
 
                 o.inner_type = target_type.get_element_type().expect("Optional type expected");
-                ctx.push_stack();
-                ctx.add(&o.binding, o.inner_type.clone(), &o.span)?;
+                ctx.push_stack(false);
+                ctx.add(&o.binding, o.inner_type.clone(), false, &o.span)?;
                 let ct = infer_case_type(ctx, &mut c.to_execute, &return_type)?;
                 ctx.pop_stack();
                 ct
@@ -433,9 +433,9 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Ty
 
 fn type_check_lambda_body(ctx: &mut TypeCheckerContext, m: &mut Lambda) -> TypeCheckResult
 {
-    ctx.push_stack();
+    ctx.push_stack(false);
     for arg in &mut m.sig.args {
-        ctx.add(&arg.name, arg.typ.clone(), &arg.span)?;
+        ctx.add(&arg.name, arg.typ.clone(), false, &arg.span)?;
     }
 
     let return_type = type_check_expression(ctx, &mut m.expr, &None)?;
@@ -509,7 +509,7 @@ fn type_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint: &O
         return valid(nr.typ.clone()); // We have already determined the type
     }
 
-    let resolved = ctx.resolve_type(&nr.name).ok_or_else(|| unknown_name(&nr.span, &nr.name))?;
+    let resolved = ctx.resolve(&nr.name).ok_or_else(|| unknown_name(&nr.span, &nr.name))?;
     nr.name = resolved.full_name;
 
     if let Some(ref typ) = *type_hint {
@@ -543,17 +543,17 @@ fn type_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint: &O
     }
 }
 
-fn type_check_let_binding(ctx: &mut TypeCheckerContext, b: &mut LetBinding) -> TypeCheckResult
+fn type_check_binding(ctx: &mut TypeCheckerContext, b: &mut Binding) -> TypeCheckResult
 {
     b.typ = type_check_expression(ctx, &mut b.init, &None)?;
 
     match b.binding_type
     {
-        LetBindingType::Name(ref name) => {
-            ctx.add(name, b.typ.clone(), &b.span)?;
+        BindingType::Name(ref name) => {
+            ctx.add(name, b.typ.clone(), b.mutable, &b.span)?;
         },
 
-        LetBindingType::Struct(ref mut s) => {
+        BindingType::Struct(ref mut s) => {
             s.typ = b.typ.clone();
 
             if let Type::Struct(ref st) = s.typ
@@ -567,7 +567,7 @@ fn type_check_let_binding(ctx: &mut TypeCheckerContext, b: &mut LetBinding) -> T
                 s.types = st.members.iter().map(|sm| sm.typ.clone()).collect();
                 for (binding, typ) in s.bindings.iter().zip(s.types.iter()) {
                     if binding != "_" {
-                        ctx.add(binding, typ.clone(), &s.span)?;
+                        ctx.add(binding, typ.clone(), false, &s.span)?;
                     }
                 }
             }
@@ -581,11 +581,11 @@ fn type_check_let_binding(ctx: &mut TypeCheckerContext, b: &mut LetBinding) -> T
     valid(b.typ.clone())
 }
 
-fn type_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> TypeCheckResult
+fn type_check_binding_expression(ctx: &mut TypeCheckerContext, l: &mut BindingExpression) -> TypeCheckResult
 {
-    ctx.push_stack();
+    ctx.push_stack(false);
     for b in &mut l.bindings {
-        type_check_let_binding(ctx, b)?;
+        type_check_binding(ctx, b)?;
     }
 
     match type_check_expression(ctx, &mut l.expression, &None)
@@ -595,12 +595,12 @@ fn type_check_let(ctx: &mut TypeCheckerContext, l: &mut LetExpression) -> TypeCh
                 let mut handled = false;
                 for b in &mut l.bindings
                 {
-                    if let LetBindingType::Name(ref b_name) = b.binding_type
+                    if let BindingType::Name(ref b_name) = b.binding_type
                     {
                         if *b_name == *name {
                             // It's one we know, so lets try again with a proper type hint
                             b.typ = type_check_expression(ctx, &mut b.init, &Some(expected_type.clone()))?;
-                            ctx.update(b_name, b.typ.clone());
+                            ctx.update(b_name, b.typ.clone(), b.mutable);
                             l.typ = type_check_expression(ctx, &mut l.expression, &None)?;
                             handled = true;
                         }
@@ -710,7 +710,7 @@ fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructIn
         return type_check_anonymous_struct_initializer(ctx, si);
     }
 
-    let resolved = ctx.resolve_type(&si.struct_name).ok_or_else(|| unknown_name(&si.span, &si.struct_name))?;
+    let resolved = ctx.resolve(&si.struct_name).ok_or_else(|| unknown_name(&si.span, &si.struct_name))?;
     si.struct_name = resolved.full_name;
     match resolved.typ
     {
@@ -843,7 +843,7 @@ fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern
         return valid(p.typ.clone());
     }
 
-    let resolved = ctx.resolve_type(&p.name).ok_or_else(|| unknown_name(&p.span, &p.name))?;
+    let resolved = ctx.resolve(&p.name).ok_or_else(|| unknown_name(&p.span, &p.name))?;
     p.name = resolved.full_name;
     match resolved.typ
     {
@@ -878,7 +878,7 @@ fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern
 
 fn type_check_block(ctx: &mut TypeCheckerContext, b: &mut Block, type_hint: &Option<Type>) -> TypeCheckResult
 {
-    ctx.push_stack();
+    ctx.push_stack(false);
     let num = b.expressions.len();
     for (idx, e) in b.expressions.iter_mut().enumerate()
     {
@@ -932,6 +932,16 @@ fn type_check_address_of(ctx: &mut TypeCheckerContext, a: &mut AddressOfExpressi
 fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign) -> TypeCheckResult
 {
     let left_type = type_check_expression(ctx, &mut a.left, &None)?;
+    match a.left
+    {
+        Expression::NameRef(ref nr) => {
+            if !ctx.resolve(&nr.name).map(|rn| rn.mutable).unwrap_or(false) {
+                return err(&nr.span, ErrorCode::MutabilityError, format!("Attempting to modify {}, which is not mutable", nr.name));
+            }
+        }
+        _ => return err(&a.left.span(), ErrorCode::MutabilityError, format!("Attempting to modify a non mutable expression")),
+    }
+
     type_check_with_conversion(ctx, &mut a.right, &left_type)?;
     a.typ = left_type.clone();
     valid(left_type)
@@ -956,10 +966,10 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::NameRef(ref mut nr) => type_check_name(ctx, nr, type_hint),
         Expression::Match(ref mut m) => type_check_match(ctx, m),
         Expression::Lambda(ref mut l) => type_check_lambda(ctx, l, type_hint),
-        Expression::Let(ref mut l) => type_check_let(ctx, l),
-        Expression::LetBindings(ref mut l) => {
+        Expression::Binding(ref mut l) => type_check_binding_expression(ctx, l),
+        Expression::Bindings(ref mut l) => {
             for b in &mut l.bindings {
-                type_check_let_binding(ctx, b)?;
+                type_check_binding(ctx, b)?;
             }
             valid(Type::Void)
         },
@@ -1001,7 +1011,14 @@ pub fn type_check_module(module: &mut Module) -> CompileResult<()>
         let mut ctx = TypeCheckerContext::new();
         resolve_types(&mut ctx, module)?;
 
-        for ref mut f in module.functions.values_mut() {
+        for global in module.globals.values_mut() {
+            if global.typ == Type::Unknown {
+                global.typ = type_check_expression(&mut ctx, &mut global.init, &None)?;
+                ctx.add_global(&global.name, global.typ.clone(), global.mutable, &global.span)?;
+            }
+        }
+
+        for f in module.functions.values_mut() {
             if !f.type_checked {
                 type_check_function(&mut ctx, f)?;
             }

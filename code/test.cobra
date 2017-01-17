@@ -1,7 +1,7 @@
-foo(valid: bool) -> ?int = if valid: 77 else nil
-
+foo(var a: int) -> int {
+    a = a + 2;
+    a
+}
 main() -> int {
-    let a = foo(true);
-    let b = foo(false);
-    if a && b: 42 else 10
+    foo(40)
 }

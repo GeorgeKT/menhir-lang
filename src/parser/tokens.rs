@@ -42,6 +42,7 @@ pub enum TokenKind
     Delete,
     QuestionMark,
     Nil,
+    Var,
     EOF,
 }
 
@@ -88,6 +89,7 @@ impl Display for TokenKind
             TokenKind::Delete => write!(fmt, "delete"),
             TokenKind::QuestionMark => write!(fmt, "?"),
             TokenKind::Nil => write!(fmt, "nil"),
+            TokenKind::Var => write!(fmt, "var"),
             TokenKind::EOF => write!(fmt, "EOF"),
         }
     }

@@ -124,6 +124,7 @@ impl Lexer
             "delete" => TokenKind::Delete,
             "while" => TokenKind::While,
             "nil" => TokenKind::Nil,
+            "var" => TokenKind::Var,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
         };
 

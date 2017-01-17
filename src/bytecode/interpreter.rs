@@ -45,11 +45,27 @@ impl StackFrame
             return_address: None,
         }
     }
+
+    pub fn has_return_address(&self) -> bool
+    {
+        self.return_address.is_some()
+    }
+
+    pub fn add(&mut self, name: &str, v: Value) -> Result<(), ExecutionError>
+    {
+        if self.vars.get(name).is_some() {
+            Err(ExecutionError(format!("Variable {} already exists", name)))
+        } else {
+            self.vars.insert(name.into(), ValueRef::new(v));
+            Ok(())
+        }
+    }
 }
 
 pub struct Interpreter
 {
     stack: Vec<StackFrame>,
+    globals: StackFrame,
 }
 
 pub enum StepResult
@@ -64,18 +80,20 @@ impl Interpreter
     {
         Interpreter{
             stack: Vec::new(),
+            globals: StackFrame::new(),
         }
     }
+
 
     fn add_variable(&mut self, name: &str, v: Value) -> Result<(), ExecutionError>
     {
         let mut sf = self.stack.last_mut().expect("Empty stack");
-        if sf.vars.get(name).is_some() {
-            Err(ExecutionError(format!("Variable {} already exists", name)))
-        } else {
-            sf.vars.insert(name.into(), ValueRef::new(v));
-            Ok(())
-        }
+        sf.add(name, v)
+    }
+
+    fn add_global_variable(&mut self, name: &str, v: Value) -> Result<(), ExecutionError>
+    {
+        self.globals.add(name, v)
     }
 
     pub fn get_variable(&self, name: &str) -> Result<ValueRef, ExecutionError>
@@ -84,9 +102,13 @@ impl Interpreter
             if let Some(v) = sf.vars.get(name) {
                 return Ok(v.clone());
             }
+
+            if sf.has_return_address() {
+                break;
+            }
         }
 
-        Err(ExecutionError(format!("Unknown variable {}", name)))
+        self.globals.vars.get(name).cloned().ok_or_else(|| ExecutionError(format!("Unknown variable {}", name)))
     }
 
     fn apply_on_variable<Op>(&mut self, name: &str, op: Op) -> Result<(), ExecutionError>
@@ -96,6 +118,14 @@ impl Interpreter
             if let Some(ref mut v) = sf.vars.get_mut(name) {
                 return op(v)
             }
+
+            if sf.has_return_address() {
+                break;
+            }
+        }
+
+        if let Some(ref mut v) = self.globals.vars.get_mut(name) {
+            return op(v)
         }
 
         Err(ExecutionError(format!("Unknown variable {}", name)))
@@ -243,10 +273,15 @@ impl Interpreter
     {
         println!("{}:", func.sig.name);
         let return_address = index.next();
-        self.stack.push(StackFrame::with_return_address(return_address, dst.into()));
 
-        for (idx, arg) in args.iter().enumerate() {
+        let mut arg_values = Vec::new();
+        for arg in args {
             let arg_value = self.get_variable(arg)?.clone_value()?;
+            arg_values.push(arg_value);
+        }
+
+        self.stack.push(StackFrame::with_return_address(return_address, dst.into()));
+        for (idx, arg_value) in arg_values.into_iter().enumerate() {
             self.add_variable(&func.sig.args[idx].name, arg_value)?;
         }
 
@@ -487,6 +522,11 @@ impl Interpreter
 
             Instruction::HeapAlloc(ref var) => {
                 self.update_variable(&var.name, Value::Pointer(ValueRef::new(Value::Uninitialized)))?;
+                next
+            },
+
+            Instruction::GlobalAlloc(ref var) => {
+                self.add_global_variable(&var.name, Value::from_type(&var.typ)?)?;
                 next
             },
 

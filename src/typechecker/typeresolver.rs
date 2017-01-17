@@ -21,7 +21,7 @@ fn resolve_type_helper(ctx: &TypeCheckerContext, typ: &Type) -> (Option<Type>, T
     match *typ
     {
         Type::Unresolved(ref ut) => {
-            if let Some(r) = ctx.resolve_type(&ut.name) {
+            if let Some(r) = ctx.resolve(&ut.name) {
                 (Some(r.typ), TypeResolved::Yes)
             } else {
                 (None, TypeResolved::No)
@@ -149,26 +149,26 @@ fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: Re
             TypeDeclaration::Struct(ref mut s) => {
                 if resolve_struct_member_types(ctx, s, mode)? == TypeResolved::Yes
                 {
-                    ctx.add(&s.name, s.typ.clone(), &s.span)?;
+                    ctx.add(&s.name, s.typ.clone(), false, &s.span)?;
                     num_resolved += 1;
                 }
             },
             TypeDeclaration::Sum(ref mut s) => {
                 if resolve_sum_case_types(ctx, s, mode)? == TypeResolved::Yes
                 {
-                    ctx.add(&s.name, s.typ.clone(), &s.span)?;
+                    ctx.add(&s.name, s.typ.clone(), false, &s.span)?;
                     match s.typ
                     {
                         Type::Enum(ref et) => {
                             for c in &et.cases
                             {
-                                ctx.add(c, s.typ.clone(), &s.span)?;
+                                ctx.add(c, s.typ.clone(), false, &s.span)?;
                             }
                         },
                         Type::Sum(ref st) => {
                             for c in &st.cases
                             {
-                                ctx.add(&c.name, s.typ.clone(), &s.span)?;
+                                ctx.add(&c.name, s.typ.clone(), false, &s.span)?;
                             }
                         },
                         _ => {},
@@ -203,15 +203,14 @@ pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module) -> Compi
         }
     }
 
-
     for f in module.functions.values_mut() {
         resolve_function_args_and_ret_type(ctx, &mut f.sig)?;
-        ctx.add(&f.sig.name, f.sig.typ.clone(), &f.sig.span)?;
+        ctx.add(&f.sig.name, f.sig.typ.clone(), false, &f.sig.span)?;
     }
 
     for f in module.externals.values_mut() {
         resolve_function_args_and_ret_type(ctx, &mut f.sig)?;
-        ctx.add(&f.sig.name, f.sig.typ.clone(), &f.sig.span)?;
+        ctx.add(&f.sig.name, f.sig.typ.clone(), false, &f.sig.span)?;
     }
 
     Ok(())

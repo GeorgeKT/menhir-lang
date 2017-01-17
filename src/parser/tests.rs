@@ -332,7 +332,7 @@ fn test_array_concat()
 
 fn arg(name: &str, typ: Type, span: Span) -> Argument
 {
-    Argument::new(name.into(), typ, span)
+    Argument::new(name.into(), typ, false, span)
 }
 
 #[test]
@@ -407,6 +407,7 @@ fn test_function_with_func_type()
                         ],
                         Type::Int,
                     ),
+                    false,
                     span(1, 5, 1, 24)
                 ),
             ],
@@ -439,8 +440,8 @@ fn test_lambda()
     let e = th_expr("@(a, b) -> a + b");
     assert!(e == lambda(
         vec![
-            Argument::new("a".into(), Type::Generic("a".into()), span(1, 3, 1, 3)),
-            Argument::new("b".into(), Type::Generic("b".into()), span(1, 6, 1, 6)),
+            Argument::new("a".into(), Type::Generic("a".into()), false, span(1, 3, 1, 3)),
+            Argument::new("b".into(), Type::Generic("b".into()), false, span(1, 6, 1, 6)),
         ],
         bin_op(
             Operator::Add,
@@ -478,10 +479,10 @@ fn test_let()
     let e = th_expr(r#"
 let x = 5, y = 7 in x * y
 "#);
-    assert!(e == let_expression(
+    assert!(e == binding_expression(
         vec![
-            let_name_binding("x".into(), number(5, span(2, 9, 2, 9)), span(2, 5, 2, 9)),
-            let_name_binding("y".into(), number(7, span(2, 16, 2, 16)), span(2, 12, 2, 16)),
+            name_binding("x".into(), number(5, span(2, 9, 2, 9)), false, span(2, 5, 2, 9)),
+            name_binding("y".into(), number(7, span(2, 16, 2, 16)), false, span(2, 12, 2, 16)),
         ],
         bin_op(Operator::Mul, name_ref("x", span(2, 21, 2, 21)), name_ref("y", span(2, 25, 2, 25)), span(2, 21, 2, 25)),
         span(2, 1, 2, 25))

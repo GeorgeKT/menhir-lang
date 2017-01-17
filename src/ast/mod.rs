@@ -2,6 +2,7 @@ use std::collections::{HashSet, HashMap};
 
 mod arrays;
 mod assign;
+mod bindings;
 mod block;
 mod call;
 mod expression;
@@ -9,7 +10,6 @@ mod function;
 mod heap;
 mod ifexpression;
 mod lambda;
-mod letexpression;
 mod literal;
 mod loops;
 mod matchexpression;
@@ -24,6 +24,7 @@ mod types;
 
 pub use self::arrays::*;
 pub use self::assign::*;
+pub use self::bindings::*;
 pub use self::block::*;
 pub use self::call::*;
 pub use self::expression::*;
@@ -31,7 +32,6 @@ pub use self::function::*;
 pub use self::heap::*;
 pub use self::ifexpression::*;
 pub use self::lambda::*;
-pub use self::letexpression::*;
 pub use self::literal::*;
 pub use self::loops::*;
 pub use self::matchexpression::*;
@@ -111,6 +111,7 @@ impl TreePrinter for TypeDeclaration
 pub struct Module
 {
     pub name: String,
+    pub globals: HashMap<String, GlobalBinding>,
     pub functions: HashMap<String, Function>,
     pub externals: HashMap<String, ExternalFunction>,
     pub types: HashMap<String, TypeDeclaration>,
@@ -123,6 +124,7 @@ impl Module
     {
         Module{
             name: name.into(),
+            globals: HashMap::new(),
             functions: HashMap::new(),
             externals: HashMap::new(),
             types: HashMap::new(),
@@ -133,6 +135,11 @@ impl Module
     pub fn import(&mut self, other: &Module)
     {
         self.imports.insert(other.name.clone());
+
+        for (name, global) in &other.globals {
+            let name = format!("{}::{}", other.name, name);
+            self.globals.insert(name, global.clone());
+        }
 
         for func in other.functions.values() {
             let name = format!("{}::{}", other.name, func.sig.name);
@@ -159,6 +166,10 @@ impl TreePrinter for Module
         println!("{}Module: {}", p, self.name);
         for t in self.types.values() {
             t.print(level + 1);
+        }
+
+        for global in self.globals.values() {
+            global.print(level + 1);
         }
 
         for func in self.externals.values() {

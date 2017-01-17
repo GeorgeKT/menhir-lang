@@ -44,7 +44,7 @@ fn run(prog: &str, dump: bool) -> Result<i64, ExecutionError>
         Err(e) => return Err(ExecutionError(format!("Compile error: {}", e))),
     };
 
-    let result = run_byte_code(&bc_mod, "main")?;
+    let result = run_byte_code(&bc_mod, START_CODE_FUNCTION)?;
     match result
     {
         Value::Int(r) => Ok(r),

@@ -123,10 +123,11 @@ fn main()
             */
             panic!("NYI");
         } else {
+            use bytecode::START_CODE_FUNCTION;
             let ret = if run_debugger {
-                debug_byte_code(&bc_mod, "main")
+                debug_byte_code(&bc_mod, START_CODE_FUNCTION)
             } else {
-                run_byte_code(&bc_mod, "main")
+                run_byte_code(&bc_mod, START_CODE_FUNCTION)
             };
             match ret
             {
