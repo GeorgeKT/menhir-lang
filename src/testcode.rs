@@ -7,11 +7,26 @@ pub struct Test
 }
 
 
-pub const ALL_TESTS: [Test; 39] = [
+pub const ALL_TESTS: [Test; 40] = [
+    Test{
+        name: "mutable arguments",
+        ret: 42,
+        debug: true,
+        code: r#"
+            foo(var a: int) -> int {
+                a = a + 2;
+                a
+            }
+            main() -> int {
+                foo(40)
+            }
+        "#
+    },
+
     Test{
         name: "globals",
         ret: 42,
-        debug: true,
+        debug: false,
         code: r#"
             let THE_ANSWER = 42;
             main() -> int {

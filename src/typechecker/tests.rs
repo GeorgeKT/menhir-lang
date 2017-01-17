@@ -119,7 +119,20 @@ fn test_mutability()
                 x
             }
         "#).unwrap_err().error,
-        ErrorCode::TypeError
+        ErrorCode::MutabilityError
+    );
+
+    assert_eq!(
+        type_check_mod(r#"
+            foo(a: int) -> int {
+                a = a + 2;
+                a
+            }
+            main() -> int {
+                foo(5)
+            }
+        "#).unwrap_err().error,
+        ErrorCode::MutabilityError
     );
 
     assert!(

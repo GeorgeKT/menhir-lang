@@ -165,7 +165,7 @@ fn substitute_expr(generic_args: &GenericMapping, e: &Expression) -> CompileResu
         },
 
         Expression::Lambda(ref l) => {
-            let args: Vec<Argument> = l.sig.args.iter().map(|a| Argument::new(a.name.clone(), make_concrete_type(generic_args, &a.typ), a.span.clone())).collect();
+            let args: Vec<Argument> = l.sig.args.iter().map(|a| Argument::new(a.name.clone(), make_concrete_type(generic_args, &a.typ), a.mutable, a.span.clone())).collect();
             let expr = substitute_expr(generic_args, &l.expr)?;
             Ok(lambda(args, expr, l.span.clone()))
         },
@@ -301,7 +301,7 @@ fn instantiate(func: &Function, generic_args: &GenericMapping) -> CompileResult<
         .map(|arg| make_concrete_type(generic_args, &arg.typ))
         .collect();
     let args = func.sig.args.iter()
-        .map(|arg| Argument::new(arg.name.clone(), make_concrete_type(generic_args, &arg.typ), arg.span.clone()))
+        .map(|arg| Argument::new(arg.name.clone(), make_concrete_type(generic_args, &arg.typ), arg.mutable, arg.span.clone()))
         .collect();
     let return_type = make_concrete_type(generic_args, &func.sig.return_type);
     let sig = FunctionSignature{

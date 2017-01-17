@@ -332,7 +332,7 @@ fn test_array_concat()
 
 fn arg(name: &str, typ: Type, span: Span) -> Argument
 {
-    Argument::new(name.into(), typ, span)
+    Argument::new(name.into(), typ, false, span)
 }
 
 #[test]
@@ -407,6 +407,7 @@ fn test_function_with_func_type()
                         ],
                         Type::Int,
                     ),
+                    false,
                     span(1, 5, 1, 24)
                 ),
             ],
@@ -439,8 +440,8 @@ fn test_lambda()
     let e = th_expr("@(a, b) -> a + b");
     assert!(e == lambda(
         vec![
-            Argument::new("a".into(), Type::Generic("a".into()), span(1, 3, 1, 3)),
-            Argument::new("b".into(), Type::Generic("b".into()), span(1, 6, 1, 6)),
+            Argument::new("a".into(), Type::Generic("a".into()), false, span(1, 3, 1, 3)),
+            Argument::new("b".into(), Type::Generic("b".into()), false, span(1, 6, 1, 6)),
         ],
         bin_op(
             Operator::Add,

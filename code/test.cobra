@@ -1,5 +1,7 @@
+foo(var a: int) -> int {
+    a = a + 2;
+    a
+}
 main() -> int {
-    var x = 7;
-    x = x * 11;
-    x
+    foo(40)
 }

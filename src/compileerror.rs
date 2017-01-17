@@ -14,6 +14,7 @@ pub enum ErrorCode
 {
     UnexpectedEOF,
     IOError,
+    MutabilityError,
     UnexpectedChar,
     UnexpectedToken,
     ExpectedIdentifier,

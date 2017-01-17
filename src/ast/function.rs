@@ -6,16 +6,18 @@ pub struct Argument
 {
     pub name: String,
     pub typ: Type,
+    pub mutable: bool,
     pub span: Span,
 }
 
 impl Argument
 {
-    pub fn new(name: String, typ: Type, span: Span) -> Argument
+    pub fn new(name: String, typ: Type, mutable: bool, span: Span) -> Argument
     {
         Argument{
             name: name,
             typ: typ,
+            mutable: mutable,
             span: span,
         }
     }

@@ -262,7 +262,7 @@ fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> Type
     ctx.push_stack(true);
     for arg in &mut fun.sig.args
     {
-        ctx.add(&arg.name, arg.typ.clone(), false, &arg.span)?;
+        ctx.add(&arg.name, arg.typ.clone(), arg.mutable, &arg.span)?;
     }
 
     let et = type_check_expression(ctx, &mut fun.expression, &None)?;
@@ -936,10 +936,10 @@ fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign) -> TypeCheckR
     {
         Expression::NameRef(ref nr) => {
             if !ctx.resolve(&nr.name).map(|rn| rn.mutable).unwrap_or(false) {
-                return err(&nr.span, ErrorCode::TypeError, format!("Attempting to modify {}, which is not mutable", nr.name));
+                return err(&nr.span, ErrorCode::MutabilityError, format!("Attempting to modify {}, which is not mutable", nr.name));
             }
         }
-        _ => return err(&a.left.span(), ErrorCode::TypeError, format!("Attempting to modify a non mutable expression")),
+        _ => return err(&a.left.span(), ErrorCode::MutabilityError, format!("Attempting to modify a non mutable expression")),
     }
 
     type_check_with_conversion(ctx, &mut a.right, &left_type)?;

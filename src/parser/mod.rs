@@ -300,6 +300,13 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
 
 fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool, self_type: &Option<Type>) -> CompileResult<Argument>
 {
+    let mutable = if tq.is_next(TokenKind::Var) {
+        tq.pop()?;
+        true
+    } else {
+        false
+    };
+
     let (name, span) = tq.expect_identifier()?;
     let typ = if tq.is_next(TokenKind::Colon) {
         tq.expect(TokenKind::Colon)?;
@@ -316,7 +323,7 @@ fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool, self_typ
         return err(&span, ErrorCode::MissingType, format!("Type not specified of function argument {}", name));
     };
 
-    Ok(Argument::new(name, typ, span.expanded(tq.pos())))
+    Ok(Argument::new(name, typ, mutable, span.expanded(tq.pos())))
 }
 
 fn parse_function_arguments(tq: &mut TokenQueue, type_is_optional: bool, self_type: &Option<Type>) -> CompileResult<Vec<Argument>>
