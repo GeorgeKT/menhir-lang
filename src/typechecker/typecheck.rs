@@ -954,6 +954,11 @@ fn type_check_while(ctx: &mut TypeCheckerContext, w: &mut WhileLoop) -> TypeChec
     valid(Type::Void)
 }
 
+fn type_check_for(_ctx: &mut TypeCheckerContext, _f: &mut ForLoop) -> TypeCheckResult
+{
+    panic!("NYI")
+}
+
 pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: &Option<Type>) -> CompileResult<Type>
 {
     let type_check_result = match *e
@@ -983,6 +988,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::AddressOf(ref mut a) => type_check_address_of(ctx, a, type_hint),
         Expression::Assign(ref mut a) => type_check_assign(ctx, a),
         Expression::While(ref mut w) => type_check_while(ctx, w),
+        Expression::For(ref mut f) => type_check_for(ctx, f),
         Expression::Void => valid(Type::Void),
         Expression::Nil(_) => valid(Type::Nil),
         Expression::ToOptional(ref mut t) => {

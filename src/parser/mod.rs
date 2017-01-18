@@ -720,6 +720,21 @@ fn parse_while(tq: &mut TokenQueue, start: &Span) -> CompileResult<Expression>
     Ok(while_loop(cond, body, start.expanded(tq.pos())))
 }
 
+
+fn parse_for(tq: &mut TokenQueue, start: &Span) -> CompileResult<Expression>
+{
+    let (loop_variable, _) = tq.expect_identifier()?;
+    tq.expect(TokenKind::In)?;
+
+    let iterable = parse_expression(tq)?;
+    if !tq.is_next(TokenKind::OpenCurly) {
+        tq.expect(TokenKind::Colon)?;
+    }
+
+    let body = parse_expression(tq)?;
+    Ok(for_loop(&loop_variable, iterable, body, start.expanded(tq.pos())))
+}
+
 fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expression>
 {
     match tok.kind
@@ -762,6 +777,10 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
 
         TokenKind::While => {
             parse_while(tq, &tok.span)
+        },
+
+        TokenKind::For => {
+            parse_for(tq, &tok.span)
         },
 
         TokenKind::OpenCurly => {

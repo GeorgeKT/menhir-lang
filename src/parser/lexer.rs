@@ -123,6 +123,7 @@ impl Lexer
             "new" => TokenKind::New,
             "delete" => TokenKind::Delete,
             "while" => TokenKind::While,
+            "for" => TokenKind::For,
             "nil" => TokenKind::Nil,
             "var" => TokenKind::Var,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),

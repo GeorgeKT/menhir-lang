@@ -726,6 +726,10 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
             None
         },
 
+        Expression::For(ref _f) => {
+            panic!("NYI")
+        },
+
         Expression::Nil(_) => {
             let dst = get_dst(func, &Type::Nil);
             Some(dst)
