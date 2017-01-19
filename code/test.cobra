@@ -4,4 +4,5 @@ main() -> int {
     var sum = 0;
     for a in array:
         sum = sum + a;
+    sum
 }

@@ -1,32 +1,10 @@
-extern close(fd: int) -> int
-
-type File {
-    fd: int,
-}
-
-~File(self) {
-    close(self.fd);
-}
-
-File.read(self, bytes: int) -> string {
-    "data"
-}
-
-type Box {
-    inner: *$a,
-}
-
-box(inner: *$a) -> Box<$a> {
-    Box{inner}
-}
-
-~Box(self) {
-    delete self.inner;
+unwrap_or(opt: ?int, default: int) -> int {
+    match opt {
+        ?value => value,
+        nil => default
+    }
 }
 
 main() -> int {
-    let f = box(new File{1});
-    let a = new 5;
-    delete a;
-    0
+    unwrap_or(41, 1) + unwrap_or(nil, 1)
 }

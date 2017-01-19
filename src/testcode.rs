@@ -6,8 +6,22 @@ pub struct Test
     pub code: &'static str,
 }
 
+pub const ALL_TESTS: [Test; 42] = [
+    Test{
+        name: "for loops",
+        ret: 15,
+        debug: true,
+        code: r#"
+            main() -> int {
+                let array = [1, 2, 3, 4, 5];
+                var sum = 0;
+                for a in array:
+                    sum = sum + a;
+                sum
+            }
+        "#
+    },
 
-pub const ALL_TESTS: [Test; 40] = [
     Test{
         name: "mutable arguments",
         ret: 42,
@@ -116,7 +130,7 @@ pub const ALL_TESTS: [Test; 40] = [
             main() -> int {
                 var x = 0;
                 var y = 0;
-                while x < 10 {
+                while x < 10: {
                     y = y + 2;
                     x = x + 1;
                 }
@@ -193,8 +207,26 @@ pub const ALL_TESTS: [Test; 40] = [
         debug: false,
         code: r#"
             max(a: int, b: int) -> int =
-                if a > b: a
-                else b
+                if a > b: a else b
+
+            main() -> int =
+                max(100, 10)
+        "#
+    },
+
+    Test{
+        name: "if test 2",
+        ret: 100,
+        debug: false,
+        code: r#"
+            max(a: int, b: int) -> int {
+                let v = a > b;
+                if v: {
+                    a
+                } else {
+                    b
+                }
+            }
 
             main() -> int =
                 max(100, 10)
