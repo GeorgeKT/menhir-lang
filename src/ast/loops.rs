@@ -55,7 +55,7 @@ impl TreePrinter for ForLoop
     fn print(&self, level: usize)
     {
         let p = prefix(level);
-        println!("{}for {}(span: {})", p, self.loop_variable, self.span);
+        println!("{}for {} (span: {})", p, self.loop_variable, self.span);
         self.iterable.print(level + 1);
         self.body.print(level + 1);
     }

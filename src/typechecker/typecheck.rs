@@ -954,9 +954,26 @@ fn type_check_while(ctx: &mut TypeCheckerContext, w: &mut WhileLoop) -> TypeChec
     valid(Type::Void)
 }
 
-fn type_check_for(_ctx: &mut TypeCheckerContext, _f: &mut ForLoop) -> TypeCheckResult
+fn type_check_for(ctx: &mut TypeCheckerContext, f: &mut ForLoop) -> TypeCheckResult
 {
-    panic!("NYI")
+    let typ = type_check_expression(ctx, &mut f.iterable, &None)?;
+    match typ
+    {
+        // Iterable
+        Type::String | Type::Array(_) | Type::Slice(_) => {
+            ctx.push_stack(false);
+            let element_type = if let Some(et) = typ.get_element_type() {
+                et
+            } else {
+                return err(&f.span, ErrorCode::TypeError, format!("Cannot determine type of {}", f.loop_variable))
+            };
+
+            ctx.add(&f.loop_variable, element_type, false, &f.span)?;
+            type_check_expression(ctx, &mut f.body, &None)?;
+            valid(Type::Void)
+        },
+        _ => err(&f.span, ErrorCode::TypeError, format!("Cannot iterate over expressions of type {}", typ)),
+    }
 }
 
 pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: &Option<Type>) -> CompileResult<Type>
