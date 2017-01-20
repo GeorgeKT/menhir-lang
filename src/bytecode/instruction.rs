@@ -49,13 +49,34 @@ impl fmt::Display for ByteCodeProperty
 
 
 #[derive(Debug, Clone)]
+pub enum Operand
+{
+    Var(Var),
+    Const(ByteCodeLiteral),
+    //Func(String),
+}
+
+impl fmt::Display for Operand
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
+    {
+        match *self
+        {
+            Operand::Var(ref var) => write!(f, "{}", var),
+            Operand::Const(ref lit) => write!(f, "{}", lit),
+        }
+    }
+}
+
+
+#[derive(Debug, Clone)]
 pub enum Instruction
 {
     Store{dst: Var, src: Var},
     StoreLit{dst: Var, lit: ByteCodeLiteral},
     StoreFunc{dst: Var, func: String},
     Load{dst: Var, ptr: Var},
-    LoadMember{dst: Var, obj: Var, member_index: usize},
+    LoadMember{dst: Var, obj: Var, member_index: Operand},
     AddressOf{dst: Var, obj: Var},
     GetProperty{dst: Var, obj: Var, prop: ByteCodeProperty},
     SetProperty{obj: Var, prop: ByteCodeProperty, val: usize},
@@ -108,14 +129,24 @@ pub fn load_instr(dst: &Var, ptr: &Var) -> Instruction
     }
 }
 
+pub fn load_member_instr_with_var(dst: &Var, obj: &Var, member_index: &Var) -> Instruction
+{
+    Instruction::LoadMember{
+        dst: dst.clone(),
+        obj: obj.clone(),
+        member_index: Operand::Var(member_index.clone()),
+    }
+}
+
 pub fn load_member_instr(dst: &Var, obj: &Var, member_index: usize) -> Instruction
 {
     Instruction::LoadMember{
         dst: dst.clone(),
         obj: obj.clone(),
-        member_index: member_index,
+        member_index: Operand::Const(ByteCodeLiteral::Int(member_index as u64)),
     }
 }
+
 
 pub fn address_of_instr(dst: &Var, obj: &Var) -> Instruction
 {
@@ -221,7 +252,7 @@ impl fmt::Display for Instruction
                 writeln!(f, "  load {} {}", dst, ptr)
             },
 
-            Instruction::LoadMember{ref dst, ref obj, member_index} => {
+            Instruction::LoadMember{ref dst, ref obj, ref member_index} => {
                 writeln!(f, "  loadm {} {}.{}", dst, obj, member_index)
             },
 

@@ -968,6 +968,7 @@ fn type_check_for(ctx: &mut TypeCheckerContext, f: &mut ForLoop) -> TypeCheckRes
                 return err(&f.span, ErrorCode::TypeError, format!("Cannot determine type of {}", f.loop_variable))
             };
 
+            f.loop_variable_type = element_type.clone();
             ctx.add(&f.loop_variable, element_type, false, &f.span)?;
             type_check_expression(ctx, &mut f.body, &None)?;
             valid(Type::Void)

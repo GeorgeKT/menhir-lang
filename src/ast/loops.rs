@@ -1,4 +1,4 @@
-use ast::{Expression, TreePrinter, prefix};
+use ast::{Expression, TreePrinter, Type, prefix};
 use span::{Span};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -34,6 +34,7 @@ impl TreePrinter for WhileLoop
 pub struct ForLoop
 {
     pub loop_variable: String,
+    pub loop_variable_type: Type,
     pub iterable: Expression,
     pub body: Expression,
     pub span: Span,
@@ -43,6 +44,7 @@ pub fn for_loop(loop_variable: &str, iterable: Expression, body: Expression, spa
 {
     Expression::For(Box::new(ForLoop{
         loop_variable: loop_variable.into(),
+        loop_variable_type: Type::Unknown,
         iterable: iterable,
         body: body,
         span: span,

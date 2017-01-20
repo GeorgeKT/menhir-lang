@@ -558,6 +558,50 @@ fn while_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, w: &Whi
     func.set_current_bb(post_while_bb);
 }
 
+fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLoop)
+{
+    func.push_scope();
+    func.push_destination(None);
+    let iterable = to_bc(bc_mod, func, &f.iterable);
+    func.pop_destination();
+
+    let loop_variable = stack_alloc(func, &f.loop_variable_type, Some(&f.loop_variable));
+    let loop_variable_ptr = stack_alloc(func, &ptr_type(f.loop_variable_type.clone()), None);
+
+    let index = stack_alloc(func, &Type::Int, None);
+    func.add(store_lit_instr(&index, ByteCodeLiteral::Int(0)));
+
+    let incr = stack_alloc(func, &Type::Int, None);
+    store_lit_instr(&incr, ByteCodeLiteral::Int(1));
+
+    let len = stack_alloc(func, &Type::Int, None);
+    func.add(get_prop_instr(&len, &iterable, ByteCodeProperty::Len));
+
+    let cond_bb = func.create_basic_block();
+    let body_bb = func.create_basic_block();
+    let post_for_bb = func.create_basic_block();
+
+    func.add_basic_block(cond_bb);
+    func.set_current_bb(cond_bb);
+    let cmp = stack_alloc(func, &Type::Bool, None);
+    func.add(binary_op_instr(&cmp, Operator::LessThan, index.clone(), len));
+    func.add(branch_if_instr(&cmp, body_bb, post_for_bb));
+
+    func.add_basic_block(body_bb);
+    func.set_current_bb(body_bb);
+    func.add(load_member_instr_with_var(&loop_variable_ptr, &iterable, &index));
+    func.add(load_instr(&loop_variable, &loop_variable_ptr));
+    func.push_destination(None);
+    expr_to_bc(bc_mod, func, &f.body);
+    func.pop_destination();
+    func.add(binary_op_instr(&index, Operator::Add, index.clone(), incr));
+    func.add(Instruction::Branch(cond_bb));
+
+    func.add_basic_block(post_for_bb);
+    func.set_current_bb(post_for_bb);
+    func.pop_scope();
+}
+
 fn to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &Expression) -> Var
 {
     expr_to_bc(bc_mod, func, expr).expect("Expression must return a value")
@@ -726,8 +770,9 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
             None
         },
 
-        Expression::For(ref _f) => {
-            panic!("NYI")
+        Expression::For(ref f) => {
+            for_to_bc(bc_mod, func, f);
+            None
         },
 
         Expression::Nil(_) => {

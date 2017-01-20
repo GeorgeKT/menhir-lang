@@ -331,10 +331,22 @@ impl Interpreter
         })
     }
 
-    fn load_member(&mut self, dst: &str, obj: &str, member_index: usize) -> Result<(), ExecutionError>
+    fn load_member(&mut self, dst: &str, obj: &str, member_index: &Operand) -> Result<(), ExecutionError>
     {
         let obj = self.get_variable(obj)?;
-        let vr = obj.apply(|value: &Value| value.get_member_ptr(member_index))?;
+        let index = match *member_index
+        {
+            Operand::Const(ByteCodeLiteral::Int(index)) => index as usize,
+            Operand::Var(ref v) =>
+                if let Value::Int(v) = self.get_variable(&v.name)?.clone_value()? {
+                    v as usize
+                } else {
+                    return Err(ExecutionError("load member instruction with non integer index value".into()));
+                },
+            _ => return Err(ExecutionError("load member instruction with non integer index value".into())),
+        };
+
+        let vr = obj.apply(|value: &Value| value.get_member_ptr(index as usize))?;
         self.replace_variable(dst, ValueRef::new(vr))?;
         Ok(())
     }
@@ -478,8 +490,8 @@ impl Interpreter
                 next
             },
 
-            Instruction::LoadMember{ref dst, ref obj, member_index} => {
-                self.load_member(&dst.name, &obj.name, member_index)?;
+            Instruction::LoadMember{ref dst, ref obj, ref member_index} => {
+                self.load_member(&dst.name, &obj.name, &member_index)?;
                 next
             },
 
