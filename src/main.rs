@@ -24,7 +24,7 @@ use std::process::exit;
 use docopt::Docopt;
 use parser::{ParserOptions, parse_file};
 use typechecker::{type_check_module};
-use bytecode::{compile_to_byte_code, run_byte_code, debug_byte_code};
+use bytecode::{compile_to_byte_code, run_byte_code, debug_byte_code, optimize_module, ByteCodeModule};
 
 
 static USAGE: &'static str =  "
@@ -66,6 +66,16 @@ fn default_output_file(input_file: &str) -> String
         .into()
 }
 
+fn dump_byte_code(bc_mod: &ByteCodeModule, dump_flags: &str)
+{
+    if dump_flags.contains("bytecode") || dump_flags.contains("all") {
+        println!("bytecode:");
+        println!("------\n");
+        println!("{}", bc_mod);
+        println!("------\n");
+    }
+}
+
 fn main()
 {
     let args: Args = Docopt::new(USAGE)
@@ -75,6 +85,7 @@ fn main()
     let input_file = args.arg_input_file.expect("Missing input file argument");
     let run_interpreter = args.flag_interpret.unwrap_or(false);
     let run_debugger = args.flag_debug.unwrap_or(false);
+    let optimize = args.flag_optimize.unwrap_or(false);
     let _output_file = args.flag_output.unwrap_or_else(|| default_output_file(&input_file));
     let dump_flags = args.flag_dump.unwrap_or_default();
 
@@ -105,14 +116,11 @@ fn main()
             println!("------\n");
         }
 
-
-        let bc_mod = compile_to_byte_code(&module);
-
-        if dump_flags.contains("bytecode") || dump_flags.contains("all") {
-            println!("bytecode:");
-            println!("------\n");
-            println!("{}", bc_mod);
-            println!("------\n");
+        let mut bc_mod = compile_to_byte_code(&module);
+        dump_byte_code(&bc_mod, &dump_flags);
+        if optimize {
+            optimize_module(&mut bc_mod);
+            dump_byte_code(&bc_mod, &dump_flags);
         }
 
         if !run_debugger && !run_interpreter {

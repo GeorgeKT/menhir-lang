@@ -3,13 +3,13 @@ mod debugger;
 mod function;
 mod instruction;
 mod interpreter;
+mod optimizer;
 mod value;
 mod valueref;
 #[cfg(test)]
 mod tests;
 
 use std::fmt;
-use std::rc::Rc;
 use std::collections::HashMap;
 
 use self::function::ByteCodeFunction;
@@ -29,8 +29,20 @@ impl fmt::Display for ExecutionError
 pub struct ByteCodeModule
 {
     pub name: String,
-    pub functions: HashMap<String, Rc<ByteCodeFunction>>,
-    pub exit_function: Rc<ByteCodeFunction>,
+    functions: HashMap<String, ByteCodeFunction>,
+    exit_function: ByteCodeFunction,
+}
+
+impl ByteCodeModule
+{
+    fn get_function(&self, name: &str) -> Option<&ByteCodeFunction>
+    {
+        if name == self.exit_function.sig.name {
+            Some(&self.exit_function)
+        } else {
+            self.functions.get(name)
+        }
+    }
 }
 
 impl fmt::Display for ByteCodeModule
@@ -45,6 +57,8 @@ impl fmt::Display for ByteCodeModule
     }
 }
 
+
 pub use self::compiler::{compile_to_byte_code, START_CODE_FUNCTION};
 pub use self::interpreter::run_byte_code;
 pub use self::debugger::debug_byte_code;
+pub use self::optimizer::optimize_module;

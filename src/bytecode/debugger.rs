@@ -1,6 +1,4 @@
 use std::io::prelude::*;
-use std::fmt;
-use std::rc::Rc;
 use shrust::{Shell, ShellIO, ExecResult, ExecError};
 use bytecode::{ExecutionError, ByteCodeModule};
 use super::function::*;
@@ -11,17 +9,17 @@ use super::value::Value;
 #[derive(Debug, Clone)]
 pub struct ByteCodeIndex
 {
-    pub function: Rc<ByteCodeFunction>,
+    pub function: String,
     pub basic_block: BasicBlockRef,      // current basic block
     pub instruction: usize,     // current instruction in the basic block
 }
 
 impl ByteCodeIndex
 {
-    pub fn new(function: Rc<ByteCodeFunction>, bb_ref: BasicBlockRef, instruction: usize) -> ByteCodeIndex
+    pub fn new<S: Into<String>>(function: S, bb_ref: BasicBlockRef, instruction: usize) -> ByteCodeIndex
     {
         ByteCodeIndex{
-            function: function,
+            function: function.into(),
             basic_block: bb_ref,
             instruction: instruction,
         }
@@ -44,21 +42,21 @@ impl ByteCodeIndex
             instruction: 0,
         }
     }
-}
 
-impl fmt::Display for ByteCodeIndex
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
+
+    pub fn print(&self, module: &ByteCodeModule)
     {
-        match self.function.blocks.get(&self.basic_block)
+        if module.functions
+            .get(&self.function)
+            .and_then(|function| function.blocks.get(&self.basic_block))
             .and_then(|bb| bb.instructions.get(self.instruction))
-            .map(|inst| write!(f, "{}", inst))
+            .map(|inst| print!("{}", inst))
+            .is_none()
         {
-            Some(res) => res,
-            None => write!(f, "Invalid Location (function: {},  bb: {}, instruction: {})",
-                self.function.sig.name, self.basic_block, self.instruction)
+            println!("Invalid Location (function: {},  bb: {}, instruction: {})", self.function, self.basic_block, self.instruction)
         }
     }
+
 }
 
 struct DebuggerContext<'a>
@@ -92,7 +90,7 @@ fn step(io: &mut ShellIO, dc: &mut DebuggerContext) -> ExecResult
     dc.index = match dc.interpreter.step(&dc.index, dc.module)
     {
         Ok(StepResult::Continue(new_index)) => {
-            write!(io, "{}", new_index)?;
+            new_index.print(dc.module);
             new_index
         },
 
@@ -137,7 +135,7 @@ pub fn debug_byte_code(module: &ByteCodeModule, function: &str) -> Result<Value,
 {
     let mut interpreter = Interpreter::new();
     let index = interpreter.start(function, module)?;
-    print!("{}", index);
+    index.print(module);
     let mut shell = Shell::new(DebuggerContext{
         interpreter: interpreter,
         index: index,

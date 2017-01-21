@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::ops::Deref;
 use bytecode::*;
 use ast::{Type, Operator};
@@ -149,7 +148,7 @@ impl Interpreter
         match *op
         {
             Operand::Var(ref src) => Ok(self.get_variable(&src.name)?.clone_value()?),
-            Operand::Func(ref func) => Ok(Value::Func(self.get_function(func, module)?)),
+            Operand::Func(ref func) => Ok(Value::Func(self.get_function(func, module)?.sig.name.clone())),
             _ => Ok(Value::from_operand(op)?),
         }
     }
@@ -280,7 +279,7 @@ impl Interpreter
         Ok(())
     }
 
-    fn call(&mut self, dst: &str, func: Rc<ByteCodeFunction>, args: &[Operand], index: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
+    fn call(&mut self, dst: &str, func: &ByteCodeFunction, args: &[Operand], index: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
     {
         println!("{}:", func.sig.name);
         let return_address = index.next();
@@ -296,7 +295,7 @@ impl Interpreter
             self.add_variable(&func.sig.args[idx].name, arg_value)?;
         }
 
-        Ok(StepResult::Continue(ByteCodeIndex::new(func.clone(), 0, 0)))
+        Ok(StepResult::Continue(ByteCodeIndex::new(func.sig.name.clone(), 0, 0)))
     }
 
     fn pop_until_end_of_function(&mut self) -> Result<ReturnAddress, ExecutionError>
@@ -436,15 +435,16 @@ impl Interpreter
         Ok(())
     }
 
-    fn get_function(&self, func: &str, module: &ByteCodeModule) -> Result<Rc<ByteCodeFunction>, ExecutionError>
+    fn get_function<'a>(&self, func: &str, module: &'a ByteCodeModule) -> Result<&'a ByteCodeFunction, ExecutionError>
     {
-        match module.functions.get(func) {
-            Some(f) => Ok(f.clone()),
+        match module.get_function(func) {
+            Some(f) => Ok(f),
             None => {
                 let v = self.get_variable(func)?;
                 v.apply(|val: &Value|
                     if let Value::Func(ref f) = *val {
-                        Ok(f.clone())
+                        module.get_function(f)
+                            .ok_or_else(|| ExecutionError(format!("Unknown function {}", f)))
                     } else {
                         Err(ExecutionError(format!("{} is not callable", func)))
                     }
@@ -539,7 +539,7 @@ impl Interpreter
             Instruction::Call{ref dst, ref func, ref args} => {
                 let func = self.get_function(func, module)?;
                 let args = args.iter().cloned().collect::<Vec<_>>();
-                self.call(&dst.name, func, &args, index, module)
+                self.call(&dst.name, &func, &args, index, module)
             },
 
             Instruction::Cast{ref dst, ref src} => {
@@ -605,7 +605,7 @@ impl Interpreter
     {
         let mut index = self.start(function, module)?;
         loop {
-            print!("{}", index);
+            index.print(module);
             let sr = self.step(&index, module)?;
             index = match sr {
                 StepResult::Continue(new_index) => new_index,
@@ -618,12 +618,12 @@ impl Interpreter
 
     pub fn start(&mut self, function: &str, module: &ByteCodeModule) -> Result<ByteCodeIndex, ExecutionError>
     {
-        let func = module.functions.get(function).ok_or_else(|| ExecutionError(format!("Unknown function {}", function)))?;
+        let func = module.get_function(function).ok_or_else(|| ExecutionError(format!("Unknown function {}", function)))?;
         let bottom_frame = StackFrame::new();
         self.stack.push(bottom_frame);
 
         self.add_variable(RETURN_VALUE, Value::Void)?;
-        match self.call(RETURN_VALUE, func.clone(), &Vec::new(), &ByteCodeIndex::new(module.exit_function.clone(), 0, 0), module)?
+        match self.call(RETURN_VALUE, func.clone(), &Vec::new(), &ByteCodeIndex::new(module.exit_function.sig.name.clone(), 0, 0), module)?
         {
             StepResult::Continue(index) => Ok(index),
             StepResult::Exit(_) => Err(ExecutionError("Unexpected exit".into()))
@@ -632,7 +632,9 @@ impl Interpreter
 
     pub fn step(&mut self, s: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
     {
-        let bb = s.function.blocks.get(&s.basic_block)
+        let func = module.get_function(&s.function)
+            .ok_or_else(|| ExecutionError(format!("Unknown function {}", s.function)))?;
+        let bb = func.blocks.get(&s.basic_block)
             .ok_or_else(|| ExecutionError(format!("Function does not have basic block {}", s.basic_block)))?;
 
         if let Some(instruction) = bb.instructions.get(s.instruction) {
