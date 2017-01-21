@@ -68,7 +68,12 @@ fn parse_number(num: &str, span: &Span) -> CompileResult<Literal>
     } else {
         // Should be an integer
         match num.parse::<u64>() {
-            Ok(i) => Ok(Literal::Int(span.clone(), i)),
+            Ok(i) =>
+                if i > (i64::max_value() as u64) {
+                    Ok(Literal::UInt(span.clone(), i))
+                } else {
+                    Ok(Literal::Int(span.clone(), i as i64))
+                },
             Err(_) => err(span, ErrorCode::InvalidInteger, format!("{} is not a valid integer", num))
         }
     }
@@ -724,7 +729,7 @@ fn parse_for(tq: &mut TokenQueue, start: &Span) -> CompileResult<Expression>
 
     let iterable = parse_expression(tq)?;
     tq.expect(TokenKind::Colon)?;
-    
+
     let body = parse_expression(tq)?;
     Ok(for_loop(&loop_variable, iterable, body, start.expanded(tq.pos())))
 }

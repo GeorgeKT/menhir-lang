@@ -144,8 +144,20 @@ impl Interpreter
         })
     }
 
-    fn store(&mut self, name: &str, val: Value) -> Result<(), ExecutionError>
+    fn get_operand_value(&self, op: &Operand, module: &ByteCodeModule) -> Result<Value, ExecutionError>
     {
+        match *op
+        {
+            Operand::Var(ref src) => Ok(self.get_variable(&src.name)?.clone_value()?),
+            Operand::Func(ref func) => Ok(Value::Func(self.get_function(func, module)?)),
+            _ => Ok(Value::from_operand(op)?),
+        }
+    }
+
+    fn store(&mut self, name: &str, val: &Operand, module: &ByteCodeModule) -> Result<(), ExecutionError>
+    {
+        let val = self.get_operand_value(val, module)?;
+
         self.apply_on_variable(name, |vr: &mut ValueRef| {
             vr.apply_mut(|v: &mut Value| {
                 match *v
@@ -163,29 +175,28 @@ impl Interpreter
         })
     }
 
-    fn unary_op(&mut self, dst: &str, op: Operator, var: &str) -> Result<(), ExecutionError>
+    fn unary_op(&mut self, dst: &str, op: Operator, var: &Operand, module: &ByteCodeModule) -> Result<(), ExecutionError>
     {
-        let val = self.get_variable(var)?;
-        let result = val.apply(|v: &Value| {
-            match (op, v)
+        let val = self.get_operand_value(var, module)?;
+        let result =
+            match (op, val)
             {
-                (Operator::Sub, &Value::Int(num)) => Ok(Value::Int(-num)),
-                (Operator::Sub, &Value::UInt(num)) => Ok(Value::Int(-(num as i64))),
-                (Operator::Sub, &Value::Float(num)) => Ok(Value::Float(-num)),
-                (Operator::Not, &Value::Bool(b)) => Ok(Value::Bool(!b)),
-                _ => Err(ExecutionError(format!("Invalid unary op {}", op))),
-            }
-        })?;
+                (Operator::Sub, Value::Int(num)) => Value::Int(-num),
+                (Operator::Sub, Value::UInt(num)) => Value::Int(-(num as i64)),
+                (Operator::Sub, Value::Float(num)) => Value::Float(-num),
+                (Operator::Not, Value::Bool(b)) => Value::Bool(!b),
+                _ => return Err(ExecutionError(format!("Invalid unary op {}", op))),
+            };
 
         self.update_variable(dst, result)?;
         Ok(())
     }
 
     #[cfg_attr(feature = "cargo-clippy", allow(float_cmp, match_same_arms))]
-    fn binary_op(&mut self, dst: &str, op: Operator, left: &str, right: &str) -> Result<(), ExecutionError>
+    fn binary_op(&mut self, dst: &str, op: Operator, left: &Operand, right: &Operand, module: &ByteCodeModule) -> Result<(), ExecutionError>
     {
-        let left = self.get_variable(left)?.clone_value()?;
-        let right = self.get_variable(right)?.clone_value()?;
+        let left = self.get_operand_value(left, module)?;
+        let right = self.get_operand_value(right, module)?;
 
         let value = match (op, left, right)
         {
@@ -261,7 +272,7 @@ impl Interpreter
                 }
             }
 
-            _ => return Err(ExecutionError(format!("Operator {} not supported on these operands", op))),
+            (_, left, right) => return Err(ExecutionError(format!("Operator {} not supported on operands ({}) and ({})", op, left, right))),
         };
 
 
@@ -269,14 +280,14 @@ impl Interpreter
         Ok(())
     }
 
-    fn call(&mut self, dst: &str, func: Rc<ByteCodeFunction>, args: &[String], index: &ByteCodeIndex) -> Result<StepResult, ExecutionError>
+    fn call(&mut self, dst: &str, func: Rc<ByteCodeFunction>, args: &[Operand], index: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
     {
         println!("{}:", func.sig.name);
         let return_address = index.next();
 
         let mut arg_values = Vec::new();
         for arg in args {
-            let arg_value = self.get_variable(arg)?.clone_value()?;
+            let arg_value = self.get_operand_value(arg, module)?;
             arg_values.push(arg_value);
         }
 
@@ -336,14 +347,16 @@ impl Interpreter
         let obj = self.get_variable(obj)?;
         let index = match *member_index
         {
-            Operand::Const(ByteCodeLiteral::Int(index)) => index as usize,
+            Operand::Int(index) if index >= 0 => index as usize,
+            Operand::UInt(index) => index as usize,
             Operand::Var(ref v) =>
-                if let Value::Int(v) = self.get_variable(&v.name)?.clone_value()? {
-                    v as usize
-                } else {
-                    return Err(ExecutionError("load member instruction with non integer index value".into()));
+                match self.get_variable(&v.name)?.clone_value()?
+                {
+                    Value::Int(index) if index >= 0 => index as usize,
+                    Value::UInt(index) => index as usize,
+                    _ => return Err(ExecutionError("load member instruction with non integer or negative index value".into())),
                 },
-            _ => return Err(ExecutionError("load member instruction with non integer index value".into())),
+            _ => return Err(ExecutionError("load member instruction with non integer or negative index value".into())),
         };
 
         let vr = obj.apply(|value: &Value| value.get_member_ptr(index as usize))?;
@@ -375,22 +388,20 @@ impl Interpreter
         )
     }
 
-    fn get_int(&self, name: &str) -> Result<i64, ExecutionError>
+    fn get_index(&self, op: &Operand, module: &ByteCodeModule) -> Result<usize, ExecutionError>
     {
-        self.get_variable(name)?
-            .apply(|vr: &Value| {
-                if let Value::Int(v) = *vr {
-                    Ok(v)
-                } else {
-                    Err(ExecutionError(format!("{} is not an integer", name)))
-                }
-            })
+        match self.get_operand_value(op, module)?
+        {
+            Value::UInt(v) => Ok(v as usize),
+            Value::Int(v) if v >= 0 => Ok(v as usize),
+            _ => Err(ExecutionError(format!("{} is not an integer or a negative integer", op))),
+        }
     }
 
-    fn slice(&mut self, dst: &str, array: &str, start: &str, len: &str) -> Result<(), ExecutionError>
+    fn slice(&mut self, dst: &str, array: &str, start: &Operand, len: &Operand, module: &ByteCodeModule) -> Result<(), ExecutionError>
     {
-        let start_value = self.get_int(start)? as usize;
-        let len_value = self.get_int(len)? as usize;
+        let start_value = self.get_index(start, module)?;
+        let len_value = self.get_index(len, module)?;
         let slice = self.get_variable(array)?.apply(|vr: &Value| {
             match *vr
             {
@@ -468,20 +479,7 @@ impl Interpreter
             },
 
             Instruction::Store{ref dst, ref src} => {
-                let new_value = self.get_variable(&src.name)?.clone_value()?;
-                self.store(&dst.name, new_value)?;
-                next
-            },
-
-            Instruction::StoreLit{ref dst, ref lit} => {
-                let v = Value::from_literal(lit)?;
-                self.store(&dst.name, v)?;
-                next
-            },
-
-            Instruction::StoreFunc{ref dst, ref func} => {
-                let func = self.get_function(func, module)?;
-                self.store(&dst.name, Value::Func(func))?;
+                self.store(&dst.name, src, module)?;
                 next
             },
 
@@ -512,19 +510,19 @@ impl Interpreter
             },
 
             Instruction::UnaryOp{ref dst, op, ref src} => {
-                self.unary_op(&dst.name, op, &src.name)?;
+                self.unary_op(&dst.name, op, &src, module)?;
                 next
             },
 
             Instruction::BinaryOp{ref dst, op, ref left, ref right} => {
-                self.binary_op(&dst.name, op, &left.name, &right.name)?;
+                self.binary_op(&dst.name, op, &left, &right, module)?;
                 next
             },
 
             Instruction::Call{ref dst, ref func, ref args} => {
                 let func = self.get_function(func, module)?;
-                let args = args.iter().map(|a| a.name.clone()).collect::<Vec<_>>();
-                self.call(&dst.name, func, &args, index)
+                let args = args.iter().cloned().collect::<Vec<_>>();
+                self.call(&dst.name, func, &args, index, module)
             },
 
             Instruction::StackAlloc(ref var) => {
@@ -564,7 +562,7 @@ impl Interpreter
             },
 
             Instruction::Slice{ref dst, ref src, ref start, ref len} => {
-                self.slice(&dst.name, &src.name, &start.name, &len.name)?;
+                self.slice(&dst.name, &src.name, &start, &len, module)?;
                 next
             },
 
@@ -581,9 +579,9 @@ impl Interpreter
     }
 
 
-    pub fn run_function(&mut self, function: &str, args: Vec<Value>, module: &ByteCodeModule) -> Result<Value, ExecutionError>
+    pub fn run_function(&mut self, function: &str, module: &ByteCodeModule) -> Result<Value, ExecutionError>
     {
-        let mut index = self.start(function, args, module)?;
+        let mut index = self.start(function, module)?;
         loop {
             print!("{}", index);
             let sr = self.step(&index, module)?;
@@ -596,21 +594,14 @@ impl Interpreter
         }
     }
 
-    pub fn start(&mut self, function: &str, args: Vec<Value>, module: &ByteCodeModule) -> Result<ByteCodeIndex, ExecutionError>
+    pub fn start(&mut self, function: &str, module: &ByteCodeModule) -> Result<ByteCodeIndex, ExecutionError>
     {
         let func = module.functions.get(function).ok_or_else(|| ExecutionError(format!("Unknown function {}", function)))?;
         let bottom_frame = StackFrame::new();
         self.stack.push(bottom_frame);
 
-        let mut call_args = Vec::new();
-        for arg in &args {
-            let name = "arg0".to_string();
-            self.add_variable(&name, arg.clone())?;
-            call_args.push(name);
-        }
-
         self.add_variable(RETURN_VALUE, Value::Void)?;
-        match self.call(RETURN_VALUE, func.clone(), &call_args, &ByteCodeIndex::new(module.exit_function.clone(), 0, 0))?
+        match self.call(RETURN_VALUE, func.clone(), &Vec::new(), &ByteCodeIndex::new(module.exit_function.clone(), 0, 0), module)?
         {
             StepResult::Continue(index) => Ok(index),
             StepResult::Exit(_) => Err(ExecutionError("Unexpected exit".into()))
@@ -633,5 +624,5 @@ impl Interpreter
 pub fn run_byte_code(module: &ByteCodeModule, function: &str) -> Result<Value, ExecutionError>
 {
     let mut interpreter = Interpreter::new();
-    interpreter.run_function(function, vec![], module)
+    interpreter.run_function(function, module)
 }

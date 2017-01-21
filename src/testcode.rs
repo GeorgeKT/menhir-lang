@@ -25,7 +25,7 @@ pub const ALL_TESTS: [Test; 42] = [
     Test{
         name: "mutable arguments",
         ret: 42,
-        debug: true,
+        debug: false,
         code: r#"
             foo(var a: int) -> int {
                 a = a + 2;

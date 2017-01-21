@@ -4,7 +4,8 @@ use span::Span;
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Literal
 {
-    Int(Span, u64),
+    Int(Span, i64),
+    UInt(Span, u64),
     Bool(Span, bool),
     Char(Span, u8),
     Float(Span, String), // Keep as string until we generate code, so we can compare it
@@ -19,6 +20,7 @@ impl Literal
         match *self
         {
             Literal::Int(_, _) => Type::Int,
+            Literal::UInt(_, _) => Type::UInt,
             Literal::Float(_, _) => Type::Float,
             Literal::Bool(_, _) => Type::Bool,
             Literal::Char(_, _) => Type::Char,
@@ -32,6 +34,7 @@ impl Literal
         match *self
         {
             Literal::Int(ref span, _) |
+            Literal::UInt(ref span, _) |
             Literal::Float(ref span, _) |
             Literal::Bool(ref span, _) |
             Literal::Char(ref span, _) |
@@ -49,6 +52,7 @@ impl TreePrinter for Literal
         match *self
         {
             Literal::Int(ref s, v) => println!("{}int {} ({})", p, v, s),
+            Literal::UInt(ref s, v) => println!("{}uint {} ({})", p, v, s),
             Literal::Float(ref s, ref v) => println!("{}float {} ({})", p, v, s),
             Literal::Bool(ref s, v) => println!("{}bool {} ({})", p, v, s),
             Literal::Char(ref s, v) => println!("{}char {} ({})", p, v, s),
