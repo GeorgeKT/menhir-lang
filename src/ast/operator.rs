@@ -18,6 +18,7 @@ pub enum Operator
     And,
     Or,
     Dot,
+    As,
 }
 
 pub const TOP_PRECEDENCE: usize = 2000;
@@ -28,7 +29,7 @@ impl Operator
     {
         match *self
         {
-            Operator::Not | Operator::Dot => TOP_PRECEDENCE,
+            Operator::Not | Operator::Dot | Operator::As => TOP_PRECEDENCE,
             Operator::Mul | Operator::Div | Operator::Mod => TOP_PRECEDENCE - 100,
             Operator::Add | Operator::Sub => TOP_PRECEDENCE - 200,
             Operator::LessThan | Operator::GreaterThan | Operator::LessThanEquals |
@@ -69,6 +70,7 @@ impl fmt::Display for Operator
             Operator::And => write!(fmt, "&&"),
             Operator::Or => write!(fmt, "||"),
             Operator::Dot => write!(fmt, "."),
+            Operator::As => write!(fmt, "as"),
         }
     }
 }

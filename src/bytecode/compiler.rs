@@ -587,6 +587,16 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
     func.pop_scope();
 }
 
+fn cast_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, c: &TypeCast) -> Var
+{
+    let dst = get_dst(func, &c.destination_type);
+    func.push_destination(None);
+    let inner = to_bc(bc_mod, func, &c.inner);
+    func.pop_destination();
+    func.add(cast_instr(&dst, &inner));
+    dst
+}
+
 fn to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &Expression) -> Var
 {
     expr_to_bc(bc_mod, func, expr).expect("Expression must return a value")
@@ -777,6 +787,10 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
             func.pop_destination();
             func.add(store_instr(&dst, &inner));
             Some(dst)
+        },
+
+        Expression::Cast(ref c) => {
+            Some(cast_to_bc(bc_mod, func, c))
         },
     }
 }

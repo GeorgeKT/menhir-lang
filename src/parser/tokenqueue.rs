@@ -145,6 +145,20 @@ impl TokenQueue
             None => false,
         }
     }
+
+    pub fn is_next_identifier(&self, value: &str) -> bool
+    {
+        match self.tokens.front()
+        {
+            Some(tok) =>
+                if let TokenKind::Identifier(ref v) = tok.kind {
+                    *v == *value
+                } else {
+                    false
+                },
+            None => false,
+        }
+    }
 }
 
 impl Iterator for TokenQueue

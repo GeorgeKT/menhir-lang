@@ -108,7 +108,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
     fn basic_bin_op_checks(span: &Span, operator: Operator, left_type: &Type, right_type: &Type) -> CompileResult<()>
     {
         if left_type != right_type {
-            return err(span, ErrorCode::TypeError, format!("Operator {} expects operands of the same type", operator));
+            return err(span, ErrorCode::TypeError, format!("Operator {} expects operands of the same type (left type: {}, right type: {})", operator, left_type, right_type));
         }
 
         if !left_type.is_operator_supported(operator) {
@@ -977,6 +977,21 @@ fn type_check_for(ctx: &mut TypeCheckerContext, f: &mut ForLoop) -> TypeCheckRes
     }
 }
 
+fn type_check_cast(ctx: &mut TypeCheckerContext, c: &mut TypeCast) -> TypeCheckResult
+{
+    let inner_type = type_check_expression(ctx, &mut c.inner, &None)?;
+    match (inner_type, &c.destination_type)
+    {
+        (Type::Int, &Type::UInt) |
+        (Type::Int, &Type::Float) |
+        (Type::UInt, &Type::Int) |
+        (Type::UInt, &Type::Float) |
+        (Type::Float, &Type::Int) |
+        (Type::Float, &Type::UInt) => valid(c.destination_type.clone()),
+        (inner_type, _) => err(&c.span, ErrorCode::TypeError, format!("Cast from type {} to type {} is not allowed", inner_type, c.destination_type))
+    }
+}
+
 pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: &Option<Type>) -> CompileResult<Type>
 {
     let type_check_result = match *e
@@ -1013,6 +1028,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
             type_check_expression(ctx, &mut t.inner, &None)?;
             valid(t.optional_type.clone())
         },
+        Expression::Cast(ref mut t) => type_check_cast(ctx, t),
     };
 
     match type_check_result

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::ops::Deref;
 use bytecode::*;
-use ast::Operator;
+use ast::{Type, Operator};
 use super::function::*;
 use super::instruction::*;
 use super::value::Value;
@@ -468,6 +468,23 @@ impl Interpreter
         self.update_variable(dst, new_value)
     }
 
+    fn cast(&mut self, dst: &Var, src: &Var) -> Result<(), ExecutionError>
+    {
+        let new_value = self.get_variable(&src.name)?.apply(|src_val: &Value| {
+            match (src_val, &dst.typ)
+            {
+                (&Value::Int(s), &Type::UInt) => Ok(Value::UInt(s as u64)),
+                (&Value::Int(s), &Type::Float) => Ok(Value::Float(s as f64)),
+                (&Value::UInt(s), &Type::Int) => Ok(Value::Int(s as i64)),
+                (&Value::UInt(s), &Type::Float) => Ok(Value::Float(s as f64)),
+                (&Value::Float(s), &Type::Int) => Ok(Value::Int(s as i64)),
+                (&Value::Float(s), &Type::UInt) => Ok(Value::UInt(s as u64)),
+                _ => Err(ExecutionError("Unsupported type cast".into())),
+            }
+        })?;
+        self.update_variable(&dst.name, new_value)
+    }
+
     fn execute_instruction(&mut self, instr: &Instruction, index: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
     {
         let next = Ok(StepResult::Continue(index.next()));
@@ -523,6 +540,11 @@ impl Interpreter
                 let func = self.get_function(func, module)?;
                 let args = args.iter().cloned().collect::<Vec<_>>();
                 self.call(&dst.name, func, &args, index, module)
+            },
+
+            Instruction::Cast{ref dst, ref src} => {
+                self.cast(dst, src)?;
+                next
             },
 
             Instruction::StackAlloc(ref var) => {

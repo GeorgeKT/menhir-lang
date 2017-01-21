@@ -292,6 +292,11 @@ fn substitute_expr(generic_args: &GenericMapping, e: &Expression) -> CompileResu
             Ok(to_optional(inner, t.optional_type.clone()))
         },
 
+        Expression::Cast(ref t) => {
+            let inner = substitute_expr(generic_args, &t.inner)?;
+            Ok(type_cast(inner, make_concrete_type(generic_args, &t.destination_type), t.span.clone()))
+        },
+
         Expression::Void => Ok(Expression::Void),
     }
 }
@@ -461,6 +466,10 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
         },
 
         Expression::ToOptional(ref t) => {
+            resolve_generics(new_functions, module, &t.inner)
+        },
+
+        Expression::Cast(ref t) => {
             resolve_generics(new_functions, module, &t.inner)
         },
 

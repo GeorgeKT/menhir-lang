@@ -10,6 +10,14 @@ pub struct ToOptional
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
+pub struct TypeCast
+{
+    pub inner: Expression,
+    pub destination_type: Type,
+    pub span: Span,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
 {
     Literal(Literal),
@@ -34,6 +42,7 @@ pub enum Expression
     For(Box<ForLoop>),
     Nil(Span),
     ToOptional(Box<ToOptional>),
+    Cast(Box<TypeCast>),
     Void,
 }
 
@@ -45,6 +54,14 @@ pub fn to_optional(e: Expression, typ: Type) -> Expression
     }))
 }
 
+pub fn type_cast(e: Expression, dst_type: Type, span: Span) -> Expression
+{
+    Expression::Cast(Box::new(TypeCast{
+        inner: e,
+        destination_type: dst_type,
+        span: span,
+    }))
+}
 
 impl Expression
 {
@@ -101,6 +118,7 @@ impl Expression
             Expression::For(ref f) => f.span.clone(),
             Expression::Nil(ref span) => span.clone(),
             Expression::ToOptional(ref t) => t.inner.span(),
+            Expression::Cast(ref t) => t.span.clone(),
             Expression::Void => Span::default(),
         }
     }
@@ -128,6 +146,7 @@ impl Expression
             Expression::Assign(ref a) => a.typ.clone(),
             Expression::Nil(_) => Type::Nil,
             Expression::ToOptional(ref t) => optional_type(t.inner.get_type()),
+            Expression::Cast(ref t) => t.destination_type.clone(),
             Expression::Void |
             Expression::While(_) |
             Expression::Delete(_) |
@@ -182,6 +201,10 @@ impl TreePrinter for Expression
             Expression::Nil(_) => println!("{}nil", p),
             Expression::ToOptional(ref t) => {
                 println!("{}to_optional (type: {})", p, t.optional_type);
+                t.inner.print(level + 1)
+            },
+            Expression::Cast(ref t) => {
+                println!("{}cast to {} ({})", p, t.destination_type, t.span);
                 t.inner.print(level + 1)
             },
             Expression::Void => println!("{}void", p),

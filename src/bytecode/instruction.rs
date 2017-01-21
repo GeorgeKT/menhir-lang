@@ -85,6 +85,7 @@ pub enum Instruction
     BinaryOp{dst: Var, op: Operator, left: Operand, right: Operand},
     Call{dst: Var, func: String, args: Vec<Operand>},
     Slice{dst: Var, src: Var, start: Operand, len: Operand},
+    Cast{dst: Var, src: Var},
     GlobalAlloc(Var),
     StackAlloc(Var),
     HeapAlloc(Var),
@@ -227,6 +228,14 @@ pub fn slice_instr(dst: &Var, src: &Var, start: Operand, len: Operand) -> Instru
     }
 }
 
+pub fn cast_instr(dst: &Var, src: &Var) -> Instruction
+{
+    Instruction::Cast{
+        dst: dst.clone(),
+        src: src.clone(),
+    }
+}
+
 impl fmt::Display for Instruction
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
@@ -271,6 +280,10 @@ impl fmt::Display for Instruction
 
             Instruction::Call{ref dst, ref func, ref args} => {
                 writeln!(f, "  call {} {} {}", dst, func, join(args.iter(), " "))
+            },
+
+            Instruction::Cast{ref dst, ref src} => {
+                writeln!(f, "  cast {} {}", dst, src)
             },
 
             Instruction::StackAlloc(ref var) => {
