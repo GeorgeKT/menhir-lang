@@ -43,9 +43,10 @@ fn array_lit_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, a: 
     let ep = stack_alloc(func, &ptr_type(element_type), None);
     for (idx, element) in a.elements.iter().enumerate() {
         func.add(load_member_instr(&ep, dst, idx));
-        func.push_destination(Some(ep.clone()));
-        expr_to_bc(bc_mod, func, element);
+        func.push_destination(None);
+        let v = to_bc(bc_mod, func, element);
         func.pop_destination();
+        func.add(store_instr(&ep, &v));
     }
 }
 

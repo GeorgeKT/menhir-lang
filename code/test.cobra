@@ -1,6 +1,18 @@
+bar() -> int {
+    7
+}
+
+foo() -> int {
+    let x = 7;
+    x + bar()
+}
+
+baz() -> int {
+    5
+}
 
 main() -> uint {
-    let array = [1, 2, 3, 4, 5];
+    let array = [1, 2, 3, 4, baz()];
     var sum = 0u;
     for a in array:
         sum = sum + a as uint;

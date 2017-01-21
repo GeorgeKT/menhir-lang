@@ -164,7 +164,7 @@ impl ByteCodeFunction
 
     pub fn exit() -> ByteCodeFunction
     {
-        let function_sig = sig("exit", Type::Void, vec![], Span::default());
+        let function_sig = sig("@exit", Type::Void, vec![], Span::default());
         let mut function = ByteCodeFunction::new(&function_sig);
         let entry = function.create_basic_block();
         function.add_basic_block(entry);

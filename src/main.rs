@@ -117,11 +117,11 @@ fn main()
         }
 
         let mut bc_mod = compile_to_byte_code(&module);
-        dump_byte_code(&bc_mod, &dump_flags);
         if optimize {
             optimize_module(&mut bc_mod);
-            dump_byte_code(&bc_mod, &dump_flags);
         }
+        
+        dump_byte_code(&bc_mod, &dump_flags);
 
         if !run_debugger && !run_interpreter {
             /*

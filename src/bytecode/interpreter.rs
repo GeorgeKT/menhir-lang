@@ -437,6 +437,10 @@ impl Interpreter
 
     fn get_function<'a>(&self, func: &str, module: &'a ByteCodeModule) -> Result<&'a ByteCodeFunction, ExecutionError>
     {
+        if module.exit_function.sig.name == func {
+            return Ok(&module.exit_function);
+        }
+        
         match module.get_function(func) {
             Some(f) => Ok(f),
             None => {

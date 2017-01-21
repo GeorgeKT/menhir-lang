@@ -46,8 +46,7 @@ impl ByteCodeIndex
 
     pub fn print(&self, module: &ByteCodeModule)
     {
-        if module.functions
-            .get(&self.function)
+        if module.get_function(&self.function)
             .and_then(|function| function.blocks.get(&self.basic_block))
             .and_then(|bb| bb.instructions.get(self.instruction))
             .map(|inst| print!("{}", inst))
