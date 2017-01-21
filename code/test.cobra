@@ -11,10 +11,14 @@ baz() -> int {
     5
 }
 
-main() -> uint {
+main() -> int {
     let array = [1, 2, 3, 4, baz()];
-    var sum = 0u;
+    var sum = 0;
     for a in array:
-        sum = sum + a as uint;
-    sum
+        sum = sum + a;
+
+    if sum > 7:
+        sum
+    else
+        sum * 2
 }

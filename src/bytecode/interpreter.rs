@@ -21,7 +21,7 @@ struct ReturnAddress
 struct StackFrame
 {
     vars: HashMap<String, ValueRef>,
-    return_address: Option<ReturnAddress>
+    return_address: Option<ReturnAddress>,
 }
 
 impl StackFrame
@@ -65,6 +65,7 @@ pub struct Interpreter
 {
     stack: Vec<StackFrame>,
     globals: StackFrame,
+    debug_mode: bool,
 }
 
 pub enum StepResult
@@ -75,11 +76,12 @@ pub enum StepResult
 
 impl Interpreter
 {
-    pub fn new() -> Interpreter
+    pub fn new(debug_mode: bool) -> Interpreter
     {
         Interpreter{
             stack: Vec::new(),
             globals: StackFrame::new(),
+            debug_mode: debug_mode,
         }
     }
 
@@ -281,7 +283,10 @@ impl Interpreter
 
     fn call(&mut self, dst: &str, func: &ByteCodeFunction, args: &[Operand], index: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
     {
-        println!("{}:", func.sig.name);
+        if self.debug_mode {
+            println!("{}:", func.sig.name);
+        }
+
         let return_address = index.next();
 
         let mut arg_values = Vec::new();
@@ -440,7 +445,7 @@ impl Interpreter
         if module.exit_function.sig.name == func {
             return Ok(&module.exit_function);
         }
-        
+
         match module.get_function(func) {
             Some(f) => Ok(f),
             None => {
@@ -609,7 +614,10 @@ impl Interpreter
     {
         let mut index = self.start(function, module)?;
         loop {
-            index.print(module);
+            if self.debug_mode {
+                index.print(module);
+            }
+
             let sr = self.step(&index, module)?;
             index = match sr {
                 StepResult::Continue(new_index) => new_index,
@@ -651,6 +659,6 @@ impl Interpreter
 
 pub fn run_byte_code(module: &ByteCodeModule, function: &str) -> Result<Value, ExecutionError>
 {
-    let mut interpreter = Interpreter::new();
+    let mut interpreter = Interpreter::new(false);
     interpreter.run_function(function, module)
 }
