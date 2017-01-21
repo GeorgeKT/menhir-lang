@@ -381,9 +381,7 @@ fn struct_pattern_match_to_bc(
 fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc: &MatchCase, target: &Var, match_end_bb: BasicBlockRef)
 {
     let match_case_bb = func.create_basic_block();
-    func.add_basic_block(match_case_bb);
     let next_bb = func.create_basic_block();
-    func.add_basic_block(next_bb);
 
     let add_literal_case = |bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, op: Operand| {
         func.push_destination(None);
@@ -518,7 +516,6 @@ fn match_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, m: &Mat
     func.pop_destination();
 
     func.add(Instruction::Branch(match_end_bb));
-    func.add_basic_block(match_end_bb);
     func.set_current_bb(match_end_bb);
     func.pop_scope();
     dst
@@ -530,9 +527,6 @@ fn while_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, w: &Whi
     let body_bb = func.create_basic_block();
     let post_while_bb = func.create_basic_block();
 
-    func.add_basic_block(cond_bb);
-    func.add_basic_block(body_bb);
-
     func.add(Instruction::Branch(cond_bb));
     func.set_current_bb(cond_bb);
     let cond = to_bc(bc_mod, func, &w.cond);
@@ -541,7 +535,6 @@ fn while_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, w: &Whi
     expr_to_bc(bc_mod, func, &w.body);
     func.add(Instruction::Branch(cond_bb));
 
-    func.add_basic_block(post_while_bb);
     func.set_current_bb(post_while_bb);
 }
 
@@ -566,13 +559,11 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
     let post_for_bb = func.create_basic_block();
 
     func.add(Instruction::Branch(cond_bb));
-    func.add_basic_block(cond_bb);
     func.set_current_bb(cond_bb);
     let cmp = stack_alloc(func, &Type::Bool, None);
     func.add(binary_op_instr(&cmp, Operator::LessThan, var_op(&index), var_op(&len)));
     func.add(branch_if_instr(&cmp, body_bb, post_for_bb));
 
-    func.add_basic_block(body_bb);
     func.set_current_bb(body_bb);
     func.add(load_member_instr_with_var(&loop_variable_ptr, &iterable, &index));
     func.add(load_instr(&loop_variable, &loop_variable_ptr));
@@ -582,7 +573,6 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
     func.add(binary_op_instr(&index, Operator::Add, var_op(&index), Operand::Int(1)));
     func.add(Instruction::Branch(cond_bb));
 
-    func.add_basic_block(post_for_bb);
     func.set_current_bb(post_for_bb);
     func.pop_scope();
 }

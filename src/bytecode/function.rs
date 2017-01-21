@@ -129,7 +129,6 @@ pub struct ByteCodeFunction
 {
     pub sig: FunctionSignature,
     pub blocks: BTreeMap<BasicBlockRef, BasicBlock>,
-    pub block_order: Vec<BasicBlockRef>,
     current_bb: usize,
     bb_counter: usize,
     var_counter: usize,
@@ -145,7 +144,6 @@ impl ByteCodeFunction
         let mut f = ByteCodeFunction{
             sig: sig.clone(),
             blocks: BTreeMap::new(),
-            block_order: Vec::new(),
             current_bb: 0,
             bb_counter: 0,
             var_counter: 0,
@@ -154,7 +152,7 @@ impl ByteCodeFunction
         };
 
         let entry = f.create_basic_block();
-        f.add_basic_block(entry);
+        f.set_current_bb(entry);
 
         for arg in &sig.args {
             f.add_named_var(Var::named(&arg.name, arg.typ.clone()));
@@ -166,8 +164,6 @@ impl ByteCodeFunction
     {
         let function_sig = sig("@exit", Type::Void, vec![], Span::default());
         let mut function = ByteCodeFunction::new(&function_sig);
-        let entry = function.create_basic_block();
-        function.add_basic_block(entry);
         function.add(Instruction::Exit);
         function.add(Instruction::Exit);
         function.add(Instruction::Exit);
@@ -212,11 +208,6 @@ impl ByteCodeFunction
         let name = bb_name(bb_ref);
         self.blocks.insert(bb_ref, BasicBlock::new(name));
         bb_ref
-    }
-
-    pub fn add_basic_block(&mut self, bb_ref: BasicBlockRef)
-    {
-        self.block_order.push(bb_ref);
     }
 
     pub fn set_current_bb(&mut self, bb_ref: BasicBlockRef)
@@ -298,8 +289,7 @@ impl fmt::Display for ByteCodeFunction
             self.sig.name,
             join(self.sig.args.iter().map(|arg| format!("{}: {}", arg.name, arg.typ)), ", "),
             self.sig.return_type)?;
-        for bb_ref in &self.block_order {
-            let bb = self.blocks.get(bb_ref).expect("Unknown basic block");
+        for bb in self.blocks.values() {
             writeln!(f, " {}:", bb.name)?;
             for inst in &bb.instructions {
                 inst.fmt(f)?;

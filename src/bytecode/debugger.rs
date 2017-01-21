@@ -52,7 +52,7 @@ impl ByteCodeIndex
             .map(|inst| print!("{}", inst))
             .is_none()
         {
-            println!("Invalid Location (function: {},  bb: {}, instruction: {})", self.function, self.basic_block, self.instruction)
+            panic!("Invalid Location (function: {},  bb: {}, instruction: {})", self.function, self.basic_block, self.instruction);
         }
     }
 
