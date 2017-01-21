@@ -43,6 +43,7 @@ pub enum TokenKind
     QuestionMark,
     Nil,
     Var,
+    For,
     EOF,
 }
 
@@ -90,6 +91,7 @@ impl Display for TokenKind
             TokenKind::QuestionMark => write!(fmt, "?"),
             TokenKind::Nil => write!(fmt, "nil"),
             TokenKind::Var => write!(fmt, "var"),
+            TokenKind::For => write!(fmt, "for"),
             TokenKind::EOF => write!(fmt, "EOF"),
         }
     }

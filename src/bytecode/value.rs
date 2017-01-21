@@ -63,26 +63,24 @@ impl Value
         match *self
         {
             Value::Int(v) => v as i32,
+            Value::UInt(v) => v as i32,
             Value::Bool(v) => if v {0i32} else {1i32},
             _ => 1i32,
         }
     }
 
-    pub fn from_literal(lit: &ByteCodeLiteral) -> Result<Value, ExecutionError>
+    pub fn from_operand(op: &Operand) -> Result<Value, ExecutionError>
     {
-        match *lit
+        match *op
         {
-            ByteCodeLiteral::Int(v) => Ok(Value::Int(v as i64)),
-            ByteCodeLiteral::Float(ref num) => {
-                match num.parse::<f64>()
-                {
-                    Ok(f) => Ok(Value::Float(f)),
-                    Err(_) => Err(ExecutionError(format!("{} is not a valid floating point number", num))),
-                }
-            },
-            ByteCodeLiteral::Char(v) => Ok(Value::Char(v as char)),
-            ByteCodeLiteral::String(ref s) => Ok(Value::String(s.clone())),
-            ByteCodeLiteral::Bool(v) => Ok(Value::Bool(v)),
+            Operand::Int(v) => Ok(Value::Int(v)),
+            Operand::UInt(v) => Ok(Value::UInt(v)),
+            Operand::Float(v) => Ok(Value::Float(v)),
+            Operand::Char(v) => Ok(Value::Char(v as char)),
+            Operand::String(ref s) => Ok(Value::String(s.clone())),
+            Operand::Bool(v) => Ok(Value::Bool(v)),
+            Operand::Nil => Ok(Value::Nil),
+            Operand::Var(_) | Operand::Func(_) => Err(ExecutionError(format!("Cannot convert operand {} into value", op)))
         }
     }
 

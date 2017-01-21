@@ -40,12 +40,12 @@ pub fn th_mod(data: &str) -> Module
 }
 
 
-pub fn number(v: u64, span: Span) -> Expression
+pub fn number(v: i64, span: Span) -> Expression
 {
     Expression::Literal(Literal::Int(span, v))
 }
 
-pub fn number_pattern(v: u64, span: Span) -> Pattern
+pub fn number_pattern(v: i64, span: Span) -> Pattern
 {
     Pattern::Literal(Literal::Int(span, v))
 }

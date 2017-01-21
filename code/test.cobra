@@ -1,7 +1,8 @@
-foo(var a: int) -> int {
-    a = a + 2;
-    a
-}
-main() -> int {
-    foo(40)
+
+main() -> uint {
+    let array = [1, 2, 3, 4, 5];
+    var sum = 0u;
+    for a in array:
+        sum = sum + a as uint;
+    sum
 }

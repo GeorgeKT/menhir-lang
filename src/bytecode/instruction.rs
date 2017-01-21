@@ -3,30 +3,6 @@ use itertools::free::join;
 use ast::Operator;
 use bytecode::function::{BasicBlockRef, Var};
 
-#[derive(Debug, Clone)]
-pub enum ByteCodeLiteral
-{
-    Int(u64),
-    Float(String),
-    Char(u8),
-    String(String),
-    Bool(bool),
-}
-
-impl fmt::Display for ByteCodeLiteral
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
-    {
-        match *self
-        {
-            ByteCodeLiteral::Int(v) => write!(f, "int {}", v),
-            ByteCodeLiteral::Float(ref v) => write!(f, "float {}", v),
-            ByteCodeLiteral::Char(v) => write!(f, "char {}", v),
-            ByteCodeLiteral::String(ref v) => write!(f, "string {}", v),
-            ByteCodeLiteral::Bool(v) => write!(f, "bool {}", v),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy)]
 pub enum ByteCodeProperty
@@ -49,20 +25,67 @@ impl fmt::Display for ByteCodeProperty
 
 
 #[derive(Debug, Clone)]
+pub enum Operand
+{
+    Var(Var),
+    Int(i64),
+    UInt(u64),
+    Float(f64),
+    Char(u8),
+    String(String),
+    Bool(bool),
+    Func(String),
+    Nil,
+}
+
+impl fmt::Display for Operand
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
+    {
+        match *self
+        {
+            Operand::Var(ref var) => write!(f, "{}", var),
+            Operand::Int(v) => write!(f, "(int {})", v),
+            Operand::UInt(v) => write!(f, "(uint {})", v),
+            Operand::Float(ref v) => write!(f, "(float {})", v),
+            Operand::Char(v) => write!(f, "(char '{}')", v),
+            Operand::String(ref v) => write!(f, "(string \"{}\")", v),
+            Operand::Bool(v) => write!(f, "(bool {})", v),
+            Operand::Func(ref func) => write!(f, "(func {})", func),
+            Operand::Nil => write!(f, "nil"),
+        }
+    }
+}
+
+pub fn var_op(v: &Var) -> Operand
+{
+    Operand::Var(v.clone())
+}
+
+pub fn float_op(fstr: &str) -> Operand
+{
+    match fstr.parse::<f64>()
+    {
+        Ok(f) => Operand::Float(f),
+        Err(_) => panic!("Internal Compiler Error: {} is not a valid floating point number", fstr)
+    }
+}
+
+
+#[derive(Debug, Clone)]
 pub enum Instruction
 {
-    Store{dst: Var, src: Var},
-    StoreLit{dst: Var, lit: ByteCodeLiteral},
-    StoreFunc{dst: Var, func: String},
+    Store{dst: Var, src: Operand},
     Load{dst: Var, ptr: Var},
-    LoadMember{dst: Var, obj: Var, member_index: usize},
+    LoadMember{dst: Var, obj: Var, member_index: Operand},
     AddressOf{dst: Var, obj: Var},
     GetProperty{dst: Var, obj: Var, prop: ByteCodeProperty},
     SetProperty{obj: Var, prop: ByteCodeProperty, val: usize},
-    UnaryOp{dst: Var, op: Operator, src: Var},
-    BinaryOp{dst: Var, op: Operator, left: Var, right: Var},
-    Call{dst: Var, func: String, args: Vec<Var>},
-    Slice{dst: Var, src: Var, start: Var, len: Var},
+    UnaryOp{dst: Var, op: Operator, src: Operand},
+    BinaryOp{dst: Var, op: Operator, left: Operand, right: Operand},
+    Call{dst: Var, func: String, args: Vec<Operand>},
+    Slice{dst: Var, src: Var, start: Operand, len: Operand},
+    Cast{dst: Var, src: Var},
     GlobalAlloc(Var),
     StackAlloc(Var),
     HeapAlloc(Var),
@@ -80,23 +103,23 @@ pub fn store_instr(dst: &Var, src: &Var) -> Instruction
 {
     Instruction::Store{
         dst: dst.clone(),
-        src: src.clone(),
+        src: Operand::Var(src.clone()),
     }
 }
 
-pub fn store_lit_instr(dst: &Var, lit: ByteCodeLiteral) -> Instruction
+pub fn store_operand_instr(dst: &Var, op: Operand) -> Instruction
 {
-    Instruction::StoreLit{
+    Instruction::Store{
         dst: dst.clone(),
-        lit: lit,
+        src: op,
     }
 }
 
 pub fn store_func_instr(dst: &Var, func: &str) -> Instruction
 {
-    Instruction::StoreFunc{
+    Instruction::Store{
         dst: dst.clone(),
-        func: func.into(),
+        src: Operand::Func(func.into()),
     }
 }
 
@@ -108,14 +131,24 @@ pub fn load_instr(dst: &Var, ptr: &Var) -> Instruction
     }
 }
 
+pub fn load_member_instr_with_var(dst: &Var, obj: &Var, member_index: &Var) -> Instruction
+{
+    Instruction::LoadMember{
+        dst: dst.clone(),
+        obj: obj.clone(),
+        member_index: Operand::Var(member_index.clone()),
+    }
+}
+
 pub fn load_member_instr(dst: &Var, obj: &Var, member_index: usize) -> Instruction
 {
     Instruction::LoadMember{
         dst: dst.clone(),
         obj: obj.clone(),
-        member_index: member_index,
+        member_index: Operand::UInt(member_index as u64),
     }
 }
+
 
 pub fn address_of_instr(dst: &Var, obj: &Var) -> Instruction
 {
@@ -130,7 +163,7 @@ pub fn ret_instr(var: &Var) -> Instruction
     Instruction::Return(var.clone())
 }
 
-pub fn unary_op_instr(dst: &Var, op: Operator, src: Var) -> Instruction
+pub fn unary_op_instr(dst: &Var, op: Operator, src: Operand) -> Instruction
 {
     Instruction::UnaryOp{
         dst: dst.clone(),
@@ -139,7 +172,7 @@ pub fn unary_op_instr(dst: &Var, op: Operator, src: Var) -> Instruction
     }
 }
 
-pub fn binary_op_instr(dst: &Var, op: Operator, left: Var, right: Var) -> Instruction
+pub fn binary_op_instr(dst: &Var, op: Operator, left: Operand, right: Operand) -> Instruction
 {
     Instruction::BinaryOp{
         dst: dst.clone(),
@@ -158,7 +191,7 @@ pub fn branch_if_instr(cond: &Var, on_true: BasicBlockRef, on_false: BasicBlockR
     }
 }
 
-pub fn call_instr(dst: &Var, func: &str, args: Vec<Var>) -> Instruction
+pub fn call_instr(dst: &Var, func: &str, args: Vec<Operand>) -> Instruction
 {
     Instruction::Call{
         dst: dst.clone(),
@@ -185,13 +218,21 @@ pub fn get_prop_instr(dst: &Var, obj: &Var, prop: ByteCodeProperty) -> Instructi
     }
 }
 
-pub fn slice_instr(dst: &Var, src: &Var, start: Var, len: Var) -> Instruction
+pub fn slice_instr(dst: &Var, src: &Var, start: Operand, len: Operand) -> Instruction
 {
     Instruction::Slice{
         dst: dst.clone(),
         src: src.clone(),
         start: start,
         len: len,
+    }
+}
+
+pub fn cast_instr(dst: &Var, src: &Var) -> Instruction
+{
+    Instruction::Cast{
+        dst: dst.clone(),
+        src: src.clone(),
     }
 }
 
@@ -209,19 +250,11 @@ impl fmt::Display for Instruction
                 writeln!(f, "  store {} {}", dst, src)
             },
 
-            Instruction::StoreLit{ref dst, ref lit} => {
-                writeln!(f, "  storelit {} {}", dst, lit)
-            },
-
-            Instruction::StoreFunc{ref dst, ref func} => {
-                writeln!(f, "  storefunc {} {}", dst, func)
-            },
-
             Instruction::Load{ref dst, ref ptr} => {
                 writeln!(f, "  load {} {}", dst, ptr)
             },
 
-            Instruction::LoadMember{ref dst, ref obj, member_index} => {
+            Instruction::LoadMember{ref dst, ref obj, ref member_index} => {
                 writeln!(f, "  loadm {} {}.{}", dst, obj, member_index)
             },
 
@@ -247,6 +280,10 @@ impl fmt::Display for Instruction
 
             Instruction::Call{ref dst, ref func, ref args} => {
                 writeln!(f, "  call {} {} {}", dst, func, join(args.iter(), " "))
+            },
+
+            Instruction::Cast{ref dst, ref src} => {
+                writeln!(f, "  cast {} {}", dst, src)
             },
 
             Instruction::StackAlloc(ref var) => {

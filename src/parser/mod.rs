@@ -58,7 +58,7 @@ fn eat_comma(tq: &mut TokenQueue) -> CompileResult<()>
     Ok(())
 }
 
-fn parse_number(num: &str, span: &Span) -> CompileResult<Literal>
+fn parse_number(tq: &mut TokenQueue, num: &str, span: &Span) -> CompileResult<Literal>
 {
     if num.find('.').is_some() || num.find('e').is_some() {
         match num.parse::<f64>() {
@@ -66,9 +66,21 @@ fn parse_number(num: &str, span: &Span) -> CompileResult<Literal>
             Err(_) => err(span, ErrorCode::InvalidFloatingPoint, format!("{} is not a valid floating point number", num))
         }
     } else {
+        let force_unsigned = if tq.is_next_identifier("u") {
+            tq.pop()?;
+            true
+        } else {
+            false
+        };
+
         // Should be an integer
         match num.parse::<u64>() {
-            Ok(i) => Ok(Literal::Int(span.clone(), i)),
+            Ok(i) =>
+                if force_unsigned || i > (i64::max_value() as u64) {
+                    Ok(Literal::UInt(span.clone(), i))
+                } else {
+                    Ok(Literal::Int(span.clone(), i as i64))
+                },
             Err(_) => err(span, ErrorCode::InvalidInteger, format!("{} is not a valid integer", num))
         }
     }
@@ -139,6 +151,21 @@ fn combine_binary_op(op: Operator, lhs: Expression, rhs: Expression) -> Expressi
     }
 }
 
+fn combine_type_cast(lhs: Expression, destination_type: Type, span: Span) -> Expression
+{
+    if lhs.is_binary_op()
+    {
+        let bop = lhs.extract_binary_op().expect("Not a binary op");
+        let nrhs = combine_type_cast(bop.right.clone(), destination_type, span);
+        let span = Span::merge(&bop.left.span(), &nrhs.span());
+        bin_op(bop.operator, bop.left, nrhs, span)
+    }
+    else
+    {
+        type_cast(lhs, destination_type, span)
+    }
+}
+
 fn parse_binary_op_rhs(tq: &mut TokenQueue, mut lhs: Expression) -> CompileResult<Expression>
 {
     //use ast::TreePrinter;
@@ -154,6 +181,14 @@ fn parse_binary_op_rhs(tq: &mut TokenQueue, mut lhs: Expression) -> CompileResul
         }
 
         let op = tq.expect_operator()?;
+        if op == Operator::As {
+            let typ = parse_type(tq)?;
+            let span = lhs.span().expanded(tq.pos());
+            lhs = combine_type_cast(lhs, typ, span);
+            continue;
+        }
+
+
         let next_tok = tq.pop()?;
         let rhs = parse_expression_start(tq, next_tok)?;
 
@@ -416,7 +451,7 @@ pub fn parse_pattern(tq: &mut TokenQueue) -> CompileResult<Pattern>
     let tok = tq.pop()?;
     match tok.kind
     {
-        TokenKind::Number(ref num) => parse_number(num, &tok.span).map(Pattern::Literal),
+        TokenKind::Number(ref num) => parse_number(tq, num, &tok.span).map(Pattern::Literal),
         TokenKind::True => Ok(Pattern::Literal(Literal::Bool(tok.span, true))),
         TokenKind::False => Ok(Pattern::Literal(Literal::Bool(tok.span, false))),
         TokenKind::CharLiteral(c) => Ok(Pattern::Literal(Literal::Char(tok.span, c as u8))),
@@ -476,6 +511,7 @@ fn parse_match(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 {
     let target = parse_expression(tq)?;
     tq.expect(TokenKind::Colon)?;
+
     let mut cases = Vec::new();
     loop
     {
@@ -490,6 +526,7 @@ fn parse_match(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
             break;
         }
     }
+
     Ok(match_expression(target, cases, span.expanded(tq.pos())))
 }
 
@@ -545,10 +582,7 @@ fn parse_binding(tq: &mut TokenQueue, mutable: bool, span: &Span) -> CompileResu
 fn parse_if(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 {
     let cond = parse_expression(tq)?;
-    if !tq.is_next(TokenKind::OpenCurly) {
-        tq.expect(TokenKind::Colon)?;
-    }
-
+    tq.expect(TokenKind::Colon)?;
     let on_true = parse_expression(tq)?;
     tq.expect(TokenKind::Else)?;
     let on_false = parse_expression(tq)?;
@@ -712,12 +746,22 @@ fn parse_block(tq: &mut TokenQueue, start: &Span) -> CompileResult<Expression>
 fn parse_while(tq: &mut TokenQueue, start: &Span) -> CompileResult<Expression>
 {
     let cond = parse_expression(tq)?;
-    if !tq.is_next(TokenKind::OpenCurly) {
-        tq.expect(TokenKind::Colon)?;
-    }
-
+    tq.expect(TokenKind::Colon)?;
     let body = parse_expression(tq)?;
     Ok(while_loop(cond, body, start.expanded(tq.pos())))
+}
+
+
+fn parse_for(tq: &mut TokenQueue, start: &Span) -> CompileResult<Expression>
+{
+    let (loop_variable, _) = tq.expect_identifier()?;
+    tq.expect(TokenKind::In)?;
+
+    let iterable = parse_expression(tq)?;
+    tq.expect(TokenKind::Colon)?;
+
+    let body = parse_expression(tq)?;
+    Ok(for_loop(&loop_variable, iterable, body, start.expanded(tq.pos())))
 }
 
 fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expression>
@@ -762,6 +806,10 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
 
         TokenKind::While => {
             parse_while(tq, &tok.span)
+        },
+
+        TokenKind::For => {
+            parse_for(tq, &tok.span)
         },
 
         TokenKind::OpenCurly => {
@@ -813,7 +861,7 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
         },
 
         TokenKind::Number(n) => {
-            parse_number(&n, &tok.span).map(Expression::Literal)
+            parse_number(tq, &n, &tok.span).map(Expression::Literal)
         },
 
         TokenKind::New => {
@@ -856,6 +904,7 @@ fn parse_expression_continued(tq: &mut TokenQueue, lhs: Expression) -> CompileRe
             tq.push_front(next);
             parse_binary_op_rhs(tq, lhs)
         },
+
         _ => {
             tq.push_front(next);
             Ok(lhs)
