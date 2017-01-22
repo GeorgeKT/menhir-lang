@@ -6,7 +6,7 @@ use bytecode::*;
 use compileerror::*;
 use super::value::Value;
 
-fn generate_byte_code(prog: &str, dump: bool) -> CompileResult<ByteCodeModule>
+pub fn generate_byte_code(prog: &str, dump: bool) -> CompileResult<ByteCodeModule>
 {
     let mut cursor = Cursor::new(prog);
     let parser_options = ParserOptions::default();
