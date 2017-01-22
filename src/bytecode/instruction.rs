@@ -85,16 +85,16 @@ pub enum Instruction
     BinaryOp{dst: Var, op: Operator, left: Operand, right: Operand},
     Call{dst: Var, func: String, args: Vec<Operand>},
     Slice{dst: Var, src: Var, start: Operand, len: Operand},
-    Cast{dst: Var, src: Var},
+    Cast{dst: Var, src: Operand},
     GlobalAlloc(Var),
     StackAlloc(Var),
     HeapAlloc(Var),
     StartScope,
     EndScope,
-    Return(Var),
+    Return(Operand),
     ReturnVoid,
     Branch(BasicBlockRef),
-    BranchIf{cond: Var, on_true: BasicBlockRef, on_false: BasicBlockRef},
+    BranchIf{cond: Operand, on_true: BasicBlockRef, on_false: BasicBlockRef},
     Delete(Var),
     Exit,
 }
@@ -160,7 +160,7 @@ pub fn address_of_instr(dst: &Var, obj: &Var) -> Instruction
 
 pub fn ret_instr(var: &Var) -> Instruction
 {
-    Instruction::Return(var.clone())
+    Instruction::Return(var_op(var))
 }
 
 pub fn unary_op_instr(dst: &Var, op: Operator, src: Operand) -> Instruction
@@ -185,7 +185,7 @@ pub fn binary_op_instr(dst: &Var, op: Operator, left: Operand, right: Operand) -
 pub fn branch_if_instr(cond: &Var, on_true: BasicBlockRef, on_false: BasicBlockRef) -> Instruction
 {
     Instruction::BranchIf{
-        cond: cond.clone(),
+        cond: var_op(cond),
         on_true: on_true,
         on_false: on_false,
     }
@@ -232,7 +232,7 @@ pub fn cast_instr(dst: &Var, src: &Var) -> Instruction
 {
     Instruction::Cast{
         dst: dst.clone(),
-        src: src.clone(),
+        src: var_op(src),
     }
 }
 

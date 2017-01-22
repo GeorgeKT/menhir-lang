@@ -269,6 +269,34 @@ impl ByteCodeFunction
         scope.add_named_var(var);
     }
 
+    pub fn for_each_instruction<Func: FnMut(&Instruction) -> bool>(&self, mut f: Func)
+    {
+        for block in self.blocks.values() {
+            for instr in &block.instructions {
+                if !f(instr) {
+                    return;
+                }
+            }
+        }
+    }
+
+    pub fn for_each_instruction_mut<Func: Fn(&mut Instruction) -> bool>(&mut self, f: Func)
+    {
+        for block in self.blocks.values_mut() {
+            for instr in &mut block.instructions {
+                if !f(instr) {
+                    return;
+                }
+            }
+        }
+    }
+
+    pub fn remove_instruction<Pred: Fn(&Instruction) -> bool>(&mut self, pred: Pred) {
+        for block in self.blocks.values_mut() {
+            block.instructions.retain(|instr| !pred(instr));
+        }
+    }
+
 /*
     pub fn add_cleanup_target(&mut self, v: &Var)
     {
