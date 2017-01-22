@@ -6,7 +6,27 @@ pub struct Test
     pub code: &'static str,
 }
 
-pub const ALL_TESTS: [Test; 43] = [
+pub const ALL_TESTS: [Test; 44] = [
+    Test{
+        name: "call in array initializer",
+        ret: 15,
+        debug: true,
+        code: r#"
+            baz() -> int {
+                5
+            }
+
+            main() -> int {
+                let array = [1, 2, 3, 4, baz()];
+                var sum = 0;
+                for a in array:
+                    sum = sum + a;
+                sum
+            }
+
+        "#
+    },
+
     Test{
         name: "for loops with casting",
         ret: 15,

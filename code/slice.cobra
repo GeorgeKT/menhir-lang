@@ -1,4 +1,4 @@
-make_pair(a: int, b: int) -> {int, int} = ${a, b}
+apply(x: int, fn: (int) -> int) -> int =
+    fn(x)
 
-main() -> int =
-    let {left, right} = make_pair(4, 5) in left + right
+main() -> int = apply(5, @(x) -> x * 2)

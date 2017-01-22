@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::ops::Deref;
 use bytecode::*;
 use ast::{Type, Operator};
@@ -22,7 +21,7 @@ struct ReturnAddress
 struct StackFrame
 {
     vars: HashMap<String, ValueRef>,
-    return_address: Option<ReturnAddress>
+    return_address: Option<ReturnAddress>,
 }
 
 impl StackFrame
@@ -66,6 +65,7 @@ pub struct Interpreter
 {
     stack: Vec<StackFrame>,
     globals: StackFrame,
+    debug_mode: bool,
 }
 
 pub enum StepResult
@@ -76,11 +76,12 @@ pub enum StepResult
 
 impl Interpreter
 {
-    pub fn new() -> Interpreter
+    pub fn new(debug_mode: bool) -> Interpreter
     {
         Interpreter{
             stack: Vec::new(),
             globals: StackFrame::new(),
+            debug_mode: debug_mode,
         }
     }
 
@@ -149,7 +150,7 @@ impl Interpreter
         match *op
         {
             Operand::Var(ref src) => Ok(self.get_variable(&src.name)?.clone_value()?),
-            Operand::Func(ref func) => Ok(Value::Func(self.get_function(func, module)?)),
+            Operand::Func(ref func) => Ok(Value::Func(self.get_function(func, module)?.sig.name.clone())),
             _ => Ok(Value::from_operand(op)?),
         }
     }
@@ -280,9 +281,12 @@ impl Interpreter
         Ok(())
     }
 
-    fn call(&mut self, dst: &str, func: Rc<ByteCodeFunction>, args: &[Operand], index: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
+    fn call(&mut self, dst: &str, func: &ByteCodeFunction, args: &[Operand], index: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
     {
-        println!("{}:", func.sig.name);
+        if self.debug_mode {
+            println!("{}:", func.sig.name);
+        }
+
         let return_address = index.next();
 
         let mut arg_values = Vec::new();
@@ -296,7 +300,7 @@ impl Interpreter
             self.add_variable(&func.sig.args[idx].name, arg_value)?;
         }
 
-        Ok(StepResult::Continue(ByteCodeIndex::new(func.clone(), 0, 0)))
+        Ok(StepResult::Continue(ByteCodeIndex::new(func.sig.name.clone(), 0, 0)))
     }
 
     fn pop_until_end_of_function(&mut self) -> Result<ReturnAddress, ExecutionError>
@@ -310,14 +314,14 @@ impl Interpreter
         Err(ExecutionError("Reached bottom of the stack".into()))
     }
 
-    fn ret(&mut self, name: Option<&str>) -> Result<StepResult, ExecutionError>
+    fn ret(&mut self, op: Option<&Operand>, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
     {
-        let return_address = match name
+        let return_address = match op
         {
-            Some(name) => {
-                let result = self.get_variable(name)?.clone();
+            Some(operand) => {
+                let result = self.get_operand_value(operand, module)?;
                 let return_address = self.pop_until_end_of_function()?;
-                self.replace_variable(&return_address.result_destination, result)?;
+                self.update_variable(&return_address.result_destination, result)?;
                 return_address
             }
 
@@ -329,17 +333,21 @@ impl Interpreter
         Ok(StepResult::Continue(return_address.address))
     }
 
-    fn branch_if(&self, var: &str, on_true: BasicBlockRef, on_false: BasicBlockRef, index: &ByteCodeIndex) -> Result<StepResult, ExecutionError>
+    fn branch_if(
+        &self,
+        cond: &Operand,
+        on_true: BasicBlockRef,
+        on_false: BasicBlockRef,
+        index: &ByteCodeIndex,
+        module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
     {
-        let val = self.get_variable(var)?;
-        val.apply(|v: &Value| {
-            match *v
-            {
-                Value::Bool(true) => Ok(StepResult::Continue(index.jump(on_true))),
-                Value::Bool(false) => Ok(StepResult::Continue(index.jump(on_false))),
-                _ => Err(ExecutionError(format!("brif operand {} is not a boolean", var))),
-            }
-        })
+        let val = self.get_operand_value(cond, module)?;
+        match val
+        {
+            Value::Bool(true) => Ok(StepResult::Continue(index.jump(on_true))),
+            Value::Bool(false) => Ok(StepResult::Continue(index.jump(on_false))),
+            _ => Err(ExecutionError(format!("brif operand {} is not a boolean", cond))),
+        }
     }
 
     fn load_member(&mut self, dst: &str, obj: &str, member_index: &Operand) -> Result<(), ExecutionError>
@@ -436,15 +444,20 @@ impl Interpreter
         Ok(())
     }
 
-    fn get_function(&self, func: &str, module: &ByteCodeModule) -> Result<Rc<ByteCodeFunction>, ExecutionError>
+    fn get_function<'a>(&self, func: &str, module: &'a ByteCodeModule) -> Result<&'a ByteCodeFunction, ExecutionError>
     {
-        match module.functions.get(func) {
-            Some(f) => Ok(f.clone()),
+        if module.exit_function.sig.name == func {
+            return Ok(&module.exit_function);
+        }
+
+        match module.get_function(func) {
+            Some(f) => Ok(f),
             None => {
                 let v = self.get_variable(func)?;
                 v.apply(|val: &Value|
                     if let Value::Func(ref f) = *val {
-                        Ok(f.clone())
+                        module.get_function(f)
+                            .ok_or_else(|| ExecutionError(format!("Unknown function {}", f)))
                     } else {
                         Err(ExecutionError(format!("{} is not callable", func)))
                     }
@@ -468,20 +481,20 @@ impl Interpreter
         self.update_variable(dst, new_value)
     }
 
-    fn cast(&mut self, dst: &Var, src: &Var) -> Result<(), ExecutionError>
+    fn cast(&mut self, dst: &Var, src: &Operand, module: &ByteCodeModule) -> Result<(), ExecutionError>
     {
-        let new_value = self.get_variable(&src.name)?.apply(|src_val: &Value| {
+        let src_val = self.get_operand_value(src, module)?;
+        let new_value =
             match (src_val, &dst.typ)
             {
-                (&Value::Int(s), &Type::UInt) => Ok(Value::UInt(s as u64)),
-                (&Value::Int(s), &Type::Float) => Ok(Value::Float(s as f64)),
-                (&Value::UInt(s), &Type::Int) => Ok(Value::Int(s as i64)),
-                (&Value::UInt(s), &Type::Float) => Ok(Value::Float(s as f64)),
-                (&Value::Float(s), &Type::Int) => Ok(Value::Int(s as i64)),
-                (&Value::Float(s), &Type::UInt) => Ok(Value::UInt(s as u64)),
+                (Value::Int(s), &Type::UInt) => Ok(Value::UInt(s as u64)),
+                (Value::Int(s), &Type::Float) => Ok(Value::Float(s as f64)),
+                (Value::UInt(s), &Type::Int) => Ok(Value::Int(s as i64)),
+                (Value::UInt(s), &Type::Float) => Ok(Value::Float(s as f64)),
+                (Value::Float(s), &Type::Int) => Ok(Value::Int(s as i64)),
+                (Value::Float(s), &Type::UInt) => Ok(Value::UInt(s as u64)),
                 _ => Err(ExecutionError("Unsupported type cast".into())),
-            }
-        })?;
+            }?;
         self.update_variable(&dst.name, new_value)
     }
 
@@ -539,11 +552,11 @@ impl Interpreter
             Instruction::Call{ref dst, ref func, ref args} => {
                 let func = self.get_function(func, module)?;
                 let args = args.iter().cloned().collect::<Vec<_>>();
-                self.call(&dst.name, func, &args, index, module)
+                self.call(&dst.name, &func, &args, index, module)
             },
 
             Instruction::Cast{ref dst, ref src} => {
-                self.cast(dst, src)?;
+                self.cast(dst, src, module)?;
                 next
             },
 
@@ -563,11 +576,11 @@ impl Interpreter
             },
 
             Instruction::Return(ref var) => {
-                self.ret(Some(&var.name))
+                self.ret(Some(var), module)
             },
 
             Instruction::ReturnVoid => {
-                self.ret(None)
+                self.ret(None, module)
             },
 
             Instruction::Branch(bb) => {
@@ -575,7 +588,7 @@ impl Interpreter
             },
 
             Instruction::BranchIf{ref cond, on_true, on_false} => {
-                self.branch_if(&cond.name, on_true, on_false, index)
+                self.branch_if(&cond, on_true, on_false, index, module)
             },
 
             Instruction::Delete(ref var) => {
@@ -605,7 +618,10 @@ impl Interpreter
     {
         let mut index = self.start(function, module)?;
         loop {
-            print!("{}", index);
+            if self.debug_mode {
+                index.print(module);
+            }
+
             let sr = self.step(&index, module)?;
             index = match sr {
                 StepResult::Continue(new_index) => new_index,
@@ -618,12 +634,12 @@ impl Interpreter
 
     pub fn start(&mut self, function: &str, module: &ByteCodeModule) -> Result<ByteCodeIndex, ExecutionError>
     {
-        let func = module.functions.get(function).ok_or_else(|| ExecutionError(format!("Unknown function {}", function)))?;
+        let func = module.get_function(function).ok_or_else(|| ExecutionError(format!("Unknown function {}", function)))?;
         let bottom_frame = StackFrame::new();
         self.stack.push(bottom_frame);
 
         self.add_variable(RETURN_VALUE, Value::Void)?;
-        match self.call(RETURN_VALUE, func.clone(), &Vec::new(), &ByteCodeIndex::new(module.exit_function.clone(), 0, 0), module)?
+        match self.call(RETURN_VALUE, func.clone(), &Vec::new(), &ByteCodeIndex::new(module.exit_function.sig.name.clone(), 0, 0), module)?
         {
             StepResult::Continue(index) => Ok(index),
             StepResult::Exit(_) => Err(ExecutionError("Unexpected exit".into()))
@@ -632,7 +648,9 @@ impl Interpreter
 
     pub fn step(&mut self, s: &ByteCodeIndex, module: &ByteCodeModule) -> Result<StepResult, ExecutionError>
     {
-        let bb = s.function.blocks.get(&s.basic_block)
+        let func = module.get_function(&s.function)
+            .ok_or_else(|| ExecutionError(format!("Unknown function {}", s.function)))?;
+        let bb = func.blocks.get(&s.basic_block)
             .ok_or_else(|| ExecutionError(format!("Function does not have basic block {}", s.basic_block)))?;
 
         if let Some(instruction) = bb.instructions.get(s.instruction) {
@@ -645,6 +663,6 @@ impl Interpreter
 
 pub fn run_byte_code(module: &ByteCodeModule, function: &str) -> Result<Value, ExecutionError>
 {
-    let mut interpreter = Interpreter::new();
+    let mut interpreter = Interpreter::new(false);
     interpreter.run_function(function, module)
 }

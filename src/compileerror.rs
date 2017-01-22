@@ -56,6 +56,42 @@ pub struct CompileError
     pub msg: String,
 }
 
+pub fn print_message(msg: &str, span: &Span)
+{
+    let prefix = "| ";
+    println!("{}: {}", span, msg);
+    if let Ok(file) = File::open(&span.file) {
+        let start_line = if span.start.line >= 4 {span.start.line - 4} else {0};
+        let reader = io::BufReader::new(file);
+
+        for (idx, line) in reader.lines().enumerate().skip(start_line)
+        {
+            let line = line.unwrap();
+            let line_idx = idx + 1;
+            println!("{:>4} {}{}", line_idx, prefix, line);
+            if line_idx == span.start.line
+            {
+                let end = if line_idx == span.end.line {span.end.offset} else {line.len()};
+                let carets = repeat_string("^", end - span.start.offset + 1);
+                let whitespace = repeat_string(" ", span.start.offset - 1);
+                println!("     {}{}{}", prefix, whitespace, carets);
+            }
+            else if line_idx == span.end.line
+            {
+                let carets = repeat_string("^", span.end.offset);
+                println!("     {}{}", prefix, carets);
+            }
+            else if line_idx > span.start.line && line_idx < span.end.line && !line.is_empty()
+            {
+                let carets = repeat_string("^", line.len());
+                println!("     {}{}", prefix, carets);
+            }
+
+            if line_idx >= span.end.line + 3 {break;}
+        }
+    }
+}
+
 impl CompileError
 {
     pub fn new(span: &Span, error: ErrorCode, msg: String) -> CompileError
@@ -69,38 +105,7 @@ impl CompileError
 
     pub fn print(&self)
     {
-        let prefix = "| ";
-        println!("{}: {}", self.span, self.msg);
-        if let Ok(file) = File::open(&self.span.file) {
-            let start_line = if self.span.start.line >= 4 {self.span.start.line - 4} else {0};
-            let reader = io::BufReader::new(file);
-
-            for (idx, line) in reader.lines().enumerate().skip(start_line)
-            {
-                let line = line.unwrap();
-                let line_idx = idx + 1;
-                println!("{:>4} {}{}", line_idx, prefix, line);
-                if line_idx == self.span.start.line
-                {
-                    let end = if line_idx == self.span.end.line {self.span.end.offset} else {line.len()};
-                    let carets = repeat_string("^", end - self.span.start.offset + 1);
-                    let whitespace = repeat_string(" ", self.span.start.offset - 1);
-                    println!("     {}{}{}", prefix, whitespace, carets);
-                }
-                else if line_idx == self.span.end.line
-                {
-                    let carets = repeat_string("^", self.span.end.offset);
-                    println!("     {}{}", prefix, carets);
-                }
-                else if line_idx > self.span.start.line && line_idx < self.span.end.line && !line.is_empty()
-                {
-                    let carets = repeat_string("^", line.len());
-                    println!("     {}{}", prefix, carets);
-                }
-
-                if line_idx >= self.span.end.line + 3 {break;}
-            }
-        }
+        print_message(&self.msg, &self.span);
     }
 }
 

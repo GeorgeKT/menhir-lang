@@ -4,9 +4,9 @@ use ast::{TreePrinter};
 use parser::*;
 use bytecode::*;
 use compileerror::*;
-use super::value::Value;
+use bytecode::value::Value;
 
-fn generate_byte_code(prog: &str, dump: bool) -> CompileResult<ByteCodeModule>
+pub fn generate_byte_code(prog: &str, dump: bool) -> CompileResult<ByteCodeModule>
 {
     let mut cursor = Cursor::new(prog);
     let parser_options = ParserOptions::default();
@@ -38,12 +38,13 @@ fn generate_byte_code(prog: &str, dump: bool) -> CompileResult<ByteCodeModule>
 
 fn run(prog: &str, dump: bool) -> Result<i64, ExecutionError>
 {
-    let bc_mod = match generate_byte_code(prog, dump)
+    let mut bc_mod = match generate_byte_code(prog, dump)
     {
         Ok(bc_mod) => bc_mod,
         Err(e) => return Err(ExecutionError(format!("Compile error: {}", e))),
     };
 
+    optimize_module(&mut bc_mod, OptimizationLevel::Normal);
     let result = run_byte_code(&bc_mod, START_CODE_FUNCTION)?;
     match result
     {

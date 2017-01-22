@@ -1,10 +1,8 @@
 use std::fmt;
-use std::rc::Rc;
 use itertools::free::join;
 use ast::Type;
 use super::ExecutionError;
 use super::valueref::ValueRef;
-use super::function::ByteCodeFunction;
 use super::instruction::*;
 
 #[derive(Debug, Clone)]
@@ -21,7 +19,7 @@ pub enum Value
     String(String),
     Array(Vec<ValueRef>),
     Slice(Vec<ValueRef>),
-    Func(Rc<ByteCodeFunction>),
+    Func(String),
     Struct(Vec<ValueRef>),
     Sum(usize, Box<ValueRef>),
     Enum(usize),

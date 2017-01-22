@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::rc::Rc;
 use ast::*;
 use bytecode::*;
 use super::function::*;
@@ -44,9 +43,10 @@ fn array_lit_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, a: 
     let ep = stack_alloc(func, &ptr_type(element_type), None);
     for (idx, element) in a.elements.iter().enumerate() {
         func.add(load_member_instr(&ep, dst, idx));
-        func.push_destination(Some(ep.clone()));
-        expr_to_bc(bc_mod, func, element);
+        func.push_destination(None);
+        let v = to_bc(bc_mod, func, element);
         func.pop_destination();
+        func.add(store_instr(&ep, &v));
     }
 }
 
@@ -381,9 +381,7 @@ fn struct_pattern_match_to_bc(
 fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc: &MatchCase, target: &Var, match_end_bb: BasicBlockRef)
 {
     let match_case_bb = func.create_basic_block();
-    func.add_basic_block(match_case_bb);
     let next_bb = func.create_basic_block();
-    func.add_basic_block(next_bb);
 
     let add_literal_case = |bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, op: Operand| {
         func.push_destination(None);
@@ -518,7 +516,6 @@ fn match_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, m: &Mat
     func.pop_destination();
 
     func.add(Instruction::Branch(match_end_bb));
-    func.add_basic_block(match_end_bb);
     func.set_current_bb(match_end_bb);
     func.pop_scope();
     dst
@@ -530,9 +527,6 @@ fn while_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, w: &Whi
     let body_bb = func.create_basic_block();
     let post_while_bb = func.create_basic_block();
 
-    func.add_basic_block(cond_bb);
-    func.add_basic_block(body_bb);
-
     func.add(Instruction::Branch(cond_bb));
     func.set_current_bb(cond_bb);
     let cond = to_bc(bc_mod, func, &w.cond);
@@ -541,7 +535,6 @@ fn while_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, w: &Whi
     expr_to_bc(bc_mod, func, &w.body);
     func.add(Instruction::Branch(cond_bb));
 
-    func.add_basic_block(post_while_bb);
     func.set_current_bb(post_while_bb);
 }
 
@@ -566,13 +559,11 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
     let post_for_bb = func.create_basic_block();
 
     func.add(Instruction::Branch(cond_bb));
-    func.add_basic_block(cond_bb);
     func.set_current_bb(cond_bb);
     let cmp = stack_alloc(func, &Type::Bool, None);
     func.add(binary_op_instr(&cmp, Operator::LessThan, var_op(&index), var_op(&len)));
     func.add(branch_if_instr(&cmp, body_bb, post_for_bb));
 
-    func.add_basic_block(body_bb);
     func.set_current_bb(body_bb);
     func.add(load_member_instr_with_var(&loop_variable_ptr, &iterable, &index));
     func.add(load_instr(&loop_variable, &loop_variable_ptr));
@@ -582,7 +573,6 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
     func.add(binary_op_instr(&index, Operator::Add, var_op(&index), Operand::Int(1)));
     func.add(Instruction::Branch(cond_bb));
 
-    func.add_basic_block(post_for_bb);
     func.set_current_bb(post_for_bb);
     func.pop_scope();
 }
@@ -714,10 +704,10 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         },
 
         Expression::Lambda(ref l) => {
-            let lambda = Rc::new(func_to_bc(&l.sig, bc_mod, &l.expr));
-            bc_mod.functions.insert(l.sig.name.clone(), lambda.clone());
+            let lambda = func_to_bc(&l.sig, bc_mod, &l.expr);
             let dst = get_dst(func, &l.sig.get_type());
             func.add(store_func_instr(&dst, &lambda.sig.name));
+            bc_mod.functions.insert(l.sig.name.clone(), lambda);
             Some(dst)
         },
 
@@ -808,6 +798,7 @@ fn func_to_bc(sig: &FunctionSignature, bc_mod: &mut ByteCodeModule, expression: 
             llfunc.add(Instruction::ReturnVoid);
         }
     }
+
     llfunc
 }
 
@@ -838,19 +829,19 @@ pub fn compile_to_byte_code(md: &Module) -> ByteCodeModule
     let mut ll_mod = ByteCodeModule{
         name: md.name.clone(),
         functions: HashMap::new(),
-        exit_function: Rc::new(ByteCodeFunction::exit()),
+        exit_function: ByteCodeFunction::exit(),
     };
 
     for func in md.externals.values() {
-        ll_mod.functions.insert(func.sig.name.clone(), Rc::new(ByteCodeFunction::new(&func.sig)));
+        ll_mod.functions.insert(func.sig.name.clone(), ByteCodeFunction::new(&func.sig));
     }
 
-    let start_code = Rc::new(generate_start_code(md, &mut ll_mod));
+    let start_code = generate_start_code(md, &mut ll_mod);
     ll_mod.functions.insert(START_CODE_FUNCTION.to_string(), start_code);
 
     for func in md.functions.values() {
         if !func.is_generic() {
-            let new_func = Rc::new(func_to_bc(&func.sig, &mut ll_mod, &func.expression));
+            let new_func = func_to_bc(&func.sig, &mut ll_mod, &func.expression);
             ll_mod.functions.insert(func.sig.name.clone(), new_func);
         }
     }
