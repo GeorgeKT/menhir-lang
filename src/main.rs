@@ -24,7 +24,7 @@ use std::process::exit;
 use docopt::Docopt;
 use parser::{ParserOptions, parse_file};
 use typechecker::{type_check_module};
-use bytecode::{compile_to_byte_code, run_byte_code, debug_byte_code, optimize_module, ByteCodeModule};
+use bytecode::{compile_to_byte_code, run_byte_code, debug_byte_code, optimize_module, ByteCodeModule, OptimizationLevel};
 
 
 static USAGE: &'static str =  "
@@ -118,9 +118,11 @@ fn main()
 
         let mut bc_mod = compile_to_byte_code(&module);
         if optimize {
-            optimize_module(&mut bc_mod);
+            optimize_module(&mut bc_mod, OptimizationLevel::Normal);
+        } else {
+            optimize_module(&mut bc_mod, OptimizationLevel::Minimal);
         }
-        
+
         dump_byte_code(&bc_mod, &dump_flags);
 
         if !run_debugger && !run_interpreter {

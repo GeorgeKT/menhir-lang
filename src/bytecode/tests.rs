@@ -26,7 +26,7 @@ pub fn generate_byte_code(prog: &str, dump: bool) -> CompileResult<ByteCodeModul
         println!("-----------------");
     }
 
-    let mut bc_mod = compile_to_byte_code(&md);
+    let bc_mod = compile_to_byte_code(&md);
     if dump {
         println!("ByteCode:");
         println!("{}", bc_mod);
@@ -44,7 +44,7 @@ fn run(prog: &str, dump: bool) -> Result<i64, ExecutionError>
         Err(e) => return Err(ExecutionError(format!("Compile error: {}", e))),
     };
 
-    optimize_module(&mut bc_mod);
+    optimize_module(&mut bc_mod, OptimizationLevel::Normal);
     let result = run_byte_code(&bc_mod, START_CODE_FUNCTION)?;
     match result
     {
