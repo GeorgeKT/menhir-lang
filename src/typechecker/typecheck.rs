@@ -581,6 +581,25 @@ fn type_check_binding(ctx: &mut TypeCheckerContext, b: &mut Binding) -> TypeChec
     valid(b.typ.clone())
 }
 
+fn update_binding_type(ctx: &mut TypeCheckerContext, l: &mut BindingExpression, name: &str, expected_type: &Type) -> CompileResult<()>
+{
+    for b in &mut l.bindings
+    {
+        if let BindingType::Name(ref b_name) = b.binding_type
+        {
+            if *b_name == *name {
+                // It's one we know, so lets try again with a proper type hint
+                b.typ = type_check_expression(ctx, &mut b.init, &Some(expected_type.clone()))?;
+                ctx.update(b_name, b.typ.clone(), b.mutable);
+                l.typ = type_check_expression(ctx, &mut l.expression, &None)?;
+                return Ok(())
+            }
+        }
+    }
+
+    err(&l.span, ErrorCode::TypeError, format!("Cannot update the type of binding {}", name))
+}
+
 fn type_check_binding_expression(ctx: &mut TypeCheckerContext, l: &mut BindingExpression) -> TypeCheckResult
 {
     ctx.push_stack(false);
@@ -592,26 +611,7 @@ fn type_check_binding_expression(ctx: &mut TypeCheckerContext, l: &mut BindingEx
     {
         Err(ref cr) => {
             if let ErrorCode::UnknownType(ref name, ref expected_type) = cr.error {
-                let mut handled = false;
-                for b in &mut l.bindings
-                {
-                    if let BindingType::Name(ref b_name) = b.binding_type
-                    {
-                        if *b_name == *name {
-                            // It's one we know, so lets try again with a proper type hint
-                            b.typ = type_check_expression(ctx, &mut b.init, &Some(expected_type.clone()))?;
-                            ctx.update(b_name, b.typ.clone(), b.mutable);
-                            l.typ = type_check_expression(ctx, &mut l.expression, &None)?;
-                            handled = true;
-                        }
-                    }
-
-                    if handled {break;}
-                }
-
-                if !handled {
-                    return Err(cr.clone());
-                }
+                update_binding_type(ctx, l, name, expected_type)?;
             } else {
                 return Err(cr.clone());
             }

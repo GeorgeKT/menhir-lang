@@ -1,24 +1,5 @@
-bar() -> int {
-    7
-}
+apply(x: int, fn: (int) -> int) -> int =
+    fn(x)
 
-foo() -> int {
-    let x = 7;
-    x + bar()
-}
-
-baz() -> int {
-    5
-}
-
-main() -> int {
-    let array = [1, 2, 3, 4, baz()];
-    var sum = 0;
-    for a in array:
-        sum = sum + a;
-
-    if sum > 7:
-        sum
-    else
-        sum * 2
-}
+main() -> int =
+    let triple = @(x) -> x * 3 in apply(5, triple)
