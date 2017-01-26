@@ -257,7 +257,7 @@ impl Context
                 let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
                 let e = format!("Module verification error: {}", msg);
                 LLVMDisposeMessage(error_message);
-                err(&Span::default(), ErrorCode::CodegenError, e)
+                err(&Span::default(), e)
             } else {
                 Ok(())
             }

@@ -13,7 +13,7 @@ use std::fs;
 use std::io::Read;
 use std::rc::Rc;
 use ast::*;
-use compileerror::{CompileResult, ErrorCode, err};
+use compileerror::{CompileResult, parse_error};
 use span::{Span};
 use self::tokenqueue::{TokenQueue};
 use self::lexer::{Lexer};
@@ -63,7 +63,7 @@ fn parse_number(tq: &mut TokenQueue, num: &str, span: &Span) -> CompileResult<Li
     if num.find('.').is_some() || num.find('e').is_some() {
         match num.parse::<f64>() {
             Ok(_) => Ok(Literal::Float(span.clone(), num.into())),
-            Err(_) => err(span, ErrorCode::InvalidFloatingPoint, format!("{} is not a valid floating point number", num))
+            Err(_) => parse_error(span, format!("{} is not a valid floating point number", num))
         }
     } else {
         let force_unsigned = if tq.is_next_identifier("u") {
@@ -81,7 +81,7 @@ fn parse_number(tq: &mut TokenQueue, num: &str, span: &Span) -> CompileResult<Li
                 } else {
                     Ok(Literal::Int(span.clone(), i as i64))
                 },
-            Err(_) => err(span, ErrorCode::InvalidInteger, format!("{} is not a valid integer", num))
+            Err(_) => parse_error(span, format!("{} is not a valid integer", num))
         }
     }
 }
@@ -131,7 +131,7 @@ fn parse_unary_expression(tq: &mut TokenQueue, op: Operator, op_span: &Span) -> 
         let se = parse_expression(tq)?;
         Ok(unary_op(op, se, op_span.expanded(tq.pos())))
     } else {
-        err(op_span, ErrorCode::InvalidUnaryOperator, format!("Invalid unary operator {}", op))
+        parse_error(op_span, format!("Invalid unary operator {}", op))
     }
 }
 
@@ -350,12 +350,12 @@ fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool, self_typ
         if let Some(ref t) = *self_type {
             t.clone()
         } else {
-            return err(&span, ErrorCode::SelfTypeUnknown, "Cannot determine type of self argument");
+            return parse_error(&span, "Cannot determine type of self argument");
         }
     } else if type_is_optional {
         Type::Generic(name.clone()) // If the type is not known threat it as generic arg
     } else {
-        return err(&span, ErrorCode::MissingType, format!("Type not specified of function argument {}", name));
+        return parse_error(&span, format!("Type not specified of function argument {}", name));
     };
 
     Ok(Argument::new(name, typ, mutable, span.expanded(tq.pos())))
@@ -503,7 +503,7 @@ pub fn parse_pattern(tq: &mut TokenQueue) -> CompileResult<Pattern>
             Ok(Pattern::Nil(tok.span))
         },
 
-        _ => err(&tok.span, ErrorCode::UnexpectedToken, format!("Unexpected token '{}'", tok)),
+        _ => parse_error(&tok.span, format!("Unexpected token '{}'", tok)),
     }
 }
 
@@ -876,7 +876,7 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token) -> CompileResult<Expr
 
         TokenKind::Operator(op) => parse_unary_expression(tq, op, &tok.span),
 
-        _ => err(&tok.span, ErrorCode::UnexpectedToken, format!("Unexpected token '{}'", tok)),
+        _ => parse_error(&tok.span, format!("Unexpected token '{}'", tok)),
     }
 }
 
@@ -940,7 +940,7 @@ fn parse_import(options: &ParserOptions, import_name: &str) -> CompileResult<Mod
         }
     }
 
-    err(&Span::default(), ErrorCode::FileNotFound, format!("Unable to find file for import {}", import_name))
+    parse_error(&Span::default(), format!("Unable to find file for import {}", import_name))
 }
 
 fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool) -> CompileResult<()>
@@ -952,7 +952,7 @@ fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool
         let init = parse_expression(tq)?;
 
         if module.globals.contains_key(&name) {
-            return err(&span, ErrorCode::RedefinitionOfVariable, format!("Global {} already defined in this module", name));
+            return parse_error(&span, format!("Global {} already defined in this module", name));
         }
 
         module.globals.insert(name.clone(), global_binding(name, init, mutable, span.expanded(tq.pos())));
@@ -971,7 +971,7 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
 
     let add_function = |module: &mut Module, func: Function| -> CompileResult<()> {
         if module.functions.contains_key(&func.sig.name) {
-            return err(&func.span, ErrorCode::RedefinitionOfFunction, format!("Function {} redefined", func.sig.name));
+            return parse_error(&func.span, format!("Function {} redefined", func.sig.name));
         }
         module.functions.insert(func.sig.name.clone(), func);
         Ok(())
@@ -993,7 +993,7 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
             TokenKind::Type => {
                 let sd = parse_type_declaration(&mut tq, namespace, &tok.span)?;
                 if module.types.contains_key(sd.name()) {
-                    return err(&sd.span(), ErrorCode::RedefinitionOfStruct, format!("Type {} redefined", sd.name()));
+                    return parse_error(&sd.span(), format!("Type {} redefined", sd.name()));
                 }
                 module.types.insert(sd.name().into(), sd);
             },
@@ -1001,7 +1001,7 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
             TokenKind::Extern => {
                 let ext_func = parse_external_function(&mut tq, &tok.span)?;
                 if module.externals.contains_key(&ext_func.sig.name) {
-                    return err(&ext_func.span, ErrorCode::RedefinitionOfFunction, format!("External function {} redefined", ext_func.sig.name));
+                    return parse_error(&ext_func.span, format!("External function {} redefined", ext_func.sig.name));
                 }
                 module.externals.insert(ext_func.sig.name.clone(), ext_func);
             },
@@ -1035,7 +1035,7 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
                 add_function(&mut module, func)?;
             }
             _ => {
-                return err(&tok.span, ErrorCode::ExpressionNotAllowedAtTopLevel,
+                return parse_error(&tok.span,
                     format!("Expected a function declaration, import statement, extern function declaration or type declaration, found token {}", tok));
             }
         }

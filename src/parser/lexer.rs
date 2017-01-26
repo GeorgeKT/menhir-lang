@@ -1,6 +1,6 @@
 use std::io::{Read, BufReader, BufRead};
 use std::mem;
-use compileerror::{CompileResult, ErrorCode, err};
+use compileerror::{CompileResult, parse_error};
 use super::tokenqueue::TokenQueue;
 use super::tokens::{TokenKind, Token};
 use ast::Operator;
@@ -95,7 +95,7 @@ impl Lexer
             ch if is_identifier_start(ch) => {self.start(c, LexState::Identifier); Ok(())},
             ch if is_operator_start(ch) => {self.start(c, LexState::Operator); Ok(())}
             _ => {
-                err(&span, ErrorCode::UnexpectedChar, format!("Unexpected char {}", c))
+                parse_error(&span, format!("Unexpected char {}", c))
             }
         }
     }
@@ -203,7 +203,7 @@ impl Lexer
             "::" => Ok(TokenKind::DoubleColon),
             "|" => Ok(TokenKind::Pipe),
             "." => Ok(TokenKind::Operator(Operator::Dot)),
-            _ => err(&self.current_single_span(), ErrorCode::InvalidOperator, format!("Invalid operator {}", self.data)),
+            _ => parse_error(&self.current_single_span(), format!("Invalid operator {}", self.data)),
         }
     }
 
@@ -274,7 +274,7 @@ impl Lexer
             let mut span = self.current_span();
             span.end.offset += 1; // Need to include the single quote
             if self.data.len() != 1 {
-                return err(&span, ErrorCode::InvalidCharLiteral, "Invalid char literal");
+                return parse_error(&span, "Invalid char literal");
             }
 
             let c = self.data.chars().nth(0).expect("Invalid char literal");

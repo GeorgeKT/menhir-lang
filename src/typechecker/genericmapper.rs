@@ -1,5 +1,5 @@
 use ast::*;
-use compileerror::{CompileResult, ErrorCode, err};
+use compileerror::{CompileResult, type_error};
 use span::Span;
 use super::instantiategenerics::make_concrete_type;
 
@@ -7,8 +7,7 @@ pub fn add(mapping: &mut GenericMapping, from: &Type, to: &Type, span: &Span) ->
 {
     if let Some(prev_arg_type) = mapping.insert(from.clone(), to.clone()) {
         if prev_arg_type != *to {
-            return err(span, ErrorCode::GenericTypeSubstitutionError,
-                format!("Generic argument {} mismatch, expecting type {}, not {}", from, prev_arg_type, to));
+            return type_error(span, format!("Generic argument {} mismatch, expecting type {}, not {}", from, prev_arg_type, to));
         }
     }
 
@@ -27,7 +26,7 @@ pub fn fill_in_generics(actual: &Type, generic: &Type, known_types: &mut Generic
     }
 
     let map_err = || {
-        err(span, ErrorCode::GenericTypeSubstitutionError, format!("Cannot map argument type {} on type {}", actual, new_generic))
+        type_error(span, format!("Cannot map argument type {} on type {}", actual, new_generic))
     };
 
     match (&new_generic, actual)

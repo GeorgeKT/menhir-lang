@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use compileerror::{CompileError, CompileResult, ErrorCode, err};
+use compileerror::{CompileError, CompileResult, ErrorData, parse_error};
 use super::tokens::{Token, TokenKind};
 use ast::Operator;
 use span::{Pos, Span};
@@ -51,7 +51,7 @@ impl TokenQueue
             self.last_pos = tok.span.end;
             Ok(tok)
         } else {
-            err(&Span::default(), ErrorCode::UnexpectedEOF, "Unexpected end of file")
+            parse_error(&Span::default(), "Unexpected end of file")
         }
     }
 
@@ -74,7 +74,7 @@ impl TokenQueue
             }
             else
             {
-                Err(CompileError::new(&tok.span, ErrorCode::UnexpectedToken, format!("Unexpected token '{}'", tok)))
+                parse_error(&tok.span, format!("Unexpected token '{}'", tok))
             })
     }
 
@@ -83,12 +83,12 @@ impl TokenQueue
         let tok = self.pop()?;
         if let TokenKind::Number(ref v) = tok.kind
         {
-            let val = v.parse::<u64>().map_err(|_| CompileError::new(&tok.span, ErrorCode::InvalidInteger, format!("{} is not a valid integer", v)))?;
+            let val = v.parse::<u64>().map_err(|_| CompileError::Parse(ErrorData::new(&tok.span, format!("{} is not a valid integer", v))))?;
             Ok((val, tok.span))
         }
         else
         {
-            err(&tok.span, ErrorCode::ExpectedIntLiteral, format!("Expected integer literal, found {}", tok))
+            parse_error(&tok.span, format!("Expected integer literal, found {}", tok))
         }
     }
 
@@ -101,7 +101,7 @@ impl TokenQueue
         }
         else
         {
-            err(&tok.span, ErrorCode::ExpectedIdentifier, format!("Expected identifier, found {}", tok))
+            parse_error(&tok.span, format!("Expected identifier, found {}", tok))
         }
     }
 
@@ -114,7 +114,7 @@ impl TokenQueue
         }
         else
         {
-            err(&tok.span, ErrorCode::ExpectedOperator, format!("Expected operator, found {}", tok))
+            parse_error(&tok.span, format!("Expected operator, found {}", tok))
         }
     }
 

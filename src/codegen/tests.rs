@@ -62,7 +62,7 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
             let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
             let e = format!("Unable to create interpreter: {}", msg);
             LLVMDisposeMessage(error_message);
-            return err(&Span::default(), ErrorCode::CodegenError, e);
+            return err(&Span::default(), e);
         }
 
         let mut func: LLVMValueRef = ptr::null_mut();
@@ -75,7 +75,7 @@ fn run(prog: &str, dump: bool) -> CompileResult<i64>
             Ok(result)
         } else {
             LLVMDisposeExecutionEngine(ee);
-            err(&Span::default(), ErrorCode::CodegenError, "No main function found".into())
+            err(&Span::default(), "No main function found".into())
         }
     }
 }

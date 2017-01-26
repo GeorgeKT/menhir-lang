@@ -30,7 +30,7 @@ impl TargetMachine
             let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
             let e = format!("Unable to get an LLVM target reference for {}: {}", target_triple_str, msg);
             LLVMDisposeMessage(error_message);
-            return err(&Span::default(), ErrorCode::CodegenError, e);
+            return err(&Span::default(), e);
         }
 
         let target_machine = LLVMCreateTargetMachine(
@@ -44,7 +44,7 @@ impl TargetMachine
         );
         if target_machine == ptr::null_mut() {
             let e = format!("Unable to get a LLVM target machine for {}", target_triple_str);
-            return err(&Span::default(), ErrorCode::CodegenError, e);
+            return err(&Span::default(), e);
         }
 
         Ok(TargetMachine{
@@ -66,7 +66,7 @@ impl TargetMachine
             let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
             let e = format!("Unable to create object file: {}", msg);
             LLVMDisposeMessage(error_message);
-            return err(&Span::default(), ErrorCode::CodegenError, e);
+            return err(&Span::default(), e);
         }
         Ok(())
     }

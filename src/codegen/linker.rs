@@ -29,7 +29,7 @@ pub fn link(ctx: &Context, opts: &CodeGenOptions) -> CompileResult<()>
     if !output.status.success() {
         let out = String::from_utf8(output.stderr).expect("Invalid stdout from ld");
         let msg = format!("Linking {} failed:\n{}", program_path, out);
-        return err(&Span::default(), ErrorCode::CodegenError, msg);
+        return err(&Span::default(), msg);
     }
 
     Ok(())

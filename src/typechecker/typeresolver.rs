@@ -1,6 +1,6 @@
 use ast::*;
 use super::typecheckercontext::TypeCheckerContext;
-use compileerror::{CompileResult, unknown_name};
+use compileerror::{CompileResult, unknown_name_error};
 
 #[derive(Eq, PartialEq, Debug)]
 enum TypeResolved
@@ -60,13 +60,13 @@ fn resolve_function_args_and_ret_type(ctx: &mut TypeCheckerContext, sig: &mut Fu
     }
 
     if resolve_type(ctx, &mut sig.return_type) == TypeResolved::No {
-        return Err(unknown_name(&sig.span, &format!("{}", sig.return_type)));
+        return unknown_name_error(&sig.span, format!("Unknown function return type {}", sig.return_type));
     }
 
     let mut args = Vec::with_capacity(sig.args.len());
     for ref mut arg in &mut sig.args {
         if resolve_type(ctx, &mut arg.typ) == TypeResolved::No {
-            return Err(unknown_name(&arg.span, &format!("{}", arg.typ)));
+            return unknown_name_error(&arg.span, format!("Unknown function argument type {}", arg.typ));
         }
 
         args.push(arg.typ.clone());
@@ -89,7 +89,7 @@ fn resolve_struct_member_types(ctx: &mut TypeCheckerContext, sd: &mut StructDecl
             if mode == ResolveMode::Lazy {
                 return Ok(TypeResolved::No);
             } else {
-                return Err(unknown_name(&m.span, &format!("{}", m.typ)));
+                return unknown_name_error(&m.span, format!("Unknown struct member type {}", m.typ));
             }
         }
 
