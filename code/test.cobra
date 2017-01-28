@@ -1,8 +1,35 @@
-max(a: int, b: int) -> int {
-    var v = b;
-    if a > b: v = a;
-    v
+
+interface Product {
+    product(self) -> int
 }
 
-main() -> int =
-    max(100, 10)
+interface Sum {
+    sum(self) -> int
+}
+
+interface Default {
+    default() -> Self
+}
+
+type Point {
+    x: int,
+    y: int,
+}
+
+Point.sum(self) -> int {
+    self.x + self.y
+}
+
+Point.product(self) -> int {
+    self.x * self.y
+}
+
+
+foo(x: $(Product + Sum)) -> int {
+    x.product() + x.sum()
+}
+
+main() -> int {
+    let p = Point{7, 8};
+    foo(p)
+}

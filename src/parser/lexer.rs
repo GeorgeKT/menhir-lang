@@ -127,6 +127,7 @@ impl Lexer
             "nil" => TokenKind::Nil,
             "var" => TokenKind::Var,
             "as" => TokenKind::Operator(Operator::As),
+            "interface" => TokenKind::Interface,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
         };
 

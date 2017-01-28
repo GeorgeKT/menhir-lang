@@ -367,7 +367,7 @@ fn parse_function_arguments(tq: &mut TokenQueue, type_is_optional: bool, self_ty
     Ok(args)
 }
 
-fn parse_external_function(tq: &mut TokenQueue, span: &Span) -> CompileResult<ExternalFunction>
+fn parse_function_signature(tq: &mut TokenQueue) -> CompileResult<FunctionSignature>
 {
     let (name, name_span) = tq.expect_identifier()?;
 
@@ -381,8 +381,13 @@ fn parse_external_function(tq: &mut TokenQueue, span: &Span) -> CompileResult<Ex
     };
 
     let sig_span_end = tq.pos();
+    Ok(sig(&name, ret_type, args, name_span.expanded(sig_span_end)))
+}
+
+fn parse_external_function(tq: &mut TokenQueue, span: &Span) -> CompileResult<ExternalFunction>
+{
     Ok(ExternalFunction::new(
-        sig(&name, ret_type, args, name_span.expanded(sig_span_end)),
+        parse_function_signature(tq)?,
         span.expanded(tq.pos()),
     ))
 }
@@ -971,6 +976,27 @@ fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool
     Ok(())
 }
 
+fn parse_interface(module: &mut Module, tq: &mut TokenQueue, span: &Span) -> CompileResult<()>
+{
+    let mut functions = Vec::new();
+    let (name, _) = tq.expect_identifier()?;
+    if module.types.contains_key(&name) {
+        return parse_error(&span, format!("Type {} already defined in this module", name));
+    }
+
+    tq.expect(TokenKind::OpenCurly)?;
+    while !tq.is_next(TokenKind::CloseCurly)
+    {
+        let sig = parse_function_signature(tq)?;
+        functions.push(sig);
+        eat_comma(tq)?;
+    }
+
+    tq.expect(TokenKind::CloseCurly)?;
+    module.types.insert(name.clone(), TypeDeclaration::Interface(interface(name, functions, span.expanded(tq.pos()))));
+    Ok(())
+}
+
 pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, name: &str, file_name: &str) -> CompileResult<Module>
 {
     let mut tq = Lexer::new(file_name).read(input)?;
@@ -990,6 +1016,10 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
         let tok = tq.pop()?;
         match tok.kind
         {
+            TokenKind::Interface => {
+                parse_interface(&mut module, &mut tq, &tok.span)?;
+            },
+
             TokenKind::Let => {
                 parse_global_bindings(&mut module, &mut tq, false)?;
             },

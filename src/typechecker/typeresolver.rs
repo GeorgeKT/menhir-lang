@@ -146,6 +146,8 @@ fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: Re
     {
         match *typ
         {
+            TypeDeclaration::Interface(ref mut _i) => panic!("NYI"),
+            
             TypeDeclaration::Struct(ref mut s) => {
                 if resolve_struct_member_types(ctx, s, mode)? == TypeResolved::Yes
                 {
