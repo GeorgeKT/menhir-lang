@@ -6,11 +6,11 @@ pub struct Test
     pub code: &'static str,
 }
 
-pub const ALL_TESTS: [Test; 44] = [
+pub const ALL_TESTS: [Test; 45] = [
     Test{
         name: "call in array initializer",
         ret: 15,
-        debug: true,
+        debug: false,
         code: r#"
             baz() -> int {
                 5
@@ -30,7 +30,7 @@ pub const ALL_TESTS: [Test; 44] = [
     Test{
         name: "for loops with casting",
         ret: 15,
-        debug: true,
+        debug: false,
         code: r#"
             main() -> int {
                 let array = [1, 2, 3, 4, 5];
@@ -45,7 +45,7 @@ pub const ALL_TESTS: [Test; 44] = [
     Test{
         name: "for loops",
         ret: 15,
-        debug: true,
+        debug: false,
         code: r#"
             main() -> int {
                 let array = [1, 2, 3, 4, 5];
@@ -261,6 +261,22 @@ pub const ALL_TESTS: [Test; 44] = [
                 } else {
                     b
                 }
+            }
+
+            main() -> int =
+                max(100, 10)
+        "#
+    },
+
+    Test{
+        name: "single if",
+        ret: 100,
+        debug: true,
+        code: r#"
+            max(a: int, b: int) -> int {
+                var v = b;
+                if a > b: v = a;
+                v
             }
 
             main() -> int =

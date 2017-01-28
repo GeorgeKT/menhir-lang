@@ -630,13 +630,24 @@ fn type_check_if(ctx: &mut TypeCheckerContext, i: &mut IfExpression) -> TypeChec
     type_check_with_conversion(ctx, &mut i.condition, &Type::Bool)?;
 
     let on_true_type = type_check_expression(ctx, &mut i.on_true, &None)?;
-    let on_false_type = type_check_expression(ctx, &mut i.on_false, &None)?;
+    let on_false_type = if let Some(ref mut expr) = i.on_false {
+        type_check_expression(ctx, expr, &None)?
+    } else {
+        Type::Void
+    };
+
     if on_true_type != on_false_type
     {
-        if on_true_type == Type::Nil
+        if i.on_false.is_none()
+        {
+            type_error(&i.span, format!("If expressions without an else part, must return void (type of then part is {})", on_true_type))
+        }
+        else if on_true_type == Type::Nil
         {
             let optional_type = optional_type(on_false_type);
-            type_check_with_conversion(ctx, &mut i.on_false, &optional_type)?;
+            if let Some(ref mut expr) = i.on_false {
+                type_check_with_conversion(ctx, expr, &optional_type)?;
+            }
             i.typ = optional_type.clone();
             valid(optional_type)
         }
@@ -649,7 +660,7 @@ fn type_check_if(ctx: &mut TypeCheckerContext, i: &mut IfExpression) -> TypeChec
         }
         else
         {
-            type_error(&i.condition.span(),
+            type_error(&i.span,
                 format!("then and else expression of an if expression need to be of the same type, then has type {}, else has type {}", on_true_type, on_false_type)
             )
         }
@@ -943,8 +954,8 @@ fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign) -> TypeCheckR
     }
 
     type_check_with_conversion(ctx, &mut a.right, &left_type)?;
-    a.typ = left_type.clone();
-    valid(left_type)
+    a.typ = Type::Void;
+    valid(Type::Void)
 }
 
 fn type_check_while(ctx: &mut TypeCheckerContext, w: &mut WhileLoop) -> TypeCheckResult

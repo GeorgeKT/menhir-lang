@@ -584,9 +584,17 @@ fn parse_if(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
     let cond = parse_expression(tq)?;
     tq.expect(TokenKind::Colon)?;
     let on_true = parse_expression(tq)?;
-    tq.expect(TokenKind::Else)?;
-    let on_false = parse_expression(tq)?;
-    Ok(if_expression(cond, on_true, on_false, span.expanded(tq.pos())))
+
+    if tq.is_next(TokenKind::Else)
+    {
+        tq.expect(TokenKind::Else)?;
+        let on_false = parse_expression(tq)?;
+        Ok(if_expression(cond, on_true, on_false, span.expanded(tq.pos())))
+    }
+    else
+    {
+        Ok(single_if_expression(cond, on_true, span.expanded(tq.pos())))
+    }
 }
 
 fn parse_type_declaration(tq: &mut TokenQueue, namespace: &str, span: &Span) -> CompileResult<TypeDeclaration>

@@ -1,5 +1,8 @@
-apply(x: int, fn: (int) -> int) -> int =
-    fn(x)
+max(a: int, b: int) -> int {
+    var v = b;
+    if a > b: v = a;
+    v
+}
 
 main() -> int =
-    let triple = @(x) -> x * 3 in apply(5, triple)
+    max(100, 10)

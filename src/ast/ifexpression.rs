@@ -6,7 +6,7 @@ pub struct IfExpression
 {
     pub condition: Expression,
     pub on_true: Expression,
-    pub on_false: Expression,
+    pub on_false: Option<Expression>,
     pub span: Span,
     pub typ: Type,
 }
@@ -25,8 +25,16 @@ impl IfExpression
                 },
                 MatchCase{
                     pattern: Pattern::Any(Span::default()),
-                    to_execute: self.on_false.clone(),
-                    span: self.on_false.span(),
+                    to_execute: if let Some(ref expr) = self.on_false {
+                        expr.clone()
+                    } else {
+                        Expression::Void
+                    },
+                    span: if let Some(ref expr) = self.on_false {
+                        expr.span()
+                    } else {
+                        Span::default()
+                    },
                 },
             ],
             typ: self.typ.clone(),
@@ -35,12 +43,23 @@ impl IfExpression
     }
 }
 
+pub fn single_if_expression(condition: Expression, on_true: Expression, span: Span) -> Expression
+{
+    Expression::If(Box::new(IfExpression{
+        condition: condition,
+        on_true: on_true,
+        on_false: None,
+        span: span,
+        typ: Type::Unknown,
+    }))
+}
+
 pub fn if_expression(condition: Expression, on_true: Expression, on_false: Expression, span: Span) -> Expression
 {
     Expression::If(Box::new(IfExpression{
         condition: condition,
         on_true: on_true,
-        on_false: on_false,
+        on_false: Some(on_false),
         span: span,
         typ: Type::Unknown,
     }))
@@ -55,7 +74,9 @@ impl TreePrinter for IfExpression
         self.condition.print(level + 1);
         println!("{} then", p);
         self.on_true.print(level + 2);
-        println!("{} else", p);
-        self.on_false.print(level + 2);
+        if let Some(ref on_false) = self.on_false {
+            println!("{} else", p);
+            on_false.print(level + 2);
+        }
     }
 }
