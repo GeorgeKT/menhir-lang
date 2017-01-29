@@ -440,8 +440,8 @@ fn test_lambda()
     let e = th_expr("@(a, b) -> a + b");
     assert!(e == lambda(
         vec![
-            Argument::new("a".into(), Type::Generic("a".into()), false, span(1, 3, 1, 3)),
-            Argument::new("b".into(), Type::Generic("b".into()), false, span(1, 6, 1, 6)),
+            Argument::new("a".into(), generic_type("a"), false, span(1, 3, 1, 3)),
+            Argument::new("b".into(), generic_type("b"), false, span(1, 6, 1, 6)),
         ],
         bin_op(
             Operator::Add,
@@ -514,8 +514,8 @@ type Point = {x: $a, y: $b}
     assert!(*md.types.get("test::Point").unwrap() == TypeDeclaration::Struct(struct_declaration(
         "test::Point",
         vec![
-            struct_member_declaration("x", Type::Generic("a".into()), span(2, 15, 2, 19)),
-            struct_member_declaration("y", Type::Generic("b".into()), span(2, 22, 2, 26)),
+            struct_member_declaration("x", generic_type("a"), span(2, 15, 2, 19)),
+            struct_member_declaration("y", generic_type("b"), span(2, 22, 2, 26)),
         ],
         span(2, 1, 2, 27))
     ))
@@ -650,8 +650,8 @@ foo(p: Point<int>) -> int = 7
     assert!(*md.types.get("test::Point").unwrap() == TypeDeclaration::Struct(struct_declaration(
         "test::Point",
         vec![
-            struct_member_declaration("x", Type::Generic("a".into()), span(2, 15, 2, 19)),
-            struct_member_declaration("y", Type::Generic("b".into()), span(2, 22, 2, 26)),
+            struct_member_declaration("x", generic_type("a"), span(2, 15, 2, 19)),
+            struct_member_declaration("y", generic_type("b"), span(2, 22, 2, 26)),
         ],
         span(2, 1, 2, 27))
     ));

@@ -271,8 +271,17 @@ fn parse_start_of_type(tq: &mut TokenQueue) -> CompileResult<Type>
     else if tq.is_next(TokenKind::Dollar)
     {
         tq.pop()?;
-        let (name, _span) = tq.expect_identifier()?;
-        Ok(Type::Generic(name))
+        if tq.is_next(TokenKind::OpenParen)
+        {
+            tq.pop()?;
+            let (constraints, _) = parse_list(tq, TokenKind::Operator(Operator::Add), TokenKind::CloseParen, parse_type)?;
+            Ok(generic_type_with_constraints(constraints))
+        }
+        else
+        {
+            let (name, _span) = tq.expect_identifier()?;
+            Ok(generic_type(&name))
+        }
     }
     else if tq.is_next(TokenKind::QuestionMark)
     {
@@ -353,7 +362,7 @@ fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool, self_typ
             return parse_error(&span, "Cannot determine type of self argument");
         }
     } else if type_is_optional {
-        Type::Generic(name.clone()) // If the type is not known threat it as generic arg
+        generic_type(&name) // If the type is not known threat it as generic arg
     } else {
         return parse_error(&span, format!("Type not specified of function argument {}", name));
     };

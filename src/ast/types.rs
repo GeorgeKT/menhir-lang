@@ -2,7 +2,7 @@ use std::fmt;
 use std::ops::Deref;
 use std::rc::Rc;
 use itertools::free::join;
-use ast::{Expression, TreePrinter, MemberAccessType, Property, Operator, prefix, array_to_slice, to_optional, bin_op_with_type};
+use ast::*;
 use span::Span;
 
 
@@ -101,6 +101,20 @@ pub struct UnresolvedType
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
+pub struct InterfaceType
+{
+    pub name: String,
+    pub functions: Vec<FunctionSignature>,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+pub enum GenericType
+{
+    Any(String),
+    Restricted(Vec<Type>),
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub enum Type
 {
     Void,
@@ -115,12 +129,13 @@ pub enum Type
     Unresolved(Rc<UnresolvedType>),
     Array(Rc<ArrayType>),
     Slice(Rc<SliceType>),
-    Generic(String),
+    Generic(Rc<GenericType>),
     Func(Rc<FuncType>),
     Struct(Rc<StructType>),
     Sum(Rc<SumType>),
     Enum(Rc<EnumType>),
     Optional(Rc<Type>),
+    Interface(Rc<InterfaceType>),
     Nil,
 }
 
@@ -242,6 +257,21 @@ impl Type
             Type::Sum(ref st) => st.cases.iter().any(|c| c.typ.is_generic()),
             Type::Unresolved(ref ut) => ut.generic_args.iter().any(|t| t.is_generic()),
             Type::Pointer(ref inner) => inner.is_generic(),
+            Type::Interface(ref i) => {
+                for func in &i.functions {
+                    if func.return_type.is_generic() {
+                        return true;
+                    }
+
+                    for arg in &func.args {
+                        if arg.typ.is_generic() {
+                            return true;
+                        }
+                    }
+                }
+
+                false
+            }
             _ => false,
         }
     }
@@ -377,6 +407,20 @@ pub fn optional_type(inner: Type) -> Type
     Type::Optional(Rc::new(inner))
 }
 
+pub fn generic_type(name: &str) -> Type
+{
+    Type::Generic(Rc::new(GenericType::Any(name.into())))
+}
+
+pub fn generic_type_with_constraints(constraints: Vec<Type>) -> Type
+{
+    Type::Generic(
+        Rc::new(
+            GenericType::Restricted(constraints)
+        )
+    )
+}
+
 pub fn struct_member(name: &str, typ: Type) -> StructMember
 {
     StructMember{name: name.into(), typ: typ}
@@ -428,6 +472,7 @@ impl fmt::Display for Type
             Type::Sum(ref st) => write!(f, "{}", join(st.cases.iter().map(|m| &m.typ), " | ")),
             Type::Enum(ref st) => write!(f, "{}", join(st.cases.iter(), " | ")),
             Type::Optional(ref inner) => write!(f, "?{}", inner),
+            Type::Interface(ref i) => write!(f, "interface {}", i.name),
             Type::Nil => write!(f, "nil"),
         }
     }
@@ -441,6 +486,18 @@ impl fmt::Display for StructMember
             write!(f, "{}", self.typ)
         } else {
             write!(f, "{}: {}", self.name, self.typ)
+        }
+    }
+}
+
+impl fmt::Display for GenericType
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
+    {
+        match *self
+        {
+            GenericType::Any(ref name) => write!(f, "{}", name),
+            GenericType::Restricted(ref constraints) => write!(f, "({})", join(constraints.iter(), " + ")),
         }
     }
 }

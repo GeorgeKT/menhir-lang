@@ -1,4 +1,4 @@
-use ast::{Expression, Argument, TreePrinter, FunctionSignature, Type, prefix, sig};
+use ast::{Expression, Argument, TreePrinter, FunctionSignature, Type, prefix, sig, generic_type};
 use compileerror::{CompileResult, type_error};
 use span::Span;
 
@@ -13,7 +13,7 @@ pub struct Lambda
 pub fn lambda(args: Vec<Argument>, expr: Expression, span: Span) -> Expression
 {
     Expression::Lambda(Box::new(Lambda{
-        sig: sig("lambda", Type::Generic("$ret$".into()), args, span.clone()),
+        sig: sig("lambda", generic_type("$ret$"), args, span.clone()),
         expr: expr,
         span: span,
     }))

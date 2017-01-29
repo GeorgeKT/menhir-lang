@@ -9,6 +9,17 @@ pub struct Interface
     pub span: Span,
 }
 
+impl Interface
+{
+    pub fn to_type(&self) -> InterfaceType
+    {
+        InterfaceType{
+            name: self.name.clone(),
+            functions: self.functions.clone(),
+        }
+    }
+}
+
 pub fn interface(name: String, functions: Vec<FunctionSignature>, span: Span) -> Interface
 {
     Interface{
