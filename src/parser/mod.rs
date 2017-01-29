@@ -333,7 +333,7 @@ fn parse_type(tq: &mut TokenQueue) -> CompileResult<Type>
     Ok(typ)
 }
 
-fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool, self_type: &Option<Type>) -> CompileResult<Argument>
+fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool, self_type: &Type) -> CompileResult<Argument>
 {
     let mutable = if tq.is_next(TokenKind::Var) {
         tq.pop()?;
@@ -347,8 +347,8 @@ fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool, self_typ
         tq.expect(TokenKind::Colon)?;
         parse_type(tq)?
     } else if name == "self" {
-        if let Some(ref t) = *self_type {
-            t.clone()
+        if *self_type != Type::Unknown {
+            self_type.clone()
         } else {
             return parse_error(&span, "Cannot determine type of self argument");
         }
@@ -361,18 +361,18 @@ fn parse_function_argument(tq: &mut TokenQueue, type_is_optional: bool, self_typ
     Ok(Argument::new(name, typ, mutable, span.expanded(tq.pos())))
 }
 
-fn parse_function_arguments(tq: &mut TokenQueue, type_is_optional: bool, self_type: &Option<Type>) -> CompileResult<Vec<Argument>>
+fn parse_function_arguments(tq: &mut TokenQueue, type_is_optional: bool, self_type: &Type) -> CompileResult<Vec<Argument>>
 {
     let (args, _) = parse_comma_separated_list(tq, TokenKind::CloseParen, |tq| parse_function_argument(tq, type_is_optional, self_type))?;
     Ok(args)
 }
 
-fn parse_function_signature(tq: &mut TokenQueue) -> CompileResult<FunctionSignature>
+fn parse_function_signature(tq: &mut TokenQueue, self_type: &Type) -> CompileResult<FunctionSignature>
 {
     let (name, name_span) = tq.expect_identifier()?;
 
     tq.expect(TokenKind::OpenParen)?;
-    let args = parse_function_arguments(tq, false, &None)?;
+    let args = parse_function_arguments(tq, false, self_type)?;
     let ret_type = if tq.is_next(TokenKind::Arrow) {
         tq.pop()?;
         parse_type(tq)?
@@ -387,7 +387,7 @@ fn parse_function_signature(tq: &mut TokenQueue) -> CompileResult<FunctionSignat
 fn parse_external_function(tq: &mut TokenQueue, span: &Span) -> CompileResult<ExternalFunction>
 {
     Ok(ExternalFunction::new(
-        parse_function_signature(tq)?,
+        parse_function_signature(tq, &Type::Unknown)?,
         span.expanded(tq.pos()),
     ))
 }
@@ -396,19 +396,19 @@ fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, name: &str, 
 {
     let (full_name, self_type) = match name
     {
-        "main" => (name.into(), None),
+        "main" => (name.into(), Type::Unknown),
         _ if name.starts_with('~') => {
             let self_type = ptr_type(unresolved_type(&name[1..], Vec::new()));
-            (namespaced(namespace, name), Some(self_type))
+            (namespaced(namespace, name), self_type)
         },
         _ => {
             if tq.is_next(TokenKind::Operator(Operator::Dot)) {
                 tq.pop()?;
                 let (member_function_name, _) = tq.expect_identifier()?;
                 let self_type = ptr_type(unresolved_type(name, Vec::new()));
-                (namespaced(namespace, &format!("{}.{}", name, member_function_name)), Some(self_type))
+                (namespaced(namespace, &format!("{}.{}", name, member_function_name)), self_type)
             } else {
-                (namespaced(namespace, name), None)
+                (namespaced(namespace, name), Type::Unknown)
             }
         },
     };
@@ -538,7 +538,7 @@ fn parse_match(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 fn parse_lambda(tq: &mut TokenQueue, span: &Span) -> CompileResult<Expression>
 {
     tq.expect(TokenKind::OpenParen)?;
-    let args = parse_function_arguments(tq, true, &None)?;
+    let args = parse_function_arguments(tq, true, &Type::Unknown)?;
     tq.expect(TokenKind::Arrow)?;
     let expr = parse_expression(tq)?;
     Ok(lambda(args, expr, span.expanded(tq.pos())))
@@ -984,10 +984,12 @@ fn parse_interface(module: &mut Module, tq: &mut TokenQueue, span: &Span) -> Com
         return parse_error(&span, format!("Type {} already defined in this module", name));
     }
 
+    let self_type = ptr_type(unresolved_type(&name, vec![]));
+
     tq.expect(TokenKind::OpenCurly)?;
     while !tq.is_next(TokenKind::CloseCurly)
     {
-        let sig = parse_function_signature(tq)?;
+        let sig = parse_function_signature(tq, &self_type)?;
         functions.push(sig);
         eat_comma(tq)?;
     }
