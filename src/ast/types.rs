@@ -104,7 +104,7 @@ pub struct UnresolvedType
 pub struct InterfaceType
 {
     pub name: String,
-    pub functions: Vec<FunctionSignature>,
+    pub generic_args: Vec<Type>,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
@@ -125,6 +125,7 @@ pub enum Type
     Char,
     Bool,
     String,
+    SelfType,
     Pointer(Rc<Type>),
     Unresolved(Rc<UnresolvedType>),
     Array(Rc<ArrayType>),
@@ -257,21 +258,7 @@ impl Type
             Type::Sum(ref st) => st.cases.iter().any(|c| c.typ.is_generic()),
             Type::Unresolved(ref ut) => ut.generic_args.iter().any(|t| t.is_generic()),
             Type::Pointer(ref inner) => inner.is_generic(),
-            Type::Interface(ref i) => {
-                for func in &i.functions {
-                    if func.return_type.is_generic() {
-                        return true;
-                    }
-
-                    for arg in &func.args {
-                        if arg.typ.is_generic() {
-                            return true;
-                        }
-                    }
-                }
-
-                false
-            }
+            Type::Interface(ref i) => !i.generic_args.is_empty(),
             _ => false,
         }
     }
@@ -443,6 +430,14 @@ pub fn unresolved_type(name: &str, generic_args: Vec<Type>) -> Type
     }))
 }
 
+pub fn interface_type(name: &str, generic_args: Vec<Type>) -> Type
+{
+    Type::Interface(Rc::new(InterfaceType{
+        name: name.into(),
+        generic_args: generic_args,
+    }))
+}
+
 impl fmt::Display for Type
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
@@ -473,6 +468,7 @@ impl fmt::Display for Type
             Type::Enum(ref st) => write!(f, "{}", join(st.cases.iter(), " | ")),
             Type::Optional(ref inner) => write!(f, "?{}", inner),
             Type::Interface(ref i) => write!(f, "interface {}", i.name),
+            Type::SelfType => write!(f, "Self"),
             Type::Nil => write!(f, "nil"),
         }
     }
@@ -529,6 +525,7 @@ pub fn to_primitive(name: &str) -> Option<Type>
         "string" => Some(Type::String),
         "bool" => Some(Type::Bool),
         "char" => Some(Type::Char),
+        "Self" => Some(Type::SelfType),
         _ => None,
     }
 }

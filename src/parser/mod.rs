@@ -985,7 +985,7 @@ fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool
     Ok(())
 }
 
-fn parse_interface(module: &mut Module, tq: &mut TokenQueue, span: &Span) -> CompileResult<()>
+fn parse_interface(module: &mut Module, tq: &mut TokenQueue, namespace: &str, span: &Span) -> CompileResult<()>
 {
     let mut functions = Vec::new();
     let (name, _) = tq.expect_identifier()?;
@@ -993,7 +993,7 @@ fn parse_interface(module: &mut Module, tq: &mut TokenQueue, span: &Span) -> Com
         return parse_error(&span, format!("Type {} already defined in this module", name));
     }
 
-    let self_type = ptr_type(unresolved_type(&name, vec![]));
+    let self_type = ptr_type(interface_type(&name, vec![]));
 
     tq.expect(TokenKind::OpenCurly)?;
     while !tq.is_next(TokenKind::CloseCurly)
@@ -1004,6 +1004,7 @@ fn parse_interface(module: &mut Module, tq: &mut TokenQueue, span: &Span) -> Com
     }
 
     tq.expect(TokenKind::CloseCurly)?;
+    let name = namespaced(&namespace, &name);
     module.types.insert(name.clone(), TypeDeclaration::Interface(interface(name, functions, span.expanded(tq.pos()))));
     Ok(())
 }
@@ -1028,7 +1029,7 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
         match tok.kind
         {
             TokenKind::Interface => {
-                parse_interface(&mut module, &mut tq, &tok.span)?;
+                parse_interface(&mut module, &mut tq, namespace, &tok.span)?;
             },
 
             TokenKind::Let => {

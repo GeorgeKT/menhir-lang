@@ -6,18 +6,8 @@ pub struct Interface
 {
     pub name: String,
     pub functions: Vec<FunctionSignature>,
+    pub typ: Type,
     pub span: Span,
-}
-
-impl Interface
-{
-    pub fn to_type(&self) -> InterfaceType
-    {
-        InterfaceType{
-            name: self.name.clone(),
-            functions: self.functions.clone(),
-        }
-    }
 }
 
 pub fn interface(name: String, functions: Vec<FunctionSignature>, span: Span) -> Interface
@@ -25,6 +15,7 @@ pub fn interface(name: String, functions: Vec<FunctionSignature>, span: Span) ->
     Interface{
         name: name,
         functions: functions,
+        typ: Type::Unknown,
         span: span,
     }
 }

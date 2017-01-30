@@ -25,11 +25,12 @@ Point.product(self) -> int {
 }
 
 
-foo(x: $(Product + Sum)) -> int {
-    x.product() + x.sum()
-}
+#foo(x: $(Product + Sum)) -> int {
+#    x.product() + x.sum()
+#}
 
 main() -> int {
-    let p = Point{7, 8};
-    foo(p)
+#    let p = Point{7, 8};
+#    foo(p)
+    0
 }
