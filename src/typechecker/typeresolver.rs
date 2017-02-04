@@ -42,8 +42,14 @@ fn resolve_type_helper(ctx: &TypeCheckerContext, typ: &Type) -> (Option<Type>, T
         Type::Generic(ref gt) => {
             match *gt.deref()
             {
-                GenericType::Any(_) => {
-                    (None, TypeResolved::Yes)
+                GenericType::Any(ref name) => {
+                    ctx.resolve(name).map(|r| {
+                        if let Type::Interface(_) = r.typ {
+                            (Some(generic_type_with_constraints(vec![r.typ])), TypeResolved::Yes)
+                        } else {
+                            (None, TypeResolved::Yes)
+                        }
+                    }).unwrap_or((None, TypeResolved::Yes))
                 },
 
                 GenericType::Restricted(ref interfaces) => {
@@ -168,66 +174,6 @@ fn resolve_sum_case_types(ctx: &mut TypeCheckerContext, st: &mut SumTypeDeclarat
     Ok(TypeResolved::Yes)
 }
 
-fn replace_self_type(typ: &Type, replacement: &Type) -> Type
-{
-    match *typ
-    {
-        Type::SelfType => replacement.clone(),
-        Type::Pointer(ref i) => ptr_type(replace_self_type(i, replacement)),
-        Type::Optional(ref i) => optional_type(replace_self_type(i, replacement)),
-        Type::Slice(ref s) => slice_type(replace_self_type(&s.element_type, replacement)),
-        Type::Array(ref a) => array_type(replace_self_type(&a.element_type, replacement), a.len),
-
-        Type::Func(ref ft) => {
-            let args = ft.args.iter().map(|arg_type| replace_self_type(arg_type, replacement)).collect();
-            let ret = replace_self_type(&ft.return_type, replacement);
-            func_type(args, ret)
-        }
-
-        Type::Struct(ref st) => {
-            let members = st.members.iter()
-                .map(|sm| struct_member(&sm.name, replace_self_type(&sm.typ, replacement)))
-                .collect();
-
-            struct_type(&st.name, members)
-        }
-
-        Type::Sum(ref st) => {
-            let cases = st.cases.iter()
-                .map(|c| sum_type_case(&c.name, replace_self_type(&c.typ, replacement)))
-                .collect();
-            sum_type(&st.name, cases)
-        }
-
-        Type::Interface(ref i) => {
-            let generic_args = i.generic_args.iter()
-                .map(|typ| replace_self_type(typ, replacement))
-                .collect();
-            let functions = i.functions.iter()
-                .map(|sig| replace_self_type_in_sig(sig, replacement))
-                .collect();
-            interface_type(&i.name, generic_args, functions)
-        }
-
-        Type::Void | Type::Unknown | Type::Int | Type::UInt | Type::Float | Type::Char |
-        Type::Bool | Type::String | Type::Enum(_) | Type::Nil => typ.clone(),
-        Type::Unresolved(_) | Type::Generic(_) => panic!("Types must be resolved here"),
-    }
-}
-
-fn replace_self_type_in_sig(f: &FunctionSignature, replacement: &Type) -> FunctionSignature
-{
-    let return_type = replace_self_type(&f.return_type, replacement);
-    let args = f.args.iter()
-        .map(|arg| {
-            let typ = replace_self_type(&arg.typ, replacement);
-            Argument::new(arg.name.clone(), typ, arg.mutable, arg.span.clone())
-        })
-        .collect();
-
-    sig(&f.name, return_type, args, f.span.clone())
-}
-
 fn resolve_interface_types(ctx: &mut TypeCheckerContext, i: &mut Interface, mode: ResolveMode) -> CompileResult<TypeResolved>
 {
     if i.typ != Type::Unknown {
@@ -256,18 +202,6 @@ fn resolve_interface_types(ctx: &mut TypeCheckerContext, i: &mut Interface, mode
     }
 
     i.typ = interface_type(&i.name, generic_args.into_iter().collect(), functions);
-
-    // Update the self arguments, now that we now all the generic args
-    for func in &mut i.functions {
-        for arg in &mut func.args {
-            if arg.name == "self" {
-                arg.typ = ptr_type(i.typ.clone());
-            }
-        }
-
-        replace_self_type_in_sig(func, &i.typ);
-    }
-
     Ok(TypeResolved::Yes)
 }
 

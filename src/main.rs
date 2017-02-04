@@ -55,8 +55,6 @@ struct Args
     flag_debug: Option<bool>,
 }
 
-
-
 fn default_output_file(input_file: &str) -> String
 {
     Path::new(&input_file)

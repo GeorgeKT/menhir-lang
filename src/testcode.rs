@@ -6,7 +6,36 @@ pub struct Test
     pub code: &'static str,
 }
 
-pub const ALL_TESTS: [Test; 46] = [
+pub const ALL_TESTS: [Test; 47] = [
+    Test{
+        name: "interfaces",
+        ret: 15,
+        debug: false,
+        code: r#"
+            interface Sum {
+                sum(self) -> int
+            }
+
+            type Point {
+                x: int,
+                y: int,
+            }
+
+            Point.sum(self) -> int {
+                self.x + self.y
+            }
+
+            foo(x: $Sum) -> int {
+                x.sum()
+            }
+
+            main() -> int {
+                let p = Point{7, 8};
+                foo(p)
+            }
+        "#
+    },
+
     Test{
         name: "interfaces",
         ret: 71,

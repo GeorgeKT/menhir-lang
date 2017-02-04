@@ -993,7 +993,7 @@ fn parse_interface(module: &mut Module, tq: &mut TokenQueue, namespace: &str, sp
         return parse_error_result(&span, format!("Type {} already defined in this module", name));
     }
 
-    let self_type = ptr_type(interface_type(&name, vec![], vec![]));
+    let self_type = ptr_type(Type::SelfType);
 
     tq.expect(TokenKind::OpenCurly)?;
     while !tq.is_next(TokenKind::CloseCurly)

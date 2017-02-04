@@ -5,7 +5,7 @@ use super::instantiategenerics::instantiate_generics;
 use super::typeresolver::resolve_types;
 use super::matchchecker::check_match_is_exhaustive;
 use super::genericmapper::fill_in_generics;
-use super::instantiategenerics::make_concrete_type;
+use super::instantiategenerics::make_concrete;
 use span::Span;
 
 #[derive(Debug)]
@@ -205,12 +205,12 @@ fn resolve_generic_args_in_call(ctx: &mut TypeCheckerContext, ft: &FuncType, c: 
         arg_types.clear();
         for (arg, expected_arg_type) in c.args.iter_mut().zip(ft.args.iter())
         {
-            let expected_arg_type = make_concrete_type(&c.generic_args, expected_arg_type);
+            let expected_arg_type = make_concrete(ctx, &c.generic_args, expected_arg_type, &arg.span())?;
             let arg_type = type_check_expression(ctx, arg, &Some(expected_arg_type.clone()))?;
-            let arg_type = make_concrete_type(&c.generic_args, &arg_type);
+            let arg_type = make_concrete(ctx, &c.generic_args, &arg_type, &arg.span())?;
 
             if expected_arg_type.is_generic() {
-                fill_in_generics(&arg_type, &expected_arg_type, &mut c.generic_args, &arg.span())?;
+                fill_in_generics(ctx, &arg_type, &expected_arg_type, &mut c.generic_args, &arg.span())?;
             }
             arg_types.push(arg_type);
         }
@@ -241,13 +241,13 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call) -> TypeCheckResul
         let arg_types = resolve_generic_args_in_call(ctx, ft, c)?;
         for (idx, arg) in c.args.iter_mut().enumerate()
         {
-            let expected_arg_type = make_concrete_type(&c.generic_args, &ft.args[idx]);
+            let expected_arg_type = make_concrete(ctx, &c.generic_args, &ft.args[idx], &arg.span())?;
             let arg_type = &arg_types[idx];
             convert_type(ctx, &expected_arg_type, arg_type, arg)?;
         }
 
         if ft.return_type.is_generic() {
-            c.return_type = make_concrete_type(&c.generic_args, &ft.return_type);
+            c.return_type = make_concrete(ctx, &c.generic_args, &ft.return_type, &c.span)?;
             return valid(c.return_type.clone());
         }
         c.return_type = ft.return_type.clone();
@@ -685,7 +685,7 @@ fn type_check_struct_members_in_initializer(ctx: &mut TypeCheckerContext, st: &S
     {
         let t = type_check_expression(ctx, mi, &Some(member.typ.clone()))?;
         let expected_type = if member.typ.is_generic() {
-            fill_in_generics(&t, &member.typ, &mut si.generic_args, &mi.span())?
+            fill_in_generics(ctx, &t, &member.typ, &mut si.generic_args, &mi.span())?
         } else {
             member.typ.clone()
         };
@@ -1108,8 +1108,6 @@ pub fn type_check_module(module: &mut Module) -> CompileResult<()>
             }
         }
 
-        module.print(0);
-
         for f in module.functions.values_mut() {
             if !f.type_checked {
                 type_check_function(&mut ctx, f)?;
@@ -1117,7 +1115,7 @@ pub fn type_check_module(module: &mut Module) -> CompileResult<()>
         }
 
         let count = module.functions.len();
-        instantiate_generics(module)?;
+        instantiate_generics(module, &ctx)?;
         // As long as we are adding new generic functions, we need to type check the module again
         if count == module.functions.len() {
             break;

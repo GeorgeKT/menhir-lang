@@ -7,6 +7,7 @@ use ast::Operator;
 use span::{Span, Pos};
 
 
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 enum LexState
 {
@@ -102,7 +103,10 @@ impl Lexer
 
     fn comment(&mut self, c: char) -> CompileResult<()>
     {
-        if c == '\n' {self.state = LexState::Idle;}
+        if c == '\n' 
+        {
+            self.state = LexState::Idle;
+        }
         Ok(())
     }
 
@@ -328,8 +332,6 @@ impl Lexer
         Ok(mem::replace(&mut self.tokens, TokenQueue::new()))
     }
 }
-
-
 
 
 

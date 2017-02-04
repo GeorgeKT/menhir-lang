@@ -323,6 +323,18 @@ impl Type
             false
         }
     }
+
+    pub fn name(&self) -> String
+    {
+        match *self
+        {
+            Type::Struct(ref st) => st.name.clone(),
+            Type::Sum(ref st) => st.name.clone(),
+            Type::Enum(ref st) => st.name.clone(),
+            Type::Interface(ref i) => i.name.clone(),
+            _ => format!("{}", self),
+        }
+    }
 }
 
 pub fn func_type(args: Vec<Type>, ret: Type) -> Type
