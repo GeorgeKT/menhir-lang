@@ -105,6 +105,7 @@ pub struct InterfaceType
 {
     pub name: String,
     pub generic_args: Vec<Type>,
+    pub functions: Vec<FunctionSignature>
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
@@ -430,11 +431,12 @@ pub fn unresolved_type(name: &str, generic_args: Vec<Type>) -> Type
     }))
 }
 
-pub fn interface_type(name: &str, generic_args: Vec<Type>) -> Type
+pub fn interface_type(name: &str, generic_args: Vec<Type>, functions: Vec<FunctionSignature>) -> Type
 {
     Type::Interface(Rc::new(InterfaceType{
         name: name.into(),
         generic_args: generic_args,
+        functions: functions,
     }))
 }
 

@@ -118,14 +118,19 @@ pub fn print_message(msg: &str, span: &Span)
 
 pub type CompileResult<T> = Result<T, CompileError>;
 
-pub fn parse_error<T, Msg: Into<String>>(span: &Span, msg: Msg) -> CompileResult<T>
+pub fn parse_error_result<T, Msg: Into<String>>(span: &Span, msg: Msg) -> CompileResult<T>
 {
     Err(CompileError::Parse(ErrorData::new(span, msg.into())))
 }
 
-pub fn type_error<T, Msg: Into<String>>(span: &Span, msg: Msg) -> CompileResult<T>
+pub fn type_error_result<T, Msg: Into<String>>(span: &Span, msg: Msg) -> CompileResult<T>
 {
     Err(CompileError::Type(ErrorData::new(span, msg.into())))
+}
+
+pub fn type_error<Msg: Into<String>>(span: &Span, msg: Msg) -> CompileError
+{
+    CompileError::Type(ErrorData::new(span, msg))
 }
 
 pub fn unknown_name<Msg: Into<String>>(span: &Span, msg: Msg) -> CompileError
@@ -133,12 +138,12 @@ pub fn unknown_name<Msg: Into<String>>(span: &Span, msg: Msg) -> CompileError
     CompileError::UnknownName(ErrorData::new(span, msg))
 }
 
-pub fn unknown_name_error<T, Msg: Into<String>>(span: &Span, msg: Msg) -> CompileResult<T>
+pub fn unknown_name_result<T, Msg: Into<String>>(span: &Span, msg: Msg) -> CompileResult<T>
 {
     Err(CompileError::UnknownName(ErrorData::new(span, msg)))
 }
 
-pub fn unknown_type_error<T>(name: &str, typ: &Type) -> CompileResult<T>
+pub fn unknown_type_result<T>(name: &str, typ: &Type) -> CompileResult<T>
 {
     Err(CompileError::UnknownType(name.into(), typ.clone()))
 }

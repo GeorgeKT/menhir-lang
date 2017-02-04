@@ -56,6 +56,7 @@ struct Args
 }
 
 
+
 fn default_output_file(input_file: &str) -> String
 {
     Path::new(&input_file)

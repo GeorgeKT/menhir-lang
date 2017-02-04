@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use itertools::free::join;
 use ast::*;
-use compileerror::{CompileResult, unknown_name_error};
+use compileerror::{CompileResult, unknown_name_result};
 
 pub fn make_concrete_type(mapping: &GenericMapping, generic: &Type) -> Type
 {
@@ -334,7 +334,7 @@ fn resolve_generic_call(new_functions: &mut FunctionMap, module: &Module, call: 
     match module.functions.get(&call.callee.name)
     {
         None => {
-            unknown_name_error(&call.span, format!("Unknown function {}", call.callee.name))
+            unknown_name_result(&call.span, format!("Unknown function {}", call.callee.name))
         },
         Some(func) => {
             let name = new_func_name(&func.sig.name, &call.generic_args);
