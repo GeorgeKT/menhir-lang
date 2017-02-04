@@ -1,6 +1,8 @@
+use std::collections::HashSet;
+use std::ops::Deref;
 use ast::*;
 use super::typecheckercontext::TypeCheckerContext;
-use compileerror::{CompileResult, unknown_name_error};
+use compileerror::{CompileResult, unknown_name_result};
 
 #[derive(Eq, PartialEq, Debug)]
 enum TypeResolved
@@ -37,6 +39,35 @@ fn resolve_type_helper(ctx: &TypeCheckerContext, typ: &Type) -> (Option<Type>, T
             }
         },
 
+        Type::Generic(ref gt) => {
+            match *gt.deref()
+            {
+                GenericType::Any(ref name) => {
+                    ctx.resolve(name).map(|r| {
+                        if let Type::Interface(_) = r.typ {
+                            (Some(generic_type_with_constraints(vec![r.typ])), TypeResolved::Yes)
+                        } else {
+                            (None, TypeResolved::Yes)
+                        }
+                    }).unwrap_or((None, TypeResolved::Yes))
+                },
+
+                GenericType::Restricted(ref interfaces) => {
+                    let mut new_interfaces = Vec::new();
+                    for interface in interfaces {
+                        let r = resolve_type_helper(ctx, interface);
+                        if let (Some(typ), TypeResolved::Yes) = r {
+                            new_interfaces.push(typ);
+                        } else {
+                            return (None, TypeResolved::No)
+                        }
+                    }
+
+                    (Some(generic_type_with_constraints(new_interfaces)), TypeResolved::Yes)
+                },
+            }
+        },
+
         _ => (None, TypeResolved::Yes),
     }
 }
@@ -53,27 +84,31 @@ fn resolve_type(ctx: &TypeCheckerContext, typ: &mut Type) -> TypeResolved
     }
 }
 
-fn resolve_function_args_and_ret_type(ctx: &mut TypeCheckerContext, sig: &mut FunctionSignature) -> CompileResult<()>
+fn resolve_function_args_and_ret_type(ctx: &mut TypeCheckerContext, sig: &mut FunctionSignature, mode: ResolveMode) -> CompileResult<TypeResolved>
 {
     if sig.typ != Type::Unknown {
-        return Ok(());
+        return Ok(TypeResolved::Yes);
     }
 
     if resolve_type(ctx, &mut sig.return_type) == TypeResolved::No {
-        return unknown_name_error(&sig.span, format!("Unknown function return type {}", sig.return_type));
+        return unknown_name_result(&sig.span, format!("Unknown function return type {}", sig.return_type));
     }
 
     let mut args = Vec::with_capacity(sig.args.len());
     for ref mut arg in &mut sig.args {
         if resolve_type(ctx, &mut arg.typ) == TypeResolved::No {
-            return unknown_name_error(&arg.span, format!("Unknown function argument type {}", arg.typ));
+            if mode == ResolveMode::Lazy {
+                return Ok(TypeResolved::No);
+            } else {
+                return unknown_name_result(&arg.span, format!("Unknown function argument type {}", arg.typ));
+            }
         }
 
         args.push(arg.typ.clone());
     }
 
     sig.typ = func_type(args, sig.return_type.clone());
-    Ok(())
+    Ok(TypeResolved::Yes)
 }
 
 fn resolve_struct_member_types(ctx: &mut TypeCheckerContext, sd: &mut StructDeclaration, mode: ResolveMode) -> CompileResult<TypeResolved>
@@ -89,7 +124,7 @@ fn resolve_struct_member_types(ctx: &mut TypeCheckerContext, sd: &mut StructDecl
             if mode == ResolveMode::Lazy {
                 return Ok(TypeResolved::No);
             } else {
-                return unknown_name_error(&m.span, format!("Unknown struct member type {}", m.typ));
+                return unknown_name_result(&m.span, format!("Unknown struct member type {}", m.typ));
             }
         }
 
@@ -139,6 +174,37 @@ fn resolve_sum_case_types(ctx: &mut TypeCheckerContext, st: &mut SumTypeDeclarat
     Ok(TypeResolved::Yes)
 }
 
+fn resolve_interface_types(ctx: &mut TypeCheckerContext, i: &mut Interface, mode: ResolveMode) -> CompileResult<TypeResolved>
+{
+    if i.typ != Type::Unknown {
+        return Ok(TypeResolved::Yes);
+    }
+
+    let mut generic_args = HashSet::new();
+    let mut functions = Vec::new();
+    for func in &mut i.functions
+    {
+        if resolve_function_args_and_ret_type(ctx, func, mode)? == TypeResolved::No {
+            return Ok(TypeResolved::No);
+        }
+
+        if func.return_type.is_generic() {
+            generic_args.insert(func.return_type.clone());
+        }
+
+        for arg in &func.args {
+            if arg.typ.is_generic() {
+                generic_args.insert(arg.typ.clone());
+            }
+        }
+
+        functions.push(func.clone());
+    }
+
+    i.typ = interface_type(&i.name, generic_args.into_iter().collect(), functions);
+    Ok(TypeResolved::Yes)
+}
+
 fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: ResolveMode) -> CompileResult<usize>
 {
     let mut num_resolved = 0;
@@ -146,6 +212,14 @@ fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: Re
     {
         match *typ
         {
+            TypeDeclaration::Interface(ref mut i) => {
+                if resolve_interface_types(ctx, i, mode)? == TypeResolved::Yes
+                {
+                    ctx.add(&i.name, i.typ.clone(), false, &i.span)?;
+                    num_resolved += 1;
+                }
+            },
+
             TypeDeclaration::Struct(ref mut s) => {
                 if resolve_struct_member_types(ctx, s, mode)? == TypeResolved::Yes
                 {
@@ -153,6 +227,7 @@ fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: Re
                     num_resolved += 1;
                 }
             },
+
             TypeDeclaration::Sum(ref mut s) => {
                 if resolve_sum_case_types(ctx, s, mode)? == TypeResolved::Yes
                 {
@@ -177,6 +252,7 @@ fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: Re
                     num_resolved += 1;
                 }
             },
+
             TypeDeclaration::Alias(ref mut _a) => {
                 panic!("NYI");
             }
@@ -204,12 +280,12 @@ pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module) -> Compi
     }
 
     for f in module.functions.values_mut() {
-        resolve_function_args_and_ret_type(ctx, &mut f.sig)?;
+        resolve_function_args_and_ret_type(ctx, &mut f.sig, ResolveMode::Forced)?;
         ctx.add(&f.sig.name, f.sig.typ.clone(), false, &f.sig.span)?;
     }
 
     for f in module.externals.values_mut() {
-        resolve_function_args_and_ret_type(ctx, &mut f.sig)?;
+        resolve_function_args_and_ret_type(ctx, &mut f.sig, ResolveMode::Forced)?;
         ctx.add(&f.sig.name, f.sig.typ.clone(), false, &f.sig.span)?;
     }
 

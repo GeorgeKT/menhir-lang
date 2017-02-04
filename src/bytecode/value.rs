@@ -87,6 +87,8 @@ impl Value
         match *typ
         {
             Type::Unknown | Type::Unresolved(_) | Type::Generic(_) => panic!("Types must be known before the interpreter can run"),
+            Type::Interface(_) => panic!("NYI"),
+            Type::SelfType => panic!("Self type must be resolved at this point"),
             Type::Void |
             Type::Func(_) => Ok(Value::Void), // Use void, seeing that we can't fill in the function pointer yet
             Type::Int => Ok(Value::Int(0)),

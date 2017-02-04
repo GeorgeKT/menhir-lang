@@ -1,70 +1,167 @@
+use std::ops::Deref;
 use std::collections::HashMap;
 use itertools::free::join;
 use ast::*;
-use compileerror::{CompileResult, unknown_name_error};
+use span::Span;
+use typechecker::typecheckercontext::TypeCheckerContext;
+use compileerror::{CompileResult, unknown_name_result, type_error};
 
-pub fn make_concrete_type(mapping: &GenericMapping, generic: &Type) -> Type
+
+fn matches_function_signature(expected: &Type, actual: &Type, concrete_type: &Type, interface: &Type, method_name: &str) -> Result<(), String>
 {
-    if !generic.is_generic() {
-        return generic.clone();
+    fn type_matches(expected: &Type, actual: &Type, concrete_type: &Type, interface: &Type) -> bool {
+        match (expected, actual)
+        {
+            (&Type::Pointer(ref e), &Type::Pointer(ref a)) |
+            (&Type::Optional(ref e), &Type::Optional(ref a)) => type_matches(e, a, concrete_type, interface),
+            (&Type::Array(ref e), &Type::Array(ref a)) => type_matches(&e.element_type, &a.element_type, concrete_type, interface),
+            (&Type::Slice(ref e), &Type::Slice(ref a)) => type_matches(&e.element_type, &a.element_type, concrete_type, interface),
+            _ => *expected == *actual || (*expected == Type::SelfType && *actual == *concrete_type),
+        }
     }
 
-    if let Some(t) = mapping.get(generic) {
-        return t.clone();
+    match (expected, actual)
+    {
+        (&Type::Func(ref e), &Type::Func(ref a)) => {
+            if e.args.len() != a.args.len() {
+                return Err(format!("Argument count mismatch for method {}", method_name));
+            }
+
+            if !type_matches(&e.return_type, &a.return_type, concrete_type, interface) {
+                return Err(format!("Return types do not match on method {}", method_name));
+            }
+
+            for (idx, (e_arg, a_arg)) in e.args.iter().zip(a.args.iter()).enumerate() {
+                if !type_matches(e_arg, a_arg, concrete_type, interface) {
+                    return Err(format!("The type of argument {} does not match on method {}.", idx, method_name));
+                }
+            }
+
+            Ok(())
+        },
+
+        _ => Err(format!("Cannot match function signatures of {} and {} types", expected, actual))
+    }
+}
+
+fn satisfies_interface(ctx: &TypeCheckerContext, concrete_type: &Type, interface: &Type) -> Result<(), String>
+{
+    let it = if let Type::Interface(ref it) = *interface {
+        it
+    } else {
+        return Err(format!("{} is not an interface type", interface.name()));
+    };
+
+    let concrete_type_name = concrete_type.name();
+    for func in &it.functions {
+        let r = ctx.resolve(&format!("{}.{}", concrete_type_name, func.name))
+            .ok_or_else(|| format!("No method {} found on type {}", func.name, concrete_type_name))?;
+
+        matches_function_signature(&func.typ, &r.typ, concrete_type, interface, &func.name)?;
     }
 
+    Ok(())
+}
+
+fn check_interface_constraints(ctx: &TypeCheckerContext, generic: &Type, concrete: &Type) -> Result<Type, String>
+{
     match *generic
     {
-        Type::Array(ref at) => {
-            array_type(make_concrete_type(mapping, &at.element_type), at.len)
-        },
+        Type::Generic(ref gt) => {
+            match *gt.deref()
+            {
+                GenericType::Any(_) => Ok(concrete.clone()),
 
-        Type::Slice(ref st) => {
-            slice_type(make_concrete_type(mapping, &st.element_type))
-        },
+                GenericType::Restricted(ref interfaces) => {
+                    for interface in interfaces {
+                        satisfies_interface(ctx, concrete, interface)
+                            .map_err(|msg|
+                                format!("Type {} does not implement the interface {}: {}", concrete.name(), interface.name(), msg)
+                            )?;
+                    }
 
-        Type::Func(ref ft) => {
-            func_type(
-                ft.args.iter().map(|t| make_concrete_type(mapping, t)).collect(),
-                make_concrete_type(mapping, &ft.return_type))
-        },
+                    Ok(concrete.clone())
+                }
+            }
+        }
 
-        Type::Struct(ref st) => {
-            struct_type(
-                &st.name,
-                st.members.iter()
-                    .map(|m| struct_member(&m.name, make_concrete_type(mapping, &m.typ)))
-                    .collect()
-            )
-        },
-
-        Type::Sum(ref st) => {
-            sum_type(
-                &st.name,
-                st.cases.iter()
-                    .map(|c| sum_type_case(&c.name, make_concrete_type(mapping, &c.typ)))
-                    .collect()
-            )
-        },
-
-        Type::Pointer(ref inner) => {
-            ptr_type(make_concrete_type(mapping, inner))
-        },
-
-        Type::Optional(ref inner) => {
-            optional_type(make_concrete_type(mapping, inner))
-        },
-
-        _ => generic.clone(),
+        _ => Ok(concrete.clone())
     }
 }
 
 
-fn subsitute_bindings(generic_args: &GenericMapping, lb: &[Binding]) -> CompileResult<Vec<Binding>>
+fn make_concrete_type(ctx: &TypeCheckerContext, mapping: &GenericMapping, generic: &Type) -> Result<Type, String>
+{
+    if !generic.is_generic() {
+        return Ok(generic.clone());
+    }
+
+    if let Some(concrete) = mapping.get(generic) {
+        return check_interface_constraints(ctx, generic, &concrete);
+    }
+
+    let typ = match *generic
+    {
+        Type::Array(ref at) => {
+            array_type(make_concrete_type(ctx, mapping, &at.element_type)?, at.len)
+        },
+
+        Type::Slice(ref st) => {
+            slice_type(make_concrete_type(ctx, mapping, &st.element_type)?)
+        },
+
+        Type::Func(ref ft) => {
+            let mut args = Vec::new();
+            for t in &ft.args {
+                args.push(make_concrete_type(ctx, mapping, t)?);
+            }
+
+            func_type(args, make_concrete_type(ctx, mapping, &ft.return_type)?)
+        },
+
+        Type::Struct(ref st) => {
+            let mut members = Vec::new();
+            for m in &st.members {
+                members.push(struct_member(&m.name, make_concrete_type(ctx, mapping, &m.typ)?));
+            }
+
+            struct_type(&st.name, members)
+        },
+
+        Type::Sum(ref st) => {
+            let mut cases = Vec::new();
+            for c in &st.cases {
+                cases.push(sum_type_case(&c.name, make_concrete_type(ctx, mapping, &c.typ)?));
+            }
+
+            sum_type(&st.name, cases)
+        },
+
+        Type::Pointer(ref inner) => {
+            ptr_type(make_concrete_type(ctx, mapping, inner)?)
+        },
+
+        Type::Optional(ref inner) => {
+            optional_type(make_concrete_type(ctx, mapping, inner)?)
+        },
+
+        _ => generic.clone(),
+    };
+
+    Ok(typ)
+}
+
+pub fn make_concrete(ctx: &TypeCheckerContext, mapping: &GenericMapping, generic: &Type, span: &Span) -> CompileResult<Type>
+{
+    make_concrete_type(ctx, mapping, generic).map_err(|msg| type_error(span, msg))
+}
+
+
+fn subsitute_bindings(ctx: &TypeCheckerContext, generic_args: &GenericMapping, lb: &[Binding]) -> CompileResult<Vec<Binding>>
 {
     let mut bindings = Vec::with_capacity(lb.len());
     for b in lb {
-        let binding_expr = substitute_expr(generic_args, &b.init)?;
+        let binding_expr = substitute_expr(ctx, generic_args, &b.init)?;
         let new_binding = match b.binding_type
         {
             BindingType::Name(ref name) => {
@@ -73,7 +170,7 @@ fn subsitute_bindings(generic_args: &GenericMapping, lb: &[Binding]) -> CompileR
 
             BindingType::Struct(ref s) => {
                 binding(
-                    BindingType::Struct(substitute_struct_pattern(generic_args, s)),
+                    BindingType::Struct(substitute_struct_pattern(ctx, generic_args, s)?),
                     binding_expr,
                     b.mutable,
                     b.span.clone()
@@ -85,119 +182,136 @@ fn subsitute_bindings(generic_args: &GenericMapping, lb: &[Binding]) -> CompileR
     Ok(bindings)
 }
 
-fn substitute_struct_pattern(generic_args: &GenericMapping, p: &StructPattern) -> StructPattern
+
+
+fn substitute_struct_pattern(ctx: &TypeCheckerContext, generic_args: &GenericMapping, p: &StructPattern) -> CompileResult<StructPattern>
 {
-    struct_pattern(
+    let mut types = Vec::with_capacity(p.types.len());
+    for t in &p.types {
+        types.push(make_concrete(ctx, generic_args, t, &p.span)?);
+    }
+
+    Ok(struct_pattern(
         &p.name,
         p.bindings.clone(),
-        p.types.iter().map(|t| make_concrete_type(generic_args, t)).collect(),
-        make_concrete_type(generic_args, &p.typ),
+        types,
+        make_concrete(ctx, generic_args, &p.typ, &p.span)?,
         p.span.clone()
-    )
+    ))
 }
 
-fn substitute_pattern(generic_args: &GenericMapping, p: &Pattern) -> CompileResult<Pattern>
+fn substitute_pattern(ctx: &TypeCheckerContext, generic_args: &GenericMapping, p: &Pattern) -> CompileResult<Pattern>
 {
     match *p
     {
         Pattern::Struct(ref sp) => {
-            Ok(Pattern::Struct(substitute_struct_pattern(generic_args, sp)))
+            Ok(Pattern::Struct(substitute_struct_pattern(ctx, generic_args, sp)?))
         },
 
         Pattern::Name(ref nr) => {
             let new_nr = NameRef{
                 name: nr.name.clone(),
                 span: nr.span.clone(),
-                typ: make_concrete_type(generic_args, &nr.typ),
+                typ: make_concrete(ctx, generic_args, &nr.typ, &nr.span)?,
             };
             Ok(Pattern::Name(new_nr))
         },
 
         Pattern::Literal(Literal::Array(ref al)) => {
-            substitute_array_literal(generic_args, al).map(Pattern::Literal)
+            substitute_array_literal(ctx, generic_args, al).map(Pattern::Literal)
         },
 
         _ => Ok(p.clone()),
     }
 }
 
-fn substitute_array_literal(generic_args: &GenericMapping, al: &ArrayLiteral) -> CompileResult<Literal>
+fn substitute_array_literal(ctx: &TypeCheckerContext, generic_args: &GenericMapping, al: &ArrayLiteral) -> CompileResult<Literal>
 {
     let mut new_elements = Vec::with_capacity(al.elements.len());
     for el in &al.elements {
-        new_elements.push(substitute_expr(generic_args, el)?);
+        new_elements.push(substitute_expr(ctx, generic_args, el)?);
     }
     Ok(array_lit(new_elements, al.span.clone()))
 }
 
-fn substitute_call(generic_args: &GenericMapping, c: &Call) -> CompileResult<Call>
+fn substitute_call(ctx: &TypeCheckerContext, generic_args: &GenericMapping, c: &Call) -> CompileResult<Call>
 {
     let mut new_args = Vec::with_capacity(c.args.len());
     for a in &c.args {
-        new_args.push(substitute_expr(generic_args, a)?);
+        new_args.push(substitute_expr(ctx, generic_args, a)?);
     }
 
     Ok(Call::new(c.callee.clone(), new_args, c.span.clone()))
 }
 
-fn substitute_expr(generic_args: &GenericMapping, e: &Expression) -> CompileResult<Expression>
+fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &Expression) -> CompileResult<Expression>
 {
     match *e
     {
         Expression::UnaryOp(ref op) => {
-            let e = substitute_expr(generic_args, &op.expression)?;
+            let e = substitute_expr(ctx, generic_args, &op.expression)?;
             Ok(unary_op(op.operator, e, op.span.clone()))
         },
 
         Expression::BinaryOp(ref op) => {
-            let l = substitute_expr(generic_args, &op.left)?;
-            let r = substitute_expr(generic_args, &op.right)?;
+            let l = substitute_expr(ctx, generic_args, &op.left)?;
+            let r = substitute_expr(ctx, generic_args, &op.right)?;
             Ok(bin_op(op.operator, l, r, op.span.clone()))
         },
 
         Expression::Literal(Literal::Array(ref a)) => {
-            substitute_array_literal(generic_args, a).map(Expression::Literal)
+            substitute_array_literal(ctx, generic_args, a).map(Expression::Literal)
         },
 
         Expression::Call(ref c) => {
-            let new_c = substitute_call(generic_args, c)?;
+            let new_c = substitute_call(ctx, generic_args, c)?;
             Ok(Expression::Call(new_c))
         },
 
         Expression::Lambda(ref l) => {
-            let args: Vec<Argument> = l.sig.args.iter().map(|a| Argument::new(a.name.clone(), make_concrete_type(generic_args, &a.typ), a.mutable, a.span.clone())).collect();
-            let expr = substitute_expr(generic_args, &l.expr)?;
+            let mut args = Vec::with_capacity(l.sig.args.len());
+            for a in &l.sig.args {
+                args.push(
+                    Argument::new(
+                        a.name.clone(),
+                        make_concrete(ctx, generic_args, &a.typ, &a.span)?,
+                        a.mutable,
+                        a.span.clone()
+                    )
+                )
+            }
+            let expr = substitute_expr(ctx, generic_args, &l.expr)?;
             Ok(lambda(args, expr, l.span.clone()))
         },
 
         Expression::Match(ref m) => {
-            let target = substitute_expr(generic_args, &m.target)?;
+            let target = substitute_expr(ctx, generic_args, &m.target)?;
             let mut cases = Vec::with_capacity(m.cases.len());
             for c in &m.cases
             {
-                let pattern = substitute_pattern(generic_args, &c.pattern)?;
-                let to_execute = substitute_expr(generic_args, &c.to_execute)?;
+                let pattern = substitute_pattern(ctx, generic_args, &c.pattern)?;
+                let to_execute = substitute_expr(ctx, generic_args, &c.to_execute)?;
                 cases.push(match_case(pattern, to_execute, c.span.clone()));
             }
             Ok(match_expression(target, cases, m.span.clone()))
         },
 
         Expression::Binding(ref l) => {
-            let bindings = subsitute_bindings(generic_args, &l.bindings)?;
-            let expr = substitute_expr(generic_args, &l.expression)?;
+            let bindings = subsitute_bindings(ctx, generic_args, &l.bindings)?;
+            let expr = substitute_expr(ctx, generic_args, &l.expression)?;
             Ok(binding_expression(bindings, expr, l.span.clone()))
         },
 
         Expression::Bindings(ref l) => {
-            let nb = subsitute_bindings(generic_args, &l.bindings)?;
+            let nb = subsitute_bindings(ctx, generic_args, &l.bindings)?;
             Ok(bindings(nb, l.span.clone()))
         },
 
         Expression::If(ref i) => {
             Ok(if_expression(
-                substitute_expr(generic_args, &i.condition)?,
-                substitute_expr(generic_args, &i.on_true)?,
-                substitute_expr(generic_args, &i.on_true)?,
+                substitute_expr(ctx, generic_args, &i.condition)?,
+                substitute_expr(ctx, generic_args, &i.on_true)?,
+                substitute_expr(ctx, generic_args, &i.on_true)?,
                 i.span.clone(),
             ))
         },
@@ -205,7 +319,7 @@ fn substitute_expr(generic_args: &GenericMapping, e: &Expression) -> CompileResu
         Expression::Block(ref b) => {
             let mut new_expressions = Vec::with_capacity(b.expressions.len());
             for e in &b.expressions {
-                new_expressions.push(substitute_expr(generic_args, e)?);
+                new_expressions.push(substitute_expr(ctx, generic_args, e)?);
             }
             Ok(block(new_expressions, b.span.clone()))
         },
@@ -216,7 +330,7 @@ fn substitute_expr(generic_args: &GenericMapping, e: &Expression) -> CompileResu
             let new_nr = NameRef{
                 name: nr.name.clone(),
                 span: nr.span.clone(),
-                typ: make_concrete_type(generic_args, &nr.typ),
+                typ: make_concrete(ctx, generic_args, &nr.typ, &nr.span)?,
             };
             Ok(Expression::NameRef(new_nr))
         },
@@ -224,7 +338,7 @@ fn substitute_expr(generic_args: &GenericMapping, e: &Expression) -> CompileResu
         Expression::StructInitializer(ref si) => {
             let mut nmi = Vec::with_capacity(si.member_initializers.len());
             for e in &si.member_initializers {
-                let new_e = substitute_expr(generic_args, e)?;
+                let new_e = substitute_expr(ctx, generic_args, e)?;
                 nmi.push(new_e);
             }
 
@@ -232,11 +346,11 @@ fn substitute_expr(generic_args: &GenericMapping, e: &Expression) -> CompileResu
         },
 
         Expression::MemberAccess(ref sma) => {
-            let left = substitute_expr(generic_args, &sma.left)?;
+            let left = substitute_expr(ctx, generic_args, &sma.left)?;
             let right = match sma.right
             {
                 MemberAccessType::Call(ref c) => {
-                    let new_c = substitute_call(generic_args, c)?;
+                    let new_c = substitute_call(ctx, generic_args, c)?;
                     MemberAccessType::Call(new_c)
                 },
                 _ => sma.right.clone(),
@@ -246,40 +360,40 @@ fn substitute_expr(generic_args: &GenericMapping, e: &Expression) -> CompileResu
         },
 
         Expression::New(ref n) => {
-            let inner = substitute_expr(generic_args, &n.inner)?;
-            Ok(new_with_type(inner, make_concrete_type(generic_args, &n.typ), n.span.clone()))
+            let inner = substitute_expr(ctx, generic_args, &n.inner)?;
+            Ok(new_with_type(inner, make_concrete(ctx, generic_args, &n.typ, &n.span)?, n.span.clone()))
         },
 
         Expression::Delete(ref n) => {
-            let inner = substitute_expr(generic_args, &n.inner)?;
+            let inner = substitute_expr(ctx, generic_args, &n.inner)?;
             Ok(delete(inner, n.span.clone()))
         },
 
         Expression::ArrayToSlice(ref ats) => {
-            let inner = substitute_expr(generic_args, &ats.inner)?;
+            let inner = substitute_expr(ctx, generic_args, &ats.inner)?;
             Ok(array_to_slice(inner, ats.span.clone()))
         },
 
         Expression::AddressOf(ref a) => {
-            let inner = substitute_expr(generic_args, &a.inner)?;
+            let inner = substitute_expr(ctx, generic_args, &a.inner)?;
             Ok(address_of(inner, a.span.clone()))
         },
 
         Expression::Assign(ref a) => {
-            let l = substitute_expr(generic_args, &a.left)?;
-            let r = substitute_expr(generic_args, &a.right)?;
+            let l = substitute_expr(ctx, generic_args, &a.left)?;
+            let r = substitute_expr(ctx, generic_args, &a.right)?;
             Ok(assign(l, r, a.span.clone()))
         },
 
         Expression::While(ref w) => {
-            let c = substitute_expr(generic_args, &w.cond)?;
-            let b = substitute_expr(generic_args, &w.body)?;
+            let c = substitute_expr(ctx, generic_args, &w.cond)?;
+            let b = substitute_expr(ctx, generic_args, &w.body)?;
             Ok(while_loop(c, b, w.span.clone()))
         },
 
         Expression::For(ref f) => {
-            let i = substitute_expr(generic_args, &f.iterable)?;
-            let b = substitute_expr(generic_args, &f.body)?;
+            let i = substitute_expr(ctx, generic_args, &f.iterable)?;
+            let b = substitute_expr(ctx, generic_args, &f.body)?;
             Ok(for_loop(&f.loop_variable, i, b, f.span.clone()))
         },
 
@@ -288,13 +402,13 @@ fn substitute_expr(generic_args: &GenericMapping, e: &Expression) -> CompileResu
         },
 
         Expression::ToOptional(ref t) => {
-            let inner = substitute_expr(generic_args, &t.inner)?;
+            let inner = substitute_expr(ctx, generic_args, &t.inner)?;
             Ok(to_optional(inner, t.optional_type.clone()))
         },
 
         Expression::Cast(ref t) => {
-            let inner = substitute_expr(generic_args, &t.inner)?;
-            Ok(type_cast(inner, make_concrete_type(generic_args, &t.destination_type), t.span.clone()))
+            let inner = substitute_expr(ctx, generic_args, &t.inner)?;
+            Ok(type_cast(inner, make_concrete(ctx, generic_args, &t.destination_type, &t.span)?, t.span.clone()))
         },
 
         Expression::Void => Ok(Expression::Void),
@@ -306,15 +420,17 @@ fn new_func_name(func_name: &str, generic_args: &GenericMapping) -> String
     format!("{}{}", func_name, join(generic_args.values(), ","))
 }
 
-fn instantiate(func: &Function, generic_args: &GenericMapping) -> CompileResult<Function>
+fn instantiate(ctx: &TypeCheckerContext, func: &Function, generic_args: &GenericMapping) -> CompileResult<Function>
 {
-    let arg_types = func.sig.args.iter()
-        .map(|arg| make_concrete_type(generic_args, &arg.typ))
-        .collect();
-    let args = func.sig.args.iter()
-        .map(|arg| Argument::new(arg.name.clone(), make_concrete_type(generic_args, &arg.typ), arg.mutable, arg.span.clone()))
-        .collect();
-    let return_type = make_concrete_type(generic_args, &func.sig.return_type);
+    let mut arg_types = Vec::with_capacity(func.sig.args.len());
+    let mut args = Vec::with_capacity(func.sig.args.len());
+    for arg in &func.sig.args {
+        let arg_typ = make_concrete(ctx, generic_args, &arg.typ, &arg.span)?;
+        args.push(Argument::new(arg.name.clone(), arg_typ.clone(), arg.mutable, arg.span.clone()));
+        arg_types.push(arg_typ);
+    }
+
+    let return_type = make_concrete(ctx, generic_args, &func.sig.return_type, &func.sig.span)?;
     let sig = FunctionSignature{
         name: new_func_name(&func.sig.name, generic_args),
         return_type: return_type.clone(),
@@ -323,23 +439,23 @@ fn instantiate(func: &Function, generic_args: &GenericMapping) -> CompileResult<
         typ: func_type(arg_types, return_type),
     };
 
-    let body = substitute_expr(generic_args, &func.expression)?;
+    let body = substitute_expr(ctx, generic_args, &func.expression)?;
     Ok(Function::new(sig, func.public, body, func.span.clone()))
 }
 
 type FunctionMap = HashMap<String, Function>;
 
-fn resolve_generic_call(new_functions: &mut FunctionMap, module: &Module, call: &Call) -> CompileResult<()>
+fn resolve_generic_call(ctx: &TypeCheckerContext, new_functions: &mut FunctionMap, module: &Module, call: &Call) -> CompileResult<()>
 {
     match module.functions.get(&call.callee.name)
     {
         None => {
-            unknown_name_error(&call.span, format!("Unknown function {}", call.callee.name))
+            unknown_name_result(&call.span, format!("Unknown function {}", call.callee.name))
         },
         Some(func) => {
             let name = new_func_name(&func.sig.name, &call.generic_args);
             if !new_functions.contains_key(&name) && !module.functions.contains_key(&name) {
-                let new_func = instantiate(func, &call.generic_args)?;
+                let new_func = instantiate(ctx, func, &call.generic_args)?;
                 new_functions.insert(name, new_func);
             }
 
@@ -348,13 +464,13 @@ fn resolve_generic_call(new_functions: &mut FunctionMap, module: &Module, call: 
     }
 }
 
-fn resolve_generics_in_pattern(new_functions: &mut FunctionMap, module: &Module, p: &Pattern) -> CompileResult<()>
+fn resolve_generics_in_pattern(ctx: &TypeCheckerContext, new_functions: &mut FunctionMap, module: &Module, p: &Pattern) -> CompileResult<()>
 {
     match *p
     {
         Pattern::Literal(Literal::Array(ref al)) => {
             for el in &al.elements {
-                resolve_generics(new_functions, module, el)?;
+                resolve_generics(ctx, new_functions, module, el)?;
             }
             Ok(())
         },
@@ -362,59 +478,59 @@ fn resolve_generics_in_pattern(new_functions: &mut FunctionMap, module: &Module,
     }
 }
 
-fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expression) -> CompileResult<()>
+fn resolve_generics(ctx: &TypeCheckerContext, new_functions: &mut FunctionMap, module: &Module, e: &Expression) -> CompileResult<()>
 {
     match *e
     {
-        Expression::UnaryOp(ref op) => resolve_generics(new_functions, module, &op.expression),
+        Expression::UnaryOp(ref op) => resolve_generics(ctx, new_functions, module, &op.expression),
         Expression::BinaryOp(ref op) => {
-            resolve_generics(new_functions, module, &op.left)?;
-            resolve_generics(new_functions, module, &op.right)
+            resolve_generics(ctx, new_functions, module, &op.left)?;
+            resolve_generics(ctx, new_functions, module, &op.right)
         },
 
         Expression::Literal(Literal::Array(ref a)) => {
             for el in &a.elements {
-                resolve_generics(new_functions, module, el)?;
+                resolve_generics(ctx, new_functions, module, el)?;
             }
             Ok(())
         },
 
         Expression::Call(ref c) => {
             for a in &c.args {
-                resolve_generics(new_functions, module, a)?;
+                resolve_generics(ctx, new_functions, module, a)?;
             }
             if !c.generic_args.is_empty() {
-                resolve_generic_call(new_functions, module, c)
+                resolve_generic_call(ctx, new_functions, module, c)
             } else {
                 Ok(())
             }
         },
 
         Expression::Match(ref m) => {
-            resolve_generics(new_functions, module, &m.target)?;
+            resolve_generics(ctx, new_functions, module, &m.target)?;
             for c in &m.cases
             {
-                resolve_generics_in_pattern(new_functions, module, &c.pattern)?;
-                resolve_generics(new_functions, module, &c.to_execute)?;
+                resolve_generics_in_pattern(ctx, new_functions, module, &c.pattern)?;
+                resolve_generics(ctx, new_functions, module, &c.to_execute)?;
             }
             Ok(())
         },
 
         Expression::Lambda(ref l) => {
-            resolve_generics(new_functions, module, &l.expr)
+            resolve_generics(ctx, new_functions, module, &l.expr)
         },
 
         Expression::Binding(ref l) => {
             for b in &l.bindings {
-                resolve_generics(new_functions, module, &b.init)?
+                resolve_generics(ctx, new_functions, module, &b.init)?
             }
 
-            resolve_generics(new_functions, module, &l.expression)
+            resolve_generics(ctx, new_functions, module, &l.expression)
         },
 
         Expression::Bindings(ref l) => {
             for b in &l.bindings {
-                resolve_generics(new_functions, module, &b.init)?
+                resolve_generics(ctx, new_functions, module, &b.init)?
             }
 
             Ok(())
@@ -422,55 +538,55 @@ fn resolve_generics(new_functions: &mut FunctionMap, module: &Module, e: &Expres
 
         Expression::StructInitializer(ref si) => {
             for mi in &si.member_initializers {
-                resolve_generics(new_functions, module, mi)?;
+                resolve_generics(ctx, new_functions, module, mi)?;
             }
             Ok(())
         }
 
         Expression::Block(ref b) => {
             for e in &b.expressions {
-                resolve_generics(new_functions, module, e)?;
+                resolve_generics(ctx, new_functions, module, e)?;
             }
             Ok(())
         },
 
         Expression::New(ref n) => {
-            resolve_generics(new_functions, module, &n.inner)
+            resolve_generics(ctx, new_functions, module, &n.inner)
         },
 
         Expression::Delete(ref n) => {
-            resolve_generics(new_functions, module, &n.inner)
+            resolve_generics(ctx, new_functions, module, &n.inner)
         },
 
         Expression::ArrayToSlice(ref ats) => {
-            resolve_generics(new_functions, module, &ats.inner)
+            resolve_generics(ctx, new_functions, module, &ats.inner)
         },
 
         Expression::AddressOf(ref a) => {
-            resolve_generics(new_functions, module, &a.inner)
+            resolve_generics(ctx, new_functions, module, &a.inner)
         },
 
         Expression::Assign(ref a) => {
-            resolve_generics(new_functions, module, &a.left)?;
-            resolve_generics(new_functions, module, &a.right)
+            resolve_generics(ctx, new_functions, module, &a.left)?;
+            resolve_generics(ctx, new_functions, module, &a.right)
         },
 
         Expression::While(ref w) => {
-            resolve_generics(new_functions, module, &w.cond)?;
-            resolve_generics(new_functions, module, &w.body)
+            resolve_generics(ctx, new_functions, module, &w.cond)?;
+            resolve_generics(ctx, new_functions, module, &w.body)
         },
 
         Expression::For(ref f) => {
-            resolve_generics(new_functions, module, &f.iterable)?;
-            resolve_generics(new_functions, module, &f.body)
+            resolve_generics(ctx, new_functions, module, &f.iterable)?;
+            resolve_generics(ctx, new_functions, module, &f.body)
         },
 
         Expression::ToOptional(ref t) => {
-            resolve_generics(new_functions, module, &t.inner)
+            resolve_generics(ctx, new_functions, module, &t.inner)
         },
 
         Expression::Cast(ref t) => {
-            resolve_generics(new_functions, module, &t.inner)
+            resolve_generics(ctx, new_functions, module, &t.inner)
         },
 
         Expression::Nil(_) |
@@ -582,13 +698,13 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
 /*
     Instantiate all generics
 */
-pub fn instantiate_generics(module: &mut Module) -> CompileResult<()>
+pub fn instantiate_generics(module: &mut Module, ctx: &TypeCheckerContext) -> CompileResult<()>
 {
     let mut new_functions = FunctionMap::new();
     for f in module.functions.values()
     {
         if !f.generics_resolved && !f.is_generic() {
-            resolve_generics(&mut new_functions, module, &f.expression)?;
+            resolve_generics(ctx, &mut new_functions, module, &f.expression)?;
         }
     }
 

@@ -1,10 +1,11 @@
 use std::io::{Read, BufReader, BufRead};
 use std::mem;
-use compileerror::{CompileResult, parse_error};
+use compileerror::{CompileResult, parse_error_result};
 use super::tokenqueue::TokenQueue;
 use super::tokens::{TokenKind, Token};
 use ast::Operator;
 use span::{Span, Pos};
+
 
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -95,14 +96,17 @@ impl Lexer
             ch if is_identifier_start(ch) => {self.start(c, LexState::Identifier); Ok(())},
             ch if is_operator_start(ch) => {self.start(c, LexState::Operator); Ok(())}
             _ => {
-                parse_error(&span, format!("Unexpected char {}", c))
+                parse_error_result(&span, format!("Unexpected char {}", c))
             }
         }
     }
 
     fn comment(&mut self, c: char) -> CompileResult<()>
     {
-        if c == '\n' {self.state = LexState::Idle;}
+        if c == '\n' 
+        {
+            self.state = LexState::Idle;
+        }
         Ok(())
     }
 
@@ -127,6 +131,7 @@ impl Lexer
             "nil" => TokenKind::Nil,
             "var" => TokenKind::Var,
             "as" => TokenKind::Operator(Operator::As),
+            "interface" => TokenKind::Interface,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
         };
 
@@ -203,7 +208,7 @@ impl Lexer
             "::" => Ok(TokenKind::DoubleColon),
             "|" => Ok(TokenKind::Pipe),
             "." => Ok(TokenKind::Operator(Operator::Dot)),
-            _ => parse_error(&self.current_single_span(), format!("Invalid operator {}", self.data)),
+            _ => parse_error_result(&self.current_single_span(), format!("Invalid operator {}", self.data)),
         }
     }
 
@@ -274,7 +279,7 @@ impl Lexer
             let mut span = self.current_span();
             span.end.offset += 1; // Need to include the single quote
             if self.data.len() != 1 {
-                return parse_error(&span, "Invalid char literal");
+                return parse_error_result(&span, "Invalid char literal");
             }
 
             let c = self.data.chars().nth(0).expect("Invalid char literal");
@@ -327,8 +332,6 @@ impl Lexer
         Ok(mem::replace(&mut self.tokens, TokenQueue::new()))
     }
 }
-
-
 
 
 

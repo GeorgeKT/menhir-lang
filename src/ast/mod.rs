@@ -9,6 +9,7 @@ mod expression;
 mod function;
 mod heap;
 mod ifexpression;
+mod interface;
 mod lambda;
 mod literal;
 mod loops;
@@ -31,6 +32,7 @@ pub use self::expression::*;
 pub use self::function::*;
 pub use self::heap::*;
 pub use self::ifexpression::*;
+pub use self::interface::*;
 pub use self::lambda::*;
 pub use self::literal::*;
 pub use self::loops::*;
@@ -67,6 +69,7 @@ pub type GenericMapping = HashMap<Type, Type>;
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum TypeDeclaration
 {
+    Interface(Interface),
     Struct(StructDeclaration),
     Sum(SumTypeDeclaration),
     Alias(TypeAlias),
@@ -78,6 +81,7 @@ impl TypeDeclaration
     {
         match *self
         {
+            TypeDeclaration::Interface(ref i) => i.span.clone(),
             TypeDeclaration::Struct(ref sd) => sd.span.clone(),
             TypeDeclaration::Sum(ref s) => s.span.clone(),
             TypeDeclaration::Alias(ref t) => t.span.clone(),
@@ -88,6 +92,7 @@ impl TypeDeclaration
     {
         match *self
         {
+            TypeDeclaration::Interface(ref i) => &i.name,
             TypeDeclaration::Struct(ref sd) => &sd.name,
             TypeDeclaration::Sum(ref s) => &s.name,
             TypeDeclaration::Alias(ref t) => &t.name,
@@ -101,6 +106,7 @@ impl TreePrinter for TypeDeclaration
     {
         match *self
         {
+            TypeDeclaration::Interface(ref i) => i.print(level),
             TypeDeclaration::Struct(ref sd) => sd.print(level),
             TypeDeclaration::Sum(ref s) => s.print(level),
             TypeDeclaration::Alias(ref t) => t.print(level),

@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use compileerror::{CompileError, CompileResult, ErrorData, parse_error};
+use compileerror::{CompileError, CompileResult, ErrorData, parse_error_result};
 use super::tokens::{Token, TokenKind};
 use ast::Operator;
 use span::{Pos, Span};
@@ -51,7 +51,7 @@ impl TokenQueue
             self.last_pos = tok.span.end;
             Ok(tok)
         } else {
-            parse_error(&Span::default(), "Unexpected end of file")
+            parse_error_result(&Span::default(), "Unexpected end of file")
         }
     }
 
@@ -74,7 +74,7 @@ impl TokenQueue
             }
             else
             {
-                parse_error(&tok.span, format!("Unexpected token '{}'", tok))
+                parse_error_result(&tok.span, format!("Unexpected token '{}'", tok))
             })
     }
 
@@ -88,7 +88,7 @@ impl TokenQueue
         }
         else
         {
-            parse_error(&tok.span, format!("Expected integer literal, found {}", tok))
+            parse_error_result(&tok.span, format!("Expected integer literal, found {}", tok))
         }
     }
 
@@ -101,7 +101,7 @@ impl TokenQueue
         }
         else
         {
-            parse_error(&tok.span, format!("Expected identifier, found {}", tok))
+            parse_error_result(&tok.span, format!("Expected identifier, found {}", tok))
         }
     }
 
@@ -114,7 +114,7 @@ impl TokenQueue
         }
         else
         {
-            parse_error(&tok.span, format!("Expected operator, found {}", tok))
+            parse_error_result(&tok.span, format!("Expected operator, found {}", tok))
         }
     }
 

@@ -1,5 +1,5 @@
-use ast::{Expression, Argument, TreePrinter, FunctionSignature, Type, prefix, sig};
-use compileerror::{CompileResult, type_error};
+use ast::{Expression, Argument, TreePrinter, FunctionSignature, Type, prefix, sig, generic_type};
+use compileerror::{CompileResult, type_error_result};
 use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -13,7 +13,7 @@ pub struct Lambda
 pub fn lambda(args: Vec<Argument>, expr: Expression, span: Span) -> Expression
 {
     Expression::Lambda(Box::new(Lambda{
-        sig: sig("lambda", Type::Generic("$ret$".into()), args, span.clone()),
+        sig: sig("lambda", generic_type("$ret$"), args, span.clone()),
         expr: expr,
         span: span,
     }))
@@ -32,7 +32,7 @@ impl Lambda
         {
             Type::Func(ref ft) => {
                 if ft.args.len() != self.sig.args.len() {
-                    return type_error(&self.span,
+                    return type_error_result(&self.span,
                         format!("Lambda expression has {} arguments, not {} arguments", self.sig.args.len(), ft.args.len()));
                 }
 
@@ -41,7 +41,7 @@ impl Lambda
                     if arg.typ.is_generic() {
                         arg.typ = arg_typ.clone();
                     } else if arg.typ != *arg_typ {
-                        return type_error(&self.span,
+                        return type_error_result(&self.span,
                             format!("Type mismatch in lambda expression, argument {}, has type {} not {}",
                                 arg.name, arg.typ, arg_typ));
                     }
@@ -51,7 +51,7 @@ impl Lambda
                 self.sig.typ = typ.clone();
                 Ok(())
             },
-            _ => type_error(&self.span,
+            _ => type_error_result(&self.span,
                 format!("Lambda expression does not match the type {}", typ)),
         }
     }

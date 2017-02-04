@@ -55,7 +55,7 @@ impl StackFrame
     pub fn add(&mut self, name: &str, t: Type, mutable: bool, span: &Span) -> CompileResult<()>
     {
         if self.symbols.insert(name.into(), (t, mutable)).is_some() {
-            type_error(span, format!("Symbol {} has already been defined", name))
+            type_error_result(span, format!("Symbol {} has already been defined", name))
         } else {
             Ok(())
         }

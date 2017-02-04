@@ -44,6 +44,7 @@ pub enum TokenKind
     Nil,
     Var,
     For,
+    Interface,
     EOF,
 }
 
@@ -92,6 +93,7 @@ impl Display for TokenKind
             TokenKind::Nil => write!(fmt, "nil"),
             TokenKind::Var => write!(fmt, "var"),
             TokenKind::For => write!(fmt, "for"),
+            TokenKind::Interface => write!(fmt, "interface"),
             TokenKind::EOF => write!(fmt, "EOF"),
         }
     }
