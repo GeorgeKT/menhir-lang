@@ -1,6 +1,6 @@
-extern crate llvm_sys as llvm;
-extern crate libffi;
-extern crate libc;
+//extern crate llvm_sys as llvm;
+//extern crate libffi;
+//extern crate libc;
 extern crate docopt;
 extern crate rustc_serialize;
 extern crate itertools;
