@@ -9,6 +9,7 @@ mod valueref;
 #[cfg(test)]
 mod tests;
 
+use std::io;
 use std::fmt;
 use std::collections::HashMap;
 
@@ -43,6 +44,20 @@ impl ByteCodeModule
         } else {
             self.functions.get(name)
         }
+    }
+
+    pub fn save<Output: io::Write>(&self, output: &mut Output) -> Result<(), String>
+    {
+        use serde_cbor::ser;
+        ser::to_writer(output, self)
+            .map_err(|err| format!("{}", err))
+    }
+
+    pub fn load<Input: io::Read>(input: &mut Input) -> Result<ByteCodeModule, String>
+    {
+        use serde_cbor::de;
+        de::from_reader(input)
+            .map_err(|err| format!("Cannot import bytecode: {}", err))
     }
 }
 

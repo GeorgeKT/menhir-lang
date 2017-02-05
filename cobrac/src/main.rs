@@ -1,37 +1,20 @@
 //extern crate llvm_sys as llvm;
 //extern crate libffi;
 //extern crate libc;
+extern crate libcobra;
 extern crate docopt;
 extern crate rustc_serialize;
-extern crate itertools;
-extern crate uuid;
-extern crate shrust;
 
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-extern crate serde_cbor;
-
-
-mod ast;
-#[macro_use]
-//mod codegen;
-mod compileerror;
-mod bytecode;
-mod parser;
-mod typechecker;
-#[cfg(test)] mod testcode;
-mod span;
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 //use codegen::{CodeGenOptions, codegen, link, llvm_init};
 use docopt::Docopt;
-use parser::{ParserOptions, parse_file};
-use typechecker::{type_check_module};
-use bytecode::{compile_to_byte_code, run_byte_code, debug_byte_code, optimize_module, ByteCodeModule, OptimizationLevel};
-use compileerror::{CompileResult, CompileError};
+use libcobra::parser::{ParserOptions, parse_file};
+use libcobra::typechecker::{type_check_module};
+use libcobra::bytecode::{compile_to_byte_code, run_byte_code, debug_byte_code, optimize_module, ByteCodeModule, OptimizationLevel};
+use libcobra::compileerror::{CompileResult, CompileError};
 
 
 static USAGE: &'static str =  "
@@ -88,13 +71,9 @@ fn parse(parser_options: &ParserOptions, input_file: &str, dump_flags: &str, opt
 {
     let bc_mod = if input_file.ends_with(".byte")
     {
-        use serde_cbor::de;
-        let file = File::open(input_file)?;
-        let bc_mod = de::from_reader(file)
-            .map_err(|err|
-                CompileError::Other(format!("Cannot import bytecode file {}: {}", input_file, err))
-            )?;
-        bc_mod
+        let mut file = File::open(input_file)?;
+        ByteCodeModule::load(&mut file)
+            .map_err(|err| CompileError::Other(err))?
     }
     else
     {
@@ -104,7 +83,7 @@ fn parse(parser_options: &ParserOptions, input_file: &str, dump_flags: &str, opt
         if dump_flags.contains("ast") || dump_flags.contains("all") {
             println!("AST:");
             println!("------\n");
-            use ast::TreePrinter;
+            use libcobra::ast::TreePrinter;
             module.print(0);
             println!("------\n");
         }
@@ -162,10 +141,9 @@ fn run() -> CompileResult<i32>
         match &binary_type[..]
         {
             "bytecode" => {
-                use serde_cbor::ser;
                 println!("Generating bytecode binary {}.byte", output_file);
                 let mut file = File::create(&format!("{}.byte", output_file))?;
-                match ser::to_writer(&mut file, &bc_mod)
+                match bc_mod.save(&mut file)
                 {
                     Ok(()) => Ok(0),
                     Err(msg) => {
@@ -191,7 +169,7 @@ fn run() -> CompileResult<i32>
         }
 
     } else {
-        use bytecode::START_CODE_FUNCTION;
+        use libcobra::bytecode::START_CODE_FUNCTION;
         let ret = if run_debugger {
             debug_byte_code(&bc_mod, START_CODE_FUNCTION)
         } else {
@@ -214,11 +192,11 @@ fn run() -> CompileResult<i32>
 fn main()
 {
     match run()
-    {
-        Ok(ret) => exit(ret),
-        Err(e) => {
-            e.print();
-            exit(-1);
-        },
-    }
+        {
+            Ok(ret) => exit(ret),
+            Err(e) => {
+                e.print();
+                exit(-1);
+            },
+        }
 }
