@@ -13,8 +13,8 @@ use std::process::exit;
 use docopt::Docopt;
 use libcobra::parser::{ParserOptions, parse_file};
 use libcobra::typechecker::{type_check_module};
-use libcobra::bytecode::{compile_to_byte_code, run_byte_code, debug_byte_code, optimize_module, ByteCodeModule, OptimizationLevel};
-use libcobra::compileerror::{CompileResult, CompileError};
+use libcobra::bytecode::{compile_to_byte_code, optimize_module, ByteCodeModule, OptimizationLevel};
+use libcobra::compileerror::{CompileResult};
 
 
 static USAGE: &'static str =  "
@@ -28,9 +28,7 @@ options:
   -O, --optimize                               Optimize the code.
   -I <imports>, --imports=<imports>            Directory to look for imports, use a comma separated list for more then one.
   -o <output-file>, --output=<output-file>     Name of binary to create (by default input-file without the extensions).
-  -t <binary-type>, --type=<binary-type>       Binary type, allowed values: bytecode or elf
-  -i --interpret                               Execute the code in the interpreter.
-  -d --debug                                   Run the interpreter in debug mode.
+  -t <binary-type>, --type=<binary-type>       Binary type, allowed values: bytecode or exe
 ";
 
 
@@ -43,8 +41,6 @@ struct Args
     flag_output: Option<String>,
     flag_type: Option<String>,
     flag_imports: Option<String>,
-    flag_interpret: Option<bool>,
-    flag_debug: Option<bool>,
 }
 
 fn default_output_file(input_file: &str) -> String
@@ -69,38 +65,26 @@ fn dump_byte_code(bc_mod: &ByteCodeModule, dump_flags: &str)
 
 fn parse(parser_options: &ParserOptions, input_file: &str, dump_flags: &str, optimize: bool) -> CompileResult<ByteCodeModule>
 {
-    let bc_mod = if input_file.ends_with(".byte")
-    {
-        let mut file = File::open(input_file)?;
-        ByteCodeModule::load(&mut file)
-            .map_err(|err| CompileError::Other(err))?
+    let mut module = parse_file(&parser_options, input_file)?;
+    type_check_module(&mut module)?;
+
+    if dump_flags.contains("ast") || dump_flags.contains("all") {
+        println!("AST:");
+        println!("------\n");
+        use libcobra::ast::TreePrinter;
+        module.print(0);
+        println!("------\n");
     }
-    else
-    {
-        let mut module = parse_file(&parser_options, input_file)?;
-        type_check_module(&mut module)?;
 
-        if dump_flags.contains("ast") || dump_flags.contains("all") {
-            println!("AST:");
-            println!("------\n");
-            use libcobra::ast::TreePrinter;
-            module.print(0);
-            println!("------\n");
-        }
-
-        let mut bc_mod = compile_to_byte_code(&module);
-        if optimize {
-            optimize_module(&mut bc_mod, OptimizationLevel::Normal);
-        } else {
-            optimize_module(&mut bc_mod, OptimizationLevel::Minimal);
-        }
-
-        bc_mod
-    };
+    let mut bc_mod = compile_to_byte_code(&module);
+    if optimize {
+        optimize_module(&mut bc_mod, OptimizationLevel::Normal);
+    } else {
+        optimize_module(&mut bc_mod, OptimizationLevel::Minimal);
+    }
 
     dump_byte_code(&bc_mod, &dump_flags);
     Ok(bc_mod)
-
 }
 
 fn run() -> CompileResult<i32>
@@ -110,13 +94,10 @@ fn run() -> CompileResult<i32>
         .unwrap_or_else(|e| e.exit());
 
     let input_file = args.arg_input_file.expect("Missing input file argument");
-    let run_interpreter = args.flag_interpret.unwrap_or(false);
-    let run_debugger = args.flag_debug.unwrap_or(false);
     let optimize = args.flag_optimize.unwrap_or(false);
     let output_file = args.flag_output.unwrap_or_else(|| default_output_file(&input_file));
     let binary_type = args.flag_type.unwrap_or("bytecode".into());
     let dump_flags = args.flag_dump.unwrap_or_default();
-
 
     let parser_options = ParserOptions{
         import_dirs: args.flag_imports
@@ -124,52 +105,42 @@ fn run() -> CompileResult<i32>
             .unwrap_or_else(Vec::new),
     };
 
-
-    /*
-        let opts = CodeGenOptions{
-            dump_ir: dump_flags.contains("ir") || dump_flags.contains("all"),
-            build_dir: "build".into(),
-            program_name: output_file,
-            optimize: args.flag_optimize.unwrap_or(false),
-        };
-    */
-
-
     let bc_mod = parse(&parser_options, &input_file, &dump_flags, optimize)?;
-    if !run_debugger && !run_interpreter {
-
-        match &binary_type[..]
-        {
-            "bytecode" => {
-                println!("Generating bytecode binary {}.byte", output_file);
-                let mut file = File::create(&format!("{}.byte", output_file))?;
-                match bc_mod.save(&mut file)
-                {
-                    Ok(()) => Ok(0),
-                    Err(msg) => {
-                        println!("Failed to save {}: {}", output_file, msg);
-                        Ok(-1)
-                    }
+    match &binary_type[..]
+    {
+        "bytecode" => {
+            println!("Generating bytecode binary {}.byte", output_file);
+            let mut file = File::create(&format!("{}.byte", output_file))?;
+            match bc_mod.save(&mut file)
+            {
+                Ok(()) => Ok(0),
+                Err(msg) => {
+                    println!("Failed to save {}: {}", output_file, msg);
+                    Ok(-1)
                 }
-            },
-
-            "elf" => {
-                /*
-                llvm_init();
-                let mut ctx = codegen(&bc_mod)?;
-                link(&mut ctx, &opts)
-                */
-                panic!("NYI");
             }
+        },
 
-            _ => {
-                println!("Unknown binary type {}", binary_type);
-                Ok(1)
-            }
+        "exe" => {
+            /*
+            let opts = CodeGenOptions{
+                dump_ir: dump_flags.contains("ir") || dump_flags.contains("all"),
+                build_dir: "build".into(),
+                program_name: output_file,
+                optimize: args.flag_optimize.unwrap_or(false),
+            };
+
+            llvm_init();
+            let mut ctx = codegen(&bc_mod)?;
+            link(&mut ctx, &opts)
+            */
+            panic!("NYI");
         }
 
-    } else {
-
+        _ => {
+            println!("Unknown binary type {}", binary_type);
+            Ok(1)
+        }
     }
 }
 
