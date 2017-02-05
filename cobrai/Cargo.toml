@@ -1,0 +1,11 @@
+[package]
+name = "cobrai"
+version = "0.1.0"
+authors = ["Joris Guisson <joris.guisson@gmail.com>"]
+
+[dependencies]
+libcobra = { path = "../libcobra" }
+shrust = "0.0.4"
+docopt = "0.7"
+rustc-serialize = "0.3"
+itertools = "0.5"

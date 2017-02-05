@@ -1,14 +1,27 @@
 use std::collections::HashMap;
 use std::ops::Deref;
-use bytecode::*;
-use ast::{Type, Operator};
-use super::function::*;
-use super::instruction::*;
-use super::value::Value;
-use super::valueref::ValueRef;
-use super::debugger::ByteCodeIndex;
+use std::fmt;
+
+use libcobra::ast::{Type, Operator};
+use libcobra::bytecode::*;
+use libcobra::bytecode::ByteCodeFunction;
+
+use value::Value;
+use valueref::ValueRef;
+use debugger::ByteCodeIndex;
 
 const RETURN_VALUE : &'static str = "@RETURN_VALUE@";
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct ExecutionError(pub String);
+
+impl fmt::Display for ExecutionError
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
+    {
+        write!(f, "{}", self.0)
+    }
+}
 
 
 #[derive(Debug, Clone)]

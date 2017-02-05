@@ -1,3 +1,7 @@
+use interpreter::{run_byte_code, ExecutionError};
+use libcobra::bytecode::*;
+use value::Value;
+
 pub struct Test
 {
     pub name: &'static str,
@@ -705,3 +709,36 @@ pub const ALL_TESTS: [Test; 47] = [
         "#
     }
 ];
+
+fn run_test(prog: &str, dump: bool) -> Result<i64, ExecutionError>
+{
+    let mut bc_mod = match generate_byte_code(prog, dump)
+    {
+        Ok(bc_mod) => bc_mod,
+        Err(e) => return Err(ExecutionError(format!("Compile error: {}", e))),
+    };
+
+    optimize_module(&mut bc_mod, OptimizationLevel::Normal);
+    let result = run_byte_code(&bc_mod, START_CODE_FUNCTION)?;
+    match result
+    {
+        Value::Int(r) => Ok(r),
+        _ => {
+            let msg = format!("Expecting int return type, got {}", result);
+            Err(ExecutionError(msg))
+        },
+    }
+}
+
+#[test]
+fn test_all()
+{
+    for test in &ALL_TESTS[..]
+    {
+        println!("#### start {} ####", test.name);
+        assert_eq!(run_test(test.code, test.debug), Ok(test.ret));
+        println!("#### end {} ####", test.name);
+    }
+
+    //assert!(false);
+}

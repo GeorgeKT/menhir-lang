@@ -1,0 +1,10 @@
+[package]
+name = "cobrac"
+version = "0.1.0"
+authors = ["Joris Guisson <joris.guisson@gmail.com>"]
+workspace = ".."
+
+[dependencies]
+libcobra = { path = "../libcobra" }
+docopt = "0.7"
+rustc-serialize = "0.3"

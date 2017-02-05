@@ -1,9 +1,8 @@
 use std::io::prelude::*;
 use shrust::{Shell, ShellIO, ExecResult, ExecError};
-use bytecode::{ExecutionError, ByteCodeModule};
-use super::function::*;
-use super::interpreter::*;
-use super::value::Value;
+use libcobra::bytecode::*;
+use interpreter::*;
+use value::Value;
 
 
 #[derive(Debug, Clone)]
