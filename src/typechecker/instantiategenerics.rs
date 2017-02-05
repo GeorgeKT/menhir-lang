@@ -417,7 +417,7 @@ fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &
 
 fn new_func_name(func_name: &str, generic_args: &GenericMapping) -> String
 {
-    format!("{}{}", func_name, join(generic_args.values(), ","))
+    format!("{}<{}>", func_name, join(generic_args.values(), ","))
 }
 
 fn instantiate(ctx: &TypeCheckerContext, func: &Function, generic_args: &GenericMapping) -> CompileResult<Function>

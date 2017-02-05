@@ -12,6 +12,7 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_cbor;
 
+
 mod ast;
 #[macro_use]
 //mod codegen;
@@ -30,7 +31,7 @@ use docopt::Docopt;
 use parser::{ParserOptions, parse_file};
 use typechecker::{type_check_module};
 use bytecode::{compile_to_byte_code, run_byte_code, debug_byte_code, optimize_module, ByteCodeModule, OptimizationLevel};
-use compileerror::{CompileResult};
+use compileerror::{CompileResult, CompileError};
 
 
 static USAGE: &'static str =  "
@@ -85,23 +86,38 @@ fn dump_byte_code(bc_mod: &ByteCodeModule, dump_flags: &str)
 
 fn parse(parser_options: &ParserOptions, input_file: &str, dump_flags: &str, optimize: bool) -> CompileResult<ByteCodeModule>
 {
-    let mut module = parse_file(&parser_options, input_file)?;
-    type_check_module(&mut module)?;
-
-    if dump_flags.contains("ast") || dump_flags.contains("all") {
-        println!("AST:");
-        println!("------\n");
-        use ast::TreePrinter;
-        module.print(0);
-        println!("------\n");
+    let bc_mod = if input_file.ends_with(".byte")
+    {
+        use serde_cbor::de;
+        let file = File::open(input_file)?;
+        let bc_mod = de::from_reader(file)
+            .map_err(|err|
+                CompileError::Other(format!("Cannot import bytecode file {}: {}", input_file, err))
+            )?;
+        bc_mod
     }
+    else
+    {
+        let mut module = parse_file(&parser_options, input_file)?;
+        type_check_module(&mut module)?;
 
-    let mut bc_mod = compile_to_byte_code(&module);
-    if optimize {
-        optimize_module(&mut bc_mod, OptimizationLevel::Normal);
-    } else {
-        optimize_module(&mut bc_mod, OptimizationLevel::Minimal);
-    }
+        if dump_flags.contains("ast") || dump_flags.contains("all") {
+            println!("AST:");
+            println!("------\n");
+            use ast::TreePrinter;
+            module.print(0);
+            println!("------\n");
+        }
+
+        let mut bc_mod = compile_to_byte_code(&module);
+        if optimize {
+            optimize_module(&mut bc_mod, OptimizationLevel::Normal);
+        } else {
+            optimize_module(&mut bc_mod, OptimizationLevel::Minimal);
+        }
+
+        bc_mod
+    };
 
     dump_byte_code(&bc_mod, &dump_flags);
     Ok(bc_mod)
@@ -141,16 +157,15 @@ fn run() -> CompileResult<i32>
 
 
     let bc_mod = parse(&parser_options, &input_file, &dump_flags, optimize)?;
-
     if !run_debugger && !run_interpreter {
 
         match &binary_type[..]
         {
             "bytecode" => {
                 use serde_cbor::ser;
-                println!("Generating bytecode binary {}.cbor", output_file);
-                let mut file = File::create(&format!("{}.cbor", output_file))?;
-                match ser::to_writer_sd(&mut file, &bc_mod)
+                println!("Generating bytecode binary {}.byte", output_file);
+                let mut file = File::create(&format!("{}.byte", output_file))?;
+                match ser::to_writer(&mut file, &bc_mod)
                 {
                     Ok(()) => Ok(0),
                     Err(msg) => {
