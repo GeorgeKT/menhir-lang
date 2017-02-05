@@ -1,7 +1,7 @@
 use std::cmp;
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Pos
 {
     pub line: usize,
@@ -62,7 +62,7 @@ impl Default for Pos
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Span
 {
     pub file: String,

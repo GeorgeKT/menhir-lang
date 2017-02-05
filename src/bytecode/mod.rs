@@ -26,6 +26,7 @@ impl fmt::Display for ExecutionError
 }
 
 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ByteCodeModule
 {
     pub name: String,

@@ -1,7 +1,7 @@
 use ast::{Type, Expression, TreePrinter, prefix, func_type};
 use span::{Span};
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct Argument
 {
     pub name: String,
@@ -32,7 +32,7 @@ impl TreePrinter for Argument
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct FunctionSignature
 {
     pub name: String,

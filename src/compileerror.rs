@@ -37,7 +37,8 @@ impl fmt::Display for ErrorData
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileError
 {
-    IO(ErrorData),
+    Other(String),
+    IO(String),
     Parse(ErrorData),
     Type(ErrorData),
     UnknownName(ErrorData),
@@ -50,7 +51,8 @@ impl CompileError
     {
         match *self
         {
-            CompileError::IO(ref ed) |
+            CompileError::Other(ref msg) |
+            CompileError::IO(ref msg) => println!("{}", msg),
             CompileError::Parse(ref ed) |
             CompileError::Type(ref ed) |
             CompileError::UnknownName(ref ed) => print_message(&ed.msg, &ed.span),
@@ -66,7 +68,8 @@ impl fmt::Display for CompileError
     {
         match *self
         {
-            CompileError::IO(ref ed) |
+            CompileError::Other(ref msg) |
+            CompileError::IO(ref msg) => writeln!(f, "{}", msg),
             CompileError::Parse(ref ed) |
             CompileError::Type(ref ed) |
             CompileError::UnknownName(ref ed) => ed.fmt(f),
@@ -152,6 +155,6 @@ impl From<io::Error> for CompileError
 {
     fn from(e: io::Error) -> Self
     {
-        CompileError::IO(ErrorData::new(&Span::default(), format!("IO Error: {}", e)))
+        CompileError::IO(format!("IO Error: {}", e))
     }
 }
