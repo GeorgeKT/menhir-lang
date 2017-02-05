@@ -4,7 +4,7 @@ use ast::Operator;
 use bytecode::function::{BasicBlockRef, Var};
 
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum ByteCodeProperty
 {
     Len,
@@ -24,7 +24,7 @@ impl fmt::Display for ByteCodeProperty
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Operand
 {
     Var(Var),
@@ -72,7 +72,7 @@ pub fn float_op(fstr: &str) -> Operand
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Instruction
 {
     Store{dst: Var, src: Operand},

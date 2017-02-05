@@ -5,7 +5,7 @@ use ast::{Type, FunctionSignature, sig};
 use bytecode::instruction::Instruction;
 use span::Span;
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Var
 {
     pub name: String,
@@ -39,7 +39,7 @@ impl fmt::Display for Var
     }
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Scope
 {
     named_vars: HashMap<String, Var>,
@@ -104,7 +104,7 @@ pub fn bb_name(bb: BasicBlockRef) -> String
     }
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct BasicBlock
 {
     pub name: String,
@@ -124,7 +124,7 @@ impl BasicBlock
 
 
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ByteCodeFunction
 {
     pub sig: FunctionSignature,
