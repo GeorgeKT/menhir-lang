@@ -169,34 +169,18 @@ fn run() -> CompileResult<i32>
         }
 
     } else {
-        use libcobra::bytecode::START_CODE_FUNCTION;
-        let ret = if run_debugger {
-            debug_byte_code(&bc_mod, START_CODE_FUNCTION)
-        } else {
-            run_byte_code(&bc_mod, START_CODE_FUNCTION)
-        };
 
-        match ret
-        {
-            Ok(ret) => {
-                Ok(ret.to_exit_code())
-            },
-            Err(e) => {
-                println!("Failed to execute program: {}", e.0);
-                Ok(-1)
-            }
-        }
     }
 }
 
 fn main()
 {
     match run()
-        {
-            Ok(ret) => exit(ret),
-            Err(e) => {
-                e.print();
-                exit(-1);
-            },
-        }
+    {
+        Ok(ret) => exit(ret),
+        Err(e) => {
+            e.print();
+            exit(-1);
+        },
+    }
 }

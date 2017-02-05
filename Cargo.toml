@@ -1,7 +1,8 @@
 [workspace]
 members = [
 	"libcobra", 
-	"cobrac"
+	"cobrac",
+	"cobrai"
 ]
 
 #[dependencies]

@@ -1,8 +1,8 @@
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 use std::fmt;
-use super::ExecutionError;
-use super::value::Value;
+use interpreter::ExecutionError;
+use value::Value;
 
 #[derive(Debug, Clone)]
 pub enum ValueRef

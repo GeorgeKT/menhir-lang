@@ -1,6 +1,5 @@
 extern crate itertools;
 extern crate uuid;
-extern crate shrust;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
