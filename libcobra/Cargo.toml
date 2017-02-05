@@ -1,17 +1,10 @@
 [package]
-name = "cobra"
+name = "libcobra"
 version = "0.1.0"
 authors = ["Joris Guisson <joris.guisson@gmail.com>"]
-
-[workspace]
-members = ["libcobra"]
+workspace = ".."
 
 [dependencies]
-#llvm-sys = "0.3"
-#libc = "*"
-docopt = "0.6"
-rustc-serialize = "0.3"
-#libffi = "0.4"
 itertools = "0.5"
 uuid = { version = "0.2", features = ["v4"] }
 shrust = "0.0.4"
