@@ -11,5 +11,4 @@ pub mod compileerror;
 pub mod bytecode;
 pub mod parser;
 pub mod typechecker;
-#[cfg(test)] mod testcode;
 pub mod span;

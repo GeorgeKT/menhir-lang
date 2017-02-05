@@ -9,6 +9,9 @@ mod debugger;
 mod value;
 mod valueref;
 
+#[cfg(test)]
+mod tests;
+
 use std::fs::File;
 use std::process::exit;
 use docopt::Docopt;

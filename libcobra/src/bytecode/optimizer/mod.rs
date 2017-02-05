@@ -43,7 +43,7 @@ pub fn optimize_module(module: &mut ByteCodeModule, lvl: OptimizationLevel)
 mod test
 {
     use super::*;
-    use bytecode::tests::generate_byte_code;
+    use bytecode::generate_byte_code;
     use bytecode::instruction::Instruction;
     use bytecode::function::ByteCodeFunction;
     use ast::{sig, Type};
