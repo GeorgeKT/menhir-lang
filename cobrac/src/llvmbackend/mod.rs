@@ -17,10 +17,7 @@ mod target;
 mod types;
 mod valueref;
 
-use std::ptr;
-use std::ffi::CString;
 use llvm::core::*;
-use llvm::prelude::*;
 
 use libcobra::bytecode::ByteCodeModule;
 use self::function::gen_function;

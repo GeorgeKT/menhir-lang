@@ -96,4 +96,20 @@ impl ValueRef
             Type::Interface(_) => panic!("Type {} not allowed at this point", typ),
         }
     }
+
+    pub fn get(&self) -> LLVMValueRef
+    {
+        match *self
+        {
+            ValueRef::Const(v, _) => v,
+            ValueRef::Ptr(v, _) => v,
+            ValueRef::Array(ref a) => a.value,
+            ValueRef::Slice(ref s) => s.value,
+            ValueRef::String(v) => v,
+            ValueRef::Struct(ref s) => s.value,
+            ValueRef::Sum(ref s) => s.value,
+            ValueRef::Optional(ref o) => o.value,
+            ValueRef::Func(v) => v,
+        }
+    }
 }
