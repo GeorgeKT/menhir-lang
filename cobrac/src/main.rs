@@ -1,10 +1,11 @@
-//extern crate llvm_sys as llvm;
-//extern crate libffi;
-//extern crate libc;
+extern crate llvm_sys as llvm;
+extern crate libffi;
+extern crate libc;
 extern crate libcobra;
 extern crate docopt;
 extern crate rustc_serialize;
 
+mod llvmbackend;
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -14,7 +15,8 @@ use docopt::Docopt;
 use libcobra::parser::{ParserOptions, parse_file};
 use libcobra::typechecker::{type_check_module};
 use libcobra::bytecode::{compile_to_byte_code, optimize_module, ByteCodeModule, OptimizationLevel};
-use libcobra::compileerror::{CompileResult};
+use libcobra::compileerror::{CompileResult, CompileError};
+use llvmbackend::{CodeGenOptions, llvm_code_generation};
 
 
 static USAGE: &'static str =  "
@@ -96,7 +98,7 @@ fn run() -> CompileResult<i32>
     let input_file = args.arg_input_file.expect("Missing input file argument");
     let optimize = args.flag_optimize.unwrap_or(false);
     let output_file = args.flag_output.unwrap_or_else(|| default_output_file(&input_file));
-    let binary_type = args.flag_type.unwrap_or("bytecode".into());
+    let binary_type = args.flag_type.unwrap_or("exe".into());
     let dump_flags = args.flag_dump.unwrap_or_default();
 
     let parser_options = ParserOptions{
@@ -111,18 +113,12 @@ fn run() -> CompileResult<i32>
         "bytecode" => {
             println!("Generating bytecode binary {}.byte", output_file);
             let mut file = File::create(&format!("{}.byte", output_file))?;
-            match bc_mod.save(&mut file)
-            {
-                Ok(()) => Ok(0),
-                Err(msg) => {
-                    println!("Failed to save {}: {}", output_file, msg);
-                    Ok(-1)
-                }
-            }
+            bc_mod.save(&mut file)
+                .map_err(|msg| CompileError::Other(format!("Failed to save {}: {}", output_file, msg)))?;
+            Ok(0)
         },
 
         "exe" => {
-            /*
             let opts = CodeGenOptions{
                 dump_ir: dump_flags.contains("ir") || dump_flags.contains("all"),
                 build_dir: "build".into(),
@@ -130,16 +126,13 @@ fn run() -> CompileResult<i32>
                 optimize: args.flag_optimize.unwrap_or(false),
             };
 
-            llvm_init();
-            let mut ctx = codegen(&bc_mod)?;
-            link(&mut ctx, &opts)
-            */
-            panic!("NYI");
+            llvm_code_generation(&bc_mod, &opts)
+                .map_err(|msg| CompileError::Other(msg))?;
+            Ok(0)
         }
 
         _ => {
-            println!("Unknown binary type {}", binary_type);
-            Ok(1)
+            Err(CompileError::Other(format!("Unknown binary type {}", binary_type)))
         }
     }
 }

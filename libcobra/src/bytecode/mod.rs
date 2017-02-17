@@ -23,7 +23,7 @@ pub use self::optimizer::{OptimizationLevel, optimize_module};
 pub struct ByteCodeModule
 {
     pub name: String,
-    functions: HashMap<String, ByteCodeFunction>,
+    pub functions: HashMap<String, ByteCodeFunction>,
     pub exit_function: ByteCodeFunction,
 }
 

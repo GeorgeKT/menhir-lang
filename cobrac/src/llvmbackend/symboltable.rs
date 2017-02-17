@@ -2,8 +2,8 @@ use std::rc::Rc;
 use std::collections::HashMap;
 use llvm::prelude::*;
 
-use ast::{FunctionSignature};
-use codegen::ValueRef;
+use libcobra::ast::{FunctionSignature};
+use llvmbackend::valueref::ValueRef;
 
 pub struct FunctionInstance
 {

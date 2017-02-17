@@ -7,8 +7,8 @@ use llvm::core::*;
 use llvm::target_machine::*;
 use llvm::target::*;
 
-use compileerror::{CompileResult, ErrorCode, err};
-use span::Span;
+use libcobra::compileerror::{CompileResult};
+use libcobra::span::Span;
 
 pub struct TargetMachine
 {
@@ -18,7 +18,7 @@ pub struct TargetMachine
 
 impl TargetMachine
 {
-    pub unsafe fn new() -> CompileResult<TargetMachine>
+    pub unsafe fn new() -> Result<TargetMachine, String>
     {
         let target_triple = CStr::from_ptr(LLVMGetDefaultTargetTriple());
         let target_triple_str = target_triple.to_str().expect("Invalid target triple");
@@ -30,7 +30,7 @@ impl TargetMachine
             let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
             let e = format!("Unable to get an LLVM target reference for {}: {}", target_triple_str, msg);
             LLVMDisposeMessage(error_message);
-            return err(&Span::default(), e);
+            return Err(e);
         }
 
         let target_machine = LLVMCreateTargetMachine(
@@ -44,7 +44,7 @@ impl TargetMachine
         );
         if target_machine == ptr::null_mut() {
             let e = format!("Unable to get a LLVM target machine for {}", target_triple_str);
-            return err(&Span::default(), e);
+            return Err(e);
         }
 
         Ok(TargetMachine{
@@ -58,7 +58,7 @@ impl TargetMachine
         LLVMStoreSizeOfType(self.target_data, typ) as usize
     }
 
-    pub unsafe fn emit_to_file(&self, module: LLVMModuleRef, obj_file_name: &str) -> CompileResult<()>
+    pub unsafe fn emit_to_file(&self, module: LLVMModuleRef, obj_file_name: &str) -> Result<(), String>
     {
         let mut error_message: *mut c_char = ptr::null_mut();
         let obj_file_name = CString::new(obj_file_name).expect("Invalid String");
@@ -66,7 +66,7 @@ impl TargetMachine
             let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
             let e = format!("Unable to create object file: {}", msg);
             LLVMDisposeMessage(error_message);
-            return err(&Span::default(), e);
+            return Err(e);
         }
         Ok(())
     }
