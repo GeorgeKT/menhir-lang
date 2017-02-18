@@ -1,6 +1,5 @@
 extern crate shrust;
 extern crate clap;
-extern crate rustc_serialize;
 extern crate itertools;
 extern crate libcobra;
 
