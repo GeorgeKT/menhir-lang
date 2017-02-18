@@ -6,8 +6,7 @@ workspace = ".."
 
 [dependencies]
 libcobra = { path = "../libcobra" }
-docopt = "0.7"
-rustc-serialize = "0.3"
+clap = "2.20"
 llvm-sys = "38"
 libc = "*"
 libffi = "0.4"
