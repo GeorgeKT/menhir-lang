@@ -1,4 +1,5 @@
 extern crate shrust;
+#[macro_use]
 extern crate clap;
 extern crate itertools;
 extern crate libcobra;
@@ -12,7 +13,6 @@ mod tests;
 
 use std::fs::File;
 use std::process::exit;
-use clap::{App, Arg};
 use libcobra::bytecode::{ByteCodeModule, START_CODE_FUNCTION};
 use interpreter::{ExecutionError, run_byte_code};
 use debugger::debug_byte_code;
@@ -20,22 +20,16 @@ use debugger::debug_byte_code;
 
 fn run() -> Result<i32, ExecutionError>
 {
-    let matches = App::new("cobrai")
-        .version("0.1")
-        .author("Joris Guisson <joris.guisson@gmail.com>")
-        .about("cobra language interpreter")
-        .arg(Arg::with_name("debug")
-            .short("d")
-            .long("debug")
-            .help("Run the interpreter in debug mode"))
-        .arg(Arg::with_name("bytecode-file")
-            .help("Bytecode file to run")
-            .required(true)
-            .index(1))
-        .get_matches();
+    let matches = clap_app!(cobrai =>
+            (version: "0.1")
+            (author: "Joris Guisson <joris.guisson@gmail.com>")
+            (about: "cobra language bytecode interpreter")
+            (@arg DEBUG: -d --debug "Run the interpreter in debug mode")
+            (@arg BYTECODE_FILE: +required "Byte code file to run/debug")
+        ).get_matches();
 
-    let bytecode_file = matches.value_of("bytecode-file").expect("Missing input file argument");
-    let run_debugger = matches.is_present("debug");
+    let bytecode_file = matches.value_of("BYTECODE_FILE").expect("Missing input file argument");
+    let run_debugger = matches.is_present("DEBUG");
 
     let mut file = File::open(&bytecode_file)
         .map_err(|err| ExecutionError(format!("Cannot open {}: {}", bytecode_file, err)))?;
