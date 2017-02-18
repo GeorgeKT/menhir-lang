@@ -19,13 +19,6 @@ use interpreter::{ExecutionError, run_byte_code};
 use debugger::debug_byte_code;
 
 
-#[derive(RustcDecodable, Debug)]
-struct Args
-{
-    arg_bytecode_file: Option<String>,
-    flag_debug: Option<bool>,
-}
-
 fn run() -> Result<i32, ExecutionError>
 {
     let matches = App::new("cobrai")
