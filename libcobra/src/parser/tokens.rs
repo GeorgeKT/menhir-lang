@@ -45,6 +45,7 @@ pub enum TokenKind
     Var,
     For,
     Interface,
+    Indent(usize),
     EOF,
 }
 
@@ -94,6 +95,7 @@ impl Display for TokenKind
             TokenKind::Var => write!(fmt, "var"),
             TokenKind::For => write!(fmt, "for"),
             TokenKind::Interface => write!(fmt, "interface"),
+            TokenKind::Indent(lvl) => write!(fmt, "indent {}", lvl),
             TokenKind::EOF => write!(fmt, "EOF"),
         }
     }

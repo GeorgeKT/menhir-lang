@@ -1,4 +1,35 @@
-apply(x: int, fn: (int) -> int) -> int =
-    fn(x)
 
-main() -> int = apply(5, @(x) -> x * 2)
+
+type Bar = x: int, y: int
+type Foo = Baz | Boo{x: int} | Blub{y: int}
+
+
+interface Sum:
+    sum self -> int
+
+
+fn Bar.sum self = self.x + self.y 
+
+
+fn min a b =
+    if a < b:
+        a
+    else
+        b
+
+fn foo x y = x + y
+
+fn main =
+    var x = 7
+    x = x * 3
+    let y =
+        if x > 8:
+            9
+        else
+            10
+
+    let z = foo x y
+    while x < 10:
+        x = x + 1
+
+    x + y + z
