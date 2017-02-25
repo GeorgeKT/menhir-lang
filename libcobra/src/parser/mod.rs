@@ -832,6 +832,11 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token, indent_level: usize) 
             Ok(inner)
         },
 
+        TokenKind::OpenCurly => {
+            tq.push_front(tok.clone());
+            parse_struct_initializer(tq, NameRef::new("".into(), tok.span), indent_level)
+        },
+
         TokenKind::Identifier(id) => {
             let nr = parse_name(tq, id, &tok.span)?;
             if tq.is_next(TokenKind::Operator(Operator::Dot))

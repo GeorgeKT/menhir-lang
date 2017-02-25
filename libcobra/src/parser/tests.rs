@@ -544,6 +544,22 @@ Point{6, 7}
 }
 
 #[test]
+fn test_anonymous_struct_initializer()
+{
+    let e = th_expr(r#"
+{6, 7}
+"#);
+    assert!(e == Expression::StructInitializer(struct_initializer(
+        "",
+        vec![
+            number(6, span(2, 2, 2, 2)),
+            number(7, span(2, 5, 2, 5)),
+        ],
+        span(2, 1, 2, 6))
+    ))
+}
+
+#[test]
 fn test_member_access()
 {
     let e = th_expr(r#"
