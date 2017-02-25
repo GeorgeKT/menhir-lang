@@ -159,6 +159,36 @@ impl TokenQueue
             None => false,
         }
     }
+
+    pub fn is_in_same_block(&self, indent_level: usize) -> bool
+    {
+        match self.tokens.front()
+        {
+            Some(tok) =>
+                if let TokenKind::Indent(level) = tok.kind {
+                    level >= indent_level
+                } else {
+                    tok.kind != TokenKind::EOF
+                },
+            None => false,
+        }
+    }
+
+    pub fn pop_indent(&mut self) -> CompileResult<Option<(usize, Span)>>
+    {
+        let level = if let Some(tok) = self.tokens.front() {
+            if let TokenKind::Indent(level) = tok.kind {
+                level
+            } else {
+                return Ok(None);
+            }
+        } else {
+            return Ok(None);
+        };
+
+        let tok = self.pop()?;
+        Ok(Some((level, tok.span)))
+    }
 }
 
 impl Iterator for TokenQueue

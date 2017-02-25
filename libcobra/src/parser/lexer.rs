@@ -74,14 +74,19 @@ impl Lexer
         }
     }
 
+    fn to_start_of_line(&mut self)
+    {
+        self.state = LexState::StartOfLine;
+        self.indent_level = 0;
+    }
+
     fn idle(&mut self, c: char) -> CompileResult<()>
     {
         let span = self.current_single_span();
         match c
         {
             '\n' => {
-                self.state = LexState::StartOfLine;
-                self.indent_level = 0;
+                self.to_start_of_line();
                 Ok(())
             }
             ' ' | '\t' => Ok(()),
@@ -93,7 +98,6 @@ impl Lexer
             '}' => {self.add(TokenKind::CloseCurly, span); Ok(())},
             '[' => {self.add(TokenKind::OpenBracket, span); Ok(())},
             ']' => {self.add(TokenKind::CloseBracket, span); Ok(())},
-            '@' => {self.add(TokenKind::Lambda, span); Ok(())},
             '$' => {self.add(TokenKind::Dollar, span); Ok(())},
             ';' => {self.add(TokenKind::SemiColon, span); Ok(())},
             '~' => {self.add(TokenKind::Tilde, span); Ok(())},
@@ -111,9 +115,8 @@ impl Lexer
 
     fn comment(&mut self, c: char) -> CompileResult<()>
     {
-        if c == '\n'
-        {
-            self.state = LexState::Idle;
+        if c == '\n' {
+            self.to_start_of_line();
         }
         Ok(())
     }
@@ -129,6 +132,8 @@ impl Lexer
             "true" => TokenKind::True,
             "false" => TokenKind::False,
             "type" => TokenKind::Type,
+            "struct" => TokenKind::Struct,
+            "enum" => TokenKind::Enum,
             "if" => TokenKind::If,
             "else" => TokenKind::Else,
             "extern" => TokenKind::Extern,
@@ -140,6 +145,7 @@ impl Lexer
             "var" => TokenKind::Var,
             "as" => TokenKind::Operator(Operator::As),
             "interface" => TokenKind::Interface,
+            "fn" => TokenKind::Func,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
         };
 
@@ -422,7 +428,7 @@ mod tests
     #[test]
     fn test_specials()
     {
-        let mut cursor = Cursor::new("+ - * / % < <= > >= == = != ! || && => -> : , :: $ @");
+        let mut cursor = Cursor::new("+ - * / % < <= > >= == = != ! || && => -> : , :: $");
         let tokens: Vec<Token> = Lexer::new("")
             .read(&mut cursor)
             .expect("Lexing failed")
@@ -451,7 +457,6 @@ mod tests
             tok(TokenKind::Comma, 1, 45, 1, 45),
             tok(TokenKind::DoubleColon, 1, 47, 1, 48),
             tok(TokenKind::Dollar, 1, 50, 1, 50),
-            tok(TokenKind::Lambda, 1, 52, 1, 52),
             tok(TokenKind::EOF, 2, 1, 2, 1),
         ]);
     }

@@ -47,6 +47,15 @@ impl Operator
             _ => true,
         }
     }
+
+    pub fn is_unary_operator(&self) -> bool
+    {
+        match *self
+        {
+            Operator::Not | Operator::Sub => true,
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Display for Operator

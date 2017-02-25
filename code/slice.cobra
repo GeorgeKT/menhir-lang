@@ -1,25 +1,38 @@
 
 
-type Bar = x: int, y: int
-type Foo = Baz | Boo{x: int} | Blub{y: int}
+struct Bar:
+    x: int
+    y: int
 
+enum Foo:
+    Baz
+    Boo{x: int}
+    Blub{y: int}
+
+type FOF = Bar
 
 interface Sum:
-    sum self -> int
+    fn sum(self) -> int
 
 
-fn Bar.sum self = self.x + self.y 
+fn Bar.sum(self):
+    self.x + self.y
 
 
-fn min a b =
+fn min(a, b):
     if a < b:
         a
     else
         b
 
-fn foo x y = x + y
 
-fn main =
+fn add(x, y):
+    x + y
+
+fn foo(x: int, y: int) -> int:
+    x + y
+
+fn main() -> int:
     var x = 7
     x = x * 3
     let y =
@@ -28,8 +41,20 @@ fn main =
         else
             10
 
-    let z = foo x y
+    let z = foo(x, y)
     while x < 10:
         x = x + 1
 
-    x + y + z
+    let w = Bar{8, 9}
+    let f = Boo{8}
+
+    match w:
+        Baz => 8
+        Boo{xx} => xx + 1
+        Blub{yy} => yy + 1
+
+    let bla = fn(x, y) -> x + y
+
+
+fn apply(f: fn(int, int) -> int, x: int, y: int) -> int:
+    f x y
