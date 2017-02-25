@@ -1,0 +1,13 @@
+#ret:50
+struct Vec2D:
+    x: int
+    y: int
+
+fn dot(a: Vec2D, b: Vec2D) -> int:
+    a.x * b.x + a.y * b.y
+
+fn add(a: Vec2D, b: Vec2D) -> Vec2D:
+    Vec2D{a.x + b.x, a.y + b.y}
+
+fn main() -> int:
+    dot(Vec2D{4, 5}, add(Vec2D{3, 4}, Vec2D{2, 2})

@@ -1,0 +1,5 @@
+#ret:42
+let THE_ANSWER = 42
+
+main() -> int:
+    THE_ANSWER
