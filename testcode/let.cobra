@@ -1,7 +1,10 @@
 #ret:18
 
 fn foo(a: int, b: int, c: int) -> int:
-    let x = a * b, y = b * c in
+    let
+        x = a * b
+        y = b * c
+    in
         x + y
 
 fn main() -> int:

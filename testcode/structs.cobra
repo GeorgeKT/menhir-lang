@@ -10,4 +10,4 @@ fn add(a: Vec2D, b: Vec2D) -> Vec2D:
     Vec2D{a.x + b.x, a.y + b.y}
 
 fn main() -> int:
-    dot(Vec2D{4, 5}, add(Vec2D{3, 4}, Vec2D{2, 2})
+    dot(Vec2D{4, 5}, add(Vec2D{3, 4}, Vec2D{2, 2}))

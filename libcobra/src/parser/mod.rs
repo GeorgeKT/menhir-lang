@@ -297,6 +297,18 @@ fn parse_start_of_type(tq: &mut TokenQueue, indent_level: usize) -> CompileResul
         let ret = parse_type(tq, indent_level)?;
         Ok(func_type(args, ret))
     }
+    else if tq.is_next(TokenKind::OpenCurly)
+    {
+        tq.pop()?;
+        let member_types = parse_comma_separated_list(tq, TokenKind::CloseCurly, parse_type, indent_level)?;
+        Ok(struct_type(
+            "",
+            member_types
+                .into_iter()
+                .map(|member_type| struct_member("", member_type))
+                .collect()
+        ))
+    }
     else
     {
         let (name, _pos) = tq.expect_identifier()?;
@@ -368,7 +380,6 @@ fn parse_function_arguments(tq: &mut TokenQueue, self_type: &Type, indent_level:
 fn parse_function_signature(tq: &mut TokenQueue, self_type: &Type, indent_level: usize) -> CompileResult<FunctionSignature>
 {
     let (name, name_span) = tq.expect_identifier()?;
-    println!("parse_function_signature {}", name);
     let args = parse_function_arguments(tq, self_type, indent_level)?;
     let ret_type = if tq.is_next(TokenKind::Arrow) {
         tq.pop()?;
@@ -383,7 +394,6 @@ fn parse_function_signature(tq: &mut TokenQueue, self_type: &Type, indent_level:
 
 fn parse_external_function(tq: &mut TokenQueue, span: &Span, indent_level: usize) -> CompileResult<ExternalFunction>
 {
-    println!("parse_external_function");
     tq.expect(TokenKind::Func)?;
     Ok(ExternalFunction::new(
         parse_function_signature(tq, &Type::Unknown, indent_level)?,
@@ -444,7 +454,6 @@ fn parse_struct_pattern(tq: &mut TokenQueue, name: &str, span: &Span, indent_lev
         let (name, _) = tq.expect_identifier()?;
         Ok(name)
     };
-    tq.expect(TokenKind::CloseCurly)?;
     let bindings = parse_comma_separated_list(tq, TokenKind::CloseCurly, parse_name, indent_level)?;
     Ok(struct_pattern(name, bindings, Vec::new(), Type::Unknown, span.expanded(tq.pos())))
 }
@@ -548,6 +557,8 @@ fn is_end_of_bindings(tq: &mut TokenQueue, indent_level: usize) -> bool
     tq.is_next(TokenKind::In) ||
     tq.is_next(TokenKind::SemiColon) ||
     tq.is_next(TokenKind::CloseParen) ||
+    tq.is_next(TokenKind::CloseCurly) ||
+    tq.is_next(TokenKind::CloseBracket) ||
     !tq.is_in_same_block(indent_level + 1)
 }
 
@@ -559,8 +570,8 @@ fn parse_bindings(tq: &mut TokenQueue, mutable: bool, indent_level: usize) -> Co
         tq.pop_indent()?;
 
         let (binding_type, span) = if tq.is_next(TokenKind::OpenCurly) {
-            let tok = tq.pop()?;
-            let pattern = parse_struct_pattern(tq, "", &tok.span, indent_level)?;
+            let span = tq.peek().expect("Unexpected EOF").span.clone();
+            let pattern = parse_struct_pattern(tq, "", &span, indent_level)?;
             let span = pattern.span.clone();
             (BindingType::Struct(pattern), span)
         } else {
@@ -580,10 +591,14 @@ fn parse_bindings(tq: &mut TokenQueue, mutable: bool, indent_level: usize) -> Co
 fn parse_binding(tq: &mut TokenQueue, mutable: bool, span: &Span, indent_level: usize) -> CompileResult<Expression>
 {
     let b = parse_bindings(tq, mutable, indent_level)?;
+    if tq.is_next(TokenKind::Indent(indent_level)) && tq.is_next_at(1, TokenKind::In) {
+        tq.pop_indent()?;
+    }
+
     if tq.is_next(TokenKind::In)
     {
         tq.expect(TokenKind::In)?;
-        let e = parse_expression(tq, indent_level)?;
+        let e = parse_block(tq, &span.file, indent_level)?;
         Ok(binding_expression(b, e, span.expanded(tq.pos())))
     }
     else
@@ -598,6 +613,10 @@ fn parse_if(tq: &mut TokenQueue, span: &Span, indent_level: usize) -> CompileRes
     let cond = parse_expression(tq, indent_level)?;
     tq.expect(TokenKind::Colon)?;
     let on_true = parse_block(tq, &span.file, indent_level)?;
+
+    if tq.is_next(TokenKind::Indent(indent_level)) {
+        tq.pop_indent()?;
+    }
 
     if tq.is_next(TokenKind::Else)
     {
@@ -951,7 +970,7 @@ fn parse_import(options: &ParserOptions, import_name: &str) -> CompileResult<Mod
 
 fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool, indent_level: usize) -> CompileResult<()>
 {
-    while !tq.is_next(TokenKind::SemiColon)
+    while !is_end_of_bindings(tq, indent_level)
     {
         let (name, span) = tq.expect_identifier()?;
         tq.expect(TokenKind::Assign)?;
@@ -965,7 +984,6 @@ fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool
         eat_comma(tq)?;
     }
 
-    tq.expect(TokenKind::SemiColon)?;
     Ok(())
 }
 

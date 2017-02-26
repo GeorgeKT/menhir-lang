@@ -67,15 +67,13 @@ impl TokenQueue
 
     pub fn expect(&mut self, kind: TokenKind) -> CompileResult<Token>
     {
-        self.pop().and_then(
-            |tok| if tok.kind == kind
-            {
+        self.pop().and_then(|tok|
+            if tok.kind == kind {
                 Ok(tok)
+            } else {
+                parse_error_result(&tok.span, format!("Unexpected token {}, expecting {}", tok.kind, kind))
             }
-            else
-            {
-                parse_error_result(&tok.span, format!("Unexpected token '{}'", tok))
-            })
+        )
     }
 
     pub fn expect_int(&mut self) -> CompileResult<(u64, Span)>
