@@ -1,8 +1,8 @@
 use std::io::prelude::*;
 use shrust::{Shell, ShellIO, ExecResult, ExecError};
 use libcobra::bytecode::*;
-use interpreter::*;
-use value::Value;
+use super::*;
+use super::value::Value;
 
 
 #[derive(Debug, Clone)]
@@ -97,7 +97,7 @@ fn step(io: &mut ShellIO, dc: &mut DebuggerContext) -> ExecResult
             return Err(ExecError::Quit)
         },
 
-        Err(ExecutionError(msg)) => {
+        Err(msg) => {
             writeln!(io, "Execution error: {}", msg)?;
             return Err(ExecError::Quit)
         }
@@ -129,7 +129,7 @@ fn cont(io: &mut ShellIO, dc: &mut DebuggerContext) -> ExecResult
     }
 }
 
-pub fn debug_byte_code(module: &ByteCodeModule, function: &str) -> Result<Value, ExecutionError>
+pub fn debug_byte_code(module: &ByteCodeModule, function: &str) -> ExecutionResult<Value>
 {
     let mut interpreter = Interpreter::new(true);
     let index = interpreter.start(function, module)?;

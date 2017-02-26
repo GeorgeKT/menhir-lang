@@ -1,8 +1,8 @@
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 use std::fmt;
-use interpreter::ExecutionError;
-use value::Value;
+use super::ExecutionResult;
+use super::value::Value;
 
 #[derive(Debug, Clone)]
 pub enum ValueRef
@@ -19,7 +19,7 @@ impl ValueRef
         ValueRef::Owner(Rc::new(RefCell::new(v)))
     }
 
-    pub fn clone_value(&self) -> Result<Value, ExecutionError>
+    pub fn clone_value(&self) -> ExecutionResult<Value>
     {
         match *self
         {
@@ -28,11 +28,11 @@ impl ValueRef
                 if let Some(rv) = v.upgrade() {
                     Ok(rv.borrow().clone())
                 } else {
-                    Err(ExecutionError("Dangling pointer, owner of element pointed to is gone".into()))
+                    Err("Dangling pointer, owner of element pointed to is gone".into())
                 }
             }
             ValueRef::Null => {
-                Err(ExecutionError("Dangling pointer, pointer has been deleted".into()))
+                Err("Dangling pointer, pointer has been deleted".into())
             }
         }
     }
@@ -46,8 +46,8 @@ impl ValueRef
         }
     }
 
-    pub fn apply<Op, R>(&self, op: Op) -> Result<R, ExecutionError>
-        where Op: Fn(&Value) -> Result<R, ExecutionError>, R: Sized
+    pub fn apply<Op, R>(&self, op: Op) -> ExecutionResult<R>
+        where Op: Fn(&Value) -> ExecutionResult<R>, R: Sized
     {
         match *self
         {
@@ -58,17 +58,17 @@ impl ValueRef
                 if let Some(rv) = v.upgrade() {
                     op(&rv.borrow())
                 } else {
-                    Err(ExecutionError("Dangling pointer, owner of element pointed to is gone".into()))
+                    Err("Dangling pointer, owner of element pointed to is gone".into())
                 }
             }
             ValueRef::Null => {
-                Err(ExecutionError("Dangling pointer, pointer has been deleted".into()))
+                Err("Dangling pointer, pointer has been deleted".into())
             }
         }
     }
 
-    pub fn apply_mut<Op, R>(&mut self, op: Op) -> Result<R, ExecutionError>
-        where Op: FnOnce(&mut Value) -> Result<R, ExecutionError>, R: Sized
+    pub fn apply_mut<Op, R>(&mut self, op: Op) -> ExecutionResult<R>
+        where Op: FnOnce(&mut Value) -> ExecutionResult<R>, R: Sized
     {
         match *self
         {
@@ -79,11 +79,11 @@ impl ValueRef
                 if let Some(rv) = v.upgrade() {
                     op(&mut rv.borrow_mut())
                 } else {
-                    Err(ExecutionError("Dangling pointer, owner of element pointed to is gone".into()))
+                    Err("Dangling pointer, owner of element pointed to is gone".into())
                 }
             }
             ValueRef::Null => {
-                Err(ExecutionError("Dangling pointer, pointer has been deleted".into()))
+                Err("Dangling pointer, pointer has been deleted".into())
             }
         }
     }

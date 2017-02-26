@@ -1,8 +1,8 @@
 use std::fmt;
 use itertools::free::join;
 use libcobra::ast::Type;
-use interpreter::ExecutionError;
-use valueref::ValueRef;
+use super::ExecutionResult;
+use super::valueref::ValueRef;
 use libcobra::bytecode::*;
 
 #[derive(Debug, Clone)]
@@ -67,7 +67,7 @@ impl Value
         }
     }
 
-    pub fn from_operand(op: &Operand) -> Result<Value, ExecutionError>
+    pub fn from_operand(op: &Operand) -> ExecutionResult<Value>
     {
         match *op
         {
@@ -78,11 +78,11 @@ impl Value
             Operand::String(ref s) => Ok(Value::String(s.clone())),
             Operand::Bool(v) => Ok(Value::Bool(v)),
             Operand::Nil => Ok(Value::Nil),
-            Operand::Var(_) | Operand::Func(_) => Err(ExecutionError(format!("Cannot convert operand {} into value", op)))
+            Operand::Var(_) | Operand::Func(_) => Err(format!("Cannot convert operand {} into value", op))
         }
     }
 
-    pub fn from_type(typ: &Type) -> Result<Value, ExecutionError>
+    pub fn from_type(typ: &Type) -> ExecutionResult<Value>
     {
         match *typ
         {
@@ -130,7 +130,7 @@ impl Value
         }
     }
 
-    pub fn get_property(&self, prop: ByteCodeProperty) -> Result<Value, ExecutionError>
+    pub fn get_property(&self, prop: ByteCodeProperty) -> ExecutionResult<Value>
     {
         match (self, prop)
         {
@@ -139,11 +139,11 @@ impl Value
             (&Value::String(ref s), ByteCodeProperty::Len) => Ok(Value::Int(s.len() as i64)),
             (&Value::Sum(idx, _), ByteCodeProperty::SumTypeIndex) |
             (&Value::Enum(idx), ByteCodeProperty::SumTypeIndex) => Ok(Value::Int(idx as i64)),
-            _  => Err(ExecutionError(format!("Unknown property {}", prop))),
+            _  => Err(format!("Unknown property {}", prop)),
         }
     }
 
-    pub fn get_member_ptr(&self, member_index: usize) -> Result<Value, ExecutionError>
+    pub fn get_member_ptr(&self, member_index: usize) -> ExecutionResult<Value>
     {
         match *self
         {
@@ -151,7 +151,7 @@ impl Value
                 if member_index < arr.len() {
                     Ok(Value::Pointer(arr[member_index].to_ptr()))
                 } else {
-                    Err(ExecutionError(format!("Array index {} out of bounds", member_index)))
+                    Err(format!("Array index {} out of bounds", member_index))
                 }
             },
 
@@ -159,7 +159,7 @@ impl Value
                 if member_index < slice.len() {
                     Ok(Value::Pointer(slice[member_index].to_ptr()))
                 } else {
-                    Err(ExecutionError(format!("Slice index {} out of bounds", member_index)))
+                    Err(format!("Slice index {} out of bounds", member_index))
                 }
             },
 
@@ -167,7 +167,7 @@ impl Value
                 if member_index < members.len() {
                     Ok(Value::Pointer(members[member_index].to_ptr()))
                 } else {
-                    Err(ExecutionError(format!("Struct member index {} out of bounds", member_index)))
+                    Err(format!("Struct member index {} out of bounds", member_index))
                 }
             },
 
@@ -175,7 +175,7 @@ impl Value
                 if member_index == idx {
                     Ok(Value::Pointer(inner.to_ptr()))
                 } else {
-                    Err(ExecutionError(format!("Wrong sum type index {}", member_index)))
+                    Err(format!("Wrong sum type index {}", member_index))
                 }
             },
 
@@ -185,7 +185,7 @@ impl Value
                 })
             },
 
-            _ => Err(ExecutionError(format!("Load member not supported on {}", self)))
+            _ => Err(format!("Load member not supported on {}", self))
         }
     }
 

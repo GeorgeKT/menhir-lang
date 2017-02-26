@@ -1,9 +1,9 @@
 use std::fs;
 use std::io::Read;
 use std::path::{PathBuf, Path};
-use interpreter::{run_byte_code, ExecutionError};
 use libcobra::bytecode::*;
-use value::Value;
+use super::{run_byte_code, ExecutionResult};
+use super::value::Value;
 
 pub struct Test
 {
@@ -29,12 +29,12 @@ impl Test
         }
     }
 
-    pub fn run(&self, dump: bool) -> Result<i64, ExecutionError>
+    pub fn run(&self, dump: bool) -> ExecutionResult<i64>
     {
         let mut bc_mod = match generate_byte_code(&self.code, dump)
         {
             Ok(bc_mod) => bc_mod,
-            Err(e) => return Err(ExecutionError(format!("Compile error: {}", e))),
+            Err(e) => return Err(format!("Compile error: {}", e)),
         };
 
         optimize_module(&mut bc_mod, OptimizationLevel::Normal);
@@ -44,20 +44,19 @@ impl Test
         {
             Value::Int(r) => Ok(r),
             _ => {
-                let msg = format!("Expecting int return type, got {}", result);
-                Err(ExecutionError(msg))
+                Err(format!("Expecting int return type, got {}", result))
             },
         }
     }
 }
 
 
-fn run_test(prog: &Path, dump: bool) -> Result<i64, ExecutionError>
+fn run_test(prog: &Path, dump: bool) -> ExecutionResult<i64>
 {
     let test = Test::load(prog);
     let ret = test.run(dump)?;
     if ret != test.ret {
-        Err(ExecutionError(format!("Return value doesn't match: {}, expecting {}", ret, test.ret)))
+        Err(format!("Return value doesn't match: {}, expecting {}", ret, test.ret))
     } else {
         Ok(ret)
     }
