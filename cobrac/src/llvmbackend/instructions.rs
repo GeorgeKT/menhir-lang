@@ -4,6 +4,7 @@ use libc::*;
 use llvm::core::*;
 use llvm::prelude::*;
 use libcobra::bytecode::*;
+use libcobra::ast::{Type, Operator};
 use super::valueref::ValueRef;
 use super::context::Context;
 
@@ -77,6 +78,22 @@ unsafe fn stack_alloc(ctx: &Context, typ: LLVMTypeRef, name: &str) -> LLVMValueR
     alloc
 }
 
+unsafe fn get_unary_op(ctx: &Context, dst: &Var, operator: Operator, src: &Operand)
+{
+    let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
+    let src_value = get_operand(ctx, src);
+    let result = match (operator, &dst.typ)
+    {
+        (Operator::Sub, &Type::Int) |
+        (Operator::Sub, &Type::UInt) => LLVMBuildNeg(ctx.builder, src_value, cstr!("neg")),
+        (Operator::Sub, &Type::Float) => LLVMBuildFNeg(ctx.builder, src_value, cstr!("neg")),
+        (Operator::Not, &Type::Bool) => LLVMBuildNot(ctx.builder, src_value, cstr!("not")),
+        _ => panic!("Unsupported unary operator"),
+    };
+
+    dst_var.value.store(ctx.builder, result);
+}
+
 pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &HashMap<BasicBlockRef, LLVMBasicBlockRef>)
 {
     match *instr
@@ -110,7 +127,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         }
 
         Instruction::UnaryOp{ref dst, ref op, ref src} => {
-            panic!("NYI");
+            get_unary_op(ctx, dst, *op, src);
         }
 
         Instruction::BinaryOp{ref dst, ref op, ref left, ref right} => {

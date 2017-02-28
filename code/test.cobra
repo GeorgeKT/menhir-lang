@@ -1,4 +1,4 @@
 
 fn main() -> int:
-    let x = 6
+    let x = -6
     x

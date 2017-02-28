@@ -19,7 +19,6 @@ use libcobra::typechecker::{type_check_module};
 use libcobra::bytecode::{compile_to_byte_code, optimize_module, ByteCodeModule, OptimizationLevel, START_CODE_FUNCTION};
 use libcobra::compileerror::{CompileResult, CompileError};
 use llvmbackend::{CodeGenOptions, llvm_code_generation};
-
 use interpreter::{run_byte_code, debug_byte_code};
 
 
