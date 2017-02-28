@@ -25,6 +25,5 @@ before_install:
 
 script:
         - (cd libcobra && cargo build)
-        - (cd cobrai && cargo build)
         - (cd cobrac && cargo build)
         - cargo test --all

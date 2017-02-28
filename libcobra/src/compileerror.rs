@@ -158,3 +158,12 @@ impl From<io::Error> for CompileError
         CompileError::IO(format!("IO Error: {}", e))
     }
 }
+
+impl From<String> for CompileError
+{
+    fn from(e: String) -> Self
+    {
+        CompileError::Other(e)
+    }
+}
+

@@ -67,15 +67,13 @@ impl TokenQueue
 
     pub fn expect(&mut self, kind: TokenKind) -> CompileResult<Token>
     {
-        self.pop().and_then(
-            |tok| if tok.kind == kind
-            {
+        self.pop().and_then(|tok|
+            if tok.kind == kind {
                 Ok(tok)
+            } else {
+                parse_error_result(&tok.span, format!("Unexpected token {}, expecting {}", tok.kind, kind))
             }
-            else
-            {
-                parse_error_result(&tok.span, format!("Unexpected token '{}'", tok))
-            })
+        )
     }
 
     pub fn expect_int(&mut self) -> CompileResult<(u64, Span)>
@@ -158,6 +156,36 @@ impl TokenQueue
                 },
             None => false,
         }
+    }
+
+    pub fn is_in_same_block(&self, indent_level: usize) -> bool
+    {
+        match self.tokens.front()
+        {
+            Some(tok) =>
+                if let TokenKind::Indent(level) = tok.kind {
+                    level >= indent_level
+                } else {
+                    tok.kind != TokenKind::EOF
+                },
+            None => false,
+        }
+    }
+
+    pub fn pop_indent(&mut self) -> CompileResult<Option<(usize, Span)>>
+    {
+        let level = if let Some(tok) = self.tokens.front() {
+            if let TokenKind::Indent(level) = tok.kind {
+                level
+            } else {
+                return Ok(None);
+            }
+        } else {
+            return Ok(None);
+        };
+
+        let tok = self.pop()?;
+        Ok(Some((level, tok.span)))
     }
 }
 

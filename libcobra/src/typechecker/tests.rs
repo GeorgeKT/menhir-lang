@@ -61,32 +61,32 @@ fn test_arrays()
 #[test]
 fn test_function()
 {
-	assert!(type_check_mod("add(a: int, b: int) -> int = a + b").is_ok());
-	assert!(type_check_mod("add(a: int, b: int) -> int = 7.5").is_err());
+	assert!(type_check_mod("fn add(a: int, b: int) -> int: a + b").is_ok());
+	assert!(type_check_mod("fn add(a: int, b: int) -> int: 7.5").is_err());
 }
 
 #[test]
 fn test_match()
 {
 	assert!(type_check_mod(r#"
-foo(x: int[]) -> int =
+fn foo(x: int[]) -> int:
 	match x:
-		[] => 0,
+		[] => 0
 		[head | tail] => head + foo(tail)
 "#).is_ok());
 
 	assert!(type_check_mod(r#"
-foo(x: int[]) -> int =
+fn foo(x: int[]) -> int:
 	match x:
-		7 => 0,
+		7 => 0
 		[head | tail] => head + foo(tail)
 "#).is_err());
 
 	assert!(type_check_mod(r#"
-foo(x: int) -> int =
+fn foo(x: int) -> int:
 	match x:
-		7 => 8,
-		6 => 7,
+		7 => 8
+		6 => 7
 		_ => 9
 "#).is_ok());
 }
@@ -113,33 +113,41 @@ fn test_mutability()
 {
     assert!(
         type_check_mod(r#"
-            main() -> int {
-                let x = 9;
-                x = 5;
+            fn main() -> int:
+                let x = 9
+                x = 5
                 x
-            }
         "#).is_err()
     );
 
     assert!(
         type_check_mod(r#"
-            foo(a: int) -> int {
-                a = a + 2;
+            fn foo(a: int) -> int:
+                a = a + 2
                 a
-            }
-            main() -> int {
+
+            fn main() -> int:
                 foo(5)
-            }
         "#).is_err()
     );
 
     assert!(
         type_check_mod(r#"
-            main() -> int {
-                var x = 9;
-                x = 5;
+            fn main() -> int:
+                var x = 9
+                x = 5
                 x
-            }
-            "#).is_ok()
+        "#).is_ok()
     );
+
+	assert!(
+		type_check_mod(r#"
+            fn foo(var a: int) -> int:
+                a = a + 2
+                a
+
+            fn main() -> int:
+                foo(5)
+        "#).is_ok()
+	);
 }

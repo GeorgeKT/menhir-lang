@@ -13,7 +13,8 @@ pub fn th_expr(data: &str) -> Expression
 {
     let mut cursor = Cursor::new(data);
     let mut tq = Lexer::new("").read(&mut cursor).expect("Lexing failed");
-    let e = parse_expression(&mut tq).expect("Parsing failed");
+    let (level, _) = tq.pop_indent().unwrap().unwrap();
+    let e = parse_expression(&mut tq, level).expect("Parsing failed");
     println!("AST dump:");
     e.print(0);
     e
@@ -23,7 +24,8 @@ pub fn th_pattern(data: &str) -> Pattern
 {
     let mut cursor = Cursor::new(data);
     let mut tq = Lexer::new("").read(&mut cursor).expect("Lexing failed");
-    let e = parse_pattern(&mut tq).expect("Parsing failed");
+    let (level, _) = tq.pop_indent().unwrap().unwrap();
+    let e = parse_pattern(&mut tq, level).expect("Parsing failed");
     println!("AST dump:");
     e.print(0);
     e
@@ -338,65 +340,65 @@ fn arg(name: &str, typ: Type, span: Span) -> Argument
 #[test]
 fn test_function_with_args()
 {
-    let md = th_mod("foo(a: int, b: int) -> int = 7");
+    let md = th_mod("fn foo(a: int, b: int) -> int: 7");
     assert!(*md.functions.get("test::foo").unwrap() == Function::new(
         sig(
             "test::foo",
             Type::Int,
             vec![
-                arg("a", Type::Int, span(1, 5, 1, 10)),
-                arg("b", Type::Int, span(1, 13, 1, 18)),
+                arg("a", Type::Int, span(1, 8, 1, 13)),
+                arg("b", Type::Int, span(1, 16, 1, 21)),
             ],
-            span(1, 1, 1, 26)
+            span(1, 1, 1, 29)
         ),
         true,
-        number(7, span(1, 30, 1, 30)),
-        span(1, 1, 1, 30))
+        number(7, span(1, 32, 1, 32)),
+        span(1, 1, 1, 32))
     )
 }
 
 #[test]
 fn test_function_with_no_args()
 {
-    let md = th_mod("foo() -> int = 7");
+    let md = th_mod("fn foo() -> int: 7");
     assert!(*md.functions.get("test::foo").unwrap() == Function::new(
         sig(
             "test::foo",
             Type::Int,
             Vec::new(),
-            span(1, 1, 1, 12)
+            span(1, 1, 1, 15)
         ),
         true,
-        number(7, span(1, 16, 1, 16)),
-        span(1, 1, 1, 16))
+        number(7, span(1, 18, 1, 18)),
+        span(1, 1, 1, 18))
     )
 }
 
 #[test]
 fn test_function_with_no_return_type()
 {
-    let md = th_mod("foo() = 7");
+    let md = th_mod("fn foo(): 7");
     assert!(*md.functions.get("test::foo").unwrap() == Function::new(
         sig(
             "test::foo",
             Type::Void,
             Vec::new(),
-            span(1, 1, 1, 5)
+            span(1, 1, 1, 8)
         ),
         true,
-        number(7, span(1, 9, 1, 9)),
-        span(1, 1, 1, 9))
+        number(7, span(1, 11, 1, 11)),
+        span(1, 1, 1, 11))
     )
 }
 
 #[test]
 fn test_function_with_func_type()
 {
-    let md = th_mod("foo(a: (int, int) -> int) = 7");
+    let md = th_mod("fn foo(a: fn(int, int) -> int) -> int: 7");
     assert!(*md.functions.get("test::foo").unwrap() == Function::new(
         sig(
             "test::foo",
-            Type::Void,
+            Type::Int,
             vec![
                 Argument::new(
                     "a".into(),
@@ -408,48 +410,48 @@ fn test_function_with_func_type()
                         Type::Int,
                     ),
                     false,
-                    span(1, 5, 1, 24)
+                    span(1, 8, 1, 29)
                 ),
             ],
-            span(1, 1, 1, 25)
+            span(1, 1, 1, 37)
         ),
         true,
-        number(7, span(1, 29, 1, 29)),
-        span(1, 1, 1, 29))
+        number(7, span(1, 40, 1, 40)),
+        span(1, 1, 1, 40))
     )
 }
 
 #[test]
 fn test_external_function()
 {
-    let md = th_mod("extern foo() -> int");
+    let md = th_mod("extern fn foo() -> int");
     assert!(*md.externals.get("foo").unwrap() == ExternalFunction::new(
         sig(
             "foo",
             Type::Int,
             Vec::new(),
-            span(1, 8, 1, 19)
+            span(1, 11, 1, 22)
         ),
-        span(1, 1, 1, 19))
+        span(1, 1, 1, 22))
     )
 }
 
 #[test]
 fn test_lambda()
 {
-    let e = th_expr("@(a, b) -> a + b");
+    let e = th_expr("fn(a, b) -> a + b");
     assert!(e == lambda(
         vec![
-            Argument::new("a".into(), generic_type("a"), false, span(1, 3, 1, 3)),
-            Argument::new("b".into(), generic_type("b"), false, span(1, 6, 1, 6)),
+            Argument::new("a".into(), generic_type("a"), false, span(1, 4, 1, 4)),
+            Argument::new("b".into(), generic_type("b"), false, span(1, 7, 1, 7)),
         ],
         bin_op(
             Operator::Add,
-            name_ref("a", span(1, 12, 1, 12)),
-            name_ref("b", span(1, 16, 1, 16)),
-            span(1, 12, 1, 16)
+            name_ref("a", span(1, 13, 1, 13)),
+            name_ref("b", span(1, 17, 1, 17)),
+            span(1, 13, 1, 17)
         ),
-        span(1, 1, 1, 16)
+        span(1, 1, 1, 17)
     ))
 }
 
@@ -458,8 +460,8 @@ fn test_match()
 {
     let e = th_expr(r#"
 match a:
-    0 => 1,
-    1 => 2,
+    0 => 1
+    1 => 2
     2 => 3
 "#);
     assert!(e == match_expression(
@@ -493,15 +495,17 @@ let x = 5, y = 7 in x * y
 fn test_struct()
 {
     let md = th_mod(r#"
-type Point = {x: int, y: int}
+struct Point:
+    x: int
+    y: int
 "#);
     assert!(*md.types.get("test::Point").unwrap() == TypeDeclaration::Struct(struct_declaration(
         "test::Point",
         vec![
-            struct_member_declaration("x", Type::Int, span(2, 15, 2, 20)),
-            struct_member_declaration("y", Type::Int, span(2, 23, 2, 28)),
+            struct_member_declaration("x", Type::Int, span(3, 5, 3, 10)),
+            struct_member_declaration("y", Type::Int, span(4, 5, 4, 10)),
         ],
-        span(2, 1, 2, 29))
+        span(2, 1, 4, 10))
     ))
 }
 
@@ -509,15 +513,17 @@ type Point = {x: int, y: int}
 fn test_generic_struct()
 {
     let md = th_mod(r#"
-type Point = {x: $a, y: $b}
+struct Point:
+    x: $a
+    y: $b
 "#);
     assert!(*md.types.get("test::Point").unwrap() == TypeDeclaration::Struct(struct_declaration(
         "test::Point",
         vec![
-            struct_member_declaration("x", generic_type("a"), span(2, 15, 2, 19)),
-            struct_member_declaration("y", generic_type("b"), span(2, 22, 2, 26)),
+            struct_member_declaration("x", generic_type("a"), span(3, 5, 3, 9)),
+            struct_member_declaration("y", generic_type("b"), span(4, 5, 4, 9)),
         ],
-        span(2, 1, 2, 27))
+        span(2, 1, 4, 9))
     ))
 }
 
@@ -534,6 +540,22 @@ Point{6, 7}
             number(7, span(2, 10, 2, 10)),
         ],
         span(2, 1, 2, 11))
+    ))
+}
+
+#[test]
+fn test_anonymous_struct_initializer()
+{
+    let e = th_expr(r#"
+{6, 7}
+"#);
+    assert!(e == Expression::StructInitializer(struct_initializer(
+        "",
+        vec![
+            number(6, span(2, 2, 2, 2)),
+            number(7, span(2, 5, 2, 5)),
+        ],
+        span(2, 1, 2, 6))
     ))
 }
 
@@ -585,15 +607,17 @@ a.b()
 fn test_sum_types()
 {
     let md = th_mod(r#"
-type Option = Some | None
+enum Option:
+    Some
+    None
 "#);
     assert!(*md.types.get("test::Option").unwrap() == TypeDeclaration::Sum(sum_type_decl(
         "test::Option",
         vec![
-            sum_type_case_decl("test::Some", None, span(2, 15, 2, 18)),
-            sum_type_case_decl("test::None", None, span(2, 22, 2, 25)),
+            sum_type_case_decl("test::Some", None, span(3, 5, 3, 8)),
+            sum_type_case_decl("test::None", None, span(4, 5, 4, 8)),
         ],
-        span(2, 1, 2, 25))
+        span(2, 1, 4, 8))
     ))
 }
 
@@ -601,9 +625,14 @@ type Option = Some | None
 fn test_sum_types_with_data()
 {
     let md = th_mod(r#"
-type Foo = Bar{int, int} | Foo | Baz{bla: bool}
+enum Foo:
+    Bar{x: int, y: int}
+    Foo
+    Baz{bla: bool}
 "#);
-    assert!(*md.types.get("test::Foo").unwrap() == TypeDeclaration::Sum(sum_type_decl(
+    let result = md.types.get("test::Foo").unwrap();
+    result.print(1);
+    assert!(*result == TypeDeclaration::Sum(sum_type_decl(
         "test::Foo",
         vec![
             sum_type_case_decl(
@@ -612,30 +641,30 @@ type Foo = Bar{int, int} | Foo | Baz{bla: bool}
                     struct_declaration(
                         "test::Bar",
                         vec![
-                            struct_member_declaration("", Type::Int, span(2, 15, 2, 18)),
-                            struct_member_declaration("", Type::Int, span(2, 19, 2, 23)),
+                            struct_member_declaration("x", Type::Int, span(3, 9, 3, 14)),
+                            struct_member_declaration("y", Type::Int, span(3, 17, 3, 22)),
                         ],
-                        span(2, 12, 2, 24)
+                        span(3, 5, 3, 23)
                     )
                 ),
-                span(2, 12, 2, 24)
+                span(3, 5, 3, 23)
             ),
-            sum_type_case_decl("test::Foo", None, span(2, 28, 2, 30)),
+            sum_type_case_decl("test::Foo", None, span(4, 5, 4, 7)),
             sum_type_case_decl(
                 "test::Baz",
                 Some(
                     struct_declaration(
                         "test::Baz",
                         vec![
-                            struct_member_declaration("bla", Type::Bool, span(2, 38, 2, 46)),
+                            struct_member_declaration("bla", Type::Bool, span(5, 9, 5, 17)),
                         ],
-                        span(2, 34, 2, 47)
+                        span(5, 5, 5, 18)
                     )
                 ),
-                span(2, 34, 2, 47)
+                span(5, 5, 5, 18)
             ),
         ],
-        span(2, 1, 2, 47))
+        span(2, 1, 5, 18))
     ))
 }
 
@@ -643,17 +672,19 @@ type Foo = Bar{int, int} | Foo | Baz{bla: bool}
 fn test_generic_type_declaration()
 {
     let md = th_mod(r#"
-type Point = {x: $a, y: $b}
+struct Point:
+    x: $a
+    y: $b
 
-foo(p: Point<int>) -> int = 7
+fn foo(p: Point<int>) -> int: 7
 "#);
     assert!(*md.types.get("test::Point").unwrap() == TypeDeclaration::Struct(struct_declaration(
         "test::Point",
         vec![
-            struct_member_declaration("x", generic_type("a"), span(2, 15, 2, 19)),
-            struct_member_declaration("y", generic_type("b"), span(2, 22, 2, 26)),
+            struct_member_declaration("x", generic_type("a"), span(3, 5, 3, 9)),
+            struct_member_declaration("y", generic_type("b"), span(4, 5, 4, 9)),
         ],
-        span(2, 1, 2, 27))
+        span(2, 1, 4, 9))
     ));
 
     assert!(*md.functions.get("test::foo").unwrap() == Function::new(
@@ -661,13 +692,13 @@ foo(p: Point<int>) -> int = 7
             "test::foo",
             Type::Int,
             vec![
-                arg("p", unresolved_type("Point", vec![Type::Int]), span(4, 5, 4, 17)),
+                arg("p", unresolved_type("Point", vec![Type::Int]), span(6, 8, 6, 20)),
             ],
-            span(4, 1, 4, 25)
+            span(6, 1, 6, 28)
         ),
         true,
-        number(7, span(4, 29, 4, 29)),
-        span(4, 1, 4, 29))
+        number(7, span(6, 31, 6, 31)),
+        span(6, 1, 6, 31))
     )
 }
 
@@ -688,7 +719,7 @@ if true: 5 else 10"#);
 fn test_block()
 {
     let e = th_expr(r#"
-{a; b; c; 7}"#);
+(a; b; c; 7)"#);
     assert!(e == block(
         vec![
             name_ref("a", span(2, 2, 2, 2)),
@@ -696,6 +727,32 @@ fn test_block()
             name_ref("c", span(2, 8, 2, 8)),
             number(7, span(2, 11, 2, 11)),
         ],
-        span(2, 1, 2, 12)
+        span(2, 2, 2, 11)
     ))
+}
+
+
+#[test]
+fn test_interface()
+{
+    let md = th_mod(r#"
+interface Foo:
+    fn bar(self, x: int) -> int
+"#);
+    let result = md.types.get("test::Foo").unwrap();
+    println!("{:?}", result);
+    assert!(*result == TypeDeclaration::Interface(interface(
+        "test::Foo".into(),
+        vec![
+            sig("bar",
+                Type::Int,
+                vec![
+                    arg("self", ptr_type(Type::SelfType), span(3, 12, 3, 15)),
+                    arg("x", Type::Int, span(3, 18, 3, 23))
+                ],
+                span(3, 8, 3, 31)
+            )
+        ],
+        span(2, 1, 3, 31)
+    )))
 }

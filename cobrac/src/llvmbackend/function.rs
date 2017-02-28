@@ -28,13 +28,13 @@ fn make_function_instance(ctx: &Context, sig: &FunctionSignature) -> FunctionIns
     }
 }
 
-unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature) -> FunctionInstance
+pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature)
 {
     let mut fi = make_function_instance(ctx, sig);
     let function_type = LLVMFunctionType(fi.return_type, fi.args.as_mut_ptr(), fi.args.len() as libc::c_uint, 0);
     let name = CString::new(sig.name.as_bytes()).expect("Invalid string");
     fi.function = LLVMAddFunction(ctx.module, name.into_raw(), function_type);
-    fi
+    ctx.add_function(Rc::new(fi));
 }
 
 unsafe fn gen_function_ptr(ctx: &Context, func_ptr: LLVMValueRef, sig: FunctionSignature) -> FunctionInstance
@@ -59,11 +59,11 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction)
             Type::Func(ref ft) => {
                 let func_sig = anon_sig(&arg.name, &ft.return_type, &ft.args);
                 let fi = gen_function_ptr(ctx, var, func_sig);
-                ctx.add_variable(&arg.name, ValueRef::new(fi.function, &arg.typ));
+                ctx.add_variable(&arg.name, ValueRef::new(fi.function, &arg.typ, false));
                 ctx.add_function(Rc::new(fi));
             },
             _ => {
-                ctx.add_variable(&arg.name, ValueRef::new(var, &arg.typ));
+                ctx.add_variable(&arg.name, ValueRef::new(var, &arg.typ, false));
             },
         }
     }

@@ -36,7 +36,7 @@ unsafe fn get_variable(ctx: &Context, name: &str) -> LLVMValueRef
 {
     ctx.get_variable(name)
         .expect("Unknown variable")
-        .value.get()
+        .value.load(ctx.builder)
 }
 
 unsafe fn get_operand(ctx: &Context, operand: &Operand) -> LLVMValueRef
@@ -82,51 +82,73 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
     match *instr
     {
         Instruction::Store{ref dst, ref src} => {
+            let vr = get_operand(ctx, src);
+            let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
+            dst_var.value.store(ctx.builder, vr);
         }
 
         Instruction::Load{ref dst, ref ptr} => {
+            let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
+            let src_var = ctx.get_variable(&ptr.name).expect("Unknown variable");
+            dst_var.value.store(ctx.builder, src_var.value.load(ctx.builder));
         }
 
         Instruction::LoadMember{ref dst, ref obj, ref member_index} => {
+            panic!("NYI");
         }
 
         Instruction::AddressOf{ref dst, ref obj} => {
+            panic!("NYI");
         }
 
         Instruction::GetProperty{ref dst, ref obj, ref prop} => {
+            panic!("NYI");
         }
 
         Instruction::SetProperty{ref obj, ref prop, ref val} => {
+            panic!("NYI");
         }
 
         Instruction::UnaryOp{ref dst, ref op, ref src} => {
+            panic!("NYI");
         }
 
         Instruction::BinaryOp{ref dst, ref op, ref left, ref right} => {
+            panic!("NYI");
         }
 
         Instruction::Call{ref dst, ref func, ref args} => {
+            let func = ctx.get_function(func).expect("Unknown function");
+            let dst_var = ctx.get_variable(&dst.name).expect("Unknown function");
+            let mut func_args = args.iter().map(|a| get_operand(ctx, a)).collect::<Vec<_>>();
+            unsafe {
+                let ret = LLVMBuildCall(ctx.builder, func.function, func_args.as_mut_ptr(), args.len() as c_uint, cstr!("call"));
+                dst_var.value.store(ctx.builder, ret);
+            }
         }
 
         Instruction::Slice{ref dst, ref src, ref start, ref len} => {
+            panic!("NYI");
         }
 
         Instruction::Cast{ref dst, ref src} => {
+            panic!("NYI");
         }
 
         Instruction::GlobalAlloc(ref var) => {
+            panic!("NYI");
         }
 
         Instruction::StackAlloc(ref var) => {
             let typ = ctx.resolve_type(&var.typ);
             let val = stack_alloc(ctx, typ, &var.name);
-            ctx.add_variable(&var.name, ValueRef::new(val, &var.typ));
+            ctx.add_variable(&var.name, ValueRef::new(val, &var.typ, true));
         }
 
         Instruction::HeapAlloc(ref var) => {
             let name = CString::new(&var.name[..]).expect("Invalid string");
             let value = LLVMBuildMalloc(ctx.builder, ctx.resolve_type(&var.typ), name.as_ptr());
-            ctx.add_variable(&var.name, ValueRef::new(value, &var.typ))
+            ctx.add_variable(&var.name, ValueRef::new(value, &var.typ, true))
         }
 
         Instruction::StartScope => {

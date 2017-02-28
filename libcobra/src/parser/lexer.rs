@@ -11,6 +11,7 @@ use span::{Span, Pos};
 #[derive(Debug, Clone, Eq, PartialEq)]
 enum LexState
 {
+    StartOfLine,
     Idle,
     Comment,
     Identifier,
@@ -29,6 +30,7 @@ pub struct Lexer
     data: String,
     escape_code: bool,
     file_name: String,
+    indent_level: usize,
 }
 
 fn is_operator_start(c: char) -> bool
@@ -51,13 +53,14 @@ impl Lexer
     pub fn new(file_name: &str) -> Lexer
     {
         Lexer {
-            state: LexState::Idle,
+            state: LexState::StartOfLine,
             tokens: TokenQueue::new(),
             pos: Pos::new(1, 1),
             token_start_pos: Pos::new(1, 1),
             data: String::new(),
             escape_code: false,
             file_name: file_name.into(),
+            indent_level: 0,
         }
     }
 
@@ -71,12 +74,22 @@ impl Lexer
         }
     }
 
+    fn to_start_of_line(&mut self)
+    {
+        self.state = LexState::StartOfLine;
+        self.indent_level = 0;
+    }
+
     fn idle(&mut self, c: char) -> CompileResult<()>
     {
         let span = self.current_single_span();
         match c
         {
-            '\n' | ' ' | '\t' => Ok(()),
+            '\n' => {
+                self.to_start_of_line();
+                Ok(())
+            }
+            ' ' | '\t' => Ok(()),
             '#' => {self.state = LexState::Comment; Ok(())},
             ',' => {self.add(TokenKind::Comma, span); Ok(())},
             '(' => {self.add(TokenKind::OpenParen, span); Ok(())},
@@ -85,7 +98,6 @@ impl Lexer
             '}' => {self.add(TokenKind::CloseCurly, span); Ok(())},
             '[' => {self.add(TokenKind::OpenBracket, span); Ok(())},
             ']' => {self.add(TokenKind::CloseBracket, span); Ok(())},
-            '@' => {self.add(TokenKind::Lambda, span); Ok(())},
             '$' => {self.add(TokenKind::Dollar, span); Ok(())},
             ';' => {self.add(TokenKind::SemiColon, span); Ok(())},
             '~' => {self.add(TokenKind::Tilde, span); Ok(())},
@@ -103,9 +115,8 @@ impl Lexer
 
     fn comment(&mut self, c: char) -> CompileResult<()>
     {
-        if c == '\n' 
-        {
-            self.state = LexState::Idle;
+        if c == '\n' {
+            self.to_start_of_line();
         }
         Ok(())
     }
@@ -121,6 +132,8 @@ impl Lexer
             "true" => TokenKind::True,
             "false" => TokenKind::False,
             "type" => TokenKind::Type,
+            "struct" => TokenKind::Struct,
+            "enum" => TokenKind::Enum,
             "if" => TokenKind::If,
             "else" => TokenKind::Else,
             "extern" => TokenKind::Extern,
@@ -132,6 +145,7 @@ impl Lexer
             "var" => TokenKind::Var,
             "as" => TokenKind::Operator(Operator::As),
             "interface" => TokenKind::Interface,
+            "fn" => TokenKind::Func,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
         };
 
@@ -292,10 +306,36 @@ impl Lexer
         Ok(())
     }
 
+    fn start_of_line(&mut self, c: char) -> CompileResult<()>
+    {
+        match c {
+            '\n' => {
+                self.indent_level = 0;
+                Ok(())
+            }
+            ' ' => {
+                self.indent_level += 1;
+                Ok(())
+            }
+            '\t' => {
+                self.indent_level += 4;
+                Ok(())
+            }
+            _ => {
+                let level = self.indent_level;
+                let span = Span::new(&self.file_name, self.token_start_pos, self.pos);
+                self.add(TokenKind::Indent(level), span);
+                self.start(c, LexState::Idle);
+                self.feed(c)
+            }
+        }
+    }
+
     fn feed(&mut self, c: char) -> CompileResult<()>
     {
         match self.state
         {
+            LexState::StartOfLine => self.start_of_line(c),
             LexState::Idle => self.idle(c),
             LexState::Comment => self.comment(c),
             LexState::Identifier => self.identifier(c),
@@ -360,6 +400,7 @@ mod tests
             .collect();
 
         assert_eq!(tokens, vec![
+            tok(TokenKind::Indent(0), 1, 1, 1, 1),
             tok(TokenKind::Import, 1, 1, 1, 6),
             tok(TokenKind::Match, 1, 8, 1, 12),
             tok(TokenKind::EOF, 2, 1, 2, 1),
@@ -376,6 +417,7 @@ mod tests
             .collect();
 
         assert_eq!(tokens, vec![
+            tok(TokenKind::Indent(0), 1, 1, 1, 1),
             tok(TokenKind::Identifier("blaat".into()), 1, 1, 1, 5),
             tok(TokenKind::Number("8888".into()), 1, 7, 1, 10),
             tok(TokenKind::Identifier("_foo_16".into()), 1, 12, 1, 18),
@@ -386,13 +428,14 @@ mod tests
     #[test]
     fn test_specials()
     {
-        let mut cursor = Cursor::new("+ - * / % < <= > >= == = != ! || && => -> : , :: $ @");
+        let mut cursor = Cursor::new("+ - * / % < <= > >= == = != ! || && => -> : , :: $");
         let tokens: Vec<Token> = Lexer::new("")
             .read(&mut cursor)
             .expect("Lexing failed")
             .collect();
 
         assert_eq!(tokens, vec![
+            tok(TokenKind::Indent(0), 1, 1, 1, 1),
             tok(TokenKind::Operator(Operator::Add), 1, 1, 1, 1),
             tok(TokenKind::Operator(Operator::Sub), 1, 3, 1, 3),
             tok(TokenKind::Operator(Operator::Mul), 1, 5, 1, 5),
@@ -414,7 +457,6 @@ mod tests
             tok(TokenKind::Comma, 1, 45, 1, 45),
             tok(TokenKind::DoubleColon, 1, 47, 1, 48),
             tok(TokenKind::Dollar, 1, 50, 1, 50),
-            tok(TokenKind::Lambda, 1, 52, 1, 52),
             tok(TokenKind::EOF, 2, 1, 2, 1),
         ]);
     }
@@ -429,6 +471,7 @@ mod tests
             .collect();
 
         assert_eq!(tokens, vec![
+            tok(TokenKind::Indent(0), 1, 1, 1, 1),
             tok(TokenKind::StringLiteral("This is a string".into()), 1, 1, 1, 18),
             tok(TokenKind::StringLiteral("Blaat\n".into()), 1, 20, 1, 28),
             tok(TokenKind::StringLiteral("$a".into()), 1, 30, 1, 33),

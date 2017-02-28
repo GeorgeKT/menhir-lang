@@ -1,4 +1,60 @@
-apply(x: int, fn: (int) -> int) -> int =
-    fn(x)
 
-main() -> int = apply(5, @(x) -> x * 2)
+
+struct Bar:
+    x: int
+    y: int
+
+enum Foo:
+    Baz
+    Boo{x: int}
+    Blub{y: int}
+
+type FOF = Bar
+
+interface Sum:
+    fn sum(self) -> int
+
+
+fn Bar.sum(self):
+    self.x + self.y
+
+
+fn min(a, b):
+    if a < b:
+        a
+    else
+        b
+
+
+fn add(x, y):
+    x + y
+
+fn foo(x: int, y: int) -> int:
+    x + y
+
+fn main() -> int:
+    var x = 7
+    x = x * 3
+    let y =
+        if x > 8:
+            9
+        else
+            10
+
+    let z = foo(x, y)
+    while x < 10:
+        x = x + 1
+
+    let w = Bar{8, 9}
+    let f = Boo{8}
+
+    match w:
+        Baz => 8
+        Boo{xx} => xx + 1
+        Blub{yy} => yy + 1
+
+    let bla = fn(x, y) -> x + y
+
+
+fn apply(f: fn(int, int) -> int, x: int, y: int) -> int:
+    f x y

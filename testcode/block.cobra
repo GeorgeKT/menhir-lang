@@ -1,0 +1,8 @@
+#ret:77
+fn max(a: int, b: int) -> int:
+    if a > b: a
+    else b
+
+fn main() -> int:
+    let x = max(10, 11)
+    7 * x

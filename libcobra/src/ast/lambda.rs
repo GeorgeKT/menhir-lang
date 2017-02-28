@@ -69,5 +69,6 @@ impl TreePrinter for Lambda
         let p = prefix(level);
         println!("{}lambda ({})", p, self.span);
         self.sig.print(level + 1);
+        self.expr.print(level + 1);
     }
 }

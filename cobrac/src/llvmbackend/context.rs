@@ -1,9 +1,11 @@
 use std::ffi::CString;
 use std::rc::Rc;
+use std::fs::DirBuilder;
 use std::ptr;
 use llvm::prelude::*;
 use llvm::core::*;
 use libcobra::ast::Type;
+use super::CodeGenOptions;
 use super::symboltable::{SymbolTable, FunctionInstance, VariableInstance};
 use super::target::TargetMachine;
 use super::valueref::ValueRef;
@@ -52,7 +54,7 @@ impl Context
                 builder: LLVMCreateBuilderInContext(context),
                 target_machine: target_machine,
                 name: module_name.into(),
-                stack: Vec::new(),
+                stack: vec![StackFrame::new(ptr::null_mut())],
             })
         }
     }
@@ -138,6 +140,95 @@ impl Context
         }
     }
 
+    pub fn dump_module(&self)
+    {
+        println!("LLVM IR: {}", self.name);
+        // Dump the module as IR to stdout.
+        unsafe {
+            LLVMDumpModule(self.module);
+        }
+        println!("----------------------");
+    }
+
+
+    pub unsafe fn gen_object_file(&self, opts: &CodeGenOptions) -> Result<String, String>
+    {
+        if opts.optimize {
+            self.optimize()?;
+        }
+
+        if opts.dump_ir {
+           self.dump_module();
+        }
+
+        DirBuilder::new()
+            .recursive(true)
+            .create(&opts.build_dir)
+            .map_err(|e| format!("Unable to create directory for {}: {}", opts.build_dir, e))?;
+
+
+        let obj_file_name = format!("{}/{}.cobra.o", opts.build_dir, self.name);
+        println!("  Building {}", obj_file_name);
+        self.target_machine.emit_to_file(self.module, &obj_file_name)?;
+        Ok(obj_file_name)
+    }
+
+    unsafe fn optimize(&self) -> Result<(), String>
+    {
+        use llvm::transforms::pass_manager_builder::*;
+        use llvm::target::LLVMAddTargetData;
+
+        let pass_builder = LLVMPassManagerBuilderCreate();
+        LLVMPassManagerBuilderSetOptLevel(pass_builder, 3);
+        LLVMPassManagerBuilderSetSizeLevel(pass_builder, 0);
+
+        let function_passes = LLVMCreateFunctionPassManagerForModule(self.module);
+        let module_passes = LLVMCreatePassManager();
+        let lto_passes = LLVMCreatePassManager();
+
+        LLVMAddTargetData(self.target_machine.target_data, module_passes);
+
+        LLVMPassManagerBuilderPopulateFunctionPassManager(pass_builder, function_passes);
+        LLVMPassManagerBuilderPopulateModulePassManager(pass_builder, module_passes);
+        LLVMPassManagerBuilderPopulateLTOPassManager(pass_builder, lto_passes, 1, 1);
+        LLVMPassManagerBuilderDispose(pass_builder);
+
+        LLVMInitializeFunctionPassManager(function_passes);
+
+        let mut func = LLVMGetFirstFunction(self.module);
+        while func != ptr::null_mut() {
+            LLVMRunFunctionPassManager(function_passes, func);
+            func = LLVMGetNextFunction(func);
+        }
+
+        LLVMRunPassManager(module_passes, self.module);
+        LLVMRunPassManager(lto_passes, self.module);
+        LLVMDisposePassManager(function_passes);
+        LLVMDisposePassManager(module_passes);
+        LLVMDisposePassManager(lto_passes);
+        Ok(())
+    }
+
+    pub fn verify(&self) -> Result<(), String>
+    {
+        use llvm::analysis::*;
+        use libc::c_char;
+        use std::ffi::CStr;
+        unsafe {
+            let mut error_message: *mut c_char = ptr::null_mut();
+            if LLVMVerifyModule(self.module, LLVMVerifierFailureAction::LLVMReturnStatusAction, &mut error_message) != 0 {
+
+                self.dump_module();
+
+                let msg = CStr::from_ptr(error_message).to_str().expect("Invalid C string");
+                let e = format!("Module verification error: {}", msg);
+                LLVMDisposeMessage(error_message);
+                Err(e)
+            } else {
+                Ok(())
+            }
+        }
+    }
 }
 
 

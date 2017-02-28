@@ -2,19 +2,25 @@ extern crate llvm_sys as llvm;
 extern crate libffi;
 extern crate libc;
 extern crate libcobra;
+extern crate shrust;
+extern crate itertools;
 #[macro_use]
 extern crate clap;
 
 mod llvmbackend;
+mod interpreter;
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::exit;
+use clap::ArgMatches;
 use libcobra::parser::{ParserOptions, parse_file};
 use libcobra::typechecker::{type_check_module};
-use libcobra::bytecode::{compile_to_byte_code, optimize_module, ByteCodeModule, OptimizationLevel};
+use libcobra::bytecode::{compile_to_byte_code, optimize_module, ByteCodeModule, OptimizationLevel, START_CODE_FUNCTION};
 use libcobra::compileerror::{CompileResult, CompileError};
 use llvmbackend::{CodeGenOptions, llvm_code_generation};
+
+use interpreter::{run_byte_code, debug_byte_code};
 
 
 fn default_output_file(input_file: &str) -> String
@@ -61,25 +67,12 @@ fn parse(parser_options: &ParserOptions, input_file: &str, dump_flags: &str, opt
     Ok(bc_mod)
 }
 
-fn run() -> CompileResult<i32>
+fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
 {
-    let matches = clap_app!(cobrac =>
-        (version: "1.0")
-        (author: "Joris Guisson <joris.guisson@gmail.com>")
-        (about: "cobra language compiler")
-        (@arg DUMP: -d --dump +takes_value "Dump internal compiler state for debug purposes. Argument can be all, ast, bytecode or ir. A comma separated list of these values is also supported.")
-        (@arg INPUT_FILE: +required "File to compile")
-        (@arg OPTIMIZE: -O --optimize "Optimize the code")
-        (@arg BINARY_TYPE: -t --type +takes_value "Binary type, allowed values: bytecode or exe")
-        (@arg OUTPUT_FILE: -o --output +takes_value "Name of binary to create (by default input file without the extensions)")
-        (@arg IMPORTS: -I --imports +takes_value "Directory to look for imports, use a comma separated list for more then one.")
-    ).get_matches();
-
     let input_file = matches.value_of("INPUT_FILE").expect("No input file given");
     let optimize = matches.is_present("OPTIMIZE");
     let output_file = matches.value_of("OUTPUT_FILE").map(|v| v.to_string()).unwrap_or_else(|| default_output_file(&input_file));
     let binary_type = matches.value_of("BINARY_TYPE").unwrap_or("exe");
-    let dump_flags = matches.value_of("DUMP").unwrap_or("");
 
     let parser_options = ParserOptions{
         import_dirs: matches.value_of("IMPORTS")
@@ -115,6 +108,76 @@ fn run() -> CompileResult<i32>
             Err(CompileError::Other(format!("Unknown binary type {}", binary_type)))
         }
     }
+}
+
+
+fn run_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
+{
+    let input_file = matches.value_of("INPUT_FILE").expect("Missing input file argument");
+    let run_debugger = matches.is_present("DEBUG");
+    let optimize = matches.is_present("OPTIMIZE");
+
+    let bc_mod = if input_file.ends_with(".cobra") {
+        let parser_options = ParserOptions{
+            import_dirs: matches.value_of("IMPORTS")
+                .map(|dirs| dirs.split(',').map(PathBuf::from).collect())
+                .unwrap_or_else(Vec::new),
+        };
+
+        parse(&parser_options, &input_file, &dump_flags, optimize)?
+    } else {
+        let mut file = File::open(&input_file)
+            .map_err(|err| CompileError::IO(format!("Cannot open {}: {}", input_file, err)))?;
+
+        ByteCodeModule::load(&mut file)?
+    };
+
+    let ret = if run_debugger {
+        debug_byte_code(&bc_mod, START_CODE_FUNCTION)?
+    } else {
+        run_byte_code(&bc_mod, START_CODE_FUNCTION)?
+    };
+
+    Ok(ret.to_exit_code())
+}
+
+fn run() -> CompileResult<i32>
+{
+    let app = clap_app!(cobrac =>
+        (version: "0.1")
+        (author: "Joris Guisson <joris.guisson@gmail.com>")
+        (about: "Cobra language compiler")
+        (@arg DUMP: -d --dump +takes_value "Dump internal compiler state for debug purposes. Argument can be all, ast, bytecode or ir. A comma separated list of these values is also supported.")
+        (@subcommand build =>
+            (about: "Build a cobra file")
+            (version: "0.1")
+            (@arg INPUT_FILE: +required "File to build")
+            (@arg BINARY_TYPE: -t --type +takes_value "Binary type, allowed values: bytecode or exe")
+            (@arg OUTPUT_FILE: -o --output +takes_value "Name of binary to create (by default input file without the extensions)")
+            (@arg OPTIMIZE: -O --optimize "Optimize the code")
+            (@arg IMPORTS: -I --imports +takes_value "Directory to look for imports, use a comma separated list for more then one.")
+        )
+        (@subcommand run =>
+            (about: "Run a cobra file in interpreted mode")
+            (version: "0.1")
+            (@arg INPUT_FILE: +required "File to run, both source file and bytecode files are allowed")
+            (@arg OPTIMIZE: -O --optimize "Optimize the code")
+            (@arg IMPORTS: -I --imports +takes_value "Directory to look for imports, use a comma separated list for more then one.")
+        )
+    );
+
+    let matches = app.get_matches();
+    let dump_flags = matches.value_of("DUMP").unwrap_or("");
+
+    if let Some(build_matches) = matches.subcommand_matches("build") {
+        build_command(&build_matches, &dump_flags)
+    } else if let Some(run_matches) = matches.subcommand_matches("run") {
+        run_command(&run_matches, &dump_flags)
+    } else {
+        println!("{}", matches.usage());
+        Ok(1)
+    }
+
 }
 
 fn main()
