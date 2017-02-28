@@ -146,7 +146,7 @@ fn run() -> CompileResult<i32>
     let app = clap_app!(cobrac =>
         (version: "0.1")
         (author: "Joris Guisson <joris.guisson@gmail.com>")
-        (about: "cobra language compiler")
+        (about: "Cobra language compiler")
         (@arg DUMP: -d --dump +takes_value "Dump internal compiler state for debug purposes. Argument can be all, ast, bytecode or ir. A comma separated list of these values is also supported.")
         (@subcommand build =>
             (about: "Build a cobra file")

@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::ops::Deref;
 use llvm::core::*;
 use llvm::prelude::*;
 
@@ -36,6 +37,7 @@ pub struct OptionalValue
 
 pub enum ValueRef
 {
+    Void(LLVMValueRef),
     Const(LLVMValueRef, Type),
     Ptr(LLVMValueRef, Rc<Type>),
     Array(ArrayValue),
@@ -50,44 +52,67 @@ pub enum ValueRef
 
 impl ValueRef
 {
-    pub fn new(value: LLVMValueRef, typ: &Type) -> ValueRef
+    pub fn new(value: LLVMValueRef, typ: &Type, allocated: bool) -> ValueRef
     {
         match *typ
         {
-            Type::Enum(_) | Type::Void | Type::Int | Type::UInt | Type::Float |
-            Type::Char | Type::Bool => ValueRef::Const(value, typ.clone()),
+            Type::Void => ValueRef::Void(value),
 
-            Type::Pointer(ref inner) => ValueRef::Ptr(value, inner.clone()),
+            Type::Enum(_) |
+            Type::Int |
+            Type::UInt |
+            Type::Float |
+            Type::Char |
+            Type::Bool => {
+                if allocated {
+                    ValueRef::Ptr(value, Rc::new(typ.clone()))
+                } else {
+                    ValueRef::Const(value, typ.clone())
+                }
+            }
 
-            Type::Array(ref at) =>
-                ValueRef::Array(ArrayValue{
+            Type::Pointer(ref inner) => {
+                if allocated {
+                    ValueRef::Ptr(value, Rc::new(inner.deref().clone()))
+                } else {
+                    ValueRef::Ptr(value, inner.clone())
+                }
+            }
+
+            Type::Array(ref at) => {
+                ValueRef::Array(ArrayValue {
                     value: value,
                     array_type: at.clone(),
-                }),
+                })
+            }
 
-            Type::Slice(ref st) =>
+            Type::Slice(ref st) => {
                 ValueRef::Slice(SliceValue{
                     value: value,
                     slice_type: st.clone(),
-                }),
+                })
+            }
 
-            Type::Struct(ref st) =>
-                ValueRef::Struct(StructValue{
+            Type::Struct(ref st) => {
+                ValueRef::Struct(StructValue {
                     value: value,
                     struct_type: st.clone(),
-                }),
+                })
+            }
 
-            Type::Sum(ref st) =>
+            Type::Sum(ref st) => {
                 ValueRef::Sum(SumValue{
                     value: value,
                     sum_type: st.clone(),
-                }),
+                })
+            }
 
-            Type::Optional(ref ot) =>
+            Type::Optional(ref ot) => {
                 ValueRef::Optional(OptionalValue{
                     value: value,
                     inner_type: ot.clone(),
-                }),
+                })
+            }
 
             Type::String => ValueRef::String(value),
             Type::Func(_) => ValueRef::Func(value),
@@ -101,6 +126,7 @@ impl ValueRef
     {
         match *self
         {
+            ValueRef::Void(v) => v,
             ValueRef::Const(v, _) => v,
             ValueRef::Ptr(v, _) => v,
             ValueRef::Array(ref a) => a.value,
@@ -110,6 +136,34 @@ impl ValueRef
             ValueRef::Sum(ref s) => s.value,
             ValueRef::Optional(ref o) => o.value,
             ValueRef::Func(v) => v,
+        }
+    }
+
+    pub fn store(&self, builder: LLVMBuilderRef, vr: LLVMValueRef)
+    {
+        match *self
+        {
+            ValueRef::Ptr(v, _) => unsafe {
+                LLVMBuildStore(builder, vr, v);
+            },
+
+            ValueRef::Void(_) => (),
+
+            _ => panic!("Store not allowed"),
+        }
+    }
+
+    pub fn load(&self, builder: LLVMBuilderRef) -> LLVMValueRef
+    {
+        match *self
+        {
+            ValueRef::Ptr(v, _) => unsafe {
+                LLVMBuildLoad(builder, v, cstr!("load"))
+            },
+
+            ValueRef::Const(v, _) => v,
+            ValueRef::Void(v) => v,
+            _ => panic!("Load not allowed"),
         }
     }
 }

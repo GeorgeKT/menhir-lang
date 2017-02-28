@@ -19,8 +19,8 @@ mod valueref;
 
 use llvm::core::*;
 
-use libcobra::bytecode::ByteCodeModule;
-use self::function::gen_function;
+use libcobra::bytecode::{START_CODE_FUNCTION, ByteCodeModule};
+use self::function::{gen_function, gen_function_sig};
 use self::context::Context;
 
 pub struct CodeGenOptions
@@ -65,10 +65,21 @@ pub fn llvm_code_generation(bc_mod: &ByteCodeModule, options: &CodeGenOptions) -
 
     let mut ctx = Context::new(&bc_mod.name)?;
 
-    for func in bc_mod.functions.values() {
-        unsafe{
-            gen_function(&mut ctx, func);
+    unsafe {
+        for func in bc_mod.functions.values() {
+            if func.sig.name != START_CODE_FUNCTION {
+                gen_function_sig(&mut ctx, &func.sig);
+            }
         }
+
+        for func in bc_mod.functions.values() {
+            if func.sig.name != START_CODE_FUNCTION {
+                gen_function(&mut ctx, func);
+            }
+        }
+
+        ctx.verify()?;
+        let _object_file = ctx.gen_object_file(options)?;
     }
 
     Ok(())
