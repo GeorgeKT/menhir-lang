@@ -162,6 +162,7 @@ fn eliminate_vars_pass(func: &mut ByteCodeFunction) -> usize
                 true
             });
         }
+        break; // Only do one per time
     }
     eliminated
 }
