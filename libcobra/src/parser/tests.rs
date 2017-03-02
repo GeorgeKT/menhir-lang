@@ -178,7 +178,13 @@ fn test_precedence_6()
     assert!(e == bin_op(
         Operator::Mul,
         name_ref("a", span(1, 1, 1, 1)),
-        bin_op(Operator::Add, name_ref("b", span(1, 6, 1, 6)), name_ref("c", span(1, 10, 1, 10)), span(1, 6, 1, 10)),
+        bin_op_with_precedence(
+            Operator::Add,
+            name_ref("b", span(1, 6, 1, 6)),
+            name_ref("c", span(1, 10, 1, 10)),
+            span(1, 6, 1, 10),
+            TOP_PRECEDENCE
+        ),
         span(1, 1, 1, 10),
     ));
 }
@@ -486,7 +492,13 @@ let x = 5, y = 7 in x * y
             name_binding("x".into(), number(5, span(2, 9, 2, 9)), false, span(2, 5, 2, 9)),
             name_binding("y".into(), number(7, span(2, 16, 2, 16)), false, span(2, 12, 2, 16)),
         ],
-        bin_op(Operator::Mul, name_ref("x", span(2, 21, 2, 21)), name_ref("y", span(2, 25, 2, 25)), span(2, 21, 2, 25)),
+        bin_op_with_precedence(
+            Operator::Mul,
+            name_ref("x", span(2, 21, 2, 21)),
+            name_ref("y", span(2, 25, 2, 25)),
+            span(2, 21, 2, 25),
+            TOP_PRECEDENCE
+        ),
         span(2, 1, 2, 25))
     )
 }

@@ -199,9 +199,10 @@ fn parse_binary_op_rhs(tq: &mut TokenQueue, mut lhs: Expression, indent_level: u
         rhs.print(0);
         println!("lhs: {}", lhs.precedence());
         lhs.print(0);
-*/
+        */
         lhs = combine_binary_op(op, lhs, rhs);
-/*
+
+        /*
         println!("new lhs: {}", lhs.precedence());
         lhs.print(0);
         println!("----------------------");
@@ -763,7 +764,10 @@ fn parse_block(tq: &mut TokenQueue, current_file: &str, indent_level: usize) -> 
     }
 
     if expressions.len() == 1 {
-        Ok(expressions.remove(0))
+        let mut e = expressions.remove(0);
+        // Increase it's precedence, because it is actually a block
+        e.set_precedence(TOP_PRECEDENCE);
+        Ok(e)
     } else {
         let start = expressions.get(0)
             .map(|e| e.span())

@@ -69,8 +69,17 @@ impl Expression
     {
         match *self
         {
-            Expression::BinaryOp(ref op) => op.operator.precedence(),
+            Expression::BinaryOp(ref op) => op.precedence,
             _ => 0,
+        }
+    }
+
+    pub fn set_precedence(&mut self, precedence: usize)
+    {
+        match *self
+        {
+            Expression::BinaryOp(ref mut op) => op.precedence = precedence,
+            _ => (),
         }
     }
 
