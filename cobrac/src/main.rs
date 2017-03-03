@@ -1,5 +1,4 @@
 extern crate llvm_sys as llvm;
-extern crate libffi;
 extern crate libc;
 extern crate libcobra;
 extern crate shrust;

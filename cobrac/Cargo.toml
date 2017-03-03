@@ -9,7 +9,6 @@ libcobra = { path = "../libcobra" }
 clap = "2.20"
 llvm-sys = "38"
 libc = "*"
-libffi = "0.4"
 shrust = "0.0.4"
 itertools = "0.5"
 
