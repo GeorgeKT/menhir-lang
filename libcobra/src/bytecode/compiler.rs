@@ -117,11 +117,8 @@ fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &Var, func: &mut B
 {
     for (idx, name) in p.bindings.iter().enumerate() {
         if name != "_" {
-            let ptr_type = ptr_type(p.types[idx].clone());
-            let ptr = stack_alloc(func, &ptr_type, None);
             let v = stack_alloc(func, &p.types[idx], Some(name));
-            func.add(load_member_instr(&ptr, struct_var, idx));
-            func.add(load_instr(&v, &ptr));
+            func.add(load_member_instr(&v, struct_var, idx));
             func.add_named_var(v);
         }
     }
@@ -233,9 +230,7 @@ fn member_access_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction,
     match (var_typ, &sma.right)
     {
         (&Type::Struct(_), &MemberAccessType::Name(ref field)) => {
-            let ptr = stack_alloc(func, &ptr_type(sma.typ.clone()), None);
-            func.add(load_member_instr(&ptr, &var, field.index));
-            func.add(load_instr(dst, &ptr));
+            func.add(load_member_instr(&dst, &var, field.index));
         },
 
         (&Type::Array(ref at), &MemberAccessType::Property(Property::Len)) => {
@@ -314,9 +309,7 @@ fn array_pattern_match_to_bc(
 {
     let head_type = seq.typ.get_element_type().expect("Invalid array type");
     let head = stack_alloc(func, &head_type, Some(&ap.head));
-    let head_ptr = stack_alloc(func, &ptr_type(head_type.clone()), None);
-    func.add(load_member_instr(&head_ptr, seq, 0));
-    func.add(load_instr(&head, &head_ptr));
+    func.add(load_member_instr(&head, seq, 0));
 
     let tail = stack_alloc(func, &slice_type(head_type), Some(&ap.tail));
     let tail_len = stack_alloc(func, &Type::UInt, None);
@@ -365,7 +358,7 @@ fn struct_pattern_match_to_bc(
 
             func.push_scope();
             let struct_ptr = stack_alloc(func, &ptr_type(st.cases[idx].typ.clone()), None);
-            func.add(load_member_instr(&struct_ptr, target, idx));
+            func.add(address_of_member_instr(&struct_ptr, target, idx));
 
             add_struct_pattern_bindings(p, &struct_ptr, func);
         },
@@ -544,7 +537,6 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
     func.pop_destination();
 
     let loop_variable = stack_alloc(func, &f.loop_variable_type, Some(&f.loop_variable));
-    let loop_variable_ptr = stack_alloc(func, &ptr_type(f.loop_variable_type.clone()), None);
 
     let index = stack_alloc(func, &Type::UInt, None);
     func.add(store_operand_instr(&index, Operand::UInt(0)));
@@ -569,8 +561,7 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
     func.add(branch_if_instr(&cmp, body_bb, post_for_bb));
 
     func.set_current_bb(body_bb);
-    func.add(load_member_instr_with_var(&loop_variable_ptr, &iterable, &index));
-    func.add(load_instr(&loop_variable, &loop_variable_ptr));
+    func.add(load_member_instr_with_var(&loop_variable, &iterable, &index));
     func.push_destination(None);
     expr_to_bc(bc_mod, func, &f.body);
     func.pop_destination();

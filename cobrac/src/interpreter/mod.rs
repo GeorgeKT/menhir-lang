@@ -381,7 +381,7 @@ impl Interpreter
         let index = self.get_member_index(member_index)?;
 
         let vr = obj.apply(|value: &Value| value.get_member_ptr(index as usize))?;
-        self.replace_variable(dst, ValueRef::new(vr))?;
+        self.update_variable(dst, vr.load()?)?;
         Ok(())
     }
 
@@ -394,6 +394,16 @@ impl Interpreter
                 v.update_member(index, src_val)
             })
         )
+    }
+
+    fn address_of_member(&mut self, dst: &str, obj: &str, member_index: &Operand) -> ExecutionResult<()>
+    {
+        let obj = self.get_variable(obj)?;
+        let index = self.get_member_index(member_index)?;
+
+        let vr = obj.apply(|value: &Value| value.get_member_ptr(index as usize))?;
+        self.replace_variable(dst, ValueRef::new(vr))?;
+        Ok(())
     }
 
     fn get_property(&mut self, dst: &str, obj: &str, prop: ByteCodeProperty) -> ExecutionResult<()>
@@ -543,7 +553,7 @@ impl Interpreter
             },
 
             Instruction::LoadMember{ref dst, ref obj, ref member_index} => {
-                self.load_member(&dst.name, &obj.name, &member_index)?;
+                self.load_member(&dst.name, &obj.name, member_index)?;
                 next
             },
 
@@ -557,6 +567,11 @@ impl Interpreter
                 self.replace_variable(&dst.name, ptr)?;
                 next
             },
+
+            Instruction::AddressOfMember{ref dst, ref obj, ref member_index} => {
+                self.address_of_member(&dst.name, &obj.name, member_index)?;
+                next
+            }
 
             Instruction::GetProperty{ref dst, ref obj, ref prop} => {
                 self.get_property(&dst.name, &obj.name, *prop)?;

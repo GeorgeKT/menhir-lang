@@ -238,6 +238,15 @@ impl Value
         })
     }
 
+    pub fn load(&self) -> ExecutionResult<Value>
+    {
+        if let Value::Pointer(ref inner) = *self {
+            Ok(inner.clone_value()?)
+        } else {
+            Err(format!("Load can only happen on a pointer"))
+        }
+    }
+
     pub fn is_nil(&self) -> bool
     {
         if let Value::Nil = *self {

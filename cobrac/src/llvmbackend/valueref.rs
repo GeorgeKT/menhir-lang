@@ -152,7 +152,7 @@ impl ValueRef
         }
     }
 
-    pub fn load_member(&self, ctx: LLVMContextRef, builder: LLVMBuilderRef, index: LLVMValueRef) -> LLVMValueRef
+    pub fn get_member_ptr(&self, ctx: LLVMContextRef, builder: LLVMBuilderRef, index: LLVMValueRef) -> LLVMValueRef
     {
         match *self
         {

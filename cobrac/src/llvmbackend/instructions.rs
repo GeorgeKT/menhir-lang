@@ -220,7 +220,15 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             let index = get_operand(ctx, member_index);
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
-            let member_ptr = obj_var.value.load_member(ctx.context, ctx.builder, index);
+            let member_ptr = obj_var.value.get_member_ptr(ctx.context, ctx.builder, index);
+            dst_var.value.store(ctx.builder, LLVMBuildLoad(ctx.builder, member_ptr, cstr!("memberload")));
+        }
+
+        Instruction::AddressOfMember{ref dst, ref obj, ref member_index} => {
+            let index = get_operand(ctx, member_index);
+            let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
+            let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
+            let member_ptr = obj_var.value.get_member_ptr(ctx.context, ctx.builder, index);
             dst_var.value.store(ctx.builder, member_ptr);
         }
 
