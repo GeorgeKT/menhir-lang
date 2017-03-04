@@ -79,7 +79,9 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction)
         }
     }
 
-    for block in func.blocks.values() {
+    for (bb_ref, block) in func.blocks.iter() {
+        let bb = blocks.get(bb_ref).expect("Unknown basic block");
+        LLVMPositionBuilderAtEnd(ctx.builder, *bb);
         for inst in &block.instructions {
             gen_instruction(ctx, inst, &blocks);
         }

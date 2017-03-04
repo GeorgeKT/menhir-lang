@@ -11,8 +11,8 @@ pub enum Value
     Uninitialized,
     Void,
     Nil,
-    Int(i64),
-    UInt(u64),
+    Int(isize),
+    UInt(usize),
     Float(f64),
     Char(char),
     Bool(bool),
@@ -135,10 +135,10 @@ impl Value
         match (self, prop)
         {
             (&Value::Array(ref a), ByteCodeProperty::Len) |
-            (&Value::Slice(ref a), ByteCodeProperty::Len) => Ok(Value::Int(a.len() as i64)),
-            (&Value::String(ref s), ByteCodeProperty::Len) => Ok(Value::Int(s.len() as i64)),
+            (&Value::Slice(ref a), ByteCodeProperty::Len) => Ok(Value::UInt(a.len())),
+            (&Value::String(ref s), ByteCodeProperty::Len) => Ok(Value::UInt(s.len())),
             (&Value::Sum(idx, _), ByteCodeProperty::SumTypeIndex) |
-            (&Value::Enum(idx), ByteCodeProperty::SumTypeIndex) => Ok(Value::Int(idx as i64)),
+            (&Value::Enum(idx), ByteCodeProperty::SumTypeIndex) => Ok(Value::UInt(idx)),
             _  => Err(format!("Unknown property {}", prop)),
         }
     }
@@ -187,6 +187,55 @@ impl Value
 
             _ => Err(format!("Load member not supported on {}", self))
         }
+    }
+
+    pub fn update_member(&mut self, member_index: usize, value: Value) -> ExecutionResult<()>
+    {
+        let mut target = match *self
+        {
+            Value::Array(ref mut arr) => {
+                if member_index < arr.len() {
+                    &mut arr[member_index]
+                } else {
+                    return Err(format!("Array index {} out of bounds", member_index))
+                }
+            },
+
+            Value::Slice(ref mut slice) => {
+                if member_index < slice.len() {
+                    &mut slice[member_index]
+                } else {
+                    return Err(format!("Slice index {} out of bounds", member_index))
+                }
+            },
+
+            Value::Struct(ref mut members) => {
+                if member_index < members.len() {
+                    &mut members[member_index]
+                } else {
+                    return Err(format!("Struct member index {} out of bounds", member_index))
+                }
+            },
+
+            Value::Sum(idx, ref mut inner) => {
+                if member_index == idx {
+                    inner
+                } else {
+                    return Err(format!("Wrong sum type index {}", member_index))
+                }
+            },
+
+            Value::Pointer(ref mut inner) => {
+                return inner.apply_mut(|v: &mut Value| v.update_member(member_index, value));
+            },
+
+            _ => return Err(format!("Update member not supported on {}", self))
+        };
+
+        target.apply_mut(|v: &mut Value| {
+            *v = value;
+            Ok(())
+        })
     }
 
     pub fn is_nil(&self) -> bool

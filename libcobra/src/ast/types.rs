@@ -297,7 +297,7 @@ impl Type
             Type::Array(_) | Type::Slice(_) | Type::String => {
                 match name
                 {
-                    "len" => Some((Type::Int, MemberAccessType::Property(Property::Len))),
+                    "len" => Some((Type::UInt, MemberAccessType::Property(Property::Len))),
                     _ => None,
                 }
             },

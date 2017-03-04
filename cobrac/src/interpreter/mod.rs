@@ -191,7 +191,7 @@ impl Interpreter
             match (op, val)
             {
                 (Operator::Sub, Value::Int(num)) => Value::Int(-num),
-                (Operator::Sub, Value::UInt(num)) => Value::Int(-(num as i64)),
+                (Operator::Sub, Value::UInt(num)) => Value::Int(-(num as isize)),
                 (Operator::Sub, Value::Float(num)) => Value::Float(-num),
                 (Operator::Not, Value::Bool(b)) => Value::Bool(!b),
                 _ => return Err(format!("Invalid unary op {}", op)),
@@ -358,26 +358,42 @@ impl Interpreter
         }
     }
 
-    fn load_member(&mut self, dst: &str, obj: &str, member_index: &Operand) -> ExecutionResult<()>
+    fn get_member_index(&self, member_index: &Operand) -> ExecutionResult<usize>
     {
-        let obj = self.get_variable(obj)?;
-        let index = match *member_index
+        match *member_index
         {
-            Operand::Int(index) if index >= 0 => index as usize,
-            Operand::UInt(index) => index as usize,
+            Operand::Int(index) if index >= 0 => Ok(index as usize),
+            Operand::UInt(index) => Ok(index as usize),
             Operand::Var(ref v) =>
                 match self.get_variable(&v.name)?.clone_value()?
                 {
-                    Value::Int(index) if index >= 0 => index as usize,
-                    Value::UInt(index) => index as usize,
-                    _ => return Err("load member instruction with non integer or negative index value".into()),
+                    Value::Int(index) if index >= 0 => Ok(index as usize),
+                    Value::UInt(index) => Ok(index as usize),
+                    _ => Err("load member instruction with non integer or negative index value".into()),
                 },
-            _ => return Err("load member instruction with non integer or negative index value".into()),
-        };
+            _ => Err("load member instruction with non integer or negative index value".into()),
+        }
+    }
+
+    fn load_member(&mut self, dst: &str, obj: &str, member_index: &Operand) -> ExecutionResult<()>
+    {
+        let obj = self.get_variable(obj)?;
+        let index = self.get_member_index(member_index)?;
 
         let vr = obj.apply(|value: &Value| value.get_member_ptr(index as usize))?;
         self.replace_variable(dst, ValueRef::new(vr))?;
         Ok(())
+    }
+
+    fn store_member(&mut self, obj: &str, member_index: &Operand, src: &Operand, module: &ByteCodeModule) -> ExecutionResult<()>
+    {
+        let index = self.get_member_index(member_index)?;
+        let src_val = self.get_operand_value(src, module)?;
+        self.apply_on_variable(obj, |vr: &mut ValueRef|
+            vr.apply_mut(|v: &mut Value| {
+                v.update_member(index, src_val)
+            })
+        )
     }
 
     fn get_property(&mut self, dst: &str, obj: &str, prop: ByteCodeProperty) -> ExecutionResult<()>
@@ -495,12 +511,12 @@ impl Interpreter
         let new_value =
             match (src_val, &dst.typ)
             {
-                (Value::Int(s), &Type::UInt) => Ok(Value::UInt(s as u64)),
+                (Value::Int(s), &Type::UInt) => Ok(Value::UInt(s as usize)),
                 (Value::Int(s), &Type::Float) => Ok(Value::Float(s as f64)),
-                (Value::UInt(s), &Type::Int) => Ok(Value::Int(s as i64)),
+                (Value::UInt(s), &Type::Int) => Ok(Value::Int(s as isize)),
                 (Value::UInt(s), &Type::Float) => Ok(Value::Float(s as f64)),
-                (Value::Float(s), &Type::Int) => Ok(Value::Int(s as i64)),
-                (Value::Float(s), &Type::UInt) => Ok(Value::UInt(s as u64)),
+                (Value::Float(s), &Type::Int) => Ok(Value::Int(s as isize)),
+                (Value::Float(s), &Type::UInt) => Ok(Value::UInt(s as usize)),
                 _ => Err(String::from("Unsupported type cast")),
             }?;
         self.update_variable(&dst.name, new_value)
@@ -530,6 +546,11 @@ impl Interpreter
                 self.load_member(&dst.name, &obj.name, &member_index)?;
                 next
             },
+
+            Instruction::StoreMember{ref obj, ref member_index, ref src} => {
+                self.store_member(&obj.name, member_index, src, module)?;
+                next
+            }
 
             Instruction::AddressOf{ref dst, ref obj} => {
                 let ptr = self.get_variable(&obj.name)?.to_ptr();

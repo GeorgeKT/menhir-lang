@@ -4,8 +4,8 @@ use span::Span;
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Literal
 {
-    Int(Span, i64),
-    UInt(Span, u64),
+    Int(Span, isize),
+    UInt(Span, usize),
     Bool(Span, bool),
     Char(Span, u8),
     Float(Span, String), // Keep as string until we generate code, so we can compare it

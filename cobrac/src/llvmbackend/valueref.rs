@@ -4,6 +4,8 @@ use llvm::core::*;
 use llvm::prelude::*;
 
 use libcobra::ast::*;
+use libcobra::bytecode::ByteCodeProperty;
+use super::instructions::{const_uint, const_int};
 
 pub struct ArrayValue
 {
@@ -122,23 +124,6 @@ impl ValueRef
         }
     }
 
-    pub fn get(&self) -> LLVMValueRef
-    {
-        match *self
-        {
-            ValueRef::Void(v) => v,
-            ValueRef::Const(v, _) => v,
-            ValueRef::Ptr(v, _) => v,
-            ValueRef::Array(ref a) => a.value,
-            ValueRef::Slice(ref s) => s.value,
-            ValueRef::String(v) => v,
-            ValueRef::Struct(ref s) => s.value,
-            ValueRef::Sum(ref s) => s.value,
-            ValueRef::Optional(ref o) => o.value,
-            ValueRef::Func(v) => v,
-        }
-    }
-
     pub fn store(&self, builder: LLVMBuilderRef, vr: LLVMValueRef)
     {
         match *self
@@ -164,6 +149,46 @@ impl ValueRef
             ValueRef::Const(v, _) => v,
             ValueRef::Void(v) => v,
             _ => panic!("Load not allowed"),
+        }
+    }
+
+    pub fn load_member(&self, ctx: LLVMContextRef, builder: LLVMBuilderRef, index: LLVMValueRef) -> LLVMValueRef
+    {
+        match *self
+        {
+            ValueRef::Array(ref av) => unsafe {
+                let mut indices = vec![const_int(ctx, 0), index];
+                LLVMBuildGEP(builder, av.value, indices.as_mut_ptr(), 2, cstr!("member"))
+            },
+
+            _ => panic!("Load member not allowed"),
+        }
+    }
+
+    pub fn store_member(&self, ctx: LLVMContextRef, builder: LLVMBuilderRef, index: LLVMValueRef, value: LLVMValueRef)
+    {
+        match *self
+        {
+            ValueRef::Array(ref av) => unsafe {
+                let mut indices = vec![const_int(ctx, 0), index];
+                let member = LLVMBuildGEP(builder, av.value, indices.as_mut_ptr(), 2, cstr!("member"));
+                LLVMBuildStore(builder, value, member);
+            },
+
+            _ => panic!("Load member not allowed"),
+        }
+    }
+
+
+    pub fn get_property(&self, ctx: LLVMContextRef, prop: ByteCodeProperty) -> LLVMValueRef
+    {
+        match (self, prop)
+        {
+            (&ValueRef::Array(ref av), ByteCodeProperty::Len) => unsafe {
+                const_uint(ctx, av.array_type.len)
+            },
+
+            _ => panic!("Get property not allowed")
         }
     }
 }

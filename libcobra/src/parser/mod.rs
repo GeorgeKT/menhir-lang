@@ -74,12 +74,12 @@ fn parse_number(tq: &mut TokenQueue, num: &str, span: &Span) -> CompileResult<Li
         };
 
         // Should be an integer
-        match num.parse::<u64>() {
+        match num.parse::<usize>() {
             Ok(i) =>
-                if force_unsigned || i > (i64::max_value() as u64) {
+                if force_unsigned || i > (isize::max_value() as usize) {
                     Ok(Literal::UInt(span.clone(), i))
                 } else {
-                    Ok(Literal::Int(span.clone(), i as i64))
+                    Ok(Literal::Int(span.clone(), i as isize))
                 },
             Err(_) => parse_error_result(span, format!("{} is not a valid integer", num))
         }

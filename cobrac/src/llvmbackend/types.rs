@@ -1,4 +1,5 @@
 use std::ptr;
+use std::mem;
 use libc::*;
 use llvm::core::*;
 use llvm::prelude::*;
@@ -80,7 +81,13 @@ pub unsafe fn to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachi
     match *typ
     {
         Type::Void => LLVMVoidTypeInContext(context),
-        Type::Int | Type::UInt | Type::Enum(_) => LLVMInt64TypeInContext(context),
+        Type::Int | Type::UInt | Type::Enum(_) => {
+            if mem::size_of::<usize>() == 8 {
+                LLVMInt64TypeInContext(context)
+            } else {
+                LLVMInt32TypeInContext(context)
+            }
+        },
         Type::Bool => LLVMInt1TypeInContext(context),
         Type::Float => LLVMDoubleTypeInContext(context),
         Type::Char => LLVMInt8TypeInContext(context),

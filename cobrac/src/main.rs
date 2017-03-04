@@ -161,6 +161,7 @@ fn run() -> CompileResult<i32>
             (@arg INPUT_FILE: +required "File to run, both source file and bytecode files are allowed")
             (@arg OPTIMIZE: -O --optimize "Optimize the code")
             (@arg IMPORTS: -I --imports +takes_value "Directory to look for imports, use a comma separated list for more then one.")
+            (@arg DEBUG: -d --debug "Debug the code")
         )
     );
 

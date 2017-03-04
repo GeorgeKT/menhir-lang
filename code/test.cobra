@@ -1,5 +1,7 @@
 
 fn main() -> int:
-    let x = 7
-    let y = 9
-    (x + y) * 3 / 2
+    let x = [7; 7]
+    var sum = 0
+    for i in x:
+        sum = sum + i
+    sum

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::ffi::CString;
+use std::mem;
 use libc::*;
 use llvm::*;
 use llvm::core::*;
@@ -9,29 +10,38 @@ use libcobra::ast::{Type, Operator};
 use super::valueref::ValueRef;
 use super::context::Context;
 
-unsafe fn const_int(ctx: &Context, v: i64) -> LLVMValueRef
+pub unsafe fn const_int(ctx: LLVMContextRef, v: isize) -> LLVMValueRef
 {
-    LLVMConstInt(LLVMInt64TypeInContext(ctx.context), v as c_ulonglong, 1)
+    if mem::size_of::<isize>() == 8 {
+        LLVMConstInt(LLVMInt64TypeInContext(ctx), v as c_ulonglong, 1)
+    } else {
+        LLVMConstInt(LLVMInt32TypeInContext(ctx), v as c_ulonglong, 1)
+    }
+
 }
 
-unsafe fn const_uint(ctx: &Context, v: u64) -> LLVMValueRef
+pub unsafe fn const_uint(ctx: LLVMContextRef, v: usize) -> LLVMValueRef
 {
-    LLVMConstInt(LLVMInt64TypeInContext(ctx.context), v, 0)
+    if mem::size_of::<usize>() == 8 {
+        LLVMConstInt(LLVMInt64TypeInContext(ctx), v as c_ulonglong, 0)
+    } else {
+        LLVMConstInt(LLVMInt32TypeInContext(ctx), v as c_ulonglong, 0)
+    }
 }
 
-unsafe fn const_bool(ctx: &Context, v: bool) -> LLVMValueRef
+unsafe fn const_bool(ctx: LLVMContextRef, v: bool) -> LLVMValueRef
 {
-    LLVMConstInt(LLVMInt1TypeInContext(ctx.context), if v {1} else {0}, 0)
+    LLVMConstInt(LLVMInt1TypeInContext(ctx), if v {1} else {0}, 0)
 }
 
-unsafe fn const_float(ctx: &Context, v: f64) -> LLVMValueRef
+unsafe fn const_float(ctx: LLVMContextRef, v: f64) -> LLVMValueRef
 {
-    LLVMConstReal(LLVMDoubleTypeInContext(ctx.context), v)
+    LLVMConstReal(LLVMDoubleTypeInContext(ctx), v)
 }
 
-unsafe fn const_char(ctx: &Context, c: u8) -> LLVMValueRef
+unsafe fn const_char(ctx: LLVMContextRef, c: u8) -> LLVMValueRef
 {
-    LLVMConstInt(LLVMInt32TypeInContext(ctx.context), c as c_ulonglong, 0)
+    LLVMConstInt(LLVMInt32TypeInContext(ctx), c as c_ulonglong, 0)
 }
 
 unsafe fn get_variable(ctx: &Context, name: &str) -> LLVMValueRef
@@ -55,12 +65,12 @@ unsafe fn get_operand(ctx: &Context, operand: &Operand) -> LLVMValueRef
             get_variable(ctx, &v.name)
         }
 
-        Operand::Int(v) => const_int(ctx, v),
-        Operand::UInt(v) => const_uint(ctx, v),
-        Operand::Float(v) => const_float(ctx, v),
-        Operand::Char(v) => const_char(ctx, v),
+        Operand::Int(v) => const_int(ctx.context, v),
+        Operand::UInt(v) => const_uint(ctx.context, v),
+        Operand::Float(v) => const_float(ctx.context, v),
+        Operand::Char(v) => const_char(ctx.context, v),
         Operand::String(ref _s) => panic!("NYI"),
-        Operand::Bool(v) => const_bool(ctx, v),
+        Operand::Bool(v) => const_bool(ctx.context, v),
         Operand::Nil => panic!("NYI"),
     }
 }
@@ -97,55 +107,56 @@ unsafe fn gen_unary_op(ctx: &Context, dst: &Var, operator: Operator, src: &Opera
 
 unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: Operator, left: &Operand, right: &Operand)
 {
+    let left_type = left.get_type();
     let left = get_operand(ctx, left);
     let right = get_operand(ctx, right);
 
-    let value = match (op, &dst.typ)
+    let value = match (op, left_type)
     {
-        (Operator::Add, &Type::Int) => LLVMBuildAdd(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Add, &Type::UInt) => LLVMBuildAdd(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Add, &Type::Float) => LLVMBuildFAdd(ctx.builder, left, right, cstr!("bop")),
+        (Operator::Add, Type::Int) => LLVMBuildAdd(ctx.builder, left, right, cstr!("bop")),
+        (Operator::Add, Type::UInt) => LLVMBuildAdd(ctx.builder, left, right, cstr!("bop")),
+        (Operator::Add, Type::Float) => LLVMBuildFAdd(ctx.builder, left, right, cstr!("bop")),
 
-        (Operator::Sub, &Type::Int) => LLVMBuildSub(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Sub, &Type::UInt) => LLVMBuildSub(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Sub, &Type::Float) => LLVMBuildFSub(ctx.builder, left, right, cstr!("bop")),
+        (Operator::Sub, Type::Int) => LLVMBuildSub(ctx.builder, left, right, cstr!("bop")),
+        (Operator::Sub, Type::UInt) => LLVMBuildSub(ctx.builder, left, right, cstr!("bop")),
+        (Operator::Sub, Type::Float) => LLVMBuildFSub(ctx.builder, left, right, cstr!("bop")),
 
-        (Operator::Mul, &Type::Int) => LLVMBuildMul(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Mul, &Type::UInt) => LLVMBuildMul(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Mul, &Type::Float) => LLVMBuildFMul(ctx.builder, left, right, cstr!("bop")),
+        (Operator::Mul, Type::Int) => LLVMBuildMul(ctx.builder, left, right, cstr!("bop")),
+        (Operator::Mul, Type::UInt) => LLVMBuildMul(ctx.builder, left, right, cstr!("bop")),
+        (Operator::Mul, Type::Float) => LLVMBuildFMul(ctx.builder, left, right, cstr!("bop")),
 
-        (Operator::Div, &Type::Int) => LLVMBuildSDiv(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Div, &Type::UInt) => LLVMBuildUDiv(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Div, &Type::Float) => LLVMBuildFDiv(ctx.builder, left, right, cstr!("bop")),
+        (Operator::Div, Type::Int) => LLVMBuildSDiv(ctx.builder, left, right, cstr!("bop")),
+        (Operator::Div, Type::UInt) => LLVMBuildUDiv(ctx.builder, left, right, cstr!("bop")),
+        (Operator::Div, Type::Float) => LLVMBuildFDiv(ctx.builder, left, right, cstr!("bop")),
 
-        (Operator::Mod, &Type::Int) => LLVMBuildSRem(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Mod, &Type::UInt) => LLVMBuildURem(ctx.builder, left, right, cstr!("bop")),
+        (Operator::Mod, Type::Int) => LLVMBuildSRem(ctx.builder, left, right, cstr!("bop")),
+        (Operator::Mod, Type::UInt) => LLVMBuildURem(ctx.builder, left, right, cstr!("bop")),
 
-        (Operator::LessThan, &Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, left, right, cstr!("bop")),
-        (Operator::LessThan, &Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULT, left, right, cstr!("bop")),
-        (Operator::LessThan, &Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealULT, left, right, cstr!("bop")),
-        (Operator::LessThan, &Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULT, left, right, cstr!("bop")),
+        (Operator::LessThan, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, left, right, cstr!("bop")),
+        (Operator::LessThan, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULT, left, right, cstr!("bop")),
+        (Operator::LessThan, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealULT, left, right, cstr!("bop")),
+        (Operator::LessThan, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULT, left, right, cstr!("bop")),
 
-        (Operator::GreaterThan, &Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, left, right, cstr!("bop")),
-        (Operator::GreaterThan, &Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGT, left, right, cstr!("bop")),
-        (Operator::GreaterThan, &Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUGT, left, right, cstr!("bop")),
-        (Operator::GreaterThan, &Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGT, left, right, cstr!("bop")),
+        (Operator::GreaterThan, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, left, right, cstr!("bop")),
+        (Operator::GreaterThan, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGT, left, right, cstr!("bop")),
+        (Operator::GreaterThan, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUGT, left, right, cstr!("bop")),
+        (Operator::GreaterThan, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGT, left, right, cstr!("bop")),
 
-        (Operator::LessThanEquals, &Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLE, left, right, cstr!("bop")),
-        (Operator::LessThanEquals, &Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULE, left, right, cstr!("bop")),
-        (Operator::LessThanEquals, &Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealULE, left, right, cstr!("bop")),
-        (Operator::LessThanEquals, &Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULE, left, right, cstr!("bop")),
+        (Operator::LessThanEquals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLE, left, right, cstr!("bop")),
+        (Operator::LessThanEquals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULE, left, right, cstr!("bop")),
+        (Operator::LessThanEquals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealULE, left, right, cstr!("bop")),
+        (Operator::LessThanEquals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULE, left, right, cstr!("bop")),
 
-        (Operator::GreaterThanEquals, &Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGE, left, right, cstr!("bop")),
-        (Operator::GreaterThanEquals, &Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGE, left, right, cstr!("bop")),
-        (Operator::GreaterThanEquals, &Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUGE, left, right, cstr!("bop")),
-        (Operator::GreaterThanEquals, &Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGE, left, right, cstr!("bop")),
+        (Operator::GreaterThanEquals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGE, left, right, cstr!("bop")),
+        (Operator::GreaterThanEquals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGE, left, right, cstr!("bop")),
+        (Operator::GreaterThanEquals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUGE, left, right, cstr!("bop")),
+        (Operator::GreaterThanEquals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGE, left, right, cstr!("bop")),
 
-        (Operator::Equals, &Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
-        (Operator::Equals, &Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
-        (Operator::Equals, &Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUEQ, left, right, cstr!("bop")),
-        (Operator::Equals, &Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
-        (Operator::Equals, &Type::Bool) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
+        (Operator::Equals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
+        (Operator::Equals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
+        (Operator::Equals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUEQ, left, right, cstr!("bop")),
+        (Operator::Equals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
+        (Operator::Equals, Type::Bool) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
 
         /*
         (Operator::Equals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l == *r),
@@ -155,11 +166,11 @@ unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: Operator, left: &Operand, 
         (Operator::Equals, Value::Nil, _) => Value::Bool(false),
         */
 
-        (Operator::NotEquals, &Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
-        (Operator::NotEquals, &Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
-        (Operator::NotEquals, &Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUNE, left, right, cstr!("bop")),
-        (Operator::NotEquals, &Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
-        (Operator::NotEquals, &Type::Bool) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
+        (Operator::NotEquals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
+        (Operator::NotEquals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
+        (Operator::NotEquals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUNE, left, right, cstr!("bop")),
+        (Operator::NotEquals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
+        (Operator::NotEquals, Type::Bool) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
 
         /*
         (Operator::NotEquals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l != *r),
@@ -168,8 +179,8 @@ unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: Operator, left: &Operand, 
         (Operator::NotEquals, _, Value::Nil) |
         (Operator::NotEquals, Value::Nil, _) => Value::Bool(true),
 */
-        (Operator::And, &Type::Bool) => LLVMBuildAnd(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Or, &Type::Bool) => LLVMBuildOr(ctx.builder, left, right, cstr!("bop")),
+        (Operator::And, Type::Bool) => LLVMBuildAnd(ctx.builder, left, right, cstr!("bop")),
+        (Operator::Or, Type::Bool) => LLVMBuildOr(ctx.builder, left, right, cstr!("bop")),
 
         /*
         (Operator::Or, Value::Optional(inner), right) => {
@@ -181,7 +192,7 @@ unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: Operator, left: &Operand, 
         }
         */
 
-        (_, _) => panic!("Operator {} not supported on type {}", op, dst.typ),
+        (_, t) => panic!("Operator {} not supported on type {}", op, t),
     };
 
 
@@ -206,7 +217,18 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         }
 
         Instruction::LoadMember{ref dst, ref obj, ref member_index} => {
-            panic!("NYI");
+            let index = get_operand(ctx, member_index);
+            let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
+            let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
+            let member_ptr = obj_var.value.load_member(ctx.context, ctx.builder, index);
+            dst_var.value.store(ctx.builder, member_ptr);
+        }
+
+        Instruction::StoreMember{ref obj, ref member_index, ref src} => {
+            let src_val = get_operand(ctx, src);
+            let idx = get_operand(ctx, member_index);
+            let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
+            obj_var.value.store_member(ctx.context, ctx.builder, idx, src_val);
         }
 
         Instruction::AddressOf{ref dst, ref obj} => {
@@ -214,7 +236,10 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         }
 
         Instruction::GetProperty{ref dst, ref obj, ref prop} => {
-            panic!("NYI");
+            let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
+            let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
+            let value = obj_var.value.get_property(ctx.context, *prop);
+            dst_var.value.store(ctx.builder, value);
         }
 
         Instruction::SetProperty{ref obj, ref prop, ref val} => {

@@ -79,6 +79,10 @@ fn replace_var_by_initializer(instr: &mut Instruction, var: &str, initializer: &
     {
         Instruction::Store{ref mut src, ..} => do_replace(src),
         Instruction::LoadMember{ref mut member_index, ..} => do_replace(member_index),
+        Instruction::StoreMember{ref mut member_index, ref mut src, ..} => {
+            do_replace(member_index);
+            do_replace(src);
+        },
         Instruction::UnaryOp{ref mut src, ..} => do_replace(src),
         Instruction::BinaryOp{ref mut left, ref mut right, ..} => {
             do_replace(left);
@@ -124,6 +128,7 @@ fn eliminate_vars_pass(func: &mut ByteCodeFunction) -> usize
                 vars.remove(&dst.name);
             },
 
+            Instruction::StoreMember{ref obj, ..} |
             Instruction::LoadMember{ref obj, ..} |
             Instruction::AddressOf{ref obj, ..} => {
                 vars.remove(&obj.name);

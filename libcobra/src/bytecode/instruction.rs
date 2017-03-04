@@ -1,6 +1,6 @@
 use std::fmt;
 use itertools::free::join;
-use ast::Operator;
+use ast::{Operator, Type};
 use bytecode::function::{BasicBlockRef, Var};
 
 
@@ -28,14 +28,33 @@ impl fmt::Display for ByteCodeProperty
 pub enum Operand
 {
     Var(Var),
-    Int(i64),
-    UInt(u64),
+    Int(isize),
+    UInt(usize),
     Float(f64),
     Char(u8),
     String(String),
     Bool(bool),
     Func(String),
     Nil,
+}
+
+impl Operand
+{
+    pub fn get_type(&self) -> Type
+    {
+        match *self
+        {
+            Operand::Var(ref var) => var.typ.clone(),
+            Operand::Int(_) => Type::Int,
+            Operand::UInt(_) => Type::UInt,
+            Operand::Float(_) => Type::Float,
+            Operand::Char(_) => Type::Char,
+            Operand::String(_) => Type::String,
+            Operand::Bool(_) => Type::Bool,
+            Operand::Func(_) => Type::Unknown,
+            Operand::Nil => Type::Nil,
+        }
+    }
 }
 
 impl fmt::Display for Operand
@@ -78,6 +97,7 @@ pub enum Instruction
     Store{dst: Var, src: Operand},
     Load{dst: Var, ptr: Var},
     LoadMember{dst: Var, obj: Var, member_index: Operand},
+    StoreMember{obj: Var, member_index: Operand, src: Operand},
     AddressOf{dst: Var, obj: Var},
     GetProperty{dst: Var, obj: Var, prop: ByteCodeProperty},
     SetProperty{obj: Var, prop: ByteCodeProperty, val: usize},
@@ -145,10 +165,18 @@ pub fn load_member_instr(dst: &Var, obj: &Var, member_index: usize) -> Instructi
     Instruction::LoadMember{
         dst: dst.clone(),
         obj: obj.clone(),
-        member_index: Operand::UInt(member_index as u64),
+        member_index: Operand::UInt(member_index),
     }
 }
 
+pub fn store_member_instr(obj: &Var, member_index: usize, src: Var) -> Instruction
+{
+    Instruction::StoreMember{
+        obj: obj.clone(),
+        member_index: Operand::UInt(member_index),
+        src: Operand::Var(src),
+    }
+}
 
 pub fn address_of_instr(dst: &Var, obj: &Var) -> Instruction
 {
@@ -256,6 +284,10 @@ impl fmt::Display for Instruction
 
             Instruction::LoadMember{ref dst, ref obj, ref member_index} => {
                 writeln!(f, "  loadm {} {}.{}", dst, obj, member_index)
+            },
+
+            Instruction::StoreMember{ref obj, ref member_index, ref src} => {
+                writeln!(f, "  storem {}.{} {}", obj, member_index, src)
             },
 
             Instruction::AddressOf{ref dst, ref obj} => {

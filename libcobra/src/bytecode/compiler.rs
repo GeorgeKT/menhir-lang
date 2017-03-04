@@ -39,14 +39,11 @@ fn get_dst(func: &mut ByteCodeFunction, typ: &Type) -> Var
 
 fn array_lit_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, a: &ArrayLiteral, dst: &Var)
 {
-    let element_type = a.array_type.get_element_type().expect("Invalid array type");
-    let ep = stack_alloc(func, &ptr_type(element_type), None);
     for (idx, element) in a.elements.iter().enumerate() {
-        func.add(load_member_instr(&ep, dst, idx));
         func.push_destination(None);
         let v = to_bc(bc_mod, func, element);
         func.pop_destination();
-        func.add(store_instr(&ep, &v));
+        func.add(store_member_instr(dst, idx, v));
     }
 }
 
@@ -71,9 +68,7 @@ fn struct_initializer_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunc
     let init_members = |bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, si: &StructInitializer, dst: &Var| {
         for (idx, expr) in si.member_initializers.iter().enumerate() {
             let v = to_bc(bc_mod, func, expr);
-            let member_ptr = get_dst(func, &ptr_type(v.typ.clone()));
-            func.add(load_member_instr(&member_ptr, dst, idx));
-            func.add(store_instr(&member_ptr, &v));
+            func.add(store_member_instr(dst, idx, v));
         }
     };
 
@@ -199,7 +194,7 @@ fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef) -> Option<Var>
             if let Some(idx) = et.index_of(&nr.name) {
                 // enums are integers
                 let dst = get_dst(func, &nr.typ);
-                func.add(store_operand_instr(&dst, Operand::Int(idx as i64)));
+                func.add(store_operand_instr(&dst, Operand::UInt(idx)));
                 Some(dst)
             } else {
                 add_name_ref(func, nr)
@@ -243,7 +238,10 @@ fn member_access_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction,
             func.add(load_instr(dst, &ptr));
         },
 
-        (&Type::Array(_), &MemberAccessType::Property(Property::Len)) |
+        (&Type::Array(ref at), &MemberAccessType::Property(Property::Len)) => {
+            func.add(store_operand_instr(dst, Operand::UInt(at.len)))
+        },
+
         (&Type::String, &MemberAccessType::Property(Property::Len)) => {
             func.add(get_prop_instr(dst, &var, ByteCodeProperty::Len));
         },
@@ -269,15 +267,15 @@ fn name_pattern_match_to_bc(
         Type::Enum(ref et) => {
             let idx = et.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(binary_op_instr(&cond, Operator::Equals, var_op(&target), Operand::Int(idx as i64)));
+            func.add(binary_op_instr(&cond, Operator::Equals, var_op(&target), Operand::UInt(idx)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
         },
         Type::Sum(ref st) => {
             let idx = st.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
-            let sum_type_index = stack_alloc(func, &Type::Int, None);
+            let sum_type_index = stack_alloc(func, &Type::UInt, None);
             func.add(get_prop_instr(&sum_type_index, target, ByteCodeProperty::SumTypeIndex));
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(binary_op_instr(&cond, Operator::Equals, var_op(&sum_type_index), Operand::Int(idx as i64)));
+            func.add(binary_op_instr(&cond, Operator::Equals, var_op(&sum_type_index), Operand::UInt(idx)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
         },
         _ => {
@@ -321,17 +319,17 @@ fn array_pattern_match_to_bc(
     func.add(load_instr(&head, &head_ptr));
 
     let tail = stack_alloc(func, &slice_type(head_type), Some(&ap.tail));
-    let tail_len = stack_alloc(func, &Type::Int, None);
-    let seq_len = stack_alloc(func, &Type::Int, None);
+    let tail_len = stack_alloc(func, &Type::UInt, None);
+    let seq_len = stack_alloc(func, &Type::UInt, None);
     func.add(get_prop_instr(&seq_len, seq, ByteCodeProperty::Len));
-    func.add(binary_op_instr(&tail_len, Operator::Sub, var_op(&seq_len), Operand::Int(1)));
-    func.add(slice_instr(&tail, seq, Operand::Int(1), var_op(&tail_len)));
+    func.add(binary_op_instr(&tail_len, Operator::Sub, var_op(&seq_len), Operand::UInt(1)));
+    func.add(slice_instr(&tail, seq, Operand::UInt(1), var_op(&tail_len)));
 
 
-    let length = stack_alloc(func, &Type::Int, None);
+    let length = stack_alloc(func, &Type::UInt, None);
     func.add(get_prop_instr(&length, seq, ByteCodeProperty::Len));
     let cond = stack_alloc(func, &Type::Bool, None);
-    func.add(binary_op_instr(&cond, Operator::GreaterThan, var_op(&length), Operand::Int(0)));
+    func.add(binary_op_instr(&cond, Operator::GreaterThan, var_op(&length), Operand::UInt(0)));
     func.add(branch_if_instr(&cond, match_case_bb, next_bb));
 }
 
@@ -356,11 +354,11 @@ fn struct_pattern_match_to_bc(
             add_struct_pattern_bindings(p, target, func);
         },
         Type::Sum(ref st) => {
-            let target_sum_type_index = stack_alloc(func, &Type::Int, None);
+            let target_sum_type_index = stack_alloc(func, &Type::UInt, None);
             func.add(get_prop_instr(&target_sum_type_index, target, ByteCodeProperty::SumTypeIndex));
             let idx = st.index_of(&p.name).expect("Internal Compiler Error: cannot determine index of sum type case");
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(binary_op_instr(&cond, Operator::Equals, var_op(&target_sum_type_index), Operand::Int(idx as i64)));
+            func.add(binary_op_instr(&cond, Operator::Equals, var_op(&target_sum_type_index), Operand::UInt(idx)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
 
             func.set_current_bb(match_case_bb);
@@ -427,10 +425,10 @@ fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc
             match target.typ
             {
                 Type::Array(_) | Type::Slice(_) => {
-                    let len = stack_alloc(func, &Type::Int, None);
+                    let len = stack_alloc(func, &Type::UInt, None);
                     let cond = stack_alloc(func, &Type::Bool, None);
                     func.add(get_prop_instr(&len, target, ByteCodeProperty::Len));
-                    func.add(binary_op_instr(&cond, Operator::Equals, var_op(&len), Operand::Int(0)));
+                    func.add(binary_op_instr(&cond, Operator::Equals, var_op(&len), Operand::UInt(0)));
                     func.add(branch_if_instr(&cond, match_case_bb, next_bb))
                 },
                 _ => panic!("Internal Compiler Error: Match expression cannot be matched with an empty array pattern"),
@@ -548,11 +546,17 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
     let loop_variable = stack_alloc(func, &f.loop_variable_type, Some(&f.loop_variable));
     let loop_variable_ptr = stack_alloc(func, &ptr_type(f.loop_variable_type.clone()), None);
 
-    let index = stack_alloc(func, &Type::Int, None);
-    func.add(store_operand_instr(&index, Operand::Int(0)));
+    let index = stack_alloc(func, &Type::UInt, None);
+    func.add(store_operand_instr(&index, Operand::UInt(0)));
 
-    let len = stack_alloc(func, &Type::Int, None);
-    func.add(get_prop_instr(&len, &iterable, ByteCodeProperty::Len));
+
+    let len = if let Type::Array(ref at) = iterable.typ {
+        Operand::UInt(at.len)
+    } else {
+        let len = stack_alloc(func, &Type::UInt, None);
+        func.add(get_prop_instr(&len, &iterable, ByteCodeProperty::Len));
+        var_op(&len)
+    };
 
     let cond_bb = func.create_basic_block();
     let body_bb = func.create_basic_block();
@@ -561,7 +565,7 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
     func.add(Instruction::Branch(cond_bb));
     func.set_current_bb(cond_bb);
     let cmp = stack_alloc(func, &Type::Bool, None);
-    func.add(binary_op_instr(&cmp, Operator::LessThan, var_op(&index), var_op(&len)));
+    func.add(binary_op_instr(&cmp, Operator::LessThan, var_op(&index), len));
     func.add(branch_if_instr(&cmp, body_bb, post_for_bb));
 
     func.set_current_bb(body_bb);
@@ -570,7 +574,7 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
     func.push_destination(None);
     expr_to_bc(bc_mod, func, &f.body);
     func.pop_destination();
-    func.add(binary_op_instr(&index, Operator::Add, var_op(&index), Operand::Int(1)));
+    func.add(binary_op_instr(&index, Operator::Add, var_op(&index), Operand::UInt(1)));
     func.add(Instruction::Branch(cond_bb));
 
     func.set_current_bb(post_for_bb);
@@ -624,7 +628,7 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         },
 
         Expression::Literal(Literal::UInt(_, v)) => {
-            let dst = get_dst(func, &Type::Int);
+            let dst = get_dst(func, &Type::UInt);
             func.add(store_operand_instr(&dst, Operand::UInt(v)));
             Some(dst)
         },
@@ -733,9 +737,9 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         Expression::ArrayToSlice(ref ats) => {
             let dst = get_dst(func, &ats.slice_type);
             let array_var = to_bc(bc_mod, func, &ats.inner);
-            let end = stack_alloc(func, &Type::Int, None);
+            let end = stack_alloc(func, &Type::UInt, None);
             func.add(get_prop_instr(&end, &array_var, ByteCodeProperty::Len));
-            func.add(slice_instr(&dst, &array_var, Operand::Int(0), var_op(&end)));
+            func.add(slice_instr(&dst, &array_var, Operand::UInt(0), var_op(&end)));
             Some(dst)
         },
 
