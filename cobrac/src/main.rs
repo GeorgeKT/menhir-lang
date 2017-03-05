@@ -17,7 +17,7 @@ use libcobra::parser::{ParserOptions, parse_file};
 use libcobra::typechecker::{type_check_module};
 use libcobra::bytecode::{compile_to_byte_code, optimize_module, ByteCodeModule, OptimizationLevel, START_CODE_FUNCTION};
 use libcobra::compileerror::{CompileResult, CompileError};
-use llvmbackend::{CodeGenOptions, llvm_code_generation};
+use llvmbackend::{CodeGenOptions, llvm_code_generation, link};
 use interpreter::{run_byte_code, debug_byte_code};
 
 
@@ -97,8 +97,8 @@ fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
                 optimize: optimize,
             };
 
-            llvm_code_generation(&bc_mod, &opts)
-                .map_err(|msg| CompileError::Other(msg))?;
+            let ctx = llvm_code_generation(&bc_mod, &opts).map_err(|msg| CompileError::Other(msg))?;
+            link(&ctx, &opts)?;
             Ok(0)
         }
 
