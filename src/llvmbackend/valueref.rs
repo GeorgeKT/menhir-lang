@@ -3,8 +3,8 @@ use std::ops::Deref;
 use llvm::core::*;
 use llvm::prelude::*;
 
-use libcobra::ast::*;
-use libcobra::bytecode::ByteCodeProperty;
+use ast::*;
+use bytecode::ByteCodeProperty;
 use super::instructions::{const_uint, const_int};
 
 pub struct ArrayValue

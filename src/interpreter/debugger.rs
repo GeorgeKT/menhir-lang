@@ -1,6 +1,6 @@
 use std::io::prelude::*;
 use shrust::{Shell, ShellIO, ExecResult, ExecError};
-use libcobra::bytecode::*;
+use bytecode::*;
 use super::*;
 use super::value::Value;
 

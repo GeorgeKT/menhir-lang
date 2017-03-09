@@ -7,9 +7,9 @@ mod tests;
 use std::collections::HashMap;
 use std::ops::Deref;
 
-use libcobra::ast::{Type, Operator};
-use libcobra::bytecode::*;
-use libcobra::bytecode::ByteCodeFunction;
+use ast::{Type, Operator};
+use bytecode::*;
+use bytecode::ByteCodeFunction;
 
 use self::value::Value;
 use self::valueref::ValueRef;

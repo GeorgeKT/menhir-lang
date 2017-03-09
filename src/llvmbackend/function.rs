@@ -6,8 +6,8 @@ use libc;
 use llvm::core::*;
 use llvm::prelude::*;
 
-use libcobra::ast::*;
-use libcobra::bytecode::*;
+use ast::*;
+use bytecode::*;
 use super::symboltable::FunctionInstance;
 use super::context::Context;
 use super::instructions::*;

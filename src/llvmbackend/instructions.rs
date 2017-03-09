@@ -5,8 +5,8 @@ use libc::*;
 use llvm::*;
 use llvm::core::*;
 use llvm::prelude::*;
-use libcobra::bytecode::*;
-use libcobra::ast::{Type, Operator};
+use bytecode::*;
+use ast::{Type, Operator};
 use super::valueref::ValueRef;
 use super::context::Context;
 

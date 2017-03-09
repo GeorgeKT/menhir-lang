@@ -1,11 +1,22 @@
 extern crate llvm_sys as llvm;
 extern crate libc;
-extern crate libcobra;
 extern crate shrust;
 extern crate itertools;
 #[macro_use]
 extern crate clap;
+extern crate uuid;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_cbor;
 
+
+mod ast;
+mod compileerror;
+mod bytecode;
+mod parser;
+mod typechecker;
+mod span;
 mod llvmbackend;
 mod interpreter;
 
@@ -13,10 +24,10 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use clap::ArgMatches;
-use libcobra::parser::{ParserOptions, parse_file};
-use libcobra::typechecker::{type_check_module};
-use libcobra::bytecode::{compile_to_byte_code, optimize_module, ByteCodeModule, OptimizationLevel, START_CODE_FUNCTION};
-use libcobra::compileerror::{CompileResult, CompileError};
+use parser::{ParserOptions, parse_file};
+use typechecker::{type_check_module};
+use bytecode::{compile_to_byte_code, optimize_module, ByteCodeModule, OptimizationLevel, START_CODE_FUNCTION};
+use compileerror::{CompileResult, CompileError};
 use llvmbackend::{CodeGenOptions, llvm_code_generation, link};
 use interpreter::{run_byte_code, debug_byte_code};
 
@@ -49,7 +60,7 @@ fn parse(parser_options: &ParserOptions, input_file: &str, dump_flags: &str, opt
     if dump_flags.contains("ast") || dump_flags.contains("all") {
         println!("AST:");
         println!("------\n");
-        use libcobra::ast::TreePrinter;
+        use ast::TreePrinter;
         module.print(0);
         println!("------\n");
     }

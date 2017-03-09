@@ -1,7 +1,7 @@
 use std::fs;
 use std::io::Read;
 use std::path::{PathBuf, Path};
-use libcobra::bytecode::*;
+use bytecode::*;
 use super::{run_byte_code, ExecutionResult};
 use super::value::Value;
 
