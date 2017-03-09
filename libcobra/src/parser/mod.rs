@@ -336,6 +336,7 @@ fn parse_type(tq: &mut TokenQueue, indent_level: usize) -> CompileResult<Type>
         } else {
             let (len, _span) = tq.expect_int()?;
             typ = array_type(typ, len as usize);
+            tq.expect(TokenKind::CloseBracket)?;
         }
     }
 
