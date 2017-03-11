@@ -1,54 +1,16 @@
-use std::rc::Rc;
-use std::ops::Deref;
 use llvm::core::*;
 use llvm::prelude::*;
 
 use ast::*;
 use bytecode::ByteCodeProperty;
-use super::instructions::{const_uint, const_int};
+use super::context::Context;
+use super::instructions::{const_uint, const_int, copy};
+use super::function::pass_by_value;
 
-pub struct ArrayValue
+pub struct ValueRef
 {
     value: LLVMValueRef,
-    array_type: Rc<ArrayType>,
-}
-
-pub struct SliceValue
-{
-    value: LLVMValueRef,
-    slice_type: Rc<SliceType>,
-}
-
-pub struct StructValue
-{
-    value: LLVMValueRef,
-    struct_type: Rc<StructType>,
-}
-
-pub struct SumValue
-{
-    value: LLVMValueRef,
-    sum_type: Rc<SumType>,
-}
-
-pub struct OptionalValue
-{
-    value: LLVMValueRef,
-    inner_type: Rc<Type>,
-}
-
-pub enum ValueRef
-{
-    Void(LLVMValueRef),
-    Const(LLVMValueRef, Type),
-    Ptr(LLVMValueRef, Rc<Type>),
-    Array(ArrayValue),
-    Slice(SliceValue),
-    String(LLVMValueRef),
-    Struct(StructValue),
-    Sum(SumValue),
-    Optional(OptionalValue),
-    Func(LLVMValueRef),
+    typ: Type,
 }
 
 
@@ -58,114 +20,67 @@ impl ValueRef
     {
         match *typ
         {
-            Type::Void => ValueRef::Void(value),
+            Type::Nil | Type::Unknown | Type::Generic(_) | Type::Unresolved(_) | Type::SelfType |
+            Type::Interface(_) => panic!("Type {} not allowed at this point", typ),
 
             Type::Enum(_) |
             Type::Int |
             Type::UInt |
             Type::Float |
             Type::Char |
-            Type::Bool => {
-                if allocated {
-                    ValueRef::Ptr(value, Rc::new(typ.clone()))
+            Type::Void |
+            Type::Bool => ValueRef{
+                value: value,
+                typ: if allocated {
+                    ptr_type(typ.clone())
                 } else {
-                    ValueRef::Const(value, typ.clone())
+                    typ.clone()
                 }
-            }
+            },
 
-            Type::Pointer(ref inner) => {
-                if allocated {
-                    ValueRef::Ptr(value, Rc::new(inner.deref().clone()))
-                } else {
-                    ValueRef::Ptr(value, inner.clone())
-                }
-            }
 
-            Type::Array(ref at) => {
-                ValueRef::Array(ArrayValue {
-                    value: value,
-                    array_type: at.clone(),
-                })
-            }
-
-            Type::Slice(ref st) => {
-                ValueRef::Slice(SliceValue{
-                    value: value,
-                    slice_type: st.clone(),
-                })
-            }
-
-            Type::Struct(ref st) => {
-                ValueRef::Struct(StructValue {
-                    value: value,
-                    struct_type: st.clone(),
-                })
-            }
-
-            Type::Sum(ref st) => {
-                ValueRef::Sum(SumValue{
-                    value: value,
-                    sum_type: st.clone(),
-                })
-            }
-
-            Type::Optional(ref ot) => {
-                ValueRef::Optional(OptionalValue{
-                    value: value,
-                    inner_type: ot.clone(),
-                })
-            }
-
-            Type::String => ValueRef::String(value),
-            Type::Func(_) => ValueRef::Func(value),
-
-            Type::Nil | Type::Unknown | Type::Generic(_) | Type::Unresolved(_) | Type::SelfType |
-            Type::Interface(_) => panic!("Type {} not allowed at this point", typ),
+            Type::Array(_) |
+            Type::Slice(_) |
+            Type::Struct(_) |
+            Type::Sum(_) |
+            Type::Func(_) |
+            Type::Optional(_) |
+            Type::String |
+            Type::Pointer(_) => ValueRef {
+                value: value,
+                typ: typ.clone(),
+            },
         }
     }
 
-    pub fn store(&self, builder: LLVMBuilderRef, vr: LLVMValueRef)
+    pub unsafe fn store(&self, ctx: &Context, vr: LLVMValueRef)
     {
-        match *self
-        {
-            ValueRef::Ptr(v, _) => unsafe {
-                LLVMBuildStore(builder, vr, v);
-            },
-
-            ValueRef::Void(_) => (),
-
-            _ => panic!("Store not allowed"),
+        if pass_by_value(&self.typ) {
+            LLVMBuildStore(ctx.builder, vr, self.value);
+        } else {
+            copy(ctx, self.value, vr, ctx.resolve_type(&self.typ))
         }
     }
 
     pub fn load(&self, builder: LLVMBuilderRef) -> LLVMValueRef
     {
-        match *self
+        match self.typ
         {
-            ValueRef::Ptr(v, _) => unsafe {
-                LLVMBuildLoad(builder, v, cstr!("load"))
+            Type::Pointer(_) => unsafe {
+                LLVMBuildLoad(builder, self.value, cstr!("load"))
             },
 
-            ValueRef::String(v) |
-            ValueRef::Func(v) |
-            ValueRef::Const(v, _) |
-            ValueRef::Void(v) => v,
-            ValueRef::Array(ref av) => av.value,
-            ValueRef::Slice(ref sv) => sv.value,
-            ValueRef::Struct(ref sv) => sv.value,
-            ValueRef::Sum(ref sv) => sv.value,
-            ValueRef::Optional(ref ov) => ov.value,
-            //_ => panic!("Load not allowed"),
+            _ => self.value
         }
     }
 
     pub fn get_member_ptr(&self, ctx: LLVMContextRef, builder: LLVMBuilderRef, index: LLVMValueRef) -> LLVMValueRef
     {
-        match *self
+        match self.typ
         {
-            ValueRef::Array(ref av) => unsafe {
+            Type::Array(_) | Type::Struct(_) | Type::Slice(_) => unsafe {
                 let mut indices = vec![const_int(ctx, 0), index];
-                LLVMBuildGEP(builder, av.value, indices.as_mut_ptr(), 2, cstr!("member"))
+                LLVMBuildGEP(builder, self.value, indices.as_mut_ptr(), 2, cstr!("member"))
             },
 
             _ => panic!("Load member not allowed"),
@@ -174,11 +89,11 @@ impl ValueRef
 
     pub fn store_member(&self, ctx: LLVMContextRef, builder: LLVMBuilderRef, index: LLVMValueRef, value: LLVMValueRef)
     {
-        match *self
+        match self.typ
         {
-            ValueRef::Array(ref av) => unsafe {
+            Type::Array(_) | Type::Struct(_) | Type::Slice(_) => unsafe {
                 let mut indices = vec![const_int(ctx, 0), index];
-                let member = LLVMBuildGEP(builder, av.value, indices.as_mut_ptr(), 2, cstr!("member"));
+                let member = LLVMBuildGEP(builder, self.value, indices.as_mut_ptr(), 2, cstr!("member"));
                 LLVMBuildStore(builder, value, member);
             },
 
@@ -189,10 +104,10 @@ impl ValueRef
 
     pub fn get_property(&self, ctx: LLVMContextRef, prop: ByteCodeProperty) -> LLVMValueRef
     {
-        match (self, prop)
+        match (&self.typ, prop)
         {
-            (&ValueRef::Array(ref av), ByteCodeProperty::Len) => unsafe {
-                const_uint(ctx, av.array_type.len)
+            (&Type::Array(ref a), ByteCodeProperty::Len) => unsafe {
+                const_uint(ctx, a.len)
             },
 
             _ => panic!("Get property not allowed")

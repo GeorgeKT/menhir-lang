@@ -1,5 +1,4 @@
 use std::ptr;
-use std::mem;
 use libc::*;
 use llvm::core::*;
 use llvm::prelude::*;

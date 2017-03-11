@@ -76,6 +76,18 @@ unsafe fn get_operand(ctx: &Context, operand: &Operand) -> LLVMValueRef
     }
 }
 
+pub unsafe fn copy(ctx: &Context, dst: LLVMValueRef, src: LLVMValueRef, typ: LLVMTypeRef)
+{
+    let func = ctx.get_function("memcpy").expect("memcpy not found");
+    let void_ptr_type = LLVMPointerType(LLVMVoidTypeInContext(ctx.context), 0);
+    let mut args = vec![
+        LLVMBuildBitCast(ctx.builder, dst, void_ptr_type, cstr!("dst_cast")),
+        LLVMBuildBitCast(ctx.builder, src, void_ptr_type, cstr!("src_cast")),
+        const_uint(ctx.context, ctx.target_machine.size_of_type(typ))
+    ];
+    LLVMBuildCall(ctx.builder, func.function, args.as_mut_ptr(), args.len() as c_uint, cstr!("ac"));
+}
+
 unsafe fn get_function_arg(ctx: &Context, operand: &Operand) -> LLVMValueRef
 {
     match *operand
@@ -84,14 +96,7 @@ unsafe fn get_function_arg(ctx: &Context, operand: &Operand) -> LLVMValueRef
             let llvm_type = ctx.resolve_type(&v.typ);
             let dst = stack_alloc(ctx, llvm_type, "argcopy");
             let src = get_variable(ctx, &v.name);
-            let func = ctx.get_function("memcpy").expect("memcpy not found");
-            let void_ptr_type = LLVMPointerType(LLVMVoidTypeInContext(ctx.context), 0);
-            let mut args = vec![
-                LLVMBuildBitCast(ctx.builder, dst, void_ptr_type, cstr!("dst_cast")),
-                LLVMBuildBitCast(ctx.builder, src, void_ptr_type, cstr!("src_cast")),
-                const_uint(ctx.context, ctx.target_machine.size_of_type(llvm_type))
-            ];
-            LLVMBuildCall(ctx.builder, func.function, args.as_mut_ptr(), args.len() as c_uint, cstr!("ac"));
+            copy(ctx, dst, src, llvm_type);
             dst
         }
 
@@ -126,7 +131,7 @@ unsafe fn gen_unary_op(ctx: &Context, dst: &Var, operator: Operator, src: &Opera
         _ => panic!("Unsupported unary operator"),
     };
 
-    dst_var.value.store(ctx.builder, result);
+    dst_var.value.store(ctx, result);
 }
 
 unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: Operator, left: &Operand, right: &Operand)
@@ -221,7 +226,7 @@ unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: Operator, left: &Operand, 
 
 
     let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
-    dst_var.value.store(ctx.builder, value);
+    dst_var.value.store(ctx, value);
 }
 
 pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &HashMap<BasicBlockRef, LLVMBasicBlockRef>)
@@ -231,13 +236,13 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         Instruction::Store{ref dst, ref src} => {
             let vr = get_operand(ctx, src);
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
-            dst_var.value.store(ctx.builder, vr);
+            dst_var.value.store(ctx, vr);
         }
 
         Instruction::Load{ref dst, ref ptr} => {
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             let src_var = ctx.get_variable(&ptr.name).expect("Unknown variable");
-            dst_var.value.store(ctx.builder, src_var.value.load(ctx.builder));
+            dst_var.value.store(ctx, src_var.value.load(ctx.builder));
         }
 
         Instruction::LoadMember{ref dst, ref obj, ref member_index} => {
@@ -245,7 +250,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
             let member_ptr = obj_var.value.get_member_ptr(ctx.context, ctx.builder, index);
-            dst_var.value.store(ctx.builder, LLVMBuildLoad(ctx.builder, member_ptr, cstr!("memberload")));
+            dst_var.value.store(ctx, LLVMBuildLoad(ctx.builder, member_ptr, cstr!("memberload")));
         }
 
         Instruction::AddressOfMember{ref dst, ref obj, ref member_index} => {
@@ -253,7 +258,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
             let member_ptr = obj_var.value.get_member_ptr(ctx.context, ctx.builder, index);
-            dst_var.value.store(ctx.builder, member_ptr);
+            dst_var.value.store(ctx, member_ptr);
         }
 
         Instruction::StoreMember{ref obj, ref member_index, ref src} => {
@@ -271,7 +276,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
             let value = obj_var.value.get_property(ctx.context, *prop);
-            dst_var.value.store(ctx.builder, value);
+            dst_var.value.store(ctx, value);
         }
 
         Instruction::SetProperty{ref obj, ref prop, ref val} => {
@@ -292,7 +297,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             let mut func_args = args.iter().map(|a| get_function_arg(ctx, a)).collect::<Vec<_>>();
             unsafe {
                 let ret = LLVMBuildCall(ctx.builder, func.function, func_args.as_mut_ptr(), args.len() as c_uint, cstr!("call"));
-                dst_var.value.store(ctx.builder, ret);
+                dst_var.value.store(ctx, ret);
             }
         }
 

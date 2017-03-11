@@ -7,9 +7,6 @@ use llvm::core::*;
 use llvm::target_machine::*;
 use llvm::target::*;
 
-use compileerror::{CompileResult};
-use span::Span;
-
 pub struct TargetMachine
 {
     pub target_machine: LLVMTargetMachineRef,

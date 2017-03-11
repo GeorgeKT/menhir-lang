@@ -92,10 +92,12 @@ impl Context
         self.stack.last_mut().expect("Stack is empty").symbols.add_function(f)
     }
 
+    /*
     pub fn add_function_alias(&mut self, alias: &str, f: Rc<FunctionInstance>)
     {
         self.stack.last_mut().expect("Stack is empty").symbols.add_function_alias(alias, f)
     }
+    */
 
     pub fn get_function(&self, name: &str) -> Option<Rc<FunctionInstance>>
     {
