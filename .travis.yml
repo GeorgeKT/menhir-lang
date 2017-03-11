@@ -24,6 +24,5 @@ before_install:
         - export RUST_TEST_THREADS=1
 
 script:
-        - (cd libcobra && cargo build)
-        - (cd cobrac && cargo build)
+        - cargo build
         - cargo test --all

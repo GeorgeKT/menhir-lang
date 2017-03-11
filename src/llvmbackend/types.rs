@@ -5,7 +5,7 @@ use llvm::core::*;
 use llvm::prelude::*;
 
 use super::target::TargetMachine;
-use libcobra::ast::*;
+use ast::*;
 
 unsafe fn slice_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachine, slice_type: &SliceType) -> LLVMTypeRef
 {

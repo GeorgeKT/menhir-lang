@@ -4,7 +4,7 @@ use std::fs::DirBuilder;
 use std::ptr;
 use llvm::prelude::*;
 use llvm::core::*;
-use libcobra::ast::Type;
+use ast::Type;
 use super::CodeGenOptions;
 use super::symboltable::{SymbolTable, FunctionInstance, VariableInstance};
 use super::target::TargetMachine;

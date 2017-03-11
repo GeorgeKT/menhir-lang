@@ -1,10 +1,15 @@
-[workspace]
-members = [
-	"libcobra", 
-	"cobrac",
-]
+[package]
+name = "cobra"
+version = "0.1.0"
+authors = ["Joris Guisson <joris.guisson@gmail.com>"]
 
-#[dependencies]
-#llvm-sys = "0.3"
-#libc = "*"
-#libffi = "0.4"
+[dependencies]
+clap = "2.20"
+itertools = "0.5"
+uuid = { version = "0.2", features = ["v4"] }
+serde = "0.9"
+serde_derive = "0.9"
+serde_cbor = "0.5"
+llvm-sys = "38"
+libc = "*"
+shrust = "0.0.4"

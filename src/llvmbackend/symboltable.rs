@@ -2,7 +2,7 @@ use std::rc::Rc;
 use std::collections::HashMap;
 use llvm::prelude::*;
 
-use libcobra::ast::{FunctionSignature};
+use ast::{FunctionSignature};
 use llvmbackend::valueref::ValueRef;
 
 pub struct FunctionInstance

@@ -1,9 +1,9 @@
 use std::fmt;
 use itertools::free::join;
-use libcobra::ast::Type;
+use ast::Type;
 use super::ExecutionResult;
 use super::valueref::ValueRef;
-use libcobra::bytecode::*;
+use bytecode::*;
 
 #[derive(Debug, Clone)]
 pub enum Value

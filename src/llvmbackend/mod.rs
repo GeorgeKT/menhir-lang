@@ -20,7 +20,7 @@ mod valueref;
 use std::process::{Output, Command};
 use llvm::core::*;
 
-use libcobra::bytecode::{START_CODE_FUNCTION, ByteCodeModule};
+use bytecode::{START_CODE_FUNCTION, ByteCodeModule};
 use self::function::{gen_function, gen_function_sig};
 use self::context::Context;
 

@@ -53,7 +53,6 @@ impl cmp::Ord for Pos
     }
 }
 
-
 impl Default for Pos
 {
     fn default() -> Self
@@ -118,3 +117,4 @@ impl fmt::Display for Span
         write!(f, "{}:{} -> {}", self.file, self.start, self.end)
     }
 }
+

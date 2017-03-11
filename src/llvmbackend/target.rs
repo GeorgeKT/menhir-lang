@@ -7,8 +7,8 @@ use llvm::core::*;
 use llvm::target_machine::*;
 use llvm::target::*;
 
-use libcobra::compileerror::{CompileResult};
-use libcobra::span::Span;
+use compileerror::{CompileResult};
+use span::Span;
 
 pub struct TargetMachine
 {
