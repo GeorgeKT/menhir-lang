@@ -8,16 +8,38 @@ use llvm::prelude::*;
 
 use ast::*;
 use bytecode::*;
+use span::Span;
 use super::symboltable::FunctionInstance;
 use super::context::Context;
 use super::instructions::*;
 use super::valueref::ValueRef;
 
+pub fn pass_by_value(typ: &Type) -> bool
+{
+    match *typ
+    {
+        Type::Int |
+        Type::UInt |
+        Type::Float |
+        Type::Char |
+        Type::Bool |
+        Type::Pointer(_) |
+        Type::Func(_) => true,
+        _ => false,
+    }
+}
 
 fn make_function_instance(ctx: &Context, sig: &FunctionSignature) -> FunctionInstance
 {
     let ret_type = ctx.resolve_type(&sig.return_type);
-    let arg_types: Vec<_> = sig.args.iter().map(|arg| ctx.resolve_type(&arg.typ)).collect();
+    let arg_types: Vec<_> = sig.args.iter().map(|arg|{
+        let llvm_type = ctx.resolve_type(&arg.typ);
+        if pass_by_value(&arg.typ) {
+            llvm_type
+        } else {
+            unsafe{LLVMPointerType(llvm_type, 0)}
+        }
+    }).collect();
 
     FunctionInstance{
         name: sig.name.clone(),
@@ -86,4 +108,21 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction)
             gen_instruction(ctx, inst, &blocks);
         }
     }
+}
+
+pub unsafe fn add_libc_functions(ctx: &mut Context)
+{
+    // memcpy
+    let memcpy_sig = sig(
+        "memcpy",
+        ptr_type(Type::Void),
+        vec![
+            Argument::new("dst", ptr_type(Type::Void), false, Span::default()),
+            Argument::new("src", ptr_type(Type::Void), false, Span::default()),
+            Argument::new("size", Type::UInt, false, Span::default())
+        ],
+        Span::default()
+    );
+
+    gen_function_sig(ctx, &memcpy_sig);
 }

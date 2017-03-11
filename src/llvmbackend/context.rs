@@ -35,7 +35,7 @@ pub struct Context
     pub context: LLVMContextRef,
     pub module: LLVMModuleRef,
     pub builder: LLVMBuilderRef,
-    target_machine: TargetMachine,
+    pub target_machine: TargetMachine,
     name: String,
     stack: Vec<StackFrame>,
 }

@@ -12,10 +12,10 @@ pub struct Argument
 
 impl Argument
 {
-    pub fn new(name: String, typ: Type, mutable: bool, span: Span) -> Argument
+    pub fn new<S: Into<String>>(name: S, typ: Type, mutable: bool, span: Span) -> Argument
     {
         Argument{
-            name: name,
+            name: name.into(),
             typ: typ,
             mutable: mutable,
             span: span,

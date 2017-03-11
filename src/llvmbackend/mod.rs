@@ -21,7 +21,7 @@ use std::process::{Output, Command};
 use llvm::core::*;
 
 use bytecode::{START_CODE_FUNCTION, ByteCodeModule};
-use self::function::{gen_function, gen_function_sig};
+use self::function::{gen_function, gen_function_sig, add_libc_functions};
 use self::context::Context;
 
 
@@ -68,6 +68,8 @@ pub fn llvm_code_generation(bc_mod: &ByteCodeModule, options: &CodeGenOptions) -
     let mut ctx = Context::new(&bc_mod.name)?;
 
     unsafe {
+        add_libc_functions(&mut ctx);
+
         for func in bc_mod.functions.values() {
             if func.sig.name != START_CODE_FUNCTION {
                 gen_function_sig(&mut ctx, &func.sig);

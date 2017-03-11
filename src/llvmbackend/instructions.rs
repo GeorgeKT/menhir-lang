@@ -9,6 +9,7 @@ use bytecode::*;
 use ast::{Type, Operator};
 use super::valueref::ValueRef;
 use super::context::Context;
+use super::function::pass_by_value;
 
 pub unsafe fn const_int(ctx: LLVMContextRef, v: isize) -> LLVMValueRef
 {
@@ -72,6 +73,29 @@ unsafe fn get_operand(ctx: &Context, operand: &Operand) -> LLVMValueRef
         Operand::String(ref _s) => panic!("NYI"),
         Operand::Bool(v) => const_bool(ctx.context, v),
         Operand::Nil => panic!("NYI"),
+    }
+}
+
+unsafe fn get_function_arg(ctx: &Context, operand: &Operand) -> LLVMValueRef
+{
+    match *operand
+    {
+        Operand::Var(ref v) if !pass_by_value(&v.typ) => {
+            let llvm_type = ctx.resolve_type(&v.typ);
+            let dst = stack_alloc(ctx, llvm_type, "argcopy");
+            let src = get_variable(ctx, &v.name);
+            let func = ctx.get_function("memcpy").expect("memcpy not found");
+            let void_ptr_type = LLVMPointerType(LLVMVoidTypeInContext(ctx.context), 0);
+            let mut args = vec![
+                LLVMBuildBitCast(ctx.builder, dst, void_ptr_type, cstr!("dst_cast")),
+                LLVMBuildBitCast(ctx.builder, src, void_ptr_type, cstr!("src_cast")),
+                const_uint(ctx.context, ctx.target_machine.size_of_type(llvm_type))
+            ];
+            LLVMBuildCall(ctx.builder, func.function, args.as_mut_ptr(), args.len() as c_uint, cstr!("ac"));
+            dst
+        }
+
+        _ => get_operand(ctx, operand)
     }
 }
 
@@ -265,7 +289,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         Instruction::Call{ref dst, ref func, ref args} => {
             let func = ctx.get_function(func).expect("Unknown function");
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown function");
-            let mut func_args = args.iter().map(|a| get_operand(ctx, a)).collect::<Vec<_>>();
+            let mut func_args = args.iter().map(|a| get_function_arg(ctx, a)).collect::<Vec<_>>();
             unsafe {
                 let ret = LLVMBuildCall(ctx.builder, func.function, func_args.as_mut_ptr(), args.len() as c_uint, cstr!("call"));
                 dst_var.value.store(ctx.builder, ret);

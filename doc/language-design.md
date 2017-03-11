@@ -11,8 +11,8 @@
 * bool: Boolean type, possible values true or false
 
 ### Operators
-* **+**, **-**, **\***, **/**: applies to int, uint, float
+* **+,** **-,**, **\*,** **/,**: applies to int, uint, float
 * **%**: remainder applies to int and uint
-* **<**, **>**, **>=**, **<=**: numeric comparisons, applies to int, uint, float, char
-* **==**, **!=**: equals and not equals, applies to int, uint, float, char, string, bool,
-* **&&**, **||**, **!**: boolean _and_, _or_ and _not_ operators 
+* **<,** **>,** **>=,** **<=,**: numeric comparisons, applies to int, uint, float, char
+* **==,** **!=,**: equals and not equals, applies to int, uint, float, char, string, bool,
+* **&&,** **||,** **!,**: boolean _and_, _or_ and _not_ operators 

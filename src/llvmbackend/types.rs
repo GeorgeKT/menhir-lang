@@ -12,8 +12,8 @@ unsafe fn slice_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMac
     let element_type = to_llvm_type(context, target_machine, &slice_type.element_type);
     let mut member_types = vec![
         LLVMPointerType(element_type, 0),      // Pointer to data
-        LLVMInt64TypeInContext(context),  // Length of string
-        LLVMInt64TypeInContext(context),  // Offset in data pointer
+        native_int_type(context, target_machine),  // Length of string
+        native_int_type(context, target_machine),  // Offset in data pointer
     ];
     LLVMStructTypeInContext(context, member_types.as_mut_ptr(), member_types.len() as c_uint, 0)
 }
@@ -26,7 +26,7 @@ unsafe fn array_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMac
 
 unsafe fn sum_type_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachine, st: &SumType) -> LLVMTypeRef
 {
-    let mut member_types = vec![LLVMInt64TypeInContext(context)]; // first entry is the tag
+    let mut member_types = vec![native_int_type(context, target_machine)]; // first entry is the tag
 
     // Calculate the biggest type
     let mut largest_type = ptr::null_mut();
@@ -76,18 +76,23 @@ unsafe fn optional_to_llvm_type(context: LLVMContextRef, target_machine: &Target
     LLVMStructTypeInContext(context, member_types.as_mut_ptr(), member_types.len() as c_uint, 0)
 }
 
+unsafe fn native_int_type(context: LLVMContextRef, target_machine: &TargetMachine) -> LLVMTypeRef
+{
+    match target_machine.native_int_size() {
+        8 => LLVMInt64TypeInContext(context),
+        4 => LLVMInt32TypeInContext(context),
+        2 => LLVMInt16TypeInContext(context),
+        1 => LLVMInt8TypeInContext(context),
+        v => panic!("Native integer size ({}) not supported", v),
+    }
+}
+
 pub unsafe fn to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachine, typ: &Type) -> LLVMTypeRef
 {
     match *typ
     {
         Type::Void => LLVMVoidTypeInContext(context),
-        Type::Int | Type::UInt | Type::Enum(_) => {
-            if mem::size_of::<usize>() == 8 {
-                LLVMInt64TypeInContext(context)
-            } else {
-                LLVMInt32TypeInContext(context)
-            }
-        },
+        Type::Int | Type::UInt | Type::Enum(_) => native_int_type(context, target_machine),
         Type::Bool => LLVMInt1TypeInContext(context),
         Type::Float => LLVMDoubleTypeInContext(context),
         Type::Char => LLVMInt8TypeInContext(context),

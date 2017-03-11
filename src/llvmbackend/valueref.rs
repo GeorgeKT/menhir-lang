@@ -146,9 +146,16 @@ impl ValueRef
                 LLVMBuildLoad(builder, v, cstr!("load"))
             },
 
-            ValueRef::Const(v, _) => v,
+            ValueRef::String(v) |
+            ValueRef::Func(v) |
+            ValueRef::Const(v, _) |
             ValueRef::Void(v) => v,
-            _ => panic!("Load not allowed"),
+            ValueRef::Array(ref av) => av.value,
+            ValueRef::Slice(ref sv) => sv.value,
+            ValueRef::Struct(ref sv) => sv.value,
+            ValueRef::Sum(ref sv) => sv.value,
+            ValueRef::Optional(ref ov) => ov.value,
+            //_ => panic!("Load not allowed"),
         }
     }
 

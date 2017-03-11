@@ -58,6 +58,12 @@ impl TargetMachine
         LLVMStoreSizeOfType(self.target_data, typ) as usize
     }
 
+    // Get the native integer size in bytes
+    pub unsafe fn native_int_size(&self) -> usize
+    {
+        LLVMPointerSize(self.target_data) as usize
+    }
+
     pub unsafe fn emit_to_file(&self, module: LLVMModuleRef, obj_file_name: &str) -> Result<(), String>
     {
         let mut error_message: *mut c_char = ptr::null_mut();
