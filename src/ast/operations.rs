@@ -27,6 +27,7 @@ pub fn bin_op(op: Operator, left: Expression, right: Expression, span: Span) -> 
     bin_op_with_type(op, left, right, span, Type::Unknown)
 }
 
+#[cfg(test)]
 pub fn bin_op_with_precedence(op: Operator, left: Expression, right: Expression, span: Span, precedence: usize) -> Expression
 {
     Expression::BinaryOp(Box::new(BinaryOp{

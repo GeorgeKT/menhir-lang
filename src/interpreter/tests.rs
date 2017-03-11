@@ -1,7 +1,8 @@
 use std::fs;
 use std::io::Read;
 use std::path::{PathBuf, Path};
-use bytecode::*;
+use bytecode::{START_CODE_FUNCTION, OptimizationLevel, optimize_module};
+use bytecode::test::generate_byte_code;
 use super::{run_byte_code, ExecutionResult};
 use super::value::Value;
 

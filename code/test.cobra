@@ -1,5 +1,5 @@
 
-fn sum(a: int[7]) -> int:
+fn sum(a: int[]) -> int:
     var s = 0
     for i in a:
         s = s + i

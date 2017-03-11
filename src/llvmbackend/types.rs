@@ -12,7 +12,6 @@ unsafe fn slice_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMac
     let mut member_types = vec![
         LLVMPointerType(element_type, 0),      // Pointer to data
         native_int_type(context, target_machine),  // Length of string
-        native_int_type(context, target_machine),  // Offset in data pointer
     ];
     LLVMStructTypeInContext(context, member_types.as_mut_ptr(), member_types.len() as c_uint, 0)
 }
@@ -75,7 +74,7 @@ unsafe fn optional_to_llvm_type(context: LLVMContextRef, target_machine: &Target
     LLVMStructTypeInContext(context, member_types.as_mut_ptr(), member_types.len() as c_uint, 0)
 }
 
-unsafe fn native_int_type(context: LLVMContextRef, target_machine: &TargetMachine) -> LLVMTypeRef
+pub unsafe fn native_int_type(context: LLVMContextRef, target_machine: &TargetMachine) -> LLVMTypeRef
 {
     match target_machine.native_int_size() {
         8 => LLVMInt64TypeInContext(context),

@@ -108,6 +108,8 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction)
             gen_instruction(ctx, inst, &blocks);
         }
     }
+
+    ctx.pop_stack();
 }
 
 pub unsafe fn add_libc_functions(ctx: &mut Context)

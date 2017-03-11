@@ -6,12 +6,6 @@ mod optimizer;
 use std::io;
 use std::fmt;
 use std::collections::HashMap;
-use std::io::Cursor;
-
-use typechecker::{type_check_module};
-use ast::{TreePrinter};
-use parser::*;
-use compileerror::CompileResult;
 
 pub use self::instruction::*;
 pub use self::function::*;
@@ -65,35 +59,45 @@ impl fmt::Display for ByteCodeModule
     }
 }
 
-pub fn generate_byte_code(prog: &str, dump: bool) -> CompileResult<ByteCodeModule>
+#[cfg(test)]
+pub mod test
 {
+    use compileerror::CompileResult;
+    use std::io::Cursor;
+    use parser::{ParserOptions, parse_module};
+    use bytecode::{ByteCodeModule, compile_to_byte_code};
+    use typechecker::type_check_module;
+    use ast::TreePrinter;
 
+    pub fn generate_byte_code(prog: &str, dump: bool) -> CompileResult<ByteCodeModule>
+    {
+        let mut cursor = Cursor::new(prog);
+        let parser_options = ParserOptions::default();
+        let mut md = parse_module(&parser_options, &mut cursor, "test", "")?;
 
-    let mut cursor = Cursor::new(prog);
-    let parser_options = ParserOptions::default();
-    let mut md = parse_module(&parser_options, &mut cursor, "test", "")?;
+        if dump {
+            println!("Before type check");
+            md.print(2);
+            println!("-----------------");
+        }
 
-    if dump {
-        println!("Before type check");
-        md.print(2);
-        println!("-----------------");
+        type_check_module(&mut md)?;
+
+        if dump {
+            println!("After type check");
+            md.print(2);
+            println!("-----------------");
+        }
+
+        let bc_mod = compile_to_byte_code(&md);
+        if dump {
+            println!("ByteCode:");
+            println!("{}", bc_mod);
+            println!("-----------------");
+        }
+
+        Ok(bc_mod)
     }
-
-    type_check_module(&mut md)?;
-
-    if dump {
-        println!("After type check");
-        md.print(2);
-        println!("-----------------");
-    }
-
-    let bc_mod = compile_to_byte_code(&md);
-    if dump {
-        println!("ByteCode:");
-        println!("{}", bc_mod);
-        println!("-----------------");
-    }
-
-    Ok(bc_mod)
 }
+
 

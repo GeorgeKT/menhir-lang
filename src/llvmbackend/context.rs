@@ -92,13 +92,6 @@ impl Context
         self.stack.last_mut().expect("Stack is empty").symbols.add_function(f)
     }
 
-    /*
-    pub fn add_function_alias(&mut self, alias: &str, f: Rc<FunctionInstance>)
-    {
-        self.stack.last_mut().expect("Stack is empty").symbols.add_function_alias(alias, f)
-    }
-    */
-
     pub fn get_function(&self, name: &str) -> Option<Rc<FunctionInstance>>
     {
         for sf in self.stack.iter().rev()
@@ -139,6 +132,14 @@ impl Context
         unsafe{
             use llvmbackend::types::to_llvm_type;
             to_llvm_type(self.context, &self.target_machine, typ)
+        }
+    }
+
+    pub fn native_int_type(&self) -> LLVMTypeRef
+    {
+        unsafe{
+            use llvmbackend::types::native_int_type;
+            native_int_type(self.context, &self.target_machine)
         }
     }
 
