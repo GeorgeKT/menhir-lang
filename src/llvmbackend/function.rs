@@ -14,27 +14,13 @@ use super::context::Context;
 use super::instructions::*;
 use super::valueref::ValueRef;
 
-pub fn pass_by_value(typ: &Type) -> bool
-{
-    match *typ
-    {
-        Type::Int |
-        Type::UInt |
-        Type::Float |
-        Type::Char |
-        Type::Bool |
-        Type::Pointer(_) |
-        Type::Func(_) => true,
-        _ => false,
-    }
-}
 
 fn make_function_instance(ctx: &Context, sig: &FunctionSignature) -> FunctionInstance
 {
     let ret_type = ctx.resolve_type(&sig.return_type);
     let arg_types: Vec<_> = sig.args.iter().map(|arg|{
         let llvm_type = ctx.resolve_type(&arg.typ);
-        if pass_by_value(&arg.typ) {
+        if arg.typ.pass_by_value() {
             llvm_type
         } else {
             unsafe{LLVMPointerType(llvm_type, 0)}

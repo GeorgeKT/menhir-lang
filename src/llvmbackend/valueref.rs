@@ -5,7 +5,6 @@ use ast::*;
 use bytecode::ByteCodeProperty;
 use super::context::Context;
 use super::instructions::{const_uint, const_int, copy};
-use super::function::pass_by_value;
 
 pub struct ValueRef
 {
@@ -55,7 +54,7 @@ impl ValueRef
 
     pub unsafe fn store(&self, ctx: &Context, vr: LLVMValueRef)
     {
-        if pass_by_value(&self.typ) {
+        if self.typ.pass_by_value() {
             LLVMBuildStore(ctx.builder, vr, self.value);
         } else {
             copy(ctx, self.value, vr, ctx.resolve_type(&self.typ))

@@ -1,12 +1,14 @@
-
 fn sum(a: int[]) -> int:
     var s = 0
     for i in a:
         s = s + i
     s
 
+fn make_array() -> int[7]:
+    [7; 7]
+
 fn main() -> int:
-    let x = [7; 7]
+    let x = make_array()
     sum(x)
 
 

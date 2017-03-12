@@ -334,6 +334,21 @@ impl Type
             _ => format!("{}", self),
         }
     }
+
+    pub fn pass_by_value(&self) -> bool
+    {
+        match *self
+        {
+            Type::Int |
+            Type::UInt |
+            Type::Float |
+            Type::Char |
+            Type::Bool |
+            Type::Pointer(_) |
+            Type::Func(_) => true,
+            _ => false,
+        }
+    }
 }
 
 pub fn func_type(args: Vec<Type>, ret: Type) -> Type

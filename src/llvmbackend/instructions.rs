@@ -8,7 +8,6 @@ use bytecode::*;
 use ast::{Type, Operator};
 use super::valueref::ValueRef;
 use super::context::Context;
-use super::function::pass_by_value;
 
 pub unsafe fn const_int(ctx: &Context, v: isize) -> LLVMValueRef
 {
@@ -82,7 +81,7 @@ unsafe fn get_function_arg(ctx: &Context, operand: &Operand) -> LLVMValueRef
 {
     match *operand
     {
-        Operand::Var(ref v) if !pass_by_value(&v.typ) => {
+        Operand::Var(ref v) if !v.typ.pass_by_value() => {
             let llvm_type = ctx.resolve_type(&v.typ);
             let dst = stack_alloc(ctx, llvm_type, "argcopy");
             let src = get_variable(ctx, &v.name);
