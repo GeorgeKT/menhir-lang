@@ -54,11 +54,24 @@ impl ValueRef
 
     pub unsafe fn store(&self, ctx: &Context, vr: LLVMValueRef)
     {
-        if self.typ.pass_by_value() {
-            LLVMBuildStore(ctx.builder, vr, self.value);
-        } else {
-            copy(ctx, self.value, vr, ctx.resolve_type(&self.typ))
+        match self.typ
+        {
+            Type::Pointer(ref inner) => {
+                if inner.pass_by_value() {
+                    LLVMBuildStore(ctx.builder, vr, self.value);
+                } else {
+                    copy(ctx, self.value, vr, ctx.resolve_type(inner))
+                }
+            }
+            _ => {
+                if self.typ.pass_by_value() {
+                    LLVMBuildStore(ctx.builder, vr, self.value);
+                } else {
+                    copy(ctx, self.value, vr, ctx.resolve_type(&self.typ))
+                }
+            }
         }
+
     }
 
     pub fn load(&self, builder: LLVMBuilderRef) -> LLVMValueRef
@@ -70,6 +83,23 @@ impl ValueRef
             },
 
             _ => self.value
+        }
+    }
+
+    pub fn address_of(&self) -> LLVMValueRef
+    {
+        match self.typ
+        {
+            Type::Array(_) |
+            Type::Slice(_) |
+            Type::Struct(_) |
+            Type::Sum(_) |
+            Type::Func(_) |
+            Type::Optional(_) |
+            Type::String |
+            Type::Pointer(_) => self.value,
+
+            _ => panic!("Address of not allowed on value of type {}", self.typ)
         }
     }
 

@@ -157,9 +157,19 @@ impl Interpreter
     {
         match *op
         {
+            Operand::Int(v) => Ok(Value::Int(v)),
+            Operand::UInt(v) => Ok(Value::UInt(v)),
+            Operand::Float(v) => Ok(Value::Float(v)),
+            Operand::Char(v) => Ok(Value::Char(v as char)),
+            Operand::String(ref s) => Ok(Value::String(s.clone())),
+            Operand::Bool(v) => Ok(Value::Bool(v)),
+            Operand::Nil => Ok(Value::Nil),
+            Operand::AddressOf(ref src) => {
+                let var = self.get_variable(&src.name)?;
+                Ok(Value::Pointer(var))
+            }
             Operand::Var(ref src) => Ok(self.get_variable(&src.name)?.clone_value()?),
             Operand::Func(ref func) => Ok(Value::Func(self.get_function(func, module)?.sig.name.clone())),
-            _ => Ok(Value::from_operand(op)?),
         }
     }
 
@@ -289,7 +299,7 @@ impl Interpreter
         Ok(())
     }
 
-    fn call(&mut self, dst: &str, func: &ByteCodeFunction, args: &[Operand], index: &ByteCodeIndex, module: &ByteCodeModule) -> ExecutionResult<StepResult>
+    fn call(&mut self, dst: Option<&str>, func: &ByteCodeFunction, args: &[Operand], index: &ByteCodeIndex, module: &ByteCodeModule) -> ExecutionResult<StepResult>
     {
         if self.debug_mode {
             println!("{}:", func.sig.name);
@@ -303,6 +313,7 @@ impl Interpreter
             arg_values.push(arg_value);
         }
 
+        let dst = dst.unwrap_or("");
         self.stack.push(StackFrame::with_return_address(return_address, dst.into()));
         for (idx, arg_value) in arg_values.into_iter().enumerate() {
             self.add_variable(&func.sig.args[idx].name, arg_value)?;
@@ -596,7 +607,11 @@ impl Interpreter
             Instruction::Call{ref dst, ref func, ref args} => {
                 let func = self.get_function(func, module)?;
                 let args = args.iter().cloned().collect::<Vec<_>>();
-                self.call(&dst.name, &func, &args, index, module)
+                if let Some(ref dst) = *dst {
+                    self.call(Some(&dst.name), &func, &args, index, module)
+                } else {
+                    self.call(None, &func, &args, index, module)
+                }
             },
 
             Instruction::Cast{ref dst, ref src} => {
@@ -683,7 +698,7 @@ impl Interpreter
         self.stack.push(bottom_frame);
 
         self.add_variable(RETURN_VALUE, Value::Void)?;
-        match self.call(RETURN_VALUE, func.clone(), &Vec::new(), &ByteCodeIndex::new(module.exit_function.sig.name.clone(), 0, 0), module)?
+        match self.call(Some(RETURN_VALUE), func.clone(), &Vec::new(), &ByteCodeIndex::new(module.exit_function.sig.name.clone(), 0, 0), module)?
         {
             StepResult::Continue(index) => Ok(index),
             StepResult::Exit(_) => Err("Unexpected exit".into())

@@ -4,10 +4,12 @@ use bytecode::function::{ByteCodeFunction};
 mod emptyblocks;
 mod unusedfunctions;
 mod varelimination;
+mod returnvalueoptimization;
 
 use self::emptyblocks::remove_empty_blocks;
 use self::unusedfunctions::eliminate_unused_functions;
 use self::varelimination::eliminate_vars;
+use self::returnvalueoptimization::return_value_optimization;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum OptimizationLevel
@@ -34,6 +36,7 @@ pub fn optimize_function(func: &mut ByteCodeFunction, lvl: OptimizationLevel)
 pub fn optimize_module(module: &mut ByteCodeModule, lvl: OptimizationLevel)
 {
     eliminate_unused_functions(module);
+    return_value_optimization(module);
     for func in module.functions.values_mut() {
         optimize_function(func, lvl);
     }

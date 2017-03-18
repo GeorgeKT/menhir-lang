@@ -55,6 +55,12 @@ unsafe fn get_operand(ctx: &Context, operand: &Operand) -> LLVMValueRef
             get_variable(ctx, &v.name)
         }
 
+        Operand::AddressOf(ref v) => {
+            ctx.get_variable(&v.name)
+                .expect("Unknown variable")
+                .value.address_of()
+        }
+
         Operand::Int(v) => const_int(ctx, v),
         Operand::UInt(v) => const_uint(ctx, v),
         Operand::Float(v) => const_float(ctx, v),
@@ -258,7 +264,9 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         }
 
         Instruction::AddressOf{ref dst, ref obj} => {
-            panic!("NYI");
+            let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
+            let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
+            dst_var.value.store(ctx, obj_var.value.address_of());
         }
 
         Instruction::GetProperty{ref dst, ref obj, ref prop} => {
@@ -268,7 +276,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             dst_var.value.store(ctx, value);
         }
 
-        Instruction::SetProperty{ref obj, ref prop, ref val} => {
+        Instruction::SetProperty{../*ref obj, ref prop, ref val*/} => {
             panic!("NYI");
         }
 
@@ -282,10 +290,14 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
 
         Instruction::Call{ref dst, ref func, ref args} => {
             let func = ctx.get_function(func).expect("Unknown function");
-            let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             let mut func_args = args.iter().map(|a| get_function_arg(ctx, a)).collect::<Vec<_>>();
-            let ret = LLVMBuildCall(ctx.builder, func.function, func_args.as_mut_ptr(), args.len() as c_uint, cstr!("call"));
-            dst_var.value.store(ctx, ret);
+            if let Some(ref dst) = *dst {
+                let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
+                let ret = LLVMBuildCall(ctx.builder, func.function, func_args.as_mut_ptr(), args.len() as c_uint, cstr!("call"));
+                dst_var.value.store(ctx, ret);
+            } else {
+                LLVMBuildCall(ctx.builder, func.function, func_args.as_mut_ptr(), args.len() as c_uint, cstr!(""));
+            }
         }
 
         Instruction::Slice{ref dst, ref src, ref start, ref len} => {
@@ -296,11 +308,11 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             dst_var.value.slice_from_array(ctx, src_var.value.load(ctx.builder), start_val, len_val);
         }
 
-        Instruction::Cast{ref dst, ref src} => {
+        Instruction::Cast{../*ref dst, ref src*/} => {
             panic!("NYI");
         }
 
-        Instruction::GlobalAlloc(ref var) => {
+        Instruction::GlobalAlloc(ref _var) => {
             panic!("NYI");
         }
 

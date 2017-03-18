@@ -4,11 +4,17 @@ fn sum(a: int[]) -> int:
         s = s + i
     s
 
-fn make_array() -> int[7]:
-    [7; 7]
+fn make_array(foo: bool) -> int[7]:
+    let a = [7; 7]
+    let b = [6; 7]
+    if foo:
+        a
+    else
+        b
+
 
 fn main() -> int:
-    let x = make_array()
+    let x = make_array(false)
     sum(x)
 
 

@@ -1,6 +1,6 @@
 use std::fmt;
 use itertools::free::join;
-use ast::{Operator, Type};
+use ast::{Operator, Type, ptr_type};
 use bytecode::function::{BasicBlockRef, Var};
 
 
@@ -28,6 +28,7 @@ impl fmt::Display for ByteCodeProperty
 pub enum Operand
 {
     Var(Var),
+    AddressOf(Var),
     Int(isize),
     UInt(usize),
     Float(f64),
@@ -45,6 +46,7 @@ impl Operand
         match *self
         {
             Operand::Var(ref var) => var.typ.clone(),
+            Operand::AddressOf(ref var) => ptr_type(var.typ.clone()),
             Operand::Int(_) => Type::Int,
             Operand::UInt(_) => Type::UInt,
             Operand::Float(_) => Type::Float,
@@ -64,6 +66,7 @@ impl fmt::Display for Operand
         match *self
         {
             Operand::Var(ref var) => write!(f, "{}", var),
+            Operand::AddressOf(ref var) => write!(f, "&{}", var),
             Operand::Int(v) => write!(f, "(int {})", v),
             Operand::UInt(v) => write!(f, "(uint {})", v),
             Operand::Float(ref v) => write!(f, "(float {})", v),
@@ -104,7 +107,7 @@ pub enum Instruction
     SetProperty{obj: Var, prop: ByteCodeProperty, val: usize},
     UnaryOp{dst: Var, op: Operator, src: Operand},
     BinaryOp{dst: Var, op: Operator, left: Operand, right: Operand},
-    Call{dst: Var, func: String, args: Vec<Operand>},
+    Call{dst: Option<Var>, func: String, args: Vec<Operand>},
     Slice{dst: Var, src: Var, start: Operand, len: Operand},
     Cast{dst: Var, src: Operand},
     GlobalAlloc(Var),
@@ -233,7 +236,16 @@ pub fn branch_if_instr(cond: &Var, on_true: BasicBlockRef, on_false: BasicBlockR
 pub fn call_instr(dst: &Var, func: &str, args: Vec<Operand>) -> Instruction
 {
     Instruction::Call{
-        dst: dst.clone(),
+        dst: Some(dst.clone()),
+        func: func.into(),
+        args: args
+    }
+}
+
+pub fn void_call_instr(func: &str, args: Vec<Operand>) -> Instruction
+{
+    Instruction::Call{
+        dst: None,
         func: func.into(),
         args: args
     }
@@ -326,7 +338,10 @@ impl fmt::Display for Instruction
             },
 
             Instruction::Call{ref dst, ref func, ref args} => {
-                writeln!(f, "  call {} {} {}", dst, func, join(args.iter(), " "))
+                match *dst {
+                    Some(ref dst) => writeln!(f, "  call {} {} {}", dst, func, join(args.iter(), " ")),
+                    None => writeln!(f, "  call {} {}", func, join(args.iter(), " ")),
+                }
             },
 
             Instruction::Cast{ref dst, ref src} => {

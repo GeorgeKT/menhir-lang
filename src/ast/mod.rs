@@ -46,8 +46,6 @@ pub use self::structs::*;
 pub use self::sumtype::*;
 pub use self::types::*;
 
-use span::{Span};
-
 pub fn prefix(level: usize) -> String
 {
     let mut s = String::with_capacity(level);
@@ -77,17 +75,6 @@ pub enum TypeDeclaration
 
 impl TypeDeclaration
 {
-    pub fn span(&self) -> Span
-    {
-        match *self
-        {
-            TypeDeclaration::Interface(ref i) => i.span.clone(),
-            TypeDeclaration::Struct(ref sd) => sd.span.clone(),
-            TypeDeclaration::Sum(ref s) => s.span.clone(),
-            TypeDeclaration::Alias(ref t) => t.span.clone(),
-        }
-    }
-
     pub fn name(&self) -> &str
     {
         match *self

@@ -291,6 +291,26 @@ impl ByteCodeFunction
         }
     }
 
+    pub fn replace_instruction<Func>(&mut self, f: Func)
+        where Func: Fn(&Instruction) -> Vec<Instruction>
+    {
+        for block in self.blocks.values_mut() {
+            let mut idx = 0;
+            while idx < block.instructions.len() {
+                let replacements = f(&block.instructions[idx]);
+                if !replacements.is_empty() {
+                    block.instructions.remove(idx);
+                    for r in replacements.into_iter() {
+                        block.instructions.insert(idx, r);
+                        idx += 1;
+                    }
+                } else {
+                    idx += 1;
+                }
+            }
+        }
+    }
+
     pub fn remove_instruction<Pred: Fn(&Instruction) -> bool>(&mut self, pred: Pred) {
         for block in self.blocks.values_mut() {
             block.instructions.retain(|instr| !pred(instr));

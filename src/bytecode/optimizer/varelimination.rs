@@ -114,25 +114,30 @@ fn eliminate_vars_pass(func: &mut ByteCodeFunction) -> usize
         {
             Instruction::StackAlloc(ref var) => {
                 vars.0.insert(var.name.clone(), VarInfo::new(&var.typ));
-            },
+            }
 
             Instruction::Store{ref dst, ref src} => {
                 vars.store(&dst.name, src);
-            },
+            }
 
             Instruction::Cast{ref dst, ..} |
             Instruction::Load{ref dst, ..} |
             Instruction::UnaryOp{ref dst, ..} |
             Instruction::BinaryOp{ref dst, ..} |
-            Instruction::Slice{ref dst, ..} |
-            Instruction::Call{ref dst, ..} => {
+            Instruction::Slice{ref dst, ..} => {
                 vars.remove(&dst.name);
-            },
+            }
+
+            Instruction::Call{ref dst, ..} => {
+                if let Some(ref dst) = *dst {
+                    vars.remove(&dst.name);
+                }
+            }
 
             Instruction::StoreMember{ref obj, ..} |
             Instruction::AddressOf{ref obj, ..} => {
                 vars.remove(&obj.name);
-            },
+            }
 
             Instruction::LoadMember{ref dst, ref obj, ..} |
             Instruction::AddressOfMember{ref dst, ref obj, ..} |

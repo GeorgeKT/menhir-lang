@@ -67,21 +67,6 @@ impl Value
         }
     }
 
-    pub fn from_operand(op: &Operand) -> ExecutionResult<Value>
-    {
-        match *op
-        {
-            Operand::Int(v) => Ok(Value::Int(v)),
-            Operand::UInt(v) => Ok(Value::UInt(v)),
-            Operand::Float(v) => Ok(Value::Float(v)),
-            Operand::Char(v) => Ok(Value::Char(v as char)),
-            Operand::String(ref s) => Ok(Value::String(s.clone())),
-            Operand::Bool(v) => Ok(Value::Bool(v)),
-            Operand::Nil => Ok(Value::Nil),
-            Operand::Var(_) | Operand::Func(_) => Err(format!("Cannot convert operand {} into value", op))
-        }
-    }
-
     pub fn from_type(typ: &Type) -> ExecutionResult<Value>
     {
         match *typ

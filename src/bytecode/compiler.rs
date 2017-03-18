@@ -47,9 +47,8 @@ fn array_lit_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, a: 
     }
 }
 
-fn call_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, c: &Call, self_arg: Option<Var>) -> Var
+fn call_args_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, c: &Call, self_arg: Option<Var>) -> Vec<Operand>
 {
-    let dst = get_dst(func, &c.return_type);
     func.push_destination(None);
     let mut args = Vec::new();
     if let Some(s) = self_arg {
@@ -58,8 +57,21 @@ fn call_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, c: &Call
 
     args.extend(c.args.iter().map(|arg| Operand::Var(to_bc(bc_mod, func, arg))));
     func.pop_destination();
-    func.add(call_instr(&dst, &c.callee.name, args));
-    dst
+    args
+}
+
+fn call_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, c: &Call, self_arg: Option<Var>) -> Option<Var>
+{
+    if let Type::Void = c.return_type {
+        let args = call_args_to_bc(bc_mod, func, c, self_arg);
+        func.add(void_call_instr(&c.callee.name, args));
+        None
+    } else {
+        let dst = get_dst(func, &c.return_type);
+        let args = call_args_to_bc(bc_mod, func, c, self_arg);
+        func.add(call_instr(&dst, &c.callee.name, args));
+        Some(dst)
+    }
 }
 
 
@@ -657,7 +669,7 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         },
 
         Expression::Call(ref c) => {
-            Some(call_to_bc(bc_mod, func, c, None))
+            call_to_bc(bc_mod, func, c, None)
         },
 
         Expression::StructInitializer(ref si) => {

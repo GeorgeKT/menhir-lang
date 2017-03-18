@@ -17,7 +17,7 @@ fn find_used_calls(module: &ByteCodeModule, func: &ByteCodeFunction, unused_call
     func.for_each_instruction(|instr: &Instruction| {
         match *instr
         {
-            Instruction::Call{ref func, ..}  => {
+            Instruction::Call{ref func, ..} => {
                 handle_func(func);
             }
 
