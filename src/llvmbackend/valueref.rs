@@ -1,10 +1,11 @@
+use libc::c_uint;
 use llvm::core::*;
 use llvm::prelude::*;
 
 use ast::*;
-use bytecode::ByteCodeProperty;
+use bytecode::{ByteCodeProperty, Operand};
 use super::context::Context;
-use super::instructions::{const_uint, const_int, copy};
+use super::instructions::{const_uint, const_int, copy, get_operand};
 
 pub struct ValueRef
 {
@@ -103,27 +104,38 @@ impl ValueRef
         }
     }
 
-    pub fn get_member_ptr(&self, ctx: &Context, index: LLVMValueRef) -> LLVMValueRef
+    pub fn get_member_ptr(&self, ctx: &Context, index: &Operand) -> LLVMValueRef
     {
         let zero_val = unsafe{const_int(ctx, 0)};
         match self.typ
         {
-            Type::Array(_) | Type::Struct(_) => unsafe {
+            Type::Array(_) => unsafe {
+                let index = get_operand(ctx, index);
                 let mut indices = vec![zero_val, index];
                 LLVMBuildGEP(ctx.builder, self.value, indices.as_mut_ptr(), 2, cstr!("member"))
             },
 
             Type::Slice(_) => unsafe {
+                let index = get_operand(ctx, index);
                 let data_ptr = LLVMBuildLoad(ctx.builder, self.slice_data_ptr(ctx), cstr!("data_ptr"));
                 let mut indices = vec![index];
                 LLVMBuildGEP(ctx.builder, data_ptr, indices.as_mut_ptr(), 1, cstr!("member"))
+            },
+
+            Type::Struct(_) => unsafe {
+                let index = match *index {
+                    Operand::Int(v) => v as c_uint,
+                    Operand::UInt(v) => v as c_uint,
+                    _ => panic!("Struct member access has to be through an integer"),
+                };
+                LLVMBuildStructGEP(ctx.builder, self.value, index, cstr!("member"))
             },
 
             _ => panic!("Load member not allowed"),
         }
     }
 
-    pub fn store_member(&self, ctx: &Context, index: LLVMValueRef, value: LLVMValueRef)
+    pub fn store_member(&self, ctx: &Context, index: &Operand, value: LLVMValueRef)
     {
         match self.typ
         {

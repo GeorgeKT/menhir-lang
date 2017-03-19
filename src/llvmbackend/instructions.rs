@@ -41,7 +41,7 @@ unsafe fn get_variable(ctx: &Context, name: &str) -> LLVMValueRef
         .value.load(ctx.builder)
 }
 
-unsafe fn get_operand(ctx: &Context, operand: &Operand) -> LLVMValueRef
+pub unsafe fn get_operand(ctx: &Context, operand: &Operand) -> LLVMValueRef
 {
     match *operand
     {
@@ -240,27 +240,24 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             dst_var.value.store(ctx, src_var.value.load(ctx.builder));
         }
 
-        Instruction::LoadMember{ref dst, ref obj, ref member_index} => {
-            let index = get_operand(ctx, member_index);
+        Instruction::LoadMember{ref dst, ref obj, ref member_index} => { ;
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
-            let member_ptr = obj_var.value.get_member_ptr(ctx, index);
+            let member_ptr = obj_var.value.get_member_ptr(ctx, member_index);
             dst_var.value.store(ctx, LLVMBuildLoad(ctx.builder, member_ptr, cstr!("memberload")));
         }
 
         Instruction::AddressOfMember{ref dst, ref obj, ref member_index} => {
-            let index = get_operand(ctx, member_index);
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
-            let member_ptr = obj_var.value.get_member_ptr(ctx, index);
+            let member_ptr = obj_var.value.get_member_ptr(ctx, member_index);
             dst_var.value.store(ctx, member_ptr);
         }
 
         Instruction::StoreMember{ref obj, ref member_index, ref src} => {
             let src_val = get_operand(ctx, src);
-            let idx = get_operand(ctx, member_index);
             let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
-            obj_var.value.store_member(ctx, idx, src_val);
+            obj_var.value.store_member(ctx, member_index, src_val);
         }
 
         Instruction::AddressOf{ref dst, ref obj} => {
