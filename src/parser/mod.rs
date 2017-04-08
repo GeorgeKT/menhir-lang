@@ -803,7 +803,7 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token, indent_level: usize) 
     match tok.kind
     {
         TokenKind::Nil => {
-            Ok(Expression::Nil(tok.span))
+            Ok(nil_expr(tok.span))
         },
 
         TokenKind::True => {

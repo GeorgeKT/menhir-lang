@@ -18,6 +18,13 @@ pub struct TypeCast
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
+pub struct Nil
+{
+    pub typ: Type,
+    pub span: Span,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
 {
     Literal(Literal),
@@ -40,7 +47,7 @@ pub enum Expression
     Assign(Box<Assign>),
     While(Box<WhileLoop>),
     For(Box<ForLoop>),
-    Nil(Span),
+    Nil(Nil),
     ToOptional(Box<ToOptional>),
     Cast(Box<TypeCast>),
     Void,
@@ -61,6 +68,22 @@ pub fn type_cast(e: Expression, dst_type: Type, span: Span) -> Expression
         destination_type: dst_type,
         span: span,
     }))
+}
+
+pub fn nil_expr(span: Span) -> Expression
+{
+    Expression::Nil(Nil{
+        typ: optional_type(Type::Unknown),
+        span: span,
+    })
+}
+
+pub fn nil_expr_with_type(span: Span, optional_inner_type: Type) -> Expression
+{
+    Expression::Nil(Nil{
+        typ: optional_type(optional_inner_type),
+        span: span,
+    })
 }
 
 impl Expression
@@ -125,7 +148,7 @@ impl Expression
             Expression::Assign(ref a) => a.span.clone(),
             Expression::While(ref w) => w.span.clone(),
             Expression::For(ref f) => f.span.clone(),
-            Expression::Nil(ref span) => span.clone(),
+            Expression::Nil(ref nt) => nt.span.clone(),
             Expression::ToOptional(ref t) => t.inner.span(),
             Expression::Cast(ref t) => t.span.clone(),
             Expression::Void => Span::default(),
@@ -153,7 +176,7 @@ impl Expression
             Expression::ArrayToSlice(ref a) => a.slice_type.clone(),
             Expression::AddressOf(ref a) => ptr_type(a.inner.get_type()),
             Expression::Assign(ref a) => a.typ.clone(),
-            Expression::Nil(_) => Type::Nil,
+            Expression::Nil(ref nt) => nt.typ.clone(),
             Expression::ToOptional(ref t) => optional_type(t.inner.get_type()),
             Expression::Cast(ref t) => t.destination_type.clone(),
             Expression::Void |

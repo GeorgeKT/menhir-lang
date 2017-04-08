@@ -19,7 +19,7 @@ pub unsafe fn const_uint(ctx: &Context, v: usize) -> LLVMValueRef
     LLVMConstInt(ctx.native_int_type(), v as c_ulonglong, 0)
 }
 
-unsafe fn const_bool(ctx: &Context, v: bool) -> LLVMValueRef
+pub unsafe fn const_bool(ctx: &Context, v: bool) -> LLVMValueRef
 {
     LLVMConstInt(LLVMInt1TypeInContext(ctx.context), if v {1} else {0}, 0)
 }
@@ -34,21 +34,22 @@ unsafe fn const_char(ctx: &Context, c: u8) -> LLVMValueRef
     LLVMConstInt(LLVMInt32TypeInContext(ctx.context), c as c_ulonglong, 0)
 }
 
-unsafe fn get_variable(ctx: &Context, name: &str) -> LLVMValueRef
+unsafe fn get_variable(ctx: &Context, name: &str) -> ValueRef
 {
-    ctx.get_variable(name)
-        .expect("Unknown variable")
-        .value.load(ctx.builder)
+    ctx.get_variable(name).expect("Unknown variable").value.clone()
 }
 
-pub unsafe fn get_operand(ctx: &Context, operand: &Operand) -> LLVMValueRef
+pub unsafe fn get_operand(ctx: &Context, operand: &Operand) -> ValueRef
 {
     match *operand
     {
         Operand::Func(ref func) => {
-            ctx.get_function(func)
-                .expect("Unknown function")
-                .function
+            let fi = ctx.get_function(func).expect("Unknown function");
+            ValueRef::new(
+                fi.function,
+                &fi.sig.typ,
+                false
+            )
         }
 
         Operand::Var(ref v) => {
@@ -61,13 +62,12 @@ pub unsafe fn get_operand(ctx: &Context, operand: &Operand) -> LLVMValueRef
                 .value.address_of()
         }
 
-        Operand::Int(v) => const_int(ctx, v),
-        Operand::UInt(v) => const_uint(ctx, v),
-        Operand::Float(v) => const_float(ctx, v),
-        Operand::Char(v) => const_char(ctx, v),
+        Operand::Int(v) => ValueRef::new(const_int(ctx, v), &Type::Int, false),
+        Operand::UInt(v) => ValueRef::new(const_uint(ctx, v), &Type::UInt, false),
+        Operand::Float(v) => ValueRef::new(const_float(ctx, v), &Type::Float, false),
+        Operand::Char(v) => ValueRef::new(const_char(ctx, v), &Type::Char, false),
         Operand::String(ref _s) => panic!("NYI"),
-        Operand::Bool(v) => const_bool(ctx, v),
-        Operand::Nil => panic!("NYI"),
+        Operand::Bool(v) => ValueRef::new(const_bool(ctx, v), &Type::Bool, false),
     }
 }
 
@@ -83,7 +83,7 @@ pub unsafe fn copy(ctx: &Context, dst: LLVMValueRef, src: LLVMValueRef, typ: LLV
     LLVMBuildCall(ctx.builder, func.function, args.as_mut_ptr(), args.len() as c_uint, cstr!("ac"));
 }
 
-unsafe fn get_function_arg(ctx: &Context, operand: &Operand) -> LLVMValueRef
+unsafe fn get_function_arg(ctx: &Context, operand: &Operand) -> ValueRef
 {
     match *operand
     {
@@ -91,8 +91,8 @@ unsafe fn get_function_arg(ctx: &Context, operand: &Operand) -> LLVMValueRef
             let llvm_type = ctx.resolve_type(&v.typ);
             let dst = stack_alloc(ctx, llvm_type, "argcopy");
             let src = get_variable(ctx, &v.name);
-            copy(ctx, dst, src, llvm_type);
-            dst
+            copy(ctx, dst, src.value, llvm_type);
+            ValueRef::new(dst, &v.typ, true)
         }
 
         _ => get_operand(ctx, operand)
@@ -116,7 +116,7 @@ unsafe fn stack_alloc(ctx: &Context, typ: LLVMTypeRef, name: &str) -> LLVMValueR
 unsafe fn gen_unary_op(ctx: &Context, dst: &Var, operator: Operator, src: &Operand)
 {
     let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
-    let src_value = get_operand(ctx, src);
+    let src_value = get_operand(ctx, src).load(ctx.builder);
     let result = match (operator, &dst.typ)
     {
         (Operator::Sub, &Type::Int) |
@@ -126,14 +126,14 @@ unsafe fn gen_unary_op(ctx: &Context, dst: &Var, operator: Operator, src: &Opera
         _ => panic!("Unsupported unary operator"),
     };
 
-    dst_var.value.store(ctx, result);
+    dst_var.value.store(ctx, &ValueRef::new(result, &dst.typ, false));
 }
 
 unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: Operator, left: &Operand, right: &Operand)
 {
     let left_type = left.get_type();
-    let left = get_operand(ctx, left);
-    let right = get_operand(ctx, right);
+    let left = get_operand(ctx, left).load(ctx.builder);
+    let right = get_operand(ctx, right).load(ctx.builder);
 
     let value = match (op, left_type)
     {
@@ -182,46 +182,21 @@ unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: Operator, left: &Operand, 
         (Operator::Equals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
         (Operator::Equals, Type::Bool) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
 
-        /*
-        (Operator::Equals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l == *r),
-        (Operator::Equals, Value::Optional(ref inner), Value::Nil) => Value::Bool(inner.is_nil()),
-        (Operator::Equals, Value::Nil, Value::Nil) => Value::Bool(true),
-        (Operator::Equals, _, Value::Nil) |
-        (Operator::Equals, Value::Nil, _) => Value::Bool(false),
-        */
-
         (Operator::NotEquals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
         (Operator::NotEquals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
         (Operator::NotEquals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUNE, left, right, cstr!("bop")),
         (Operator::NotEquals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
         (Operator::NotEquals, Type::Bool) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
 
-        /*
-        (Operator::NotEquals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l != *r),
-        (Operator::NotEquals, Value::Optional(ref inner), Value::Nil) => Value::Bool(!inner.is_nil()),
-        (Operator::NotEquals, Value::Nil, Value::Nil) => Value::Bool(false),
-        (Operator::NotEquals, _, Value::Nil) |
-        (Operator::NotEquals, Value::Nil, _) => Value::Bool(true),
-*/
         (Operator::And, Type::Bool) => LLVMBuildAnd(ctx.builder, left, right, cstr!("bop")),
         (Operator::Or, Type::Bool) => LLVMBuildOr(ctx.builder, left, right, cstr!("bop")),
-
-        /*
-        (Operator::Or, Value::Optional(inner), right) => {
-            if inner.is_nil() {
-                right
-            } else {
-                inner.deref().clone()
-            }
-        }
-        */
 
         (_, t) => panic!("Operator {} not supported on type {}", op, t),
     };
 
 
     let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
-    dst_var.value.store(ctx, value);
+    dst_var.value.store(ctx, &ValueRef::new(value, &dst.typ, false));
 }
 
 pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &HashMap<BasicBlockRef, LLVMBasicBlockRef>)
@@ -231,46 +206,46 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         Instruction::Store{ref dst, ref src} => {
             let vr = get_operand(ctx, src);
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
-            dst_var.value.store(ctx, vr);
+            dst_var.value.store(ctx, &vr);
         }
 
         Instruction::Load{ref dst, ref ptr} => {
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             let src_var = ctx.get_variable(&ptr.name).expect("Unknown variable");
-            dst_var.value.store(ctx, src_var.value.load(ctx.builder));
+            dst_var.value.store(ctx, &src_var.value);
         }
 
         Instruction::LoadMember{ref dst, ref obj, ref member_index} => { ;
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
             let member_ptr = obj_var.value.get_member_ptr(ctx, member_index);
-            dst_var.value.store(ctx, LLVMBuildLoad(ctx.builder, member_ptr, cstr!("memberload")));
+            dst_var.value.store(ctx, &member_ptr);
         }
 
         Instruction::AddressOfMember{ref dst, ref obj, ref member_index} => {
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
             let member_ptr = obj_var.value.get_member_ptr(ctx, member_index);
-            dst_var.value.store(ctx, member_ptr);
+            dst_var.value.store(ctx, &member_ptr);
         }
 
         Instruction::StoreMember{ref obj, ref member_index, ref src} => {
             let src_val = get_operand(ctx, src);
             let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
-            obj_var.value.store_member(ctx, member_index, src_val);
+            obj_var.value.store_member(ctx, member_index, &src_val);
         }
 
         Instruction::AddressOf{ref dst, ref obj} => {
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
-            dst_var.value.store(ctx, obj_var.value.address_of());
+            dst_var.value.store(ctx, &obj_var.value.address_of());
         }
 
         Instruction::GetProperty{ref dst, ref obj, ref prop} => {
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
-            let value = obj_var.value.get_property(ctx, *prop);
-            dst_var.value.store(ctx, value);
+            let prop = obj_var.value.get_property(ctx, *prop);
+            dst_var.value.store(ctx, &prop);
         }
 
         Instruction::SetProperty{../*ref obj, ref prop, ref val*/} => {
@@ -287,11 +262,15 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
 
         Instruction::Call{ref dst, ref func, ref args} => {
             let func = ctx.get_function(func).expect("Unknown function");
-            let mut func_args = args.iter().map(|a| get_function_arg(ctx, a)).collect::<Vec<_>>();
+            let mut func_args = args.iter().map(|a| get_function_arg(ctx, a).value).collect::<Vec<_>>();
             if let Some(ref dst) = *dst {
                 let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
-                let ret = LLVMBuildCall(ctx.builder, func.function, func_args.as_mut_ptr(), args.len() as c_uint, cstr!("call"));
-                dst_var.value.store(ctx, ret);
+                let ret = ValueRef::new(
+                    LLVMBuildCall(ctx.builder, func.function, func_args.as_mut_ptr(), args.len() as c_uint, cstr!("call")),
+                    &dst.typ.get_element_type().expect("dst must have an element type"),
+                    false
+                );
+                dst_var.value.store(ctx, &ret);
             } else {
                 LLVMBuildCall(ctx.builder, func.function, func_args.as_mut_ptr(), args.len() as c_uint, cstr!(""));
             }
@@ -300,9 +279,20 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         Instruction::Slice{ref dst, ref src, ref start, ref len} => {
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             let src_var = ctx.get_variable(&src.name).expect("Unknown variable");
-            let start_val = get_operand(ctx, start);
-            let len_val = get_operand(ctx, len);
+            let start_val = get_operand(ctx, start).load(ctx.builder);
+            let len_val = get_operand(ctx, len).load(ctx.builder);
             dst_var.value.slice_from_array(ctx, src_var.value.load(ctx.builder), start_val, len_val);
+        }
+
+        Instruction::IsNil{ref dst, ref obj} => {
+            let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
+            let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
+            dst_var.value.store(ctx, &obj_var.value.is_nil(ctx));
+        }
+
+        Instruction::StoreNil(ref dst) => {
+            let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
+            dst_var.value.store_nil(ctx);
         }
 
         Instruction::Cast{../*ref dst, ref src*/} => {
@@ -332,7 +322,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         }
 
         Instruction::Return(ref operand) => {
-            LLVMBuildRet(ctx.builder, get_operand(ctx, operand));
+            LLVMBuildRet(ctx.builder, get_operand(ctx, operand).load(ctx.builder));
         }
 
         Instruction::ReturnVoid => {
@@ -347,11 +337,11 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         Instruction::BranchIf{ref cond, ref on_true, ref on_false} => {
             let on_true_bb = blocks.get(on_true).expect("Unknown basic block");
             let on_false_bb = blocks.get(on_false).expect("Unknown basic block");
-            LLVMBuildCondBr(ctx.builder, get_operand(ctx, cond), *on_true_bb, *on_false_bb);
+            LLVMBuildCondBr(ctx.builder, get_operand(ctx, cond).load(ctx.builder), *on_true_bb, *on_false_bb);
         }
 
         Instruction::Delete(ref var) => {
-            LLVMBuildFree(ctx.builder, get_variable(ctx, &var.name));
+            LLVMBuildFree(ctx.builder, get_variable(ctx, &var.name).value);
         }
 
         Instruction::Exit => {

@@ -55,7 +55,9 @@ fn convert_type(ctx: &mut TypeCheckerContext, dst_type: &Type, src_type: &Type, 
         assert_eq!(type_check_expression(ctx, expr, &None)?, *dst_type);
         Ok(())
     } else {
-        type_error_result(&expr.span(), format!("Expecting an expression of type {} or something convertible to, but found one of type {}", src_type, dst_type))
+        type_error_result(
+            &expr.span(),
+            format!("Expecting an expression of type {} or something convertible to, but found one of type {}", dst_type, src_type))
     }
 }
 
@@ -159,7 +161,17 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
         },
         Operator::Equals |
         Operator::NotEquals => {
-            if left_type != Type::Nil && right_type != Type::Nil {
+            if left_type.is_optional_of(&Type::Unknown) && right_type.is_optional_of(&Type::Unknown) {
+                return if b.operator == Operator::Equals {
+                    replace_by(Expression::Literal(Literal::Bool(b.span.clone(), true)))
+                } else {
+                    replace_by(Expression::Literal(Literal::Bool(b.span.clone(), false)))
+                };
+            } else if left_type.is_optional() && right_type.is_optional_of(&Type::Unknown) {
+                type_check_with_conversion(ctx, &mut b.right, &left_type)?;
+            } else if right_type.is_optional() && left_type.is_optional_of(&Type::Unknown) {
+                type_check_with_conversion(ctx, &mut b.left, &right_type)?;
+            } else {
                 basic_bin_op_checks(&b.span, b.operator, &left_type, &right_type)?;
             }
             b.typ = Type::Bool;
@@ -625,6 +637,7 @@ fn type_check_binding_expression(ctx: &mut TypeCheckerContext, l: &mut BindingEx
     valid(l.typ.clone())
 }
 
+
 fn type_check_if(ctx: &mut TypeCheckerContext, i: &mut IfExpression) -> TypeCheckResult
 {
     type_check_with_conversion(ctx, &mut i.condition, &Type::Bool)?;
@@ -642,18 +655,22 @@ fn type_check_if(ctx: &mut TypeCheckerContext, i: &mut IfExpression) -> TypeChec
         {
             type_error_result(&i.span, format!("If expressions without an else part, must return void (type of then part is {})", on_true_type))
         }
-        else if on_true_type == Type::Nil
+        else if on_true_type.is_optional_of(&on_false_type) || on_true_type.is_optional_of(&Type::Unknown)
         {
             let optional_type = optional_type(on_false_type);
             if let Some(ref mut expr) = i.on_false {
                 type_check_with_conversion(ctx, expr, &optional_type)?;
             }
+            type_check_with_conversion(ctx, &mut i.on_true, &optional_type)?;
             i.typ = optional_type.clone();
             valid(optional_type)
         }
-        else if on_false_type == Type::Nil
+        else if on_false_type.is_optional_of(&on_true_type) || on_false_type.is_optional_of(&Type::Unknown)
         {
             let optional_type = optional_type(on_true_type);
+            if let Some(ref mut expr) = i.on_false {
+                type_check_with_conversion(ctx, expr, &optional_type)?;
+            }
             type_check_with_conversion(ctx, &mut i.on_true, &optional_type)?;
             i.typ = optional_type.clone();
             valid(optional_type)
@@ -1073,7 +1090,14 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::While(ref mut w) => type_check_while(ctx, w),
         Expression::For(ref mut f) => type_check_for(ctx, f),
         Expression::Void => valid(Type::Void),
-        Expression::Nil(_) => valid(Type::Nil),
+        Expression::Nil(ref mut nt) => {
+            if let Some(ref typ) = *type_hint {
+                if let Type::Optional(_) = *typ {
+                    nt.typ = typ.clone();
+                }
+            }
+            valid(nt.typ.clone())
+        },
         Expression::ToOptional(ref mut t) => {
             type_check_expression(ctx, &mut t.inner, &None)?;
             valid(t.optional_type.clone())

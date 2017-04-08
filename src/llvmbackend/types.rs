@@ -68,8 +68,8 @@ unsafe fn optional_to_llvm_type(context: LLVMContextRef, target_machine: &Target
 {
     let inner = to_llvm_type(context, target_machine, inner);
     let mut member_types = vec![
-        inner,
         LLVMInt1TypeInContext(context),  // nil or not
+        inner,
     ];
     LLVMStructTypeInContext(context, member_types.as_mut_ptr(), member_types.len() as c_uint, 0)
 }
@@ -102,7 +102,6 @@ pub unsafe fn to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachi
         Type::Struct(ref st) => struct_to_llvm_type(context, target_machine, st),
         Type::Sum(ref st) => sum_type_to_llvm_type(context, target_machine, st),
         Type::Optional(ref ot) => optional_to_llvm_type(context, target_machine, ot),
-        Type::Nil => panic!("Internal Compiler Error: NIL"),
         Type::Generic(_) => panic!("Internal Compiler Error: All generic types must have been resolved before code generation"),
         Type::Unresolved(_) => panic!("Internal Compiler Error: All types must be resolved before code generation"),
         Type::Unknown => panic!("Internal Compiler Error: all types must be known before code generation"),

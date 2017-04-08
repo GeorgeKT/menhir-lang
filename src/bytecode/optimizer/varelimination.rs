@@ -7,7 +7,7 @@ use bytecode::function::{ByteCodeFunction};
 struct VarInfo
 {
     typ: Type,
-    initializer: Operand,
+    initializer: Option<Operand>,
     num_stores: usize,
 }
 
@@ -17,7 +17,7 @@ impl VarInfo
     {
         VarInfo{
             typ: typ.clone(),
-            initializer: Operand::Nil,
+            initializer: None,
             num_stores: 0,
         }
     }
@@ -38,7 +38,7 @@ impl VarInfo
 
     fn can_be_replaced_by_initializer(&self) -> bool
     {
-        self.num_stores == 1 && self.is_primitive()
+        self.num_stores == 1 && self.is_primitive() && self.initializer.is_some()
     }
 }
 
@@ -55,7 +55,7 @@ impl VarInfoMap
     {
         self.0.get_mut(name)
             .map(|var_info| {
-                var_info.initializer = initializer.clone();
+                var_info.initializer = Some(initializer.clone());
                 var_info.num_stores += 1;
             });
     }
@@ -141,8 +141,13 @@ fn eliminate_vars_pass(func: &mut ByteCodeFunction) -> usize
 
             Instruction::LoadMember{ref dst, ref obj, ..} |
             Instruction::AddressOfMember{ref dst, ref obj, ..} |
-            Instruction::GetProperty{ref obj, ref dst, ..} => {
+            Instruction::GetProperty{ref obj, ref dst, ..} |
+            Instruction::IsNil{ref dst, ref obj}=> {
                 vars.remove(&obj.name);
+                vars.remove(&dst.name);
+            }
+
+            Instruction::StoreNil(ref dst) => {
                 vars.remove(&dst.name);
             }
 
@@ -170,7 +175,9 @@ fn eliminate_vars_pass(func: &mut ByteCodeFunction) -> usize
 
         if var_info.can_be_replaced_by_initializer() {
             func.for_each_instruction_mut(|instr| {
-                replace_var_by_initializer(instr, &var, &var_info.initializer);
+                if let Some(ref init) = var_info.initializer {
+                    replace_var_by_initializer(instr, &var, init);
+                }
                 true
             });
         }

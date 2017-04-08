@@ -137,7 +137,6 @@ pub enum Type
     Enum(Rc<EnumType>),
     Optional(Rc<Type>),
     Interface(Rc<InterfaceType>),
-    Nil,
 }
 
 #[derive(Debug,  Eq, PartialEq, Clone, Serialize, Deserialize)]
@@ -193,19 +192,25 @@ impl Type
         {
             (&Type::Slice(ref st), &Type::Array(ref at)) if st.element_type == at.element_type => {
                 Some(array_to_slice(expr.clone(), expr.span()))
-            },
+            }
 
             (&Type::Optional(ref inner), _) if *inner.deref() == *from_type => {
                 Some(to_optional(expr.clone(), self.clone()))
-            },
+            }
 
-            (&Type::Optional(_), &Type::Nil) => {
-                Some(to_optional(expr.clone(), self.clone()))
-            },
+            (&Type::Bool, &Type::Optional(ref inner)) => {
+                Some(bin_op_with_type(
+                    Operator::NotEquals,
+                    expr.clone(),
+                    nil_expr_with_type(Span::default(), inner.deref().clone()),
+                    expr.span(),
+                    Type::Bool
+                ))
+            }
 
-            (&Type::Bool, &Type::Optional(_)) => {
-                Some(bin_op_with_type(Operator::NotEquals, expr.clone(), Expression::Nil(Span::default()), expr.span(), Type::Bool))
-            },
+            (&Type::Optional(ref inner), _) if from_type.is_optional_of(&Type::Unknown) => {
+                Some(nil_expr_with_type(expr.span(), inner.deref().clone()))
+            }
 
             _ => None,
         }
@@ -216,7 +221,6 @@ impl Type
         match (self, dst_type)
         {
             (&Type::Array(ref at), &Type::Slice(ref st)) => at.element_type == st.element_type,
-            (&Type::Nil, &Type::Optional(_)) => true,
             (_, &Type::Optional(ref inner)) => *inner.deref() == *dst_type,
             _ => false,
         }
@@ -239,9 +243,9 @@ impl Type
         {
             Type::Int | Type::UInt => op == Operator::Mod || GENERAL_NUMERIC_OPERATORS.contains(&op),
             Type::Float => GENERAL_NUMERIC_OPERATORS.contains(&op),
-            Type::Char | Type::Pointer(_) => COMPARISON_OPERATORS.contains(&op),
+            Type::Char=> COMPARISON_OPERATORS.contains(&op),
             Type::Bool => COMPARISON_OPERATORS.contains(&op) || op == Operator::And || op == Operator::Or || op == Operator::Not,
-            Type::String => op == Operator::Equals || op == Operator::NotEquals,
+            Type::String | Type::Pointer(_) | Type::Optional(_) => op == Operator::Equals || op == Operator::NotEquals,
             _ => false,
         }
     }
@@ -497,7 +501,6 @@ impl fmt::Display for Type
             Type::Optional(ref inner) => write!(f, "?{}", inner),
             Type::Interface(ref i) => write!(f, "interface {}", i.name),
             Type::SelfType => write!(f, "Self"),
-            Type::Nil => write!(f, "nil"),
         }
     }
 }

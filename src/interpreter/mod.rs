@@ -5,7 +5,6 @@ mod valueref;
 mod tests;
 
 use std::collections::HashMap;
-use std::ops::Deref;
 
 use ast::{Type, Operator};
 use bytecode::*;
@@ -163,7 +162,6 @@ impl Interpreter
             Operand::Char(v) => Ok(Value::Char(v as char)),
             Operand::String(ref s) => Ok(Value::String(s.clone())),
             Operand::Bool(v) => Ok(Value::Bool(v)),
-            Operand::Nil => Ok(Value::Nil),
             Operand::AddressOf(ref src) => {
                 let var = self.get_variable(&src.name)?;
                 Ok(Value::Pointer(var))
@@ -181,7 +179,7 @@ impl Interpreter
             vr.apply_mut(|v: &mut Value| {
                 match *v
                 {
-                    Value::Optional(ref mut inner) => *inner = Box::new(val),
+                    Value::Optional(ref mut inner) |
                     Value::Pointer(ref mut inner) =>
                         inner.apply_mut(|inner_v: &mut Value| {
                             *inner_v = val;
@@ -264,10 +262,6 @@ impl Interpreter
             (Operator::Equals, Value::Char(l), Value::Char(r)) => Value::Bool(l == r),
             (Operator::Equals, Value::Bool(l), Value::Bool(r)) => Value::Bool(l == r),
             (Operator::Equals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l == *r),
-            (Operator::Equals, Value::Optional(ref inner), Value::Nil) => Value::Bool(inner.is_nil()),
-            (Operator::Equals, Value::Nil, Value::Nil) => Value::Bool(true),
-            (Operator::Equals, _, Value::Nil) |
-            (Operator::Equals, Value::Nil, _) => Value::Bool(false),
 
             (Operator::NotEquals, Value::Int(l), Value::Int(r)) => Value::Bool(l != r),
             (Operator::NotEquals, Value::UInt(l), Value::UInt(r)) => Value::Bool(l != r),
@@ -275,21 +269,10 @@ impl Interpreter
             (Operator::NotEquals, Value::Char(l), Value::Char(r)) => Value::Bool(l != r),
             (Operator::NotEquals, Value::Bool(l), Value::Bool(r)) => Value::Bool(l != r),
             (Operator::NotEquals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l != *r),
-            (Operator::NotEquals, Value::Optional(ref inner), Value::Nil) => Value::Bool(!inner.is_nil()),
-            (Operator::NotEquals, Value::Nil, Value::Nil) => Value::Bool(false),
-            (Operator::NotEquals, _, Value::Nil) |
-            (Operator::NotEquals, Value::Nil, _) => Value::Bool(true),
 
             (Operator::And, Value::Bool(l), Value::Bool(r)) => Value::Bool(l && r),
             (Operator::Or, Value::Bool(l), Value::Bool(r)) => Value::Bool(l || r),
 
-            (Operator::Or, Value::Optional(inner), right) => {
-                if inner.is_nil() {
-                    right
-                } else {
-                    inner.deref().clone()
-                }
-            }
 
             (_, left, right) => return Err(format!("Operator {} not supported on operands ({}) and ({})", op, left, right)),
         };
@@ -517,7 +500,7 @@ impl Interpreter
         let new_value = ptr.apply(|v: &Value| {
             match *v
             {
-                Value::Optional(ref inner) => Ok(inner.deref().clone()),
+                Value::Optional(ref inner) => inner.clone_value(),
                 Value::Pointer(ref inner) => inner.clone_value(),
                 _ => Err(format!("Load can only be performed on pointers and optionals, not on {}", v)),
             }
@@ -541,6 +524,18 @@ impl Interpreter
                 _ => Err(String::from("Unsupported type cast")),
             }?;
         self.update_variable(&dst.name, new_value)
+    }
+
+    fn is_nil(&mut self, dst: &Var, obj: &Var) -> ExecutionResult<()>
+    {
+        let v = self.get_variable(&obj.name)?.apply(|val: &Value| {
+            match *val {
+                Value::Optional(ref ov) => ov.apply(|v: &Value| Ok(v.is_nil())),
+                Value::Nil => Ok(true),
+                _ => Ok(false)
+            }
+        });
+        self.update_variable(&dst.name, Value::Bool(v?))
     }
 
     fn execute_instruction(&mut self, instr: &Instruction, index: &ByteCodeIndex, module: &ByteCodeModule) -> ExecutionResult<StepResult>
@@ -618,6 +613,16 @@ impl Interpreter
                 self.cast(dst, src, module)?;
                 next
             },
+
+            Instruction::IsNil{ref dst, ref obj} => {
+                self.is_nil(dst, obj)?;
+                next
+            },
+
+            Instruction::StoreNil(ref dst) => {
+                self.update_variable(&dst.name, Value::Nil)?;
+                next
+            }
 
             Instruction::StackAlloc(ref var) => {
                 self.add_variable(&var.name, Value::from_type(&var.typ)?)?;

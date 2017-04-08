@@ -24,7 +24,7 @@ pub enum Value
     Sum(usize, Box<ValueRef>),
     Enum(usize),
     Pointer(ValueRef),
-    Optional(Box<Value>),
+    Optional(ValueRef),
 }
 
 impl fmt::Display for Value
@@ -109,9 +109,8 @@ impl Value
                 Ok(Value::Pointer(ValueRef::new(inner)))
             },
             Type::Optional(ref _inner) => {
-                Ok(Value::Optional(Box::new(Value::Nil)))
+                Ok(Value::Optional(ValueRef::new(Value::Nil)))
             },
-            Type::Nil => Ok(Value::Nil),
         }
     }
 

@@ -36,7 +36,6 @@ pub enum Operand
     String(String),
     Bool(bool),
     Func(String),
-    Nil,
 }
 
 impl Operand
@@ -54,7 +53,6 @@ impl Operand
             Operand::String(_) => Type::String,
             Operand::Bool(_) => Type::Bool,
             Operand::Func(_) => Type::Unknown,
-            Operand::Nil => Type::Nil,
         }
     }
 }
@@ -74,7 +72,6 @@ impl fmt::Display for Operand
             Operand::String(ref v) => write!(f, "(string \"{}\")", v),
             Operand::Bool(v) => write!(f, "(bool {})", v),
             Operand::Func(ref func) => write!(f, "(func {})", func),
-            Operand::Nil => write!(f, "nil"),
         }
     }
 }
@@ -110,6 +107,8 @@ pub enum Instruction
     Call{dst: Option<Var>, func: String, args: Vec<Operand>},
     Slice{dst: Var, src: Var, start: Operand, len: Operand},
     Cast{dst: Var, src: Operand},
+    IsNil{dst: Var, obj: Var},
+    StoreNil(Var),
     GlobalAlloc(Var),
     StackAlloc(Var),
     HeapAlloc(Var),
@@ -287,6 +286,14 @@ pub fn cast_instr(dst: &Var, src: &Var) -> Instruction
     }
 }
 
+pub fn is_nil_instr(dst: &Var, obj: &Var) -> Instruction
+{
+    Instruction::IsNil{
+        dst: dst.clone(),
+        obj: obj.clone()
+    }
+}
+
 impl fmt::Display for Instruction
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
@@ -391,6 +398,14 @@ impl fmt::Display for Instruction
             Instruction::Slice{ref dst, ref src, ref start, ref len} => {
                 writeln!(f, "  slice {} {} {} {}", dst, src, start, len)
             },
+
+            Instruction::IsNil{ref dst, ref obj} => {
+                writeln!(f, "  nil? {} {}", dst, obj)
+            }
+
+            Instruction::StoreNil(ref v) => {
+                writeln!(f, "  storenil {}", v)
+            }
         }
     }
 }

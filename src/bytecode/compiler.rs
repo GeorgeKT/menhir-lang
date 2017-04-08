@@ -482,14 +482,15 @@ fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc
 
         Pattern::Nil(_) => {
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(binary_op_instr(&cond, Operator::Equals, var_op(&target), Operand::Nil));
+            func.add(is_nil_instr(&cond, &target));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
             match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false);
         },
 
         Pattern::Optional(ref o) => {
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(binary_op_instr(&cond, Operator::NotEquals, var_op(&target), Operand::Nil));
+            func.add(is_nil_instr(&cond, &target));
+            func.add(unary_op_instr(&cond, Operator::Not, var_op(&cond)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
 
             func.set_current_bb(match_case_bb);
@@ -599,6 +600,103 @@ fn to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &Expres
     expr_to_bc(bc_mod, func, expr).expect("Expression must return a value")
 }
 
+fn optional_compare_to_bc(
+    func: &mut ByteCodeFunction,
+    l: &Var,
+    r: &Var,
+    dst: &Var,
+    equals: bool,
+    inner_type: &Type)
+{
+    let l_is_nil_bb = func.create_basic_block();
+    let l_is_not_nil_bb = func.create_basic_block();
+    let set_to_true_bb = func.create_basic_block();
+    let set_to_false_bb = func.create_basic_block();
+    let compare_inner_bb = func.create_basic_block();
+    let end_bb = func.create_basic_block();
+
+    let l_is_nil = stack_alloc(func, &Type::Bool, None);
+    let r_is_nil = stack_alloc(func, &Type::Bool, None);
+    func.add(is_nil_instr(&l_is_nil, l));
+    func.add(is_nil_instr(&r_is_nil, r));
+
+    func.add(branch_if_instr(&l_is_nil, l_is_nil_bb, l_is_not_nil_bb));
+    func.set_current_bb(l_is_nil_bb);
+    func.add(branch_if_instr(&r_is_nil, set_to_true_bb, set_to_false_bb));
+
+    func.set_current_bb(l_is_not_nil_bb);
+    func.add(branch_if_instr(&r_is_nil, set_to_false_bb, compare_inner_bb));
+
+    func.set_current_bb(compare_inner_bb);
+    let l_inner = stack_alloc(func, inner_type, None);
+    let r_inner = stack_alloc(func, inner_type, None);
+    let cmp = stack_alloc(func, &Type::Bool, None);
+    func.add(load_instr(&l_inner, l));
+    func.add(load_instr(&r_inner, r));
+    func.add(binary_op_instr(&cmp, Operator::Equals, var_op(&l_inner), var_op(&r_inner)));
+    func.add(branch_if_instr(&cmp, set_to_true_bb, set_to_false_bb));
+
+    func.set_current_bb(set_to_true_bb);
+    func.add(store_operand_instr(dst, Operand::Bool(equals)));
+    func.add(Instruction::Branch(end_bb));
+
+    func.set_current_bb(set_to_false_bb);
+    func.add(store_operand_instr(dst, Operand::Bool(!equals)));
+    func.add(Instruction::Branch(end_bb));
+
+    func.set_current_bb(end_bb);
+}
+
+fn binary_op_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, op: &BinaryOp) -> Var
+{
+    func.push_destination(None);
+    let l = to_bc(bc_mod, func, &op.left);
+    let r = to_bc(bc_mod, func, &op.right);
+    func.pop_destination();
+
+    let dst = get_dst(func, &op.typ);
+    match l.typ
+    {
+        Type::Optional(ref inner) => match op.operator {
+            Operator::Equals => {
+                optional_compare_to_bc(func, &l, &r, &dst, true, inner);
+            },
+
+            Operator::NotEquals => {
+                optional_compare_to_bc(func, &l, &r, &dst, false, inner);
+            },
+
+            Operator::Or => {
+                let l_is_nil = stack_alloc(func, &Type::Bool, None);
+                let true_bb = func.create_basic_block();
+                let false_bb = func.create_basic_block();
+                let end_bb = func.create_basic_block();
+                func.add(is_nil_instr(&l_is_nil, &l));
+                func.add(branch_if_instr(&l_is_nil, true_bb, false_bb));
+
+                func.set_current_bb(true_bb);
+                func.add(store_instr(&dst, &r));
+                func.add(Instruction::Branch(end_bb));
+
+                func.set_current_bb(false_bb);
+                func.add(load_instr(&dst, &l));
+                func.add(Instruction::Branch(end_bb));
+                func.set_current_bb(end_bb);
+            },
+
+            _ => {
+                panic!("Operator {} not supported on optioanl", op.operator);
+            }
+        },
+
+        _ => {
+            func.add(binary_op_instr(&dst, op.operator, var_op(&l), var_op(&r)));
+        }
+    }
+
+    dst
+}
+
 fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
 {
     match *expr
@@ -615,13 +713,7 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         },
 
         Expression::BinaryOp(ref op) => {
-            func.push_destination(None);
-            let l = to_bc(bc_mod, func, &op.left);
-            let r = to_bc(bc_mod, func, &op.right);
-            func.pop_destination();
-            let dst = get_dst(func, &op.typ);
-            func.add(binary_op_instr(&dst, op.operator, var_op(&l), var_op(&r)));
-            Some(dst)
+            Some(binary_op_to_bc(bc_mod, func, op))
         },
 
         Expression::Literal(Literal::Int(_, v)) => {
@@ -772,8 +864,9 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
             None
         },
 
-        Expression::Nil(_) => {
-            let dst = get_dst(func, &Type::Nil);
+        Expression::Nil(ref nt) => {
+            let dst = get_dst(func, &nt.typ);
+            func.add(Instruction::StoreNil(dst.clone()));
             Some(dst)
         },
 
