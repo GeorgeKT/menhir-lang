@@ -29,7 +29,7 @@ unsafe fn const_float(ctx: &Context, v: f64) -> LLVMValueRef
     LLVMConstReal(LLVMDoubleTypeInContext(ctx.context), v)
 }
 
-unsafe fn const_char(ctx: &Context, c: u8) -> LLVMValueRef
+unsafe fn const_char(ctx: &Context, c: char) -> LLVMValueRef
 {
     LLVMConstInt(LLVMInt32TypeInContext(ctx.context), c as c_ulonglong, 0)
 }

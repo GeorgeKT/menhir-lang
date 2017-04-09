@@ -93,7 +93,7 @@ pub unsafe fn to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachi
         Type::Int | Type::UInt | Type::Enum(_) => native_int_type(context, target_machine),
         Type::Bool => LLVMInt1TypeInContext(context),
         Type::Float => LLVMDoubleTypeInContext(context),
-        Type::Char => LLVMInt8TypeInContext(context),
+        Type::Char => LLVMInt32TypeInContext(context),
         Type::Pointer(ref inner) => LLVMPointerType(to_llvm_type(context, target_machine, &inner), 0),
         Type::Array(ref at) => array_to_llvm_type(context, target_machine, at),
         Type::Slice(ref st) => slice_to_llvm_type(context, target_machine, st),

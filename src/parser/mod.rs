@@ -468,7 +468,7 @@ pub fn parse_pattern(tq: &mut TokenQueue, indent_level: usize) -> CompileResult<
         TokenKind::Number(ref num) => parse_number(tq, num, &tok.span).map(Pattern::Literal),
         TokenKind::True => Ok(Pattern::Literal(Literal::Bool(tok.span, true))),
         TokenKind::False => Ok(Pattern::Literal(Literal::Bool(tok.span, false))),
-        TokenKind::CharLiteral(c) => Ok(Pattern::Literal(Literal::Char(tok.span, c as u8))),
+        TokenKind::CharLiteral(c) => Ok(Pattern::Literal(Literal::Char(tok.span, c))),
         TokenKind::StringLiteral(s) => Ok(Pattern::Literal(Literal::String(tok.span, s))),
 
         TokenKind::OpenBracket => {
@@ -815,7 +815,7 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token, indent_level: usize) 
         },
 
         TokenKind::CharLiteral(c) => {
-            Ok(Expression::Literal(Literal::Char(tok.span, c as u8)))
+            Ok(Expression::Literal(Literal::Char(tok.span, c)))
         },
 
         TokenKind::Func => {

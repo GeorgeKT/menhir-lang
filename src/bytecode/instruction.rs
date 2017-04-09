@@ -32,7 +32,7 @@ pub enum Operand
     Int(isize),
     UInt(usize),
     Float(f64),
-    Char(u8),
+    Char(char),
     String(String),
     Bool(bool),
     Func(String),

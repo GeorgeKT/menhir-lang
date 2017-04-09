@@ -7,7 +7,7 @@ pub enum Literal
     Int(Span, isize),
     UInt(Span, usize),
     Bool(Span, bool),
-    Char(Span, u8),
+    Char(Span, char),
     Float(Span, String), // Keep as string until we generate code, so we can compare it
     String(Span, String),
     Array(ArrayLiteral),
