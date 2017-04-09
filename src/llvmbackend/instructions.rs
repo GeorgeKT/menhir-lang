@@ -262,12 +262,22 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
 
         Instruction::Call{ref dst, ref func, ref args} => {
             let func = ctx.get_function(func).expect("Unknown function");
-            let mut func_args = args.iter().map(|a| get_function_arg(ctx, a).value).collect::<Vec<_>>();
+            let mut func_args = args.iter()
+                .map(|a| {
+                    let arg = get_function_arg(ctx, a);
+                    if arg.typ.pass_by_value() {
+                        arg.load(ctx.builder)
+                    } else {
+                        arg.value
+                    }
+
+                })
+                .collect::<Vec<_>>();
             if let Some(ref dst) = *dst {
                 let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
                 let ret = ValueRef::new(
                     LLVMBuildCall(ctx.builder, func.function, func_args.as_mut_ptr(), args.len() as c_uint, cstr!("call")),
-                    &dst.typ.get_element_type().expect("dst must have an element type"),
+                    &func.sig.return_type,
                     false
                 );
                 dst_var.value.store(ctx, &ret);
@@ -279,9 +289,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         Instruction::Slice{ref dst, ref src, ref start, ref len} => {
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             let src_var = ctx.get_variable(&src.name).expect("Unknown variable");
-            let start_val = get_operand(ctx, start).load(ctx.builder);
-            let len_val = get_operand(ctx, len).load(ctx.builder);
-            dst_var.value.slice_from_array(ctx, src_var.value.load(ctx.builder), start_val, len_val);
+            dst_var.value.create_slice(ctx, &src_var.value, start, len);
         }
 
         Instruction::IsNil{ref dst, ref obj} => {

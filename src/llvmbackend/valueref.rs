@@ -251,13 +251,19 @@ impl ValueRef
         LLVMBuildStructGEP(ctx.builder, self.value, 1, cstr!("slice_len_ptr"))
     }
 
-    pub unsafe fn slice_from_array(&self, ctx: &Context, array: LLVMValueRef, start: LLVMValueRef, len: LLVMValueRef)
+    pub unsafe fn create_slice(&self, ctx: &Context, array: &ValueRef, start: &Operand, len: &Operand)
     {
-        let data_ptr = self.slice_data_ptr(ctx);
-        let len_ptr = self.slice_len_ptr(ctx);
-        let mut indices = vec![const_int(ctx, 0), start];
-        let first_array_element_ptr = LLVMBuildGEP(ctx.builder, array, indices.as_mut_ptr(), 2, cstr!("first_element"));
-        LLVMBuildStore(ctx.builder, first_array_element_ptr, data_ptr);
-        LLVMBuildStore(ctx.builder, len, len_ptr);
+        match array.typ
+        {
+            Type::Array(_) | Type::Slice(_) => {
+                let data_ptr = self.slice_data_ptr(ctx);
+                let len_ptr = self.slice_len_ptr(ctx);
+                let member_ptr = array.get_member_ptr(ctx, start);
+                LLVMBuildStore(ctx.builder, member_ptr.value, data_ptr);
+                LLVMBuildStore(ctx.builder, get_operand(ctx, len).load(ctx.builder), len_ptr);
+            }
+
+            _ =>  panic!("Expecting an array type, not a {}", self.typ),
+        }
     }
 }
