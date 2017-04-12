@@ -67,11 +67,16 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction)
             Type::Func(ref ft) => {
                 let func_sig = anon_sig(&arg.name, &ft.return_type, &ft.args);
                 let fi = gen_function_ptr(ctx, var, func_sig);
-                ctx.add_variable(&arg.name, ValueRef::new(fi.function, &arg.typ, false));
+                ctx.add_variable(&arg.name, ValueRef::new(fi.function, arg.typ.clone()));
                 ctx.add_function(Rc::new(fi));
             },
+
             _ => {
-                ctx.add_variable(&arg.name, ValueRef::new(var, &arg.typ, false));
+                if arg.typ.pass_by_value() {
+                    ctx.add_variable(&arg.name, ValueRef::new(var, arg.typ.clone()));
+                } else {
+                    ctx.add_variable(&arg.name, ValueRef::new(var, ptr_type(arg.typ.clone())));
+                }
             },
         }
     }

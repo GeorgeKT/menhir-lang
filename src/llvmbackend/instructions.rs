@@ -5,7 +5,7 @@ use llvm::*;
 use llvm::core::*;
 use llvm::prelude::*;
 use bytecode::*;
-use ast::{Type, Operator};
+use ast::{Type, Operator, ptr_type};
 use super::valueref::ValueRef;
 use super::context::Context;
 
@@ -47,8 +47,7 @@ pub unsafe fn get_operand(ctx: &Context, operand: &Operand) -> ValueRef
             let fi = ctx.get_function(func).expect("Unknown function");
             ValueRef::new(
                 fi.function,
-                &fi.sig.typ,
-                false
+                fi.sig.typ.clone()
             )
         }
 
@@ -62,12 +61,12 @@ pub unsafe fn get_operand(ctx: &Context, operand: &Operand) -> ValueRef
                 .value.address_of()
         }
 
-        Operand::Int(v) => ValueRef::new(const_int(ctx, v), &Type::Int, false),
-        Operand::UInt(v) => ValueRef::new(const_uint(ctx, v), &Type::UInt, false),
-        Operand::Float(v) => ValueRef::new(const_float(ctx, v), &Type::Float, false),
-        Operand::Char(v) => ValueRef::new(const_char(ctx, v), &Type::Char, false),
+        Operand::Int(v) => ValueRef::new(const_int(ctx, v), Type::Int),
+        Operand::UInt(v) => ValueRef::new(const_uint(ctx, v), Type::UInt),
+        Operand::Float(v) => ValueRef::new(const_float(ctx, v), Type::Float),
+        Operand::Char(v) => ValueRef::new(const_char(ctx, v), Type::Char),
         Operand::String(ref _s) => panic!("NYI"),
-        Operand::Bool(v) => ValueRef::new(const_bool(ctx, v), &Type::Bool, false),
+        Operand::Bool(v) => ValueRef::new(const_bool(ctx, v), Type::Bool),
     }
 }
 
@@ -83,19 +82,29 @@ pub unsafe fn copy(ctx: &Context, dst: LLVMValueRef, src: LLVMValueRef, typ: LLV
     LLVMBuildCall(ctx.builder, func.function, args.as_mut_ptr(), args.len() as c_uint, cstr!("ac"));
 }
 
-unsafe fn get_function_arg(ctx: &Context, operand: &Operand) -> ValueRef
+unsafe fn get_function_arg(ctx: &Context, operand: &Operand) -> LLVMValueRef
 {
     match *operand
     {
-        Operand::Var(ref v) if !v.typ.pass_by_value() => {
-            let llvm_type = ctx.resolve_type(&v.typ);
-            let dst = stack_alloc(ctx, llvm_type, "argcopy");
+        Operand::Var(ref v) => {
             let src = get_variable(ctx, &v.name);
-            copy(ctx, dst, src.value, llvm_type);
-            ValueRef::new(dst, &v.typ, true)
+            let inner_type = src.typ.get_pointer_element_type().expect("Expecting pointer type here");
+            if inner_type.pass_by_value() {
+                src.load(ctx)
+            } else {
+                let llvm_type = ctx.resolve_type(inner_type);
+                let dst = stack_alloc(ctx, llvm_type, "argcopy");
+                copy(ctx, dst, src.value, llvm_type);
+                dst
+            }
+        },
+
+        Operand::AddressOf(ref v) => {
+            let src = get_variable(ctx, &v.name);
+            src.value
         }
 
-        _ => get_operand(ctx, operand)
+        _ => get_operand(ctx, operand).load(ctx)
     }
 }
 
@@ -116,7 +125,7 @@ unsafe fn stack_alloc(ctx: &Context, typ: LLVMTypeRef, name: &str) -> LLVMValueR
 unsafe fn gen_unary_op(ctx: &Context, dst: &Var, operator: Operator, src: &Operand)
 {
     let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
-    let src_value = get_operand(ctx, src).load(ctx.builder);
+    let src_value = get_operand(ctx, src).load(ctx);
     let result = match (operator, &dst.typ)
     {
         (Operator::Sub, &Type::Int) |
@@ -126,14 +135,14 @@ unsafe fn gen_unary_op(ctx: &Context, dst: &Var, operator: Operator, src: &Opera
         _ => panic!("Unsupported unary operator"),
     };
 
-    dst_var.value.store(ctx, &ValueRef::new(result, &dst.typ, false));
+    dst_var.value.store(ctx, &ValueRef::new(result, dst.typ.clone()));
 }
 
 unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: Operator, left: &Operand, right: &Operand)
 {
     let left_type = left.get_type();
-    let left = get_operand(ctx, left).load(ctx.builder);
-    let right = get_operand(ctx, right).load(ctx.builder);
+    let left = get_operand(ctx, left).load(ctx);
+    let right = get_operand(ctx, right).load(ctx);
 
     let value = match (op, left_type)
     {
@@ -196,7 +205,7 @@ unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: Operator, left: &Operand, 
 
 
     let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
-    dst_var.value.store(ctx, &ValueRef::new(value, &dst.typ, false));
+    dst_var.value.store(ctx, &ValueRef::new(value, dst.typ.clone()));
 }
 
 pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &HashMap<BasicBlockRef, LLVMBasicBlockRef>)
@@ -248,8 +257,9 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             dst_var.value.store(ctx, &prop);
         }
 
-        Instruction::SetProperty{../*ref obj, ref prop, ref val*/} => {
-            panic!("NYI");
+        Instruction::SetProperty{ref obj, ref prop, ref val} => {
+            let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
+            obj_var.value.set_property(ctx, *prop, *val);
         }
 
         Instruction::UnaryOp{ref dst, ref op, ref src} => {
@@ -263,22 +273,13 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         Instruction::Call{ref dst, ref func, ref args} => {
             let func = ctx.get_function(func).expect("Unknown function");
             let mut func_args = args.iter()
-                .map(|a| {
-                    let arg = get_function_arg(ctx, a);
-                    if arg.typ.pass_by_value() {
-                        arg.load(ctx.builder)
-                    } else {
-                        arg.value
-                    }
-
-                })
+                .map(|a| get_function_arg(ctx, a))
                 .collect::<Vec<_>>();
             if let Some(ref dst) = *dst {
                 let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
                 let ret = ValueRef::new(
                     LLVMBuildCall(ctx.builder, func.function, func_args.as_mut_ptr(), args.len() as c_uint, cstr!("call")),
-                    &func.sig.return_type,
-                    false
+                    func.sig.return_type.clone()
                 );
                 dst_var.value.store(ctx, &ret);
             } else {
@@ -314,13 +315,13 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         Instruction::StackAlloc(ref var) => {
             let typ = ctx.resolve_type(&var.typ);
             let val = stack_alloc(ctx, typ, &var.name);
-            ctx.add_variable(&var.name, ValueRef::new(val, &var.typ, true));
+            ctx.add_variable(&var.name, ValueRef::new(val, ptr_type(var.typ.clone())));
         }
 
         Instruction::HeapAlloc(ref var) => {
             let name = CString::new(&var.name[..]).expect("Invalid string");
             let value = LLVMBuildMalloc(ctx.builder, ctx.resolve_type(&var.typ), name.as_ptr());
-            ctx.add_variable(&var.name, ValueRef::new(value, &var.typ, true))
+            ctx.add_variable(&var.name, ValueRef::new(value, ptr_type(var.typ.clone())))
         }
 
         Instruction::StartScope => {
@@ -330,7 +331,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         }
 
         Instruction::Return(ref operand) => {
-            LLVMBuildRet(ctx.builder, get_operand(ctx, operand).load(ctx.builder));
+            LLVMBuildRet(ctx.builder, get_operand(ctx, operand).load(ctx));
         }
 
         Instruction::ReturnVoid => {
@@ -345,7 +346,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         Instruction::BranchIf{ref cond, ref on_true, ref on_false} => {
             let on_true_bb = blocks.get(on_true).expect("Unknown basic block");
             let on_false_bb = blocks.get(on_false).expect("Unknown basic block");
-            LLVMBuildCondBr(ctx.builder, get_operand(ctx, cond).load(ctx.builder), *on_true_bb, *on_false_bb);
+            LLVMBuildCondBr(ctx.builder, get_operand(ctx, cond).load(ctx), *on_true_bb, *on_false_bb);
         }
 
         Instruction::Delete(ref var) => {

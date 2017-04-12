@@ -353,6 +353,15 @@ impl Type
             _ => false,
         }
     }
+
+    pub fn get_pointer_element_type(&self) -> Option<&Type>
+    {
+        if let Type::Pointer(ref inner) = *self {
+            Some(inner.deref())
+        } else {
+            None
+        }
+    }
 }
 
 pub fn func_type(args: Vec<Type>, ret: Type) -> Type
