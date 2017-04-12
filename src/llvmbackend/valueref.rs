@@ -188,7 +188,7 @@ impl ValueRef
             Type::Pointer(ref inner) => {
                 ValueRef::new(
                     self.load(ctx),
-                    inner.deref().clone()
+                    element_type.clone()
                 ).get_member_ptr(ctx, index)
             }
 

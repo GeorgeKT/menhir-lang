@@ -210,6 +210,7 @@ unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: Operator, left: &Operand, 
 
 pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &HashMap<BasicBlockRef, LLVMBasicBlockRef>)
 {
+    print!(">> {}", instr);
     match *instr
     {
         Instruction::Store{ref dst, ref src} => {
