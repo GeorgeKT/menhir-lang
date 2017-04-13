@@ -349,6 +349,7 @@ impl Type
             Type::Char |
             Type::Bool |
             Type::Pointer(_) |
+            Type::Enum(_) |
             Type::Func(_) => true,
             _ => false,
         }

@@ -131,7 +131,6 @@ impl ValueRef
 
     pub fn get_member_ptr(&self, ctx: &Context, index: &Operand) -> ValueRef
     {
-        use std::ops::Deref;
         let zero_val = unsafe{const_int(ctx, 0)};
 
         let element_type = self.typ.get_pointer_element_type().unwrap_or_else(|| panic!("Load member not allowed on type {}", self.typ));
@@ -185,7 +184,7 @@ impl ValueRef
                 )
             },
 
-            Type::Pointer(ref inner) => {
+            Type::Pointer(_) => {
                 ValueRef::new(
                     self.load(ctx),
                     element_type.clone()

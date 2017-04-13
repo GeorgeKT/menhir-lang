@@ -190,12 +190,14 @@ unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: Operator, left: &Operand, 
         (Operator::Equals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUEQ, left, right, cstr!("bop")),
         (Operator::Equals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
         (Operator::Equals, Type::Bool) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
+        (Operator::Equals, Type::Enum(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
 
         (Operator::NotEquals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
         (Operator::NotEquals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
         (Operator::NotEquals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUNE, left, right, cstr!("bop")),
         (Operator::NotEquals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
         (Operator::NotEquals, Type::Bool) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
+        (Operator::NotEquals, Type::Enum(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
 
         (Operator::And, Type::Bool) => LLVMBuildAnd(ctx.builder, left, right, cstr!("bop")),
         (Operator::Or, Type::Bool) => LLVMBuildOr(ctx.builder, left, right, cstr!("bop")),
@@ -210,7 +212,7 @@ unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: Operator, left: &Operand, 
 
 pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &HashMap<BasicBlockRef, LLVMBasicBlockRef>)
 {
-    print!(">> {}", instr);
+    //print!(">> {}", instr);
     match *instr
     {
         Instruction::Store{ref dst, ref src} => {
