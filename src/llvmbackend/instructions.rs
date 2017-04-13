@@ -210,6 +210,35 @@ unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: Operator, left: &Operand, 
     dst_var.value.store(ctx, &ValueRef::new(value, dst.typ.clone()));
 }
 
+unsafe fn gen_cast(ctx: &mut Context, dst: &Var, src: &Operand)
+{
+    let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
+    let operand = get_operand(ctx, src);
+    let src_type = src.get_type();
+    let casted = match (&dst.typ, &src_type)
+    {
+        (&Type::UInt, &Type::Int) |
+        (&Type::Int, &Type::UInt) =>
+            LLVMBuildIntCast(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("cast_to_int")),
+
+        (&Type::Int, &Type::Float) =>
+            LLVMBuildFPToSI(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("cast_to_int")),
+
+        (&Type::UInt, &Type::Float) =>
+            LLVMBuildFPToUI(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("cast_to_int")),
+
+        (&Type::Float, &Type::Int) =>
+            LLVMBuildSIToFP(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("cast_to_int")),
+
+        (&Type::Float, &Type::UInt) =>
+            LLVMBuildUIToFP(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("cast_to_int")),
+
+        _ => panic!("Cast from type {} to type {} is not allowed", src_type, dst.typ),
+    };
+
+    dst_var.value.store(ctx, &ValueRef::new(casted, dst.typ.clone()));
+}
+
 pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &HashMap<BasicBlockRef, LLVMBasicBlockRef>)
 {
     //print!(">> {}", instr);
@@ -307,8 +336,8 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             dst_var.value.store_nil(ctx);
         }
 
-        Instruction::Cast{../*ref dst, ref src*/} => {
-            panic!("NYI");
+        Instruction::Cast{ref dst, ref src} => {
+            gen_cast(ctx, dst, src);
         }
 
         Instruction::GlobalAlloc(ref _var) => {
