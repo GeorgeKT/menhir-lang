@@ -61,7 +61,7 @@ fn llvm_init()
 }
 
 
-pub fn llvm_code_generation(bc_mod: &ByteCodeModule, options: &CodeGenOptions) -> Result<Context, String>
+pub fn llvm_code_generation(bc_mod: &ByteCodeModule) -> Result<Context, String>
 {
     llvm_init();
 
@@ -83,7 +83,6 @@ pub fn llvm_code_generation(bc_mod: &ByteCodeModule, options: &CodeGenOptions) -
         }
 
         ctx.verify()?;
-        let _object_file = ctx.gen_object_file(options)?;
     }
 
     Ok(ctx)

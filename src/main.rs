@@ -108,7 +108,7 @@ fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
                 optimize: optimize,
             };
 
-            let ctx = llvm_code_generation(&bc_mod, &opts).map_err(|msg| CompileError::Other(msg))?;
+            let ctx = llvm_code_generation(&bc_mod).map_err(|msg| CompileError::Other(msg))?;
             link(&ctx, &opts)?;
             Ok(0)
         }

@@ -47,10 +47,13 @@ unsafe fn func_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMach
         llvm_arg_types.push(to_llvm_type(context, target_machine, arg));
     }
 
-    LLVMFunctionType(
-        to_llvm_type(context, target_machine, &ft.return_type),
-        llvm_arg_types.as_mut_ptr(),
-        ft.args.len() as c_uint,
+    LLVMPointerType(
+        LLVMFunctionType(
+            to_llvm_type(context, target_machine, &ft.return_type),
+            llvm_arg_types.as_mut_ptr(),
+            ft.args.len() as c_uint,
+            0
+        ),
         0
     )
 }

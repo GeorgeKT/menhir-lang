@@ -39,6 +39,16 @@ unsafe fn get_variable(ctx: &Context, name: &str) -> ValueRef
     ctx.get_variable(name).expect("Unknown variable").value.clone()
 }
 
+#[allow(unused)]
+unsafe fn type_name(typ: LLVMTypeRef) -> String
+{
+    use std::ffi::CStr;
+    let name = LLVMPrintTypeToString(typ);
+    let ret_name = String::from(CStr::from_ptr(name).to_str().expect("Invalid string"));
+    LLVMDisposeMessage(name);
+    ret_name
+}
+
 pub unsafe fn get_operand(ctx: &Context, operand: &Operand) -> ValueRef
 {
     match *operand
