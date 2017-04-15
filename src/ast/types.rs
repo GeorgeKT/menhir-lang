@@ -327,6 +327,15 @@ impl Type
         }
     }
 
+    pub fn is_pointer(&self) -> bool
+    {
+        if let Type::Pointer(_) = *self {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn name(&self) -> String
     {
         match *self
