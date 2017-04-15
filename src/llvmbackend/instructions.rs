@@ -88,6 +88,10 @@ unsafe fn get_function_arg(ctx: &Context, operand: &Operand) -> LLVMValueRef
     {
         Operand::Var(ref v) => {
             let src = get_variable(ctx, &v.name);
+            if !src.typ.is_pointer() {
+                return src.value
+            }
+
             let inner_type = src.typ.get_pointer_element_type().expect("Expecting pointer type here");
             if inner_type.pass_by_value() {
                 src.load(ctx)
