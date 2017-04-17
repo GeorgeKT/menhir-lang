@@ -2,16 +2,28 @@ use std::rc::Rc;
 use std::collections::HashMap;
 use llvm::prelude::*;
 
-use ast::{FunctionSignature};
+use ast::{Type};
 use llvmbackend::valueref::ValueRef;
 
 pub struct FunctionInstance
 {
     pub function: LLVMValueRef,
     pub name: String,
-    pub args: Vec<LLVMTypeRef>,
-    pub return_type: LLVMTypeRef,
-    pub sig: FunctionSignature,
+    pub return_type: Type,
+    pub typ: Type,
+}
+
+impl FunctionInstance
+{
+    pub fn new(name: &str, func: LLVMValueRef, return_type: Type, typ: Type) -> FunctionInstance
+    {
+        FunctionInstance{
+            name: name.into(),
+            function: func,
+            return_type: return_type,
+            typ: typ,
+        }
+    }
 }
 
 pub struct VariableInstance

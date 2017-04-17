@@ -6,6 +6,7 @@ use llvm::core::*;
 use llvm::prelude::*;
 use bytecode::*;
 use ast::{Type, Operator, ptr_type};
+use super::function::gen_function_ptr;
 use super::valueref::ValueRef;
 use super::context::Context;
 
@@ -57,7 +58,7 @@ pub unsafe fn get_operand(ctx: &Context, operand: &Operand) -> ValueRef
             let fi = ctx.get_function(func).expect("Unknown function");
             ValueRef::new(
                 fi.function,
-                fi.sig.typ.clone()
+                fi.typ.clone()
             )
         }
 
@@ -262,6 +263,9 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             let vr = get_operand(ctx, src);
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             dst_var.value.store(ctx, &vr);
+            if let Type::Func(ref ft) = dst.typ {
+                gen_function_ptr(ctx, &dst.name, vr.value, ft.return_type.clone(), dst.typ.clone());
+            }
         }
 
         Instruction::Load{ref dst, ref ptr} => {
@@ -325,7 +329,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
                 let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
                 let ret = ValueRef::new(
                     LLVMBuildCall(ctx.builder, func.function, func_args.as_mut_ptr(), args.len() as c_uint, cstr!("call")),
-                    func.sig.return_type.clone()
+                    func.return_type.clone()
                 );
                 dst_var.value.store(ctx, &ret);
             } else {

@@ -463,6 +463,7 @@ pub fn struct_member(name: &str, typ: Type) -> StructMember
     StructMember{name: name.into(), typ: typ}
 }
 
+/*
 pub fn type_alias(name: &str, original: Type, span: Span) -> TypeAlias
 {
     TypeAlias{
@@ -471,6 +472,7 @@ pub fn type_alias(name: &str, original: Type, span: Span) -> TypeAlias
         span: span,
     }
 }
+*/
 
 pub fn unresolved_type(name: &str, generic_args: Vec<Type>) -> Type
 {

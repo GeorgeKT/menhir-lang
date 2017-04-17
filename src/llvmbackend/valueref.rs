@@ -41,6 +41,11 @@ impl ValueRef
                 }
             },
 
+            Type::Func(_) => {
+                let func = val.load(ctx);
+                LLVMBuildStore(ctx.builder, func, self.value);
+            }
+
             _ => {
                 if element_type.pass_by_value() {
                     LLVMBuildStore(ctx.builder, val.load(ctx), self.value);
