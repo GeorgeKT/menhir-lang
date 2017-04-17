@@ -23,35 +23,98 @@ impl fmt::Display for ByteCodeProperty
     }
 }
 
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Operand
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ByteCodeConstant
 {
-    Var(Var),
-    AddressOf(Var),
     Int(isize),
     UInt(usize),
     Float(f64),
     Char(char),
     String(String),
     Bool(bool),
+}
+
+impl ByteCodeConstant
+{
+    pub fn get_type(&self) -> Type
+    {
+        match *self
+        {
+            ByteCodeConstant::Int(_) => Type::Int,
+            ByteCodeConstant::UInt(_) => Type::UInt,
+            ByteCodeConstant::Float(_) => Type::Float,
+            ByteCodeConstant::Char(_) => Type::Char,
+            ByteCodeConstant::String(_) => Type::String,
+            ByteCodeConstant::Bool(_) => Type::Bool,
+        }
+    }
+}
+
+impl fmt::Display for ByteCodeConstant
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
+    {
+        match *self
+        {
+            ByteCodeConstant::Int(v) => writeln!(f, "(int {})", v),
+            ByteCodeConstant::UInt(v) => writeln!(f, "(uint {})", v),
+            ByteCodeConstant::Float(v) => writeln!(f, "(float {})", v),
+            ByteCodeConstant::Char(v) => writeln!(f, "(char {})", v),
+            ByteCodeConstant::String(ref v) => writeln!(f, "(string {})", v),
+            ByteCodeConstant::Bool(v) => writeln!(f, "(bool {})", v),
+        }
+    }
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Operand
+{
+    Var(Var),
+    AddressOf(Var),
+    Const(ByteCodeConstant),
     Func(String),
 }
 
 impl Operand
 {
+    pub fn const_int(v: isize) -> Operand
+    {
+        Operand::Const(ByteCodeConstant::Int(v))
+    }
+
+    pub fn const_uint(v: usize) -> Operand
+    {
+        Operand::Const(ByteCodeConstant::UInt(v))
+    }
+
+    pub fn const_float(v: f64) -> Operand
+    {
+        Operand::Const(ByteCodeConstant::Float(v))
+    }
+
+    pub fn const_bool(v: bool) -> Operand
+    {
+        Operand::Const(ByteCodeConstant::Bool(v))
+    }
+
+    pub fn const_char(v: char) -> Operand
+    {
+        Operand::Const(ByteCodeConstant::Char(v))
+    }
+
+    pub fn const_string<S: Into<String>>(s: S) -> Operand
+    {
+        Operand::Const(ByteCodeConstant::String(s.into()))
+    }
+
     pub fn get_type(&self) -> Type
     {
         match *self
         {
             Operand::Var(ref var) => var.typ.clone(),
             Operand::AddressOf(ref var) => ptr_type(var.typ.clone()),
-            Operand::Int(_) => Type::Int,
-            Operand::UInt(_) => Type::UInt,
-            Operand::Float(_) => Type::Float,
-            Operand::Char(_) => Type::Char,
-            Operand::String(_) => Type::String,
-            Operand::Bool(_) => Type::Bool,
+            Operand::Const(ref c) => c.get_type(),
             Operand::Func(_) => Type::Unknown,
         }
     }
@@ -65,12 +128,7 @@ impl fmt::Display for Operand
         {
             Operand::Var(ref var) => write!(f, "{}", var),
             Operand::AddressOf(ref var) => write!(f, "&{}", var),
-            Operand::Int(v) => write!(f, "(int {})", v),
-            Operand::UInt(v) => write!(f, "(uint {})", v),
-            Operand::Float(ref v) => write!(f, "(float {})", v),
-            Operand::Char(v) => write!(f, "(char '{}')", v),
-            Operand::String(ref v) => write!(f, "(string \"{}\")", v),
-            Operand::Bool(v) => write!(f, "(bool {})", v),
+            Operand::Const(ref c) => write!(f, "{}", c),
             Operand::Func(ref func) => write!(f, "(func {})", func),
         }
     }
@@ -85,7 +143,7 @@ pub fn float_op(fstr: &str) -> Operand
 {
     match fstr.parse::<f64>()
     {
-        Ok(f) => Operand::Float(f),
+        Ok(f) => Operand::const_float(f),
         Err(_) => panic!("Internal Compiler Error: {} is not a valid floating point number", fstr)
     }
 }
@@ -168,7 +226,7 @@ pub fn load_member_instr(dst: &Var, obj: &Var, member_index: usize) -> Instructi
     Instruction::LoadMember{
         dst: dst.clone(),
         obj: obj.clone(),
-        member_index: Operand::UInt(member_index),
+        member_index: Operand::const_uint(member_index),
     }
 }
 
@@ -176,7 +234,7 @@ pub fn store_member_instr(obj: &Var, member_index: usize, src: Var) -> Instructi
 {
     Instruction::StoreMember{
         obj: obj.clone(),
-        member_index: Operand::UInt(member_index),
+        member_index: Operand::const_uint(member_index),
         src: Operand::Var(src),
     }
 }
@@ -194,7 +252,7 @@ pub fn address_of_member_instr(dst: &Var, obj: &Var, member_index: usize) -> Ins
     Instruction::AddressOfMember{
         dst: dst.clone(),
         obj: obj.clone(),
-        member_index: Operand::UInt(member_index),
+        member_index: Operand::const_uint(member_index),
     }
 }
 

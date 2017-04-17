@@ -156,12 +156,12 @@ impl Interpreter
     {
         match *op
         {
-            Operand::Int(v) => Ok(Value::Int(v)),
-            Operand::UInt(v) => Ok(Value::UInt(v)),
-            Operand::Float(v) => Ok(Value::Float(v)),
-            Operand::Char(v) => Ok(Value::Char(v as char)),
-            Operand::String(ref s) => Ok(Value::String(s.clone())),
-            Operand::Bool(v) => Ok(Value::Bool(v)),
+            Operand::Const(ByteCodeConstant::Int(v)) => Ok(Value::Int(v)),
+            Operand::Const(ByteCodeConstant::UInt(v)) => Ok(Value::UInt(v)),
+            Operand::Const(ByteCodeConstant::Float(v)) => Ok(Value::Float(v)),
+            Operand::Const(ByteCodeConstant::Char(v)) => Ok(Value::Char(v as char)),
+            Operand::Const(ByteCodeConstant::String(ref s)) => Ok(Value::String(s.clone())),
+            Operand::Const(ByteCodeConstant::Bool(v)) => Ok(Value::Bool(v)),
             Operand::AddressOf(ref src) => {
                 let var = self.get_variable(&src.name)?;
                 Ok(Value::Pointer(var))
@@ -356,8 +356,8 @@ impl Interpreter
     {
         match *member_index
         {
-            Operand::Int(index) if index >= 0 => Ok(index as usize),
-            Operand::UInt(index) => Ok(index as usize),
+            Operand::Const(ByteCodeConstant::Int(index)) if index >= 0 => Ok(index as usize),
+            Operand::Const(ByteCodeConstant::UInt(index)) => Ok(index as usize),
             Operand::Var(ref v) =>
                 match self.get_variable(&v.name)?.clone_value()?
                 {

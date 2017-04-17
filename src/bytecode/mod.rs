@@ -12,12 +12,12 @@ pub use self::function::*;
 pub use self::compiler::{compile_to_byte_code, START_CODE_FUNCTION};
 pub use self::optimizer::{OptimizationLevel, optimize_module};
 
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ByteCodeModule
 {
     pub name: String,
     pub functions: HashMap<String, ByteCodeFunction>,
+    pub globals: HashMap<String, ByteCodeConstant>,
     pub exit_function: ByteCodeFunction,
 }
 
@@ -51,6 +51,12 @@ impl fmt::Display for ByteCodeModule
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
+        for (name, value) in &self.globals {
+            writeln!(f, "glob {} = {}", name, value)?;
+        }
+
+        writeln!(f, " ")?;
+
         for func in self.functions.values() {
             func.fmt(f)?;
             writeln!(f, " ")?;
