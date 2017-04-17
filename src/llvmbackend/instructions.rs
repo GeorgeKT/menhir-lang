@@ -72,11 +72,14 @@ pub unsafe fn get_operand(ctx: &Context, operand: &Operand) -> ValueRef
                 .value.address_of()
         }
 
+        Operand::String(ref s) => {
+            ValueRef::const_string(ctx, s)
+        },
+
         Operand::Int(v) => ValueRef::new(const_int(ctx, v), Type::Int),
         Operand::UInt(v) => ValueRef::new(const_uint(ctx, v), Type::UInt),
         Operand::Float(v) => ValueRef::new(const_float(ctx, v), Type::Float),
         Operand::Char(v) => ValueRef::new(const_char(ctx, v), Type::Char),
-        Operand::String(ref _s) => panic!("NYI"),
         Operand::Bool(v) => ValueRef::new(const_bool(ctx, v), Type::Bool),
     }
 }

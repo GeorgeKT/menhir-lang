@@ -6,6 +6,16 @@ use llvm::prelude::*;
 use super::target::TargetMachine;
 use ast::*;
 
+unsafe fn string_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachine) -> LLVMTypeRef
+{
+    let element_type = LLVMInt8TypeInContext(context);
+    let mut member_types = vec![
+        LLVMPointerType(element_type, 0),      // Pointer to data
+        native_int_type(context, target_machine),  // Length in bytes of string
+    ];
+    LLVMStructTypeInContext(context, member_types.as_mut_ptr(), member_types.len() as c_uint, 0)
+}
+
 unsafe fn slice_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachine, slice_type: &SliceType) -> LLVMTypeRef
 {
     let element_type = to_llvm_type(context, target_machine, &slice_type.element_type);
@@ -100,7 +110,7 @@ pub unsafe fn to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachi
         Type::Pointer(ref inner) => LLVMPointerType(to_llvm_type(context, target_machine, &inner), 0),
         Type::Array(ref at) => array_to_llvm_type(context, target_machine, at),
         Type::Slice(ref st) => slice_to_llvm_type(context, target_machine, st),
-        Type::String => slice_to_llvm_type(context, target_machine, &SliceType{element_type: Type::Char}),
+        Type::String => string_to_llvm_type(context, target_machine),
         Type::Func(ref ft) => func_to_llvm_type(context, target_machine, ft),
         Type::Struct(ref st) => struct_to_llvm_type(context, target_machine, st),
         Type::Sum(ref st) => sum_type_to_llvm_type(context, target_machine, st),

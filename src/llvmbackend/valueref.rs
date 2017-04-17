@@ -1,4 +1,5 @@
-use libc::c_uint;
+use libc::{c_char, c_uint};
+use llvm::LLVMLinkage;
 use llvm::core::*;
 use llvm::prelude::*;
 
@@ -23,6 +24,29 @@ impl ValueRef
             value: value,
             typ: typ,
         }
+    }
+
+    pub unsafe fn const_string(ctx: &Context, s: &str) -> ValueRef
+    {
+        let char_type = LLVMInt8TypeInContext(ctx.context);
+        let glob = LLVMAddGlobal(ctx.module, LLVMArrayType(char_type, (s.len() + 1) as c_uint), cstr!("str_constant"));
+        LLVMSetLinkage(glob, LLVMLinkage::LLVMInternalLinkage);
+        let const_string = LLVMConstStringInContext(ctx.context, s.as_bytes().as_ptr() as *const c_char, s.len() as c_uint, 0);
+        LLVMSetInitializer(glob, const_string);
+
+
+        let ret = ValueRef::new(
+            LLVMBuildAlloca(ctx.builder, ctx.resolve_type(&Type::String), cstr!("str")),
+            Type::String
+        );
+
+        let string_data_ptr = ret.slice_data_ptr(ctx);
+        LLVMBuildStore(ctx.builder, LLVMBuildBitCast(ctx.builder, glob, LLVMPointerType(char_type, 0), cstr!("str_ptr")), string_data_ptr);
+
+        let string_len_ptr = ret.slice_len_ptr(ctx);
+        LLVMBuildStore(ctx.builder, const_uint(ctx, s.len()), string_len_ptr);
+
+        ret
     }
 
     pub unsafe fn store(&self, ctx: &Context, val: &ValueRef)
@@ -233,7 +257,8 @@ impl ValueRef
                 )
             },
 
-            (&Type::Slice(_), ByteCodeProperty::Len) => unsafe {
+            (&Type::Slice(_), ByteCodeProperty::Len) |
+            (&Type::String, ByteCodeProperty::Len) => unsafe {
                 let len_ptr = self.slice_len_ptr(ctx);
                 ValueRef::new(
                     LLVMBuildLoad(ctx.builder, len_ptr, cstr!("len")),
