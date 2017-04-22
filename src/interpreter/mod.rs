@@ -6,7 +6,7 @@ mod tests;
 
 use std::collections::HashMap;
 
-use ast::{Type, Operator};
+use ast::{Type, BinaryOperator, UnaryOperator};
 use bytecode::*;
 use bytecode::ByteCodeFunction;
 
@@ -192,16 +192,16 @@ impl Interpreter
         })
     }
 
-    fn unary_op(&mut self, dst: &str, op: Operator, var: &Operand, module: &ByteCodeModule) -> ExecutionResult<()>
+    fn unary_op(&mut self, dst: &str, op: UnaryOperator, var: &Operand, module: &ByteCodeModule) -> ExecutionResult<()>
     {
         let val = self.get_operand_value(var, module)?;
         let result =
             match (op, val)
             {
-                (Operator::Sub, Value::Int(num)) => Value::Int(-num),
-                (Operator::Sub, Value::UInt(num)) => Value::Int(-(num as isize)),
-                (Operator::Sub, Value::Float(num)) => Value::Float(-num),
-                (Operator::Not, Value::Bool(b)) => Value::Bool(!b),
+                (UnaryOperator::Sub, Value::Int(num)) => Value::Int(-num),
+                (UnaryOperator::Sub, Value::UInt(num)) => Value::Int(-(num as isize)),
+                (UnaryOperator::Sub, Value::Float(num)) => Value::Float(-num),
+                (UnaryOperator::Not, Value::Bool(b)) => Value::Bool(!b),
                 _ => return Err(format!("Invalid unary op {}", op)),
             };
 
@@ -210,68 +210,68 @@ impl Interpreter
     }
 
     #[cfg_attr(feature = "cargo-clippy", allow(float_cmp, match_same_arms))]
-    fn binary_op(&mut self, dst: &str, op: Operator, left: &Operand, right: &Operand, module: &ByteCodeModule) -> ExecutionResult<()>
+    fn binary_op(&mut self, dst: &str, op: BinaryOperator, left: &Operand, right: &Operand, module: &ByteCodeModule) -> ExecutionResult<()>
     {
         let left = self.get_operand_value(left, module)?;
         let right = self.get_operand_value(right, module)?;
 
         let value = match (op, left, right)
         {
-            (Operator::Add, Value::Int(l), Value::Int(r)) => Value::Int(l + r),
-            (Operator::Add, Value::UInt(l), Value::UInt(r)) => Value::UInt(l + r),
-            (Operator::Add, Value::Float(l), Value::Float(r)) => Value::Float(l + r),
+            (BinaryOperator::Add, Value::Int(l), Value::Int(r)) => Value::Int(l + r),
+            (BinaryOperator::Add, Value::UInt(l), Value::UInt(r)) => Value::UInt(l + r),
+            (BinaryOperator::Add, Value::Float(l), Value::Float(r)) => Value::Float(l + r),
 
-            (Operator::Sub, Value::Int(l), Value::Int(r)) => Value::Int(l - r),
-            (Operator::Sub, Value::UInt(l), Value::UInt(r)) => Value::UInt(l - r),
-            (Operator::Sub, Value::Float(l), Value::Float(r)) => Value::Float(l - r),
+            (BinaryOperator::Sub, Value::Int(l), Value::Int(r)) => Value::Int(l - r),
+            (BinaryOperator::Sub, Value::UInt(l), Value::UInt(r)) => Value::UInt(l - r),
+            (BinaryOperator::Sub, Value::Float(l), Value::Float(r)) => Value::Float(l - r),
 
-            (Operator::Mul, Value::Int(l), Value::Int(r)) => Value::Int(l * r),
-            (Operator::Mul, Value::UInt(l), Value::UInt(r)) => Value::UInt(l * r),
-            (Operator::Mul, Value::Float(l), Value::Float(r)) => Value::Float(l * r),
+            (BinaryOperator::Mul, Value::Int(l), Value::Int(r)) => Value::Int(l * r),
+            (BinaryOperator::Mul, Value::UInt(l), Value::UInt(r)) => Value::UInt(l * r),
+            (BinaryOperator::Mul, Value::Float(l), Value::Float(r)) => Value::Float(l * r),
 
-            (Operator::Div, Value::Int(l), Value::Int(r)) => Value::Int(l / r),
-            (Operator::Div, Value::UInt(l), Value::UInt(r)) => Value::UInt(l / r),
-            (Operator::Div, Value::Float(l), Value::Float(r)) => Value::Float(l / r),
+            (BinaryOperator::Div, Value::Int(l), Value::Int(r)) => Value::Int(l / r),
+            (BinaryOperator::Div, Value::UInt(l), Value::UInt(r)) => Value::UInt(l / r),
+            (BinaryOperator::Div, Value::Float(l), Value::Float(r)) => Value::Float(l / r),
 
-            (Operator::Mod, Value::Int(l), Value::Int(r)) => Value::Int(l % r),
-            (Operator::Mod, Value::UInt(l), Value::UInt(r)) => Value::UInt(l % r),
+            (BinaryOperator::Mod, Value::Int(l), Value::Int(r)) => Value::Int(l % r),
+            (BinaryOperator::Mod, Value::UInt(l), Value::UInt(r)) => Value::UInt(l % r),
 
-            (Operator::LessThan, Value::Int(l), Value::Int(r)) => Value::Bool(l < r),
-            (Operator::LessThan, Value::UInt(l), Value::UInt(r)) => Value::Bool(l < r),
-            (Operator::LessThan, Value::Float(l), Value::Float(r)) => Value::Bool(l < r),
-            (Operator::LessThan, Value::Char(l), Value::Char(r)) => Value::Bool(l < r),
+            (BinaryOperator::LessThan, Value::Int(l), Value::Int(r)) => Value::Bool(l < r),
+            (BinaryOperator::LessThan, Value::UInt(l), Value::UInt(r)) => Value::Bool(l < r),
+            (BinaryOperator::LessThan, Value::Float(l), Value::Float(r)) => Value::Bool(l < r),
+            (BinaryOperator::LessThan, Value::Char(l), Value::Char(r)) => Value::Bool(l < r),
 
-            (Operator::GreaterThan, Value::Int(l), Value::Int(r)) => Value::Bool(l > r),
-            (Operator::GreaterThan, Value::UInt(l), Value::UInt(r)) => Value::Bool(l > r),
-            (Operator::GreaterThan, Value::Float(l), Value::Float(r)) => Value::Bool(l > r),
-            (Operator::GreaterThan, Value::Char(l), Value::Char(r)) => Value::Bool(l > r),
+            (BinaryOperator::GreaterThan, Value::Int(l), Value::Int(r)) => Value::Bool(l > r),
+            (BinaryOperator::GreaterThan, Value::UInt(l), Value::UInt(r)) => Value::Bool(l > r),
+            (BinaryOperator::GreaterThan, Value::Float(l), Value::Float(r)) => Value::Bool(l > r),
+            (BinaryOperator::GreaterThan, Value::Char(l), Value::Char(r)) => Value::Bool(l > r),
 
-            (Operator::LessThanEquals, Value::Int(l), Value::Int(r)) => Value::Bool(l <= r),
-            (Operator::LessThanEquals, Value::UInt(l), Value::UInt(r)) => Value::Bool(l <= r),
-            (Operator::LessThanEquals, Value::Float(l), Value::Float(r)) => Value::Bool(l <= r),
-            (Operator::LessThanEquals, Value::Char(l), Value::Char(r)) => Value::Bool(l <= r),
+            (BinaryOperator::LessThanEquals, Value::Int(l), Value::Int(r)) => Value::Bool(l <= r),
+            (BinaryOperator::LessThanEquals, Value::UInt(l), Value::UInt(r)) => Value::Bool(l <= r),
+            (BinaryOperator::LessThanEquals, Value::Float(l), Value::Float(r)) => Value::Bool(l <= r),
+            (BinaryOperator::LessThanEquals, Value::Char(l), Value::Char(r)) => Value::Bool(l <= r),
 
-            (Operator::GreaterThanEquals, Value::Int(l), Value::Int(r)) => Value::Bool(l >= r),
-            (Operator::GreaterThanEquals, Value::UInt(l), Value::UInt(r)) => Value::Bool(l >= r),
-            (Operator::GreaterThanEquals, Value::Float(l), Value::Float(r)) => Value::Bool(l >= r),
-            (Operator::GreaterThanEquals, Value::Char(l), Value::Char(r)) => Value::Bool(l >= r),
+            (BinaryOperator::GreaterThanEquals, Value::Int(l), Value::Int(r)) => Value::Bool(l >= r),
+            (BinaryOperator::GreaterThanEquals, Value::UInt(l), Value::UInt(r)) => Value::Bool(l >= r),
+            (BinaryOperator::GreaterThanEquals, Value::Float(l), Value::Float(r)) => Value::Bool(l >= r),
+            (BinaryOperator::GreaterThanEquals, Value::Char(l), Value::Char(r)) => Value::Bool(l >= r),
 
-            (Operator::Equals, Value::Int(l), Value::Int(r)) => Value::Bool(l == r),
-            (Operator::Equals, Value::UInt(l), Value::UInt(r)) => Value::Bool(l == r),
-            (Operator::Equals, Value::Float(l), Value::Float(r)) => Value::Bool(l == r),
-            (Operator::Equals, Value::Char(l), Value::Char(r)) => Value::Bool(l == r),
-            (Operator::Equals, Value::Bool(l), Value::Bool(r)) => Value::Bool(l == r),
-            (Operator::Equals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l == *r),
+            (BinaryOperator::Equals, Value::Int(l), Value::Int(r)) => Value::Bool(l == r),
+            (BinaryOperator::Equals, Value::UInt(l), Value::UInt(r)) => Value::Bool(l == r),
+            (BinaryOperator::Equals, Value::Float(l), Value::Float(r)) => Value::Bool(l == r),
+            (BinaryOperator::Equals, Value::Char(l), Value::Char(r)) => Value::Bool(l == r),
+            (BinaryOperator::Equals, Value::Bool(l), Value::Bool(r)) => Value::Bool(l == r),
+            (BinaryOperator::Equals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l == *r),
 
-            (Operator::NotEquals, Value::Int(l), Value::Int(r)) => Value::Bool(l != r),
-            (Operator::NotEquals, Value::UInt(l), Value::UInt(r)) => Value::Bool(l != r),
-            (Operator::NotEquals, Value::Float(l), Value::Float(r)) => Value::Bool(l != r),
-            (Operator::NotEquals, Value::Char(l), Value::Char(r)) => Value::Bool(l != r),
-            (Operator::NotEquals, Value::Bool(l), Value::Bool(r)) => Value::Bool(l != r),
-            (Operator::NotEquals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l != *r),
+            (BinaryOperator::NotEquals, Value::Int(l), Value::Int(r)) => Value::Bool(l != r),
+            (BinaryOperator::NotEquals, Value::UInt(l), Value::UInt(r)) => Value::Bool(l != r),
+            (BinaryOperator::NotEquals, Value::Float(l), Value::Float(r)) => Value::Bool(l != r),
+            (BinaryOperator::NotEquals, Value::Char(l), Value::Char(r)) => Value::Bool(l != r),
+            (BinaryOperator::NotEquals, Value::Bool(l), Value::Bool(r)) => Value::Bool(l != r),
+            (BinaryOperator::NotEquals, Value::String(ref l), Value::String(ref r)) => Value::Bool(*l != *r),
 
-            (Operator::And, Value::Bool(l), Value::Bool(r)) => Value::Bool(l && r),
-            (Operator::Or, Value::Bool(l), Value::Bool(r)) => Value::Bool(l || r),
+            (BinaryOperator::And, Value::Bool(l), Value::Bool(r)) => Value::Bool(l && r),
+            (BinaryOperator::Or, Value::Bool(l), Value::Bool(r)) => Value::Bool(l || r),
 
 
             (_, left, right) => return Err(format!("Operator {} not supported on operands ({}) and ({})", op, left, right)),

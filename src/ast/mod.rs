@@ -70,7 +70,7 @@ pub enum TypeDeclaration
     Interface(Interface),
     Struct(StructDeclaration),
     Sum(SumTypeDeclaration),
-    Alias(TypeAlias),
+    //Alias(TypeAlias),
 }
 
 impl TypeDeclaration
@@ -82,7 +82,7 @@ impl TypeDeclaration
             TypeDeclaration::Interface(ref i) => &i.name,
             TypeDeclaration::Struct(ref sd) => &sd.name,
             TypeDeclaration::Sum(ref s) => &s.name,
-            TypeDeclaration::Alias(ref t) => &t.name,
+            //TypeDeclaration::Alias(ref t) => &t.name,
         }
     }
 }
@@ -96,7 +96,7 @@ impl TreePrinter for TypeDeclaration
             TypeDeclaration::Interface(ref i) => i.print(level),
             TypeDeclaration::Struct(ref sd) => sd.print(level),
             TypeDeclaration::Sum(ref s) => s.print(level),
-            TypeDeclaration::Alias(ref t) => t.print(level),
+            //TypeDeclaration::Alias(ref t) => t.print(level),
         }
     }
 }

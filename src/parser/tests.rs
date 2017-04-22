@@ -71,8 +71,8 @@ fn test_basic_expressions()
 {
     assert!(th_expr("1000") == number(1000, span(1, 1, 1, 4)));
     assert!(th_expr("id") == name_ref("id", span(1, 1, 1, 2)));
-    assert!(th_expr("-1000") == unary_op(Operator::Sub, number(1000, span(1, 2, 1, 5)), span(1, 1, 1, 5)));
-    assert!(th_expr("!id") == unary_op(Operator::Not, name_ref("id", span(1, 2, 1, 3)), span(1, 1, 1, 3)));
+    assert!(th_expr("-1000") == unary_op(UnaryOperator::Sub, number(1000, span(1, 2, 1, 5)), span(1, 1, 1, 5)));
+    assert!(th_expr("!id") == unary_op(UnaryOperator::Not, name_ref("id", span(1, 2, 1, 3)), span(1, 1, 1, 3)));
     assert!(th_expr("true") == Expression::Literal(Literal::Bool(span(1, 1, 1, 4), true)));
     assert!(th_expr("false") == Expression::Literal(Literal::Bool(span(1, 1, 1, 5), false)));
 }
@@ -81,19 +81,19 @@ fn test_basic_expressions()
 fn test_binary_ops()
 {
     let ops = [
-        (Operator::Add, "+"),
-        (Operator::Sub, "-"),
-        (Operator::Div, "/"),
-        (Operator::Mul, "*"),
-        (Operator::Mod, "%"),
-        (Operator::Equals, "=="),
-        (Operator::NotEquals, "!="),
-        (Operator::GreaterThan, ">"),
-        (Operator::GreaterThanEquals, ">="),
-        (Operator::LessThan, "<"),
-        (Operator::LessThanEquals, "<="),
-        (Operator::Or, "||"),
-        (Operator::And, "&&"),
+        (BinaryOperator::Add, "+"),
+        (BinaryOperator::Sub, "-"),
+        (BinaryOperator::Div, "/"),
+        (BinaryOperator::Mul, "*"),
+        (BinaryOperator::Mod, "%"),
+        (BinaryOperator::Equals, "=="),
+        (BinaryOperator::NotEquals, "!="),
+        (BinaryOperator::GreaterThan, ">"),
+        (BinaryOperator::GreaterThanEquals, ">="),
+        (BinaryOperator::LessThan, "<"),
+        (BinaryOperator::LessThanEquals, "<="),
+        (BinaryOperator::Or, "||"),
+        (BinaryOperator::And, "&&"),
     ];
 
     for &(op, op_txt) in &ops
@@ -115,9 +115,9 @@ fn test_precedence()
 {
     let e = th_expr("a + b * c");
     assert!(e == bin_op(
-        Operator::Add,
+        BinaryOperator::Add,
         name_ref("a", span(1, 1, 1, 1)),
-        bin_op(Operator::Mul, name_ref("b", span(1, 5, 1, 5)), name_ref("c", span(1, 9, 1, 9)), span(1, 5, 1, 9)),
+        bin_op(BinaryOperator::Mul, name_ref("b", span(1, 5, 1, 5)), name_ref("c", span(1, 9, 1, 9)), span(1, 5, 1, 9)),
         span(1, 1, 1, 9),
     ));
 }
@@ -128,8 +128,8 @@ fn test_precedence_2()
 {
     let e = th_expr("a * b + c ");
     assert!(e == bin_op(
-        Operator::Add,
-        bin_op(Operator::Mul, name_ref("a", span(1, 1, 1, 1)), name_ref("b", span(1, 5, 1, 5)), span(1, 1, 1, 5)),
+        BinaryOperator::Add,
+        bin_op(BinaryOperator::Mul, name_ref("a", span(1, 1, 1, 1)), name_ref("b", span(1, 5, 1, 5)), span(1, 1, 1, 5)),
         name_ref("c", span(1, 9, 1, 9)),
         span(1, 1, 1, 9),
     ));
@@ -140,9 +140,9 @@ fn test_precedence_3()
 {
     let e = th_expr("a * b + c / d ");
     assert!(e == bin_op(
-        Operator::Add,
-        bin_op(Operator::Mul, name_ref("a", span(1, 1, 1, 1)), name_ref("b", span(1, 5, 1, 5)), span(1, 1, 1, 5)),
-        bin_op(Operator::Div, name_ref("c", span(1, 9, 1, 9)), name_ref("d", span(1, 13, 1, 13)), span(1, 9, 1, 13)),
+        BinaryOperator::Add,
+        bin_op(BinaryOperator::Mul, name_ref("a", span(1, 1, 1, 1)), name_ref("b", span(1, 5, 1, 5)), span(1, 1, 1, 5)),
+        bin_op(BinaryOperator::Div, name_ref("c", span(1, 9, 1, 9)), name_ref("d", span(1, 13, 1, 13)), span(1, 9, 1, 13)),
         span(1, 1, 1, 13),
     ));
 }
@@ -152,9 +152,9 @@ fn test_precedence_4()
 {
     let e = th_expr("a && b || c && d ");
     assert!(e == bin_op(
-        Operator::Or,
-        bin_op(Operator::And, name_ref("a", span(1, 1, 1, 1)), name_ref("b", span(1, 6, 1, 6)), span(1, 1, 1, 6)),
-        bin_op(Operator::And, name_ref("c", span(1, 11, 1, 11)), name_ref("d", span(1, 16, 1, 16)), span(1, 11, 1, 16)),
+        BinaryOperator::Or,
+        bin_op(BinaryOperator::And, name_ref("a", span(1, 1, 1, 1)), name_ref("b", span(1, 6, 1, 6)), span(1, 1, 1, 6)),
+        bin_op(BinaryOperator::And, name_ref("c", span(1, 11, 1, 11)), name_ref("d", span(1, 16, 1, 16)), span(1, 11, 1, 16)),
         span(1, 1, 1, 16),
     ));
 }
@@ -164,9 +164,9 @@ fn test_precedence_5()
 {
     let e = th_expr("a >= b && c < d");
     assert!(e == bin_op(
-        Operator::And,
-        bin_op(Operator::GreaterThanEquals, name_ref("a", span(1, 1, 1, 1)), name_ref("b", span(1, 6, 1, 6)), span(1, 1, 1, 6)),
-        bin_op(Operator::LessThan, name_ref("c", span(1, 11, 1, 11)), name_ref("d", span(1, 15, 1, 15)), span(1, 11, 1, 15)),
+        BinaryOperator::And,
+        bin_op(BinaryOperator::GreaterThanEquals, name_ref("a", span(1, 1, 1, 1)), name_ref("b", span(1, 6, 1, 6)), span(1, 1, 1, 6)),
+        bin_op(BinaryOperator::LessThan, name_ref("c", span(1, 11, 1, 11)), name_ref("d", span(1, 15, 1, 15)), span(1, 11, 1, 15)),
         span(1, 1, 1, 15),
     ));
 }
@@ -176,10 +176,10 @@ fn test_precedence_6()
 {
     let e = th_expr("a * (b + c)");
     assert!(e == bin_op(
-        Operator::Mul,
+        BinaryOperator::Mul,
         name_ref("a", span(1, 1, 1, 1)),
         bin_op_with_precedence(
-            Operator::Add,
+            BinaryOperator::Add,
             name_ref("b", span(1, 6, 1, 6)),
             name_ref("c", span(1, 10, 1, 10)),
             span(1, 6, 1, 10),
@@ -194,9 +194,9 @@ fn test_precedence_7()
 {
     let e = th_expr("b + -c");
     assert!(e == bin_op(
-        Operator::Add,
+        BinaryOperator::Add,
         name_ref("b", span(1, 1, 1, 1)),
-        unary_op(Operator::Sub, name_ref("c", span(1, 6, 1, 6)), span(1, 5, 1, 6)),
+        unary_op(UnaryOperator::Sub, name_ref("c", span(1, 6, 1, 6)), span(1, 5, 1, 6)),
         span(1, 1, 1, 6),
     ));
 }
@@ -206,7 +206,7 @@ fn test_precedence_8()
 {
     let e = th_expr("b + c(6)");
     assert!(e == bin_op(
-        Operator::Add,
+        BinaryOperator::Add,
         name_ref("b", span(1, 1, 1, 1)),
         Expression::Call(Call::new(
             name_ref2("c", span(1, 5, 1, 5)),
@@ -222,7 +222,7 @@ fn test_precedence_9()
 {
     let e = th_expr("c(6) + b");
     assert!(e == bin_op(
-        Operator::Add,
+        BinaryOperator::Add,
         Expression::Call(Call::new(
             name_ref2("c", span(1, 1, 1, 1)),
             vec![number(6, span(1, 3, 1, 3))],
@@ -239,28 +239,28 @@ fn test_precedence_10()
     let e = th_expr("4 + 5 * 7 - 9 / 3 + 5 % 4");
 
     let mul = bin_op(
-        Operator::Mul,
+        BinaryOperator::Mul,
         number(5, span(1, 5, 1, 5)),
         number(7, span(1, 9, 1, 9)),
         span(1, 5, 1, 9));
 
-    let s1 = bin_op(Operator::Add, number(4, span(1, 1, 1, 1)), mul, span(1, 1, 1, 9));
+    let s1 = bin_op(BinaryOperator::Add, number(4, span(1, 1, 1, 1)), mul, span(1, 1, 1, 9));
 
     let div = bin_op(
-        Operator::Div,
+        BinaryOperator::Div,
         number(9, span(1, 13, 1, 13)),
         number(3, span(1, 17, 1, 17)),
         span(1, 13, 1, 17));
 
-    let s2 = bin_op(Operator::Sub, s1, div, span(1, 1, 1, 17));
+    let s2 = bin_op(BinaryOperator::Sub, s1, div, span(1, 1, 1, 17));
 
     let rem = bin_op(
-        Operator::Mod,
+        BinaryOperator::Mod,
         number(5, span(1, 21, 1, 21)),
         number(4, span(1, 25, 1, 25)),
         span(1, 21, 1, 25));
 
-    let s3 = bin_op(Operator::Add, s2, rem,span(1, 1, 1, 25));
+    let s3 = bin_op(BinaryOperator::Add, s2, rem,span(1, 1, 1, 25));
 
     println!("s3:");
     s3.print(0);
@@ -300,7 +300,7 @@ fn test_array_generator()
     let e = th_expr("[x * x | x <- v]");
     assert!(e == array_generator(
         bin_op(
-            Operator::Mul,
+            BinaryOperator::Mul,
             name_ref("x", span(1, 2, 1, 2)),
             name_ref("x", span(1, 6, 1, 6)),
             span(1, 2, 1, 6)
@@ -324,7 +324,7 @@ fn test_array_concat()
 {
     let e = th_expr("a + [1, 2]");
     assert!(e == bin_op(
-        Operator::Add,
+        BinaryOperator::Add,
         name_ref("a", span(1, 1, 1, 1)),
         Expression::Literal(array_lit(
             vec![
@@ -452,7 +452,7 @@ fn test_lambda()
             Argument::new("b", generic_type("b"), false, span(1, 7, 1, 7)),
         ],
         bin_op(
-            Operator::Add,
+            BinaryOperator::Add,
             name_ref("a", span(1, 13, 1, 13)),
             name_ref("b", span(1, 17, 1, 17)),
             span(1, 13, 1, 17)
@@ -493,7 +493,7 @@ let x = 5, y = 7 in x * y
             name_binding("y".into(), number(7, span(2, 16, 2, 16)), false, span(2, 12, 2, 16)),
         ],
         bin_op_with_precedence(
-            Operator::Mul,
+            BinaryOperator::Mul,
             name_ref("x", span(2, 21, 2, 21)),
             name_ref("y", span(2, 25, 2, 25)),
             span(2, 21, 2, 25),

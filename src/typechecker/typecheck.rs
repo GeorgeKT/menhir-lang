@@ -39,11 +39,6 @@ fn replace_by(e: Expression) -> TypeCheckResult
     Ok(TypeCheckAction::ReplaceBy(e))
 }
 
-fn invalid_unary_operator<T>(span: &Span, op: Operator) -> CompileResult<T>
-{
-    type_error_result(span, format!("{} is not a valid unary operator", op))
-}
-
 fn convert_type(ctx: &mut TypeCheckerContext, dst_type: &Type, src_type: &Type, expr: &mut Expression) -> CompileResult<()>
 {
     if *dst_type == *src_type {
@@ -72,7 +67,7 @@ fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> TypeChe
 
     match u.operator
     {
-        Operator::Sub => {
+        UnaryOperator::Sub => {
             if !e_type.is_numeric() {
                 type_error_result(&u.span, format!("Unary operator {} expects a numeric expression", u.operator))
             } else {
@@ -81,7 +76,7 @@ fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> TypeChe
             }
         },
 
-        Operator::Not => {
+        UnaryOperator::Not => {
             if !e_type.is_bool() {
                 type_error_result(&u.span, format!("Unary operator {} expects a boolean expression", u.operator))
             } else {
@@ -89,7 +84,6 @@ fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> TypeChe
                 valid(Type::Bool)
             }
         }
-        _ => invalid_unary_operator(&u.span, u.operator),
     }
 }
 
@@ -107,13 +101,13 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
         return valid(left_type);
     }
 
-    fn basic_bin_op_checks(span: &Span, operator: Operator, left_type: &Type, right_type: &Type) -> CompileResult<()>
+    fn basic_bin_op_checks(span: &Span, operator: BinaryOperator, left_type: &Type, right_type: &Type) -> CompileResult<()>
     {
         if left_type != right_type {
             return type_error_result(span, format!("Operator {} expects operands of the same type (left type: {}, right type: {})", operator, left_type, right_type));
         }
 
-        if !left_type.is_operator_supported(operator) {
+        if !left_type.is_binary_operator_supported(operator) {
             return type_error_result(span, format!("Operator {} is not supported on {}", operator, left_type));
         }
 
@@ -122,33 +116,33 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
 
     match b.operator
     {
-        Operator::Add |
-        Operator::Sub |
-        Operator::Mul |
-        Operator::Div |
-        Operator::Mod => {
+        BinaryOperator::Add |
+        BinaryOperator::Sub |
+        BinaryOperator::Mul |
+        BinaryOperator::Div |
+        BinaryOperator::Mod => {
             basic_bin_op_checks(&b.span, b.operator, &left_type, &right_type)?;
             b.typ = right_type;
             valid(left_type)
         },
 
-        Operator::LessThan |
-        Operator::GreaterThan |
-        Operator::LessThanEquals |
-        Operator::GreaterThanEquals => {
+        BinaryOperator::LessThan |
+        BinaryOperator::GreaterThan |
+        BinaryOperator::LessThanEquals |
+        BinaryOperator::GreaterThanEquals => {
             basic_bin_op_checks(&b.span, b.operator, &left_type, &right_type)?;
             b.typ = Type::Bool;
             valid(Type::Bool)
         },
 
-        Operator::And => {
+        BinaryOperator::And => {
             type_check_with_conversion(ctx, &mut b.left, &Type::Bool)?;
             type_check_with_conversion(ctx, &mut b.right, &Type::Bool)?;
             b.typ = Type::Bool;
             valid(Type::Bool)
         },
 
-        Operator::Or => {
+        BinaryOperator::Or => {
             if left_type.is_optional_of(&right_type) {
                 b.typ = right_type.clone();
                 valid(right_type)
@@ -159,10 +153,10 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
                 valid(Type::Bool)
             }
         },
-        Operator::Equals |
-        Operator::NotEquals => {
+        BinaryOperator::Equals |
+        BinaryOperator::NotEquals => {
             if left_type.is_optional_of(&Type::Unknown) && right_type.is_optional_of(&Type::Unknown) {
-                return if b.operator == Operator::Equals {
+                return if b.operator == BinaryOperator::Equals {
                     replace_by(Expression::Literal(Literal::Bool(b.span.clone(), true)))
                 } else {
                     replace_by(Expression::Literal(Literal::Bool(b.span.clone(), false)))

@@ -1,6 +1,6 @@
 use std::fmt;
 use itertools::free::join;
-use ast::{Operator, Type, ptr_type};
+use ast::{UnaryOperator, BinaryOperator, Type, ptr_type};
 use bytecode::function::{BasicBlockRef, Var};
 
 
@@ -160,8 +160,8 @@ pub enum Instruction
     AddressOfMember{dst: Var, obj: Var, member_index: Operand},
     GetProperty{dst: Var, obj: Var, prop: ByteCodeProperty},
     SetProperty{obj: Var, prop: ByteCodeProperty, val: usize},
-    UnaryOp{dst: Var, op: Operator, src: Operand},
-    BinaryOp{dst: Var, op: Operator, left: Operand, right: Operand},
+    UnaryOp{dst: Var, op: UnaryOperator, src: Operand},
+    BinaryOp{dst: Var, op: BinaryOperator, left: Operand, right: Operand},
     Call{dst: Option<Var>, func: String, args: Vec<Operand>},
     Slice{dst: Var, src: Var, start: Operand, len: Operand},
     Cast{dst: Var, src: Operand},
@@ -262,7 +262,7 @@ pub fn ret_instr(var: &Var) -> Instruction
     Instruction::Return(var_op(var))
 }
 
-pub fn unary_op_instr(dst: &Var, op: Operator, src: Operand) -> Instruction
+pub fn unary_op_instr(dst: &Var, op: UnaryOperator, src: Operand) -> Instruction
 {
     Instruction::UnaryOp{
         dst: dst.clone(),
@@ -271,7 +271,7 @@ pub fn unary_op_instr(dst: &Var, op: Operator, src: Operand) -> Instruction
     }
 }
 
-pub fn binary_op_instr(dst: &Var, op: Operator, left: Operand, right: Operand) -> Instruction
+pub fn binary_op_instr(dst: &Var, op: BinaryOperator, left: Operand, right: Operand) -> Instruction
 {
     Instruction::BinaryOp{
         dst: dst.clone(),

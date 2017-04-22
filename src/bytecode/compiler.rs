@@ -274,7 +274,7 @@ fn name_pattern_match_to_bc(
         Type::Enum(ref et) => {
             let idx = et.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(binary_op_instr(&cond, Operator::Equals, var_op(&target), Operand::const_uint(idx)));
+            func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(&target), Operand::const_uint(idx)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
         },
         Type::Sum(ref st) => {
@@ -282,7 +282,7 @@ fn name_pattern_match_to_bc(
             let sum_type_index = stack_alloc(func, &Type::UInt, None);
             func.add(get_prop_instr(&sum_type_index, target, ByteCodeProperty::SumTypeIndex));
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(binary_op_instr(&cond, Operator::Equals, var_op(&sum_type_index), Operand::const_uint(idx)));
+            func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(&sum_type_index), Operand::const_uint(idx)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
         },
         _ => {
@@ -327,14 +327,14 @@ fn array_pattern_match_to_bc(
     let tail_len = stack_alloc(func, &Type::UInt, None);
     let seq_len = stack_alloc(func, &Type::UInt, None);
     func.add(get_prop_instr(&seq_len, seq, ByteCodeProperty::Len));
-    func.add(binary_op_instr(&tail_len, Operator::Sub, var_op(&seq_len), Operand::const_uint(1)));
+    func.add(binary_op_instr(&tail_len, BinaryOperator::Sub, var_op(&seq_len), Operand::const_uint(1)));
     func.add(slice_instr(&tail, seq, Operand::const_uint(1), var_op(&tail_len)));
 
 
     let length = stack_alloc(func, &Type::UInt, None);
     func.add(get_prop_instr(&length, seq, ByteCodeProperty::Len));
     let cond = stack_alloc(func, &Type::Bool, None);
-    func.add(binary_op_instr(&cond, Operator::GreaterThan, var_op(&length), Operand::const_uint(0)));
+    func.add(binary_op_instr(&cond, BinaryOperator::GreaterThan, var_op(&length), Operand::const_uint(0)));
     func.add(branch_if_instr(&cond, match_case_bb, next_bb));
 }
 
@@ -363,7 +363,7 @@ fn struct_pattern_match_to_bc(
             func.add(get_prop_instr(&target_sum_type_index, target, ByteCodeProperty::SumTypeIndex));
             let idx = st.index_of(&p.name).expect("Internal Compiler Error: cannot determine index of sum type case");
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(binary_op_instr(&cond, Operator::Equals, var_op(&target_sum_type_index), Operand::const_uint(idx)));
+            func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(&target_sum_type_index), Operand::const_uint(idx)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
 
             func.set_current_bb(match_case_bb);
@@ -389,7 +389,7 @@ fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc
     let add_literal_case = |bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, op: Operand| {
         func.push_destination(None);
         let cond = stack_alloc(func, &Type::Bool, None);
-        func.add(binary_op_instr(&cond, Operator::Equals, op, var_op(&target)));
+        func.add(binary_op_instr(&cond, BinaryOperator::Equals, op, var_op(&target)));
         func.add(branch_if_instr(&cond, match_case_bb, next_bb));
         func.pop_destination();
         match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false);
@@ -433,7 +433,7 @@ fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc
                     let len = stack_alloc(func, &Type::UInt, None);
                     let cond = stack_alloc(func, &Type::Bool, None);
                     func.add(get_prop_instr(&len, target, ByteCodeProperty::Len));
-                    func.add(binary_op_instr(&cond, Operator::Equals, var_op(&len), Operand::const_uint(0)));
+                    func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(&len), Operand::const_uint(0)));
                     func.add(branch_if_instr(&cond, match_case_bb, next_bb))
                 },
                 _ => panic!("Internal Compiler Error: Match expression cannot be matched with an empty array pattern"),
@@ -461,7 +461,7 @@ fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc
             let arr = func.new_var(a.array_type.clone());
             array_lit_to_bc(bc_mod, func, a, &arr);
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(binary_op_instr(&cond, Operator::Equals, var_op(&arr), var_op(&target)));
+            func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(&arr), var_op(&target)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
             func.pop_destination();
             match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false);
@@ -470,7 +470,7 @@ fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc
         Pattern::Literal(Literal::String(_, ref s)) => {
             func.push_destination(None);
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(binary_op_instr(&cond, Operator::Equals, Operand::const_string(&s[..]), var_op(&target)));
+            func.add(binary_op_instr(&cond, BinaryOperator::Equals, Operand::const_string(&s[..]), var_op(&target)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
             func.pop_destination();
             match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false);
@@ -490,7 +490,7 @@ fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc
         Pattern::Optional(ref o) => {
             let cond = stack_alloc(func, &Type::Bool, None);
             func.add(is_nil_instr(&cond, &target));
-            func.add(unary_op_instr(&cond, Operator::Not, var_op(&cond)));
+            func.add(unary_op_instr(&cond, UnaryOperator::Not, var_op(&cond)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
 
             func.set_current_bb(match_case_bb);
@@ -570,7 +570,7 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
     func.add(Instruction::Branch(cond_bb));
     func.set_current_bb(cond_bb);
     let cmp = stack_alloc(func, &Type::Bool, None);
-    func.add(binary_op_instr(&cmp, Operator::LessThan, var_op(&index), len));
+    func.add(binary_op_instr(&cmp, BinaryOperator::LessThan, var_op(&index), len));
     func.add(branch_if_instr(&cmp, body_bb, post_for_bb));
 
     func.set_current_bb(body_bb);
@@ -578,7 +578,7 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
     func.push_destination(None);
     expr_to_bc(bc_mod, func, &f.body);
     func.pop_destination();
-    func.add(binary_op_instr(&index, Operator::Add, var_op(&index), Operand::const_uint(1)));
+    func.add(binary_op_instr(&index, BinaryOperator::Add, var_op(&index), Operand::const_uint(1)));
     func.add(Instruction::Branch(cond_bb));
 
     func.set_current_bb(post_for_bb);
@@ -633,7 +633,7 @@ fn optional_compare_to_bc(
     let cmp = stack_alloc(func, &Type::Bool, None);
     func.add(load_instr(&l_inner, l));
     func.add(load_instr(&r_inner, r));
-    func.add(binary_op_instr(&cmp, Operator::Equals, var_op(&l_inner), var_op(&r_inner)));
+    func.add(binary_op_instr(&cmp, BinaryOperator::Equals, var_op(&l_inner), var_op(&r_inner)));
     func.add(branch_if_instr(&cmp, set_to_true_bb, set_to_false_bb));
 
     func.set_current_bb(set_to_true_bb);
@@ -658,15 +658,15 @@ fn binary_op_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, op:
     match l.typ
     {
         Type::Optional(ref inner) => match op.operator {
-            Operator::Equals => {
+            BinaryOperator::Equals => {
                 optional_compare_to_bc(func, &l, &r, &dst, true, inner);
             },
 
-            Operator::NotEquals => {
+            BinaryOperator::NotEquals => {
                 optional_compare_to_bc(func, &l, &r, &dst, false, inner);
             },
 
-            Operator::Or => {
+            BinaryOperator::Or => {
                 let l_is_nil = stack_alloc(func, &Type::Bool, None);
                 let true_bb = func.create_basic_block();
                 let false_bb = func.create_basic_block();
