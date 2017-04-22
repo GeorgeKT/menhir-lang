@@ -1,6 +1,6 @@
 use std::fmt::{Formatter, Display, Error};
 use span::{Span};
-use ast::{Operator};
+use ast::{BinaryOperator, UnaryOperator};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum TokenKind
@@ -9,7 +9,8 @@ pub enum TokenKind
     Number(String),
     StringLiteral(String),
     CharLiteral(char),
-    Operator(Operator),
+    BinaryOperator(BinaryOperator),
+    UnaryOperator(UnaryOperator),
     Colon,
     DoubleColon,
     SemiColon,
@@ -61,7 +62,8 @@ impl Display for TokenKind
             TokenKind::Number(ref n) => write!(fmt, "number '{}'", n),
             TokenKind::StringLiteral(ref s) => write!(fmt, "string litteral '{}'", s),
             TokenKind::CharLiteral(c) => write!(fmt, "char literal '{}'", c),
-            TokenKind::Operator(ref op) => write!(fmt, "operator {}", op),
+            TokenKind::BinaryOperator(ref op) => write!(fmt, "operator {}", op),
+            TokenKind::UnaryOperator(ref op) => write!(fmt, "operator {}", op),
             TokenKind::Colon => write!(fmt, ":"),
             TokenKind::DoubleColon => write!(fmt, "::"),
             TokenKind::SemiColon => write!(fmt, ";"),

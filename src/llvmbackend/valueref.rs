@@ -4,7 +4,7 @@ use llvm::core::*;
 use llvm::prelude::*;
 
 use ast::*;
-use bytecode::{ByteCodeProperty, Operand};
+use bytecode::{ByteCodeProperty, Operand, ByteCodeConstant};
 use super::context::Context;
 use super::instructions::{const_uint, const_int, const_bool, copy, get_operand};
 
@@ -186,8 +186,8 @@ impl ValueRef
 
             Type::Struct(ref st) => unsafe {
                 let index = match *index {
-                    Operand::Int(v) => v as usize,
-                    Operand::UInt(v) => v as usize,
+                    Operand::Const(ByteCodeConstant::Int(v)) => v as usize,
+                    Operand::Const(ByteCodeConstant::UInt(v)) => v as usize,
                     _ => panic!("Struct member access has to be through an integer"),
                 };
 
@@ -199,8 +199,8 @@ impl ValueRef
 
             Type::Sum(ref st) => unsafe {
                 let index = match *index {
-                    Operand::Int(v) => v as usize,
-                    Operand::UInt(v) => v as usize,
+                    Operand::Const(ByteCodeConstant::Int(v)) => v as usize,
+                    Operand::Const(ByteCodeConstant::UInt(v)) => v as usize,
                     _ => panic!("Sum type member access has to be through an integer"),
                 };
 

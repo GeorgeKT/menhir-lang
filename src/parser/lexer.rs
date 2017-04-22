@@ -3,7 +3,7 @@ use std::mem;
 use compileerror::{CompileResult, parse_error_result};
 use super::tokenqueue::TokenQueue;
 use super::tokens::{TokenKind, Token};
-use ast::Operator;
+use ast::{BinaryOperator, UnaryOperator};
 use span::{Span, Pos};
 
 
@@ -143,7 +143,7 @@ impl Lexer
             "for" => TokenKind::For,
             "nil" => TokenKind::Nil,
             "var" => TokenKind::Var,
-            "as" => TokenKind::Operator(Operator::As),
+            "as" => TokenKind::BinaryOperator(BinaryOperator::As),
             "interface" => TokenKind::Interface,
             "fn" => TokenKind::Func,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
@@ -201,27 +201,27 @@ impl Lexer
     {
         match &self.data[..]
         {
-            "+" => Ok(TokenKind::Operator(Operator::Add)),
-            "-" => Ok(TokenKind::Operator(Operator::Sub)),
-            "*" => Ok(TokenKind::Operator(Operator::Mul)),
-            "/" => Ok(TokenKind::Operator(Operator::Div)),
-            "%" => Ok(TokenKind::Operator(Operator::Mod)),
-            ">" => Ok(TokenKind::Operator(Operator::GreaterThan)),
-            ">=" => Ok(TokenKind::Operator(Operator::GreaterThanEquals)),
-            "<" => Ok(TokenKind::Operator(Operator::LessThan)),
-            "<=" => Ok(TokenKind::Operator(Operator::LessThanEquals)),
+            "+" => Ok(TokenKind::BinaryOperator(BinaryOperator::Add)),
+            "-" => Ok(TokenKind::BinaryOperator(BinaryOperator::Sub)),
+            "*" => Ok(TokenKind::BinaryOperator(BinaryOperator::Mul)),
+            "/" => Ok(TokenKind::BinaryOperator(BinaryOperator::Div)),
+            "%" => Ok(TokenKind::BinaryOperator(BinaryOperator::Mod)),
+            ">" => Ok(TokenKind::BinaryOperator(BinaryOperator::GreaterThan)),
+            ">=" => Ok(TokenKind::BinaryOperator(BinaryOperator::GreaterThanEquals)),
+            "<" => Ok(TokenKind::BinaryOperator(BinaryOperator::LessThan)),
+            "<=" => Ok(TokenKind::BinaryOperator(BinaryOperator::LessThanEquals)),
             "=" => Ok(TokenKind::Assign),
-            "==" => Ok(TokenKind::Operator(Operator::Equals)),
-            "!" => Ok(TokenKind::Operator(Operator::Not)),
-            "!=" => Ok(TokenKind::Operator(Operator::NotEquals)),
-            "&&" => Ok(TokenKind::Operator(Operator::And)),
-            "||" => Ok(TokenKind::Operator(Operator::Or)),
+            "==" => Ok(TokenKind::BinaryOperator(BinaryOperator::Equals)),
+            "!" => Ok(TokenKind::UnaryOperator(UnaryOperator::Not)),
+            "!=" => Ok(TokenKind::BinaryOperator(BinaryOperator::NotEquals)),
+            "&&" => Ok(TokenKind::BinaryOperator(BinaryOperator::And)),
+            "||" => Ok(TokenKind::BinaryOperator(BinaryOperator::Or)),
             "->" => Ok(TokenKind::Arrow),
             "=>" => Ok(TokenKind::FatArrow),
             ":" => Ok(TokenKind::Colon),
             "::" => Ok(TokenKind::DoubleColon),
             "|" => Ok(TokenKind::Pipe),
-            "." => Ok(TokenKind::Operator(Operator::Dot)),
+            "." => Ok(TokenKind::BinaryOperator(BinaryOperator::Dot)),
             _ => parse_error_result(&self.current_single_span(), format!("Invalid operator {}", self.data)),
         }
     }
@@ -379,7 +379,7 @@ impl Lexer
 mod tests
 {
     use std::io::Cursor;
-    use ast::Operator;
+    use ast::{BinaryOperator, UnaryOperator};
     use parser::lexer::Lexer;
     use parser::tokens::*;
     use span::*;
@@ -436,21 +436,21 @@ mod tests
 
         assert_eq!(tokens, vec![
             tok(TokenKind::Indent(0), 1, 1, 1, 1),
-            tok(TokenKind::Operator(Operator::Add), 1, 1, 1, 1),
-            tok(TokenKind::Operator(Operator::Sub), 1, 3, 1, 3),
-            tok(TokenKind::Operator(Operator::Mul), 1, 5, 1, 5),
-            tok(TokenKind::Operator(Operator::Div), 1, 7, 1, 7),
-            tok(TokenKind::Operator(Operator::Mod), 1, 9, 1, 9),
-            tok(TokenKind::Operator(Operator::LessThan), 1, 11, 1, 11),
-            tok(TokenKind::Operator(Operator::LessThanEquals), 1, 13, 1, 14),
-            tok(TokenKind::Operator(Operator::GreaterThan), 1, 16, 1, 16),
-            tok(TokenKind::Operator(Operator::GreaterThanEquals), 1, 18, 1, 19),
-            tok(TokenKind::Operator(Operator::Equals), 1, 21, 1, 22),
+            tok(TokenKind::BinaryOperator(BinaryOperator::Add), 1, 1, 1, 1),
+            tok(TokenKind::BinaryOperator(BinaryOperator::Sub), 1, 3, 1, 3),
+            tok(TokenKind::BinaryOperator(BinaryOperator::Mul), 1, 5, 1, 5),
+            tok(TokenKind::BinaryOperator(BinaryOperator::Div), 1, 7, 1, 7),
+            tok(TokenKind::BinaryOperator(BinaryOperator::Mod), 1, 9, 1, 9),
+            tok(TokenKind::BinaryOperator(BinaryOperator::LessThan), 1, 11, 1, 11),
+            tok(TokenKind::BinaryOperator(BinaryOperator::LessThanEquals), 1, 13, 1, 14),
+            tok(TokenKind::BinaryOperator(BinaryOperator::GreaterThan), 1, 16, 1, 16),
+            tok(TokenKind::BinaryOperator(BinaryOperator::GreaterThanEquals), 1, 18, 1, 19),
+            tok(TokenKind::BinaryOperator(BinaryOperator::Equals), 1, 21, 1, 22),
             tok(TokenKind::Assign, 1, 24, 1, 24),
-            tok(TokenKind::Operator(Operator::NotEquals), 1, 26, 1, 27),
-            tok(TokenKind::Operator(Operator::Not), 1, 29, 1, 29),
-            tok(TokenKind::Operator(Operator::Or), 1, 31, 1, 32),
-            tok(TokenKind::Operator(Operator::And), 1, 34, 1, 35),
+            tok(TokenKind::BinaryOperator(BinaryOperator::NotEquals), 1, 26, 1, 27),
+            tok(TokenKind::UnaryOperator(UnaryOperator::Not), 1, 29, 1, 29),
+            tok(TokenKind::BinaryOperator(BinaryOperator::Or), 1, 31, 1, 32),
+            tok(TokenKind::BinaryOperator(BinaryOperator::And), 1, 34, 1, 35),
             tok(TokenKind::FatArrow, 1, 37, 1, 38),
             tok(TokenKind::Arrow, 1, 40, 1, 41),
             tok(TokenKind::Colon, 1, 43, 1, 43),

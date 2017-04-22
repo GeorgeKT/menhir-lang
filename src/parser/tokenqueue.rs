@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use compileerror::{CompileError, CompileResult, ErrorData, parse_error_result};
 use super::tokens::{Token, TokenKind};
-use ast::Operator;
+use ast::{BinaryOperator};
 use span::{Pos, Span};
 
 
@@ -103,10 +103,10 @@ impl TokenQueue
         }
     }
 
-    pub fn expect_operator(&mut self) -> CompileResult<Operator>
+    pub fn expect_binary_operator(&mut self) -> CompileResult<BinaryOperator>
     {
         let tok = self.pop()?;
-        if let TokenKind::Operator(op) = tok.kind
+        if let TokenKind::BinaryOperator(op) = tok.kind
         {
             Ok(op)
         }
@@ -135,11 +135,11 @@ impl TokenQueue
     }
 
 
-    pub fn is_next_operator(&self) -> bool
+    pub fn is_next_binary_operator(&self) -> bool
     {
         match self.tokens.front()
         {
-            Some(tok) => if let TokenKind::Operator(_) = tok.kind {true} else {false},
+            Some(tok) => if let TokenKind::BinaryOperator(_) = tok.kind {true} else {false},
             None => false,
         }
     }

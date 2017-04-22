@@ -1,7 +1,9 @@
 use std::fmt;
 
+pub const TOP_PRECEDENCE: usize = 2000;
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
-pub enum Operator
+pub enum BinaryOperator
 {
     Add,
     Sub,
@@ -14,72 +16,70 @@ pub enum Operator
     GreaterThanEquals,
     Equals,
     NotEquals,
-    Not,
     And,
     Or,
     Dot,
     As,
 }
 
-pub const TOP_PRECEDENCE: usize = 2000;
 
-impl Operator
-{
-    pub fn precedence(&self) -> usize
-    {
-        match *self
-        {
-            Operator::Not | Operator::Dot | Operator::As => TOP_PRECEDENCE,
-            Operator::Mul | Operator::Div | Operator::Mod => TOP_PRECEDENCE - 100,
-            Operator::Add | Operator::Sub => TOP_PRECEDENCE - 200,
-            Operator::LessThan | Operator::GreaterThan | Operator::LessThanEquals |
-            Operator::GreaterThanEquals | Operator::Equals | Operator::NotEquals => TOP_PRECEDENCE - 300,
-            Operator::And => TOP_PRECEDENCE - 400,
-            Operator::Or => TOP_PRECEDENCE - 500,
-        }
-    }
-
-    pub fn is_binary_operator(&self) -> bool
-    {
-        match *self
-        {
-            Operator::Not => false,
-            _ => true,
-        }
-    }
-
-    pub fn is_unary_operator(&self) -> bool
-    {
-        match *self
-        {
-            Operator::Not | Operator::Sub => true,
-            _ => false,
-        }
-    }
-}
-
-impl fmt::Display for Operator
+impl fmt::Display for BinaryOperator
 {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
         match *self
         {
-            Operator::Add => write!(fmt, "+"),
-            Operator::Sub => write!(fmt, "-"),
-            Operator::Mul => write!(fmt, "*"),
-            Operator::Div => write!(fmt, "/"),
-            Operator::Mod => write!(fmt, "%"),
-            Operator::LessThan => write!(fmt, "<"),
-            Operator::GreaterThan => write!(fmt, ">"),
-            Operator::LessThanEquals => write!(fmt, "<="),
-            Operator::GreaterThanEquals => write!(fmt, ">="),
-            Operator::Equals => write!(fmt, "=="),
-            Operator::NotEquals => write!(fmt, "!="),
-            Operator::Not => write!(fmt, "!"),
-            Operator::And => write!(fmt, "&&"),
-            Operator::Or => write!(fmt, "||"),
-            Operator::Dot => write!(fmt, "."),
-            Operator::As => write!(fmt, "as"),
+            BinaryOperator::Add => write!(fmt, "+"),
+            BinaryOperator::Sub => write!(fmt, "-"),
+            BinaryOperator::Mul => write!(fmt, "*"),
+            BinaryOperator::Div => write!(fmt, "/"),
+            BinaryOperator::Mod => write!(fmt, "%"),
+            BinaryOperator::LessThan => write!(fmt, "<"),
+            BinaryOperator::GreaterThan => write!(fmt, ">"),
+            BinaryOperator::LessThanEquals => write!(fmt, "<="),
+            BinaryOperator::GreaterThanEquals => write!(fmt, ">="),
+            BinaryOperator::Equals => write!(fmt, "=="),
+            BinaryOperator::NotEquals => write!(fmt, "!="),
+            BinaryOperator::And => write!(fmt, "&&"),
+            BinaryOperator::Or => write!(fmt, "||"),
+            BinaryOperator::Dot => write!(fmt, "."),
+            BinaryOperator::As => write!(fmt, "as"),
+        }
+    }
+}
+
+impl BinaryOperator
+{
+    pub fn precedence(&self) -> usize
+    {
+        match *self
+        {
+            BinaryOperator::Dot | BinaryOperator::As => TOP_PRECEDENCE,
+            BinaryOperator::Mul | BinaryOperator::Div | BinaryOperator::Mod => TOP_PRECEDENCE - 100,
+            BinaryOperator::Add | BinaryOperator::Sub => TOP_PRECEDENCE - 200,
+            BinaryOperator::LessThan | BinaryOperator::GreaterThan | BinaryOperator::LessThanEquals |
+            BinaryOperator::GreaterThanEquals | BinaryOperator::Equals | BinaryOperator::NotEquals => TOP_PRECEDENCE - 300,
+            BinaryOperator::And => TOP_PRECEDENCE - 400,
+            BinaryOperator::Or => TOP_PRECEDENCE - 500,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+pub enum UnaryOperator
+{
+    Not,
+    Sub,
+}
+
+impl fmt::Display for UnaryOperator
+{
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error>
+    {
+        match *self
+        {
+            UnaryOperator::Not => write!(fmt, "!"),
+            UnaryOperator::Sub => write!(fmt, "-"),
         }
     }
 }

@@ -200,7 +200,7 @@ impl Type
 
             (&Type::Bool, &Type::Optional(ref inner)) => {
                 Some(bin_op_with_type(
-                    Operator::NotEquals,
+                    BinaryOperator::NotEquals,
                     expr.clone(),
                     nil_expr_with_type(Span::default(), inner.deref().clone()),
                     expr.span(),
@@ -226,26 +226,26 @@ impl Type
         }
     }
 
-    pub fn is_operator_supported(&self, op: Operator) -> bool
+    pub fn is_binary_operator_supported(&self, op: BinaryOperator) -> bool
     {
-        const GENERAL_NUMERIC_OPERATORS: [Operator; 10] = [
-            Operator::Add, Operator::Sub, Operator::Div, Operator::Mul,
-            Operator::Equals, Operator::NotEquals, Operator::GreaterThan, Operator::LessThan,
-            Operator::GreaterThanEquals, Operator::LessThanEquals,
+        const GENERAL_NUMERIC_OPERATORS: [BinaryOperator; 10] = [
+            BinaryOperator::Add, BinaryOperator::Sub, BinaryOperator::Div, BinaryOperator::Mul,
+            BinaryOperator::Equals, BinaryOperator::NotEquals, BinaryOperator::GreaterThan, BinaryOperator::LessThan,
+            BinaryOperator::GreaterThanEquals, BinaryOperator::LessThanEquals,
         ];
 
-        const COMPARISON_OPERATORS: [Operator; 6] = [
-            Operator::Equals, Operator::NotEquals, Operator::GreaterThan, Operator::LessThan,
-            Operator::GreaterThanEquals, Operator::LessThanEquals,
+        const COMPARISON_OPERATORS: [BinaryOperator; 6] = [
+            BinaryOperator::Equals, BinaryOperator::NotEquals, BinaryOperator::GreaterThan, BinaryOperator::LessThan,
+            BinaryOperator::GreaterThanEquals, BinaryOperator::LessThanEquals,
         ];
 
         match *self
         {
-            Type::Int | Type::UInt => op == Operator::Mod || GENERAL_NUMERIC_OPERATORS.contains(&op),
+            Type::Int | Type::UInt => op == BinaryOperator::Mod || GENERAL_NUMERIC_OPERATORS.contains(&op),
             Type::Float => GENERAL_NUMERIC_OPERATORS.contains(&op),
             Type::Char=> COMPARISON_OPERATORS.contains(&op),
-            Type::Bool => COMPARISON_OPERATORS.contains(&op) || op == Operator::And || op == Operator::Or || op == Operator::Not,
-            Type::String | Type::Pointer(_) | Type::Optional(_) => op == Operator::Equals || op == Operator::NotEquals,
+            Type::Bool => COMPARISON_OPERATORS.contains(&op) || op == BinaryOperator::And || op == BinaryOperator::Or,
+            Type::String | Type::Pointer(_) | Type::Optional(_) => op == BinaryOperator::Equals || op == BinaryOperator::NotEquals,
             _ => false,
         }
     }

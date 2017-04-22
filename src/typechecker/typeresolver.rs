@@ -253,9 +253,9 @@ fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: Re
                 }
             },
 
-            TypeDeclaration::Alias(ref mut _a) => {
+            /*TypeDeclaration::Alias(ref mut _a) => {
                 panic!("NYI");
-            }
+            }*/
         }
     }
 

@@ -38,7 +38,8 @@ fn is_end_of_expression(tok: &Token) -> bool
 {
     match tok.kind
     {
-        TokenKind::Operator(_) |
+        TokenKind::UnaryOperator(_) |
+        TokenKind::BinaryOperator(_) |
         TokenKind::Number(_) |
         TokenKind::Identifier(_) |
         TokenKind::StringLiteral(_) |
@@ -125,17 +126,13 @@ fn parse_name(tq: &mut TokenQueue, id: String, span: &Span) -> CompileResult<Nam
     Ok(NameRef::new(name, span.expanded(tq.pos())))
 }
 
-fn parse_unary_expression(tq: &mut TokenQueue, op: Operator, op_span: &Span, indent_level: usize) -> CompileResult<Expression>
+fn parse_unary_expression(tq: &mut TokenQueue, op: UnaryOperator, op_span: &Span, indent_level: usize) -> CompileResult<Expression>
 {
-    if op == Operator::Not || op == Operator::Sub {
-        let se = parse_expression(tq, indent_level)?;
-        Ok(unary_op(op, se, op_span.expanded(tq.pos())))
-    } else {
-        parse_error_result(op_span, format!("Invalid unary operator {}", op))
-    }
+    let se = parse_expression(tq, indent_level)?;
+    Ok(unary_op(op, se, op_span.expanded(tq.pos())))
 }
 
-fn combine_binary_op(op: Operator, lhs: Expression, rhs: Expression) -> Expression
+fn combine_binary_op(op: BinaryOperator, lhs: Expression, rhs: Expression) -> Expression
 {
     if lhs.is_binary_op() && lhs.precedence() < op.precedence()
     {
@@ -176,12 +173,12 @@ fn parse_binary_op_rhs(tq: &mut TokenQueue, mut lhs: Expression, indent_level: u
             return Ok(lhs);
         }
 
-        if !tq.is_next_operator() {
+        if !tq.is_next_binary_operator() {
             return Ok(lhs);
         }
 
-        let op = tq.expect_operator()?;
-        if op == Operator::As {
+        let op = tq.expect_binary_operator()?;
+        if op == BinaryOperator::As {
             let typ = parse_type(tq, indent_level)?;
             let span = lhs.span().expanded(tq.pos());
             lhs = combine_type_cast(lhs, typ, span);
@@ -251,17 +248,17 @@ fn parse_function_call(tq: &mut TokenQueue, name: NameRef, indent_level: usize) 
 
 fn parse_generic_arg_list(tq: &mut TokenQueue, indent_level: usize) -> CompileResult<Vec<Type>>
 {
-    if !tq.is_next(TokenKind::Operator(Operator::LessThan)) {
+    if !tq.is_next(TokenKind::BinaryOperator(BinaryOperator::LessThan)) {
         return Ok(Vec::new());
     }
     tq.pop()?;
-    let args = parse_comma_separated_list(tq, TokenKind::Operator(Operator::GreaterThan), parse_type, indent_level)?;
+    let args = parse_comma_separated_list(tq, TokenKind::BinaryOperator(BinaryOperator::GreaterThan), parse_type, indent_level)?;
     Ok(args)
 }
 
 fn parse_start_of_type(tq: &mut TokenQueue, indent_level: usize) -> CompileResult<Type>
 {
-    if tq.is_next(TokenKind::Operator(Operator::Mul))
+    if tq.is_next(TokenKind::BinaryOperator(BinaryOperator::Mul))
     {
         tq.pop()?;
         let inner = parse_type(tq, indent_level)?;
@@ -273,7 +270,7 @@ fn parse_start_of_type(tq: &mut TokenQueue, indent_level: usize) -> CompileResul
         if tq.is_next(TokenKind::OpenParen)
         {
             tq.pop()?;
-            let constraints = parse_list(tq, TokenKind::Operator(Operator::Add), TokenKind::CloseParen, parse_type, indent_level)?;
+            let constraints = parse_list(tq, TokenKind::BinaryOperator(BinaryOperator::Add), TokenKind::CloseParen, parse_type, indent_level)?;
             Ok(generic_type_with_constraints(constraints))
         }
         else
@@ -422,7 +419,7 @@ fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, span: &Span,
             (namespaced(namespace, &name), self_type)
         },
         _ => {
-            if tq.is_next(TokenKind::Operator(Operator::Dot)) {
+            if tq.is_next(TokenKind::BinaryOperator(BinaryOperator::Dot)) {
                 tq.pop()?;
                 let (member_function_name, _) = tq.expect_identifier()?;
                 let self_type = ptr_type(unresolved_type(&name, Vec::new()));
@@ -695,7 +692,7 @@ fn parse_struct_initializer(tq: &mut TokenQueue, name: NameRef, indent_level: us
 fn parse_member_access(tq: &mut TokenQueue, left_expr: Expression, indent_level: usize) -> CompileResult<Expression>
 {
     let mut left = left_expr;
-    while tq.is_next(TokenKind::Operator(Operator::Dot))
+    while tq.is_next(TokenKind::BinaryOperator(BinaryOperator::Dot))
     {
         tq.pop()?;
         let (name, name_span) = tq.expect_identifier()?;
@@ -863,14 +860,14 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token, indent_level: usize) 
 
         TokenKind::Identifier(id) => {
             let nr = parse_name(tq, id, &tok.span)?;
-            if tq.is_next(TokenKind::Operator(Operator::Dot))
+            if tq.is_next(TokenKind::BinaryOperator(BinaryOperator::Dot))
             {
                 parse_member_access(tq, Expression::NameRef(nr), indent_level)
             }
             else if tq.is_next(TokenKind::OpenParen)
             {
                 let call = Expression::Call(parse_function_call(tq, nr, indent_level)?);
-                if tq.is_next(TokenKind::Operator(Operator::Dot)) {
+                if tq.is_next(TokenKind::BinaryOperator(BinaryOperator::Dot)) {
                     parse_member_access(tq, call, indent_level)
                 } else {
                     Ok(call)
@@ -904,7 +901,11 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token, indent_level: usize) 
             Ok(delete(inner, tok.span.expanded(tq.pos())))
         },
 
-        TokenKind::Operator(op) if op.is_unary_operator() => parse_unary_expression(tq, op, &tok.span, indent_level),
+        TokenKind::UnaryOperator(op) =>
+            parse_unary_expression(tq, op, &tok.span, indent_level),
+
+        TokenKind::BinaryOperator(BinaryOperator::Sub) =>
+            parse_unary_expression(tq, UnaryOperator::Sub, &tok.span, indent_level),
 
         _ => parse_error_result(&tok.span, format!("Unexpected token '{}'", tok)),
     }
@@ -925,12 +926,12 @@ fn parse_expression_continued(tq: &mut TokenQueue, lhs: Expression, indent_level
             Ok(assign(lhs, rhs, span))
         },
 
-        TokenKind::Operator(Operator::Dot) => {
+        TokenKind::BinaryOperator(BinaryOperator::Dot) => {
             tq.push_front(next);
             parse_member_access(tq, lhs, indent_level)
         },
 
-        TokenKind::Operator(op) if op.is_binary_operator() => {
+        TokenKind::BinaryOperator(_) => {
             tq.push_front(next);
             parse_binary_op_rhs(tq, lhs, indent_level)
         },

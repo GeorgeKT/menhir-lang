@@ -5,7 +5,7 @@ use llvm::*;
 use llvm::core::*;
 use llvm::prelude::*;
 use bytecode::*;
-use ast::{Type, Operator, ptr_type};
+use ast::{Type, UnaryOperator, BinaryOperator, ptr_type};
 use super::function::gen_function_ptr;
 use super::valueref::ValueRef;
 use super::context::Context;
@@ -72,15 +72,15 @@ pub unsafe fn get_operand(ctx: &Context, operand: &Operand) -> ValueRef
                 .value.address_of()
         }
 
-        Operand::String(ref s) => {
+        Operand::Const(ByteCodeConstant::String(ref s)) => {
             ValueRef::const_string(ctx, s)
         },
 
-        Operand::Int(v) => ValueRef::new(const_int(ctx, v), Type::Int),
-        Operand::UInt(v) => ValueRef::new(const_uint(ctx, v), Type::UInt),
-        Operand::Float(v) => ValueRef::new(const_float(ctx, v), Type::Float),
-        Operand::Char(v) => ValueRef::new(const_char(ctx, v), Type::Char),
-        Operand::Bool(v) => ValueRef::new(const_bool(ctx, v), Type::Bool),
+        Operand::Const(ByteCodeConstant::Int(v)) => ValueRef::new(const_int(ctx, v), Type::Int),
+        Operand::Const(ByteCodeConstant::UInt(v)) => ValueRef::new(const_uint(ctx, v), Type::UInt),
+        Operand::Const(ByteCodeConstant::Float(v)) => ValueRef::new(const_float(ctx, v), Type::Float),
+        Operand::Const(ByteCodeConstant::Char(v)) => ValueRef::new(const_char(ctx, v), Type::Char),
+        Operand::Const(ByteCodeConstant::Bool(v)) => ValueRef::new(const_bool(ctx, v), Type::Bool),
     }
 }
 
@@ -140,23 +140,23 @@ unsafe fn stack_alloc(ctx: &Context, typ: LLVMTypeRef, name: &str) -> LLVMValueR
     alloc
 }
 
-unsafe fn gen_unary_op(ctx: &Context, dst: &Var, operator: Operator, src: &Operand)
+unsafe fn gen_unary_op(ctx: &Context, dst: &Var, operator: UnaryOperator, src: &Operand)
 {
     let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
     let src_value = get_operand(ctx, src).load(ctx);
     let result = match (operator, &dst.typ)
     {
-        (Operator::Sub, &Type::Int) |
-        (Operator::Sub, &Type::UInt) => LLVMBuildNeg(ctx.builder, src_value, cstr!("neg")),
-        (Operator::Sub, &Type::Float) => LLVMBuildFNeg(ctx.builder, src_value, cstr!("neg")),
-        (Operator::Not, &Type::Bool) => LLVMBuildNot(ctx.builder, src_value, cstr!("not")),
+        (UnaryOperator::Sub, &Type::Int) |
+        (UnaryOperator::Sub, &Type::UInt) => LLVMBuildNeg(ctx.builder, src_value, cstr!("neg")),
+        (UnaryOperator::Sub, &Type::Float) => LLVMBuildFNeg(ctx.builder, src_value, cstr!("neg")),
+        (UnaryOperator::Not, &Type::Bool) => LLVMBuildNot(ctx.builder, src_value, cstr!("not")),
         _ => panic!("Unsupported unary operator"),
     };
 
     dst_var.value.store(ctx, &ValueRef::new(result, dst.typ.clone()));
 }
 
-unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: Operator, left: &Operand, right: &Operand)
+unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: BinaryOperator, left: &Operand, right: &Operand)
 {
     let left_type = left.get_type();
     let left = get_operand(ctx, left).load(ctx);
@@ -164,61 +164,61 @@ unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: Operator, left: &Operand, 
 
     let value = match (op, left_type)
     {
-        (Operator::Add, Type::Int) => LLVMBuildAdd(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Add, Type::UInt) => LLVMBuildAdd(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Add, Type::Float) => LLVMBuildFAdd(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Add, Type::Int) => LLVMBuildAdd(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Add, Type::UInt) => LLVMBuildAdd(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Add, Type::Float) => LLVMBuildFAdd(ctx.builder, left, right, cstr!("bop")),
 
-        (Operator::Sub, Type::Int) => LLVMBuildSub(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Sub, Type::UInt) => LLVMBuildSub(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Sub, Type::Float) => LLVMBuildFSub(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Sub, Type::Int) => LLVMBuildSub(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Sub, Type::UInt) => LLVMBuildSub(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Sub, Type::Float) => LLVMBuildFSub(ctx.builder, left, right, cstr!("bop")),
 
-        (Operator::Mul, Type::Int) => LLVMBuildMul(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Mul, Type::UInt) => LLVMBuildMul(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Mul, Type::Float) => LLVMBuildFMul(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Mul, Type::Int) => LLVMBuildMul(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Mul, Type::UInt) => LLVMBuildMul(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Mul, Type::Float) => LLVMBuildFMul(ctx.builder, left, right, cstr!("bop")),
 
-        (Operator::Div, Type::Int) => LLVMBuildSDiv(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Div, Type::UInt) => LLVMBuildUDiv(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Div, Type::Float) => LLVMBuildFDiv(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Div, Type::Int) => LLVMBuildSDiv(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Div, Type::UInt) => LLVMBuildUDiv(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Div, Type::Float) => LLVMBuildFDiv(ctx.builder, left, right, cstr!("bop")),
 
-        (Operator::Mod, Type::Int) => LLVMBuildSRem(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Mod, Type::UInt) => LLVMBuildURem(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Mod, Type::Int) => LLVMBuildSRem(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Mod, Type::UInt) => LLVMBuildURem(ctx.builder, left, right, cstr!("bop")),
 
-        (Operator::LessThan, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, left, right, cstr!("bop")),
-        (Operator::LessThan, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULT, left, right, cstr!("bop")),
-        (Operator::LessThan, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealULT, left, right, cstr!("bop")),
-        (Operator::LessThan, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULT, left, right, cstr!("bop")),
+        (BinaryOperator::LessThan, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, left, right, cstr!("bop")),
+        (BinaryOperator::LessThan, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULT, left, right, cstr!("bop")),
+        (BinaryOperator::LessThan, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealULT, left, right, cstr!("bop")),
+        (BinaryOperator::LessThan, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULT, left, right, cstr!("bop")),
 
-        (Operator::GreaterThan, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, left, right, cstr!("bop")),
-        (Operator::GreaterThan, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGT, left, right, cstr!("bop")),
-        (Operator::GreaterThan, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUGT, left, right, cstr!("bop")),
-        (Operator::GreaterThan, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGT, left, right, cstr!("bop")),
+        (BinaryOperator::GreaterThan, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, left, right, cstr!("bop")),
+        (BinaryOperator::GreaterThan, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGT, left, right, cstr!("bop")),
+        (BinaryOperator::GreaterThan, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUGT, left, right, cstr!("bop")),
+        (BinaryOperator::GreaterThan, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGT, left, right, cstr!("bop")),
 
-        (Operator::LessThanEquals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLE, left, right, cstr!("bop")),
-        (Operator::LessThanEquals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULE, left, right, cstr!("bop")),
-        (Operator::LessThanEquals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealULE, left, right, cstr!("bop")),
-        (Operator::LessThanEquals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULE, left, right, cstr!("bop")),
+        (BinaryOperator::LessThanEquals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLE, left, right, cstr!("bop")),
+        (BinaryOperator::LessThanEquals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULE, left, right, cstr!("bop")),
+        (BinaryOperator::LessThanEquals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealULE, left, right, cstr!("bop")),
+        (BinaryOperator::LessThanEquals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULE, left, right, cstr!("bop")),
 
-        (Operator::GreaterThanEquals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGE, left, right, cstr!("bop")),
-        (Operator::GreaterThanEquals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGE, left, right, cstr!("bop")),
-        (Operator::GreaterThanEquals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUGE, left, right, cstr!("bop")),
-        (Operator::GreaterThanEquals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGE, left, right, cstr!("bop")),
+        (BinaryOperator::GreaterThanEquals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGE, left, right, cstr!("bop")),
+        (BinaryOperator::GreaterThanEquals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGE, left, right, cstr!("bop")),
+        (BinaryOperator::GreaterThanEquals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUGE, left, right, cstr!("bop")),
+        (BinaryOperator::GreaterThanEquals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGE, left, right, cstr!("bop")),
 
-        (Operator::Equals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
-        (Operator::Equals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
-        (Operator::Equals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUEQ, left, right, cstr!("bop")),
-        (Operator::Equals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
-        (Operator::Equals, Type::Bool) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
-        (Operator::Equals, Type::Enum(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
+        (BinaryOperator::Equals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
+        (BinaryOperator::Equals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
+        (BinaryOperator::Equals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUEQ, left, right, cstr!("bop")),
+        (BinaryOperator::Equals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
+        (BinaryOperator::Equals, Type::Bool) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
+        (BinaryOperator::Equals, Type::Enum(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
 
-        (Operator::NotEquals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
-        (Operator::NotEquals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
-        (Operator::NotEquals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUNE, left, right, cstr!("bop")),
-        (Operator::NotEquals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
-        (Operator::NotEquals, Type::Bool) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
-        (Operator::NotEquals, Type::Enum(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
+        (BinaryOperator::NotEquals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
+        (BinaryOperator::NotEquals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
+        (BinaryOperator::NotEquals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUNE, left, right, cstr!("bop")),
+        (BinaryOperator::NotEquals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
+        (BinaryOperator::NotEquals, Type::Bool) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
+        (BinaryOperator::NotEquals, Type::Enum(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
 
-        (Operator::And, Type::Bool) => LLVMBuildAnd(ctx.builder, left, right, cstr!("bop")),
-        (Operator::Or, Type::Bool) => LLVMBuildOr(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::And, Type::Bool) => LLVMBuildAnd(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Or, Type::Bool) => LLVMBuildOr(ctx.builder, left, right, cstr!("bop")),
 
         (_, t) => panic!("Operator {} not supported on type {}", op, t),
     };
