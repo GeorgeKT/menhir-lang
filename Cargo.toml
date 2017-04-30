@@ -4,12 +4,12 @@ version = "0.1.0"
 authors = ["Joris Guisson <joris.guisson@gmail.com>"]
 
 [dependencies]
-clap = "2.20"
+clap = "2.*"
 itertools = "0.5"
 uuid = { version = "0.2", features = ["v4"] }
 serde = "0.9"
 serde_derive = "0.9"
 serde_cbor = "0.5"
-llvm-sys = "38"
+llvm-sys = "40"
 libc = "*"
 shrust = "0.0.4"

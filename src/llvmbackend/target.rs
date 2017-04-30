@@ -46,7 +46,7 @@ impl TargetMachine
 
         Ok(TargetMachine{
             target_machine: target_machine,
-            target_data: LLVMGetTargetMachineData(target_machine),
+            target_data: LLVMCreateTargetDataLayout(target_machine),
         })
     }
 

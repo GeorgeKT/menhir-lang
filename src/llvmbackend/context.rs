@@ -179,7 +179,6 @@ impl Context
     unsafe fn optimize(&self) -> Result<(), String>
     {
         use llvm::transforms::pass_manager_builder::*;
-        use llvm::target::LLVMAddTargetData;
 
         let pass_builder = LLVMPassManagerBuilderCreate();
         LLVMPassManagerBuilderSetOptLevel(pass_builder, 3);
@@ -188,8 +187,6 @@ impl Context
         let function_passes = LLVMCreateFunctionPassManagerForModule(self.module);
         let module_passes = LLVMCreatePassManager();
         let lto_passes = LLVMCreatePassManager();
-
-        LLVMAddTargetData(self.target_machine.target_data, module_passes);
 
         LLVMPassManagerBuilderPopulateFunctionPassManager(pass_builder, function_passes);
         LLVMPassManagerBuilderPopulateModulePassManager(pass_builder, module_passes);
