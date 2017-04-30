@@ -1,5 +1,11 @@
 #!/bin/bash
-cargo build --release 
+if [ "$1" == "release" ]; then
+	mode="--release"
+else
+	mode=""
+fi
+
+cargo build ${mode} 
 if [ $? != 0 ]; then
 	echo "Failed to build the compiler"
 	exit 1
@@ -11,8 +17,11 @@ success_count=0
 for file in testcode/*.cobra; do
 	name=$(basename -s .cobra ${file})
 	echo "Testing ${name}"
-	if ! cargo run --release -- build ${file} &> /dev/null; then
+	if ! cargo run ${mode} -- build ${file} &> /tmp/compile_output.log; then
+		echo "*********************"
 		echo "  Compile failed"
+		cat /tmp/compile_output.log
+		echo "---------------------"
 		fail_count=$((fail_count + 1))
 	else
 		build/${name}
