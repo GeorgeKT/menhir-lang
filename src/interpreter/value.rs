@@ -67,6 +67,26 @@ impl Value
         }
     }
 
+    pub fn from_const(cst: &Constant) -> Value
+    {
+        match *cst
+        {
+            Constant::Int(v) => Value::Int(v),
+            Constant::UInt(v) => Value::UInt(v),
+            Constant::Float(v) => Value::Float(v),
+            Constant::Char(v) => Value::Char(v as char),
+            Constant::String(ref s) => Value::String(s.clone()),
+            Constant::Bool(v) => Value::Bool(v),
+            Constant::Array(ref array_data) => {
+                let mut array_data_values = Vec::with_capacity(array_data.len());
+                for ad in array_data {
+                    array_data_values.push(ValueRef::new(Value::from_const(ad)));
+                }
+                Value::Array(array_data_values)
+            }
+        }
+    }
+
     pub fn from_type(typ: &Type) -> ExecutionResult<Value>
     {
         match *typ

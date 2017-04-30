@@ -20,7 +20,8 @@ mod valueref;
 use std::process::{Output, Command};
 use llvm::core::*;
 
-use bytecode::{START_CODE_FUNCTION, ByteCodeModule};
+use bytecode::{ByteCodeModule};
+use self::valueref::ValueRef;
 use self::function::{gen_function, gen_function_sig, add_libc_functions};
 use self::context::Context;
 
@@ -70,16 +71,21 @@ pub fn llvm_code_generation(bc_mod: &ByteCodeModule) -> Result<Context, String>
     unsafe {
         add_libc_functions(&mut ctx);
 
+        for (glob_name, glob_val) in &bc_mod.globals {
+            let v = ValueRef::from_const(&ctx, glob_val);
+            ctx.add_variable(glob_name, v);
+        }
+
         for func in bc_mod.functions.values() {
-            if func.sig.name != START_CODE_FUNCTION {
-                gen_function_sig(&mut ctx, &func.sig);
+            if func.sig.name == bc_mod.main_function_name() {
+                gen_function_sig(&mut ctx, &func.sig, Some("main"));
+            } else {
+                gen_function_sig(&mut ctx, &func.sig, None);
             }
         }
 
         for func in bc_mod.functions.values() {
-            if func.sig.name != START_CODE_FUNCTION {
-                gen_function(&mut ctx, func);
-            }
+            gen_function(&mut ctx, func);
         }
 
         ctx.verify()?;

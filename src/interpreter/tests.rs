@@ -1,7 +1,7 @@
 use std::fs;
 use std::io::Read;
 use std::path::{PathBuf, Path};
-use bytecode::{START_CODE_FUNCTION, OptimizationLevel, optimize_module};
+use bytecode::{OptimizationLevel, optimize_module};
 use bytecode::test::generate_byte_code;
 use super::{run_byte_code, ExecutionResult};
 use super::value::Value;
@@ -39,7 +39,7 @@ impl Test
         };
 
         optimize_module(&mut bc_mod, OptimizationLevel::Normal);
-        let result = run_byte_code(&bc_mod, START_CODE_FUNCTION)?;
+        let result = run_byte_code(&bc_mod)?;
 
         match result
         {

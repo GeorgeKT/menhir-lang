@@ -156,12 +156,7 @@ impl Interpreter
     {
         match *op
         {
-            Operand::Const(ByteCodeConstant::Int(v)) => Ok(Value::Int(v)),
-            Operand::Const(ByteCodeConstant::UInt(v)) => Ok(Value::UInt(v)),
-            Operand::Const(ByteCodeConstant::Float(v)) => Ok(Value::Float(v)),
-            Operand::Const(ByteCodeConstant::Char(v)) => Ok(Value::Char(v as char)),
-            Operand::Const(ByteCodeConstant::String(ref s)) => Ok(Value::String(s.clone())),
-            Operand::Const(ByteCodeConstant::Bool(v)) => Ok(Value::Bool(v)),
+            Operand::Const(ref cst) => Ok(Value::from_const(cst)),
             Operand::AddressOf(ref src) => {
                 let var = self.get_variable(&src.name)?;
                 Ok(Value::Pointer(var))
@@ -356,8 +351,8 @@ impl Interpreter
     {
         match *member_index
         {
-            Operand::Const(ByteCodeConstant::Int(index)) if index >= 0 => Ok(index as usize),
-            Operand::Const(ByteCodeConstant::UInt(index)) => Ok(index as usize),
+            Operand::Const(Constant::Int(index)) if index >= 0 => Ok(index as usize),
+            Operand::Const(Constant::UInt(index)) => Ok(index as usize),
             Operand::Var(ref v) =>
                 match self.get_variable(&v.name)?.clone_value()?
                 {
@@ -634,11 +629,6 @@ impl Interpreter
                 next
             },
 
-            Instruction::GlobalAlloc(ref var) => {
-                self.add_global_variable(&var.name, Value::from_type(&var.typ)?)?;
-                next
-            },
-
             Instruction::Return(ref var) => {
                 self.ret(Some(var), module)
             },
@@ -698,6 +688,11 @@ impl Interpreter
 
     pub fn start(&mut self, function: &str, module: &ByteCodeModule) -> ExecutionResult<ByteCodeIndex>
     {
+        self.globals.vars.clear();
+        for (name, cst) in &module.globals {
+            self.add_global_variable(name, Value::from_const(cst))?;
+        }
+
         let func = module.get_function(function).ok_or_else(|| format!("Unknown function {}", function))?;
         let bottom_frame = StackFrame::new();
         self.stack.push(bottom_frame);
@@ -725,10 +720,10 @@ impl Interpreter
     }
 }
 
-pub fn run_byte_code(module: &ByteCodeModule, function: &str) -> ExecutionResult<Value>
+pub fn run_byte_code(module: &ByteCodeModule) -> ExecutionResult<Value>
 {
     let mut interpreter = Interpreter::new(false);
-    interpreter.run_function(function, module)
+    interpreter.run_function(&module.main_function_name(), module)
 }
 
 pub use self::debugger::debug_byte_code;

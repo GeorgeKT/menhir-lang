@@ -1,4 +1,5 @@
 mod compiler;
+mod consteval;
 mod function;
 mod instruction;
 mod optimizer;
@@ -9,7 +10,7 @@ use std::collections::HashMap;
 
 pub use self::instruction::*;
 pub use self::function::*;
-pub use self::compiler::{compile_to_byte_code, START_CODE_FUNCTION};
+pub use self::compiler::{compile_to_byte_code};
 pub use self::optimizer::{OptimizationLevel, optimize_module};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -17,12 +18,17 @@ pub struct ByteCodeModule
 {
     pub name: String,
     pub functions: HashMap<String, ByteCodeFunction>,
-    pub globals: HashMap<String, ByteCodeConstant>,
+    pub globals: HashMap<String, Constant>,
     pub exit_function: ByteCodeFunction,
 }
 
 impl ByteCodeModule
 {
+    pub fn main_function_name(&self) -> String
+    {
+        format!("{}::main", self.name)
+    }
+
     pub fn get_function(&self, name: &str) -> Option<&ByteCodeFunction>
     {
         if name == self.exit_function.sig.name {
@@ -95,7 +101,7 @@ pub mod test
             println!("-----------------");
         }
 
-        let bc_mod = compile_to_byte_code(&md);
+        let bc_mod = compile_to_byte_code(&md)?;
         if dump {
             println!("ByteCode:");
             println!("{}", bc_mod);

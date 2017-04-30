@@ -1,6 +1,6 @@
 use std::fmt;
 use itertools::free::join;
-use ast::{UnaryOperator, BinaryOperator, Type, ptr_type};
+use ast::{UnaryOperator, BinaryOperator, Type, ptr_type, array_type};
 use bytecode::function::{BasicBlockRef, Var};
 
 
@@ -24,7 +24,7 @@ impl fmt::Display for ByteCodeProperty
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum ByteCodeConstant
+pub enum Constant
 {
     Int(isize),
     UInt(usize),
@@ -32,36 +32,41 @@ pub enum ByteCodeConstant
     Char(char),
     String(String),
     Bool(bool),
+    Array(Vec<Constant>),
 }
 
-impl ByteCodeConstant
+impl Constant
 {
     pub fn get_type(&self) -> Type
     {
         match *self
         {
-            ByteCodeConstant::Int(_) => Type::Int,
-            ByteCodeConstant::UInt(_) => Type::UInt,
-            ByteCodeConstant::Float(_) => Type::Float,
-            ByteCodeConstant::Char(_) => Type::Char,
-            ByteCodeConstant::String(_) => Type::String,
-            ByteCodeConstant::Bool(_) => Type::Bool,
+            Constant::Int(_) => Type::Int,
+            Constant::UInt(_) => Type::UInt,
+            Constant::Float(_) => Type::Float,
+            Constant::Char(_) => Type::Char,
+            Constant::String(_) => Type::String,
+            Constant::Bool(_) => Type::Bool,
+            Constant::Array(ref members) => {
+                array_type(members[0].get_type(), members.len())
+            }
         }
     }
 }
 
-impl fmt::Display for ByteCodeConstant
+impl fmt::Display for Constant
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
     {
         match *self
         {
-            ByteCodeConstant::Int(v) => writeln!(f, "(int {})", v),
-            ByteCodeConstant::UInt(v) => writeln!(f, "(uint {})", v),
-            ByteCodeConstant::Float(v) => writeln!(f, "(float {})", v),
-            ByteCodeConstant::Char(v) => writeln!(f, "(char {})", v),
-            ByteCodeConstant::String(ref v) => writeln!(f, "(string {})", v),
-            ByteCodeConstant::Bool(v) => writeln!(f, "(bool {})", v),
+            Constant::Int(v) => writeln!(f, "(int {})", v),
+            Constant::UInt(v) => writeln!(f, "(uint {})", v),
+            Constant::Float(v) => writeln!(f, "(float {})", v),
+            Constant::Char(v) => writeln!(f, "(char {})", v),
+            Constant::String(ref v) => writeln!(f, "(string {})", v),
+            Constant::Bool(v) => writeln!(f, "(bool {})", v),
+            Constant::Array(ref m) => writeln!(f, "[{}]", join(m.iter(), ", ")),
         }
     }
 }
@@ -72,7 +77,7 @@ pub enum Operand
 {
     Var(Var),
     AddressOf(Var),
-    Const(ByteCodeConstant),
+    Const(Constant),
     Func(String),
 }
 
@@ -80,32 +85,32 @@ impl Operand
 {
     pub fn const_int(v: isize) -> Operand
     {
-        Operand::Const(ByteCodeConstant::Int(v))
+        Operand::Const(Constant::Int(v))
     }
 
     pub fn const_uint(v: usize) -> Operand
     {
-        Operand::Const(ByteCodeConstant::UInt(v))
+        Operand::Const(Constant::UInt(v))
     }
 
     pub fn const_float(v: f64) -> Operand
     {
-        Operand::Const(ByteCodeConstant::Float(v))
+        Operand::Const(Constant::Float(v))
     }
 
     pub fn const_bool(v: bool) -> Operand
     {
-        Operand::Const(ByteCodeConstant::Bool(v))
+        Operand::Const(Constant::Bool(v))
     }
 
     pub fn const_char(v: char) -> Operand
     {
-        Operand::Const(ByteCodeConstant::Char(v))
+        Operand::Const(Constant::Char(v))
     }
 
     pub fn const_string<S: Into<String>>(s: S) -> Operand
     {
-        Operand::Const(ByteCodeConstant::String(s.into()))
+        Operand::Const(Constant::String(s.into()))
     }
 
     pub fn get_type(&self) -> Type
@@ -167,7 +172,6 @@ pub enum Instruction
     Cast{dst: Var, src: Operand},
     IsNil{dst: Var, obj: Var},
     StoreNil(Var),
-    GlobalAlloc(Var),
     StackAlloc(Var),
     HeapAlloc(Var),
     StartScope,
@@ -420,10 +424,6 @@ impl fmt::Display for Instruction
             Instruction::HeapAlloc(ref var) => {
                 writeln!(f, "  halloc {}", var)
             },
-
-            Instruction::GlobalAlloc(ref var) => {
-                writeln!(f, "  galloc {}", var)
-            }
 
             Instruction::StartScope => {
                 writeln!(f, "  scope start")

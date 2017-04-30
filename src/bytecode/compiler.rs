@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use ast::*;
 use bytecode::{ByteCodeModule, ByteCodeFunction};
+use super::consteval::expr_to_const;
 use super::function::*;
 use super::instruction::*;
 
@@ -902,29 +903,10 @@ fn func_to_bc(sig: &FunctionSignature, bc_mod: &mut ByteCodeModule, expression: 
     llfunc
 }
 
-pub const START_CODE_FUNCTION : &'static str = "@start";
+use compileerror::{CompileResult, type_error_result};
 
-fn generate_start_code(md: &Module, bc_mod: &mut ByteCodeModule) -> ByteCodeFunction
-{
-    use span::Span;
-    let sig = sig(START_CODE_FUNCTION, Type::Int, vec![], Span::default());
-    let mut start_code = ByteCodeFunction::new(&sig);
 
-    for global in md.globals.values() {
-        let dst = Var::named(&global.name, global.typ.clone());
-        start_code.add(Instruction::GlobalAlloc(dst.clone()));
-        start_code.push_destination(Some(dst));
-        expr_to_bc(bc_mod, &mut start_code, &global.init);
-        start_code.pop_destination();
-    }
-
-    let result = stack_alloc(&mut start_code, &Type::Int, None);
-    start_code.add(call_instr(&result, "main", vec![]));
-    start_code.add(ret_instr(&result));
-    start_code
-}
-
-pub fn compile_to_byte_code(md: &Module) -> ByteCodeModule
+pub fn compile_to_byte_code(md: &Module) -> CompileResult<ByteCodeModule>
 {
     let mut ll_mod = ByteCodeModule{
         name: md.name.clone(),
@@ -937,8 +919,13 @@ pub fn compile_to_byte_code(md: &Module) -> ByteCodeModule
         ll_mod.functions.insert(func.sig.name.clone(), ByteCodeFunction::new(&func.sig));
     }
 
-    let start_code = generate_start_code(md, &mut ll_mod);
-    ll_mod.functions.insert(START_CODE_FUNCTION.to_string(), start_code);
+    for global in md.globals.values() {
+        if let Some(cst) = expr_to_const(&global.init) {
+            ll_mod.globals.insert(global.name.clone(), cst);
+        } else {
+            return type_error_result(&global.span, format!("Global {} must be initialized with a constant expression", global.name));
+        }
+    }
 
     for func in md.functions.values() {
         if !func.is_generic() {
@@ -947,5 +934,5 @@ pub fn compile_to_byte_code(md: &Module) -> ByteCodeModule
         }
     }
 
-    ll_mod
+    Ok(ll_mod)
 }

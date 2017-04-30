@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use bytecode::{START_CODE_FUNCTION, ByteCodeModule};
+use bytecode::{ByteCodeModule};
 use bytecode::function::{ByteCodeFunction};
 use bytecode::instruction::{Instruction, Operand};
 use compileerror::print_message;
@@ -36,9 +36,8 @@ fn find_used_calls(module: &ByteCodeModule, func: &ByteCodeFunction, unused_call
 pub fn eliminate_unused_functions(module: &mut ByteCodeModule)
 {
     let mut unused_calls: HashSet<String> = module.functions.keys().cloned().collect();
-    unused_calls.remove(START_CODE_FUNCTION);
-    unused_calls.remove("main");
-    if let Some(main) = module.get_function("main") {
+    if let Some(main) = module.get_function(&module.main_function_name()) {
+        unused_calls.remove(&main.sig.name);
         find_used_calls(module, main, &mut unused_calls);
     } else {
         return;

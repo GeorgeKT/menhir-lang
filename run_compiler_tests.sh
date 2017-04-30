@@ -1,5 +1,5 @@
 #!/bin/bash
-cargo build 
+cargo build --release 
 if [ $? != 0 ]; then
 	echo "Failed to build the compiler"
 	exit 1
@@ -11,7 +11,7 @@ success_count=0
 for file in testcode/*.cobra; do
 	name=$(basename -s .cobra ${file})
 	echo "Testing ${name}"
-	if ! cargo run -- build ${file} &> /dev/null; then
+	if ! cargo run --release -- build ${file} &> /dev/null; then
 		echo "  Compile failed"
 		fail_count=$((fail_count + 1))
 	else

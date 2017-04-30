@@ -4,9 +4,9 @@ use llvm::core::*;
 use llvm::prelude::*;
 
 use ast::*;
-use bytecode::{ByteCodeProperty, Operand, ByteCodeConstant};
+use bytecode::{ByteCodeProperty, Operand, Constant};
 use super::context::Context;
-use super::instructions::{const_uint, const_int, const_bool, copy, get_operand};
+use super::instructions::{const_uint, const_int, const_bool, const_float, const_char, copy, get_operand};
 
 #[derive(Clone)]
 pub struct ValueRef
@@ -26,7 +26,21 @@ impl ValueRef
         }
     }
 
-    pub unsafe fn const_string(ctx: &Context, s: &str) -> ValueRef
+    pub unsafe fn from_const(ctx: &Context, cst: &Constant) -> ValueRef
+    {
+        match *cst {
+            Constant::String(ref s) => ValueRef::const_string(ctx, s),
+            Constant::Int(v) => ValueRef::new(const_int(ctx, v), Type::Int),
+            Constant::UInt(v) => ValueRef::new(const_uint(ctx, v), Type::UInt),
+            Constant::Float(v) => ValueRef::new(const_float(ctx, v), Type::Float),
+            Constant::Char(v) => ValueRef::new(const_char(ctx, v), Type::Char),
+            Constant::Bool(v) => ValueRef::new(const_bool(ctx, v), Type::Bool),
+            Constant::Array(ref elements) => ValueRef::const_array(ctx, elements),
+        }
+    }
+
+
+    unsafe fn const_string(ctx: &Context, s: &str) -> ValueRef
     {
         let char_type = LLVMInt8TypeInContext(ctx.context);
         let glob = LLVMAddGlobal(ctx.module, LLVMArrayType(char_type, (s.len() + 1) as c_uint), cstr!("str_constant"));
@@ -47,6 +61,29 @@ impl ValueRef
         LLVMBuildStore(ctx.builder, const_uint(ctx, s.len()), string_len_ptr);
 
         ret
+    }
+
+    unsafe fn const_array(ctx: &Context, elements: &[Constant]) -> ValueRef
+    {
+        let (element_type, array_type) = if let Some(el) = elements.first() {
+            let et = el.get_type();
+            (ctx.resolve_type(&et), array_type(et, elements.len()))
+        } else {
+            panic!("Empty arrays are not allowed in globals")
+        };
+
+        let glob = LLVMAddGlobal(ctx.module, LLVMArrayType(element_type, elements.len() as c_uint), cstr!("array_constant"));
+        LLVMSetLinkage(glob, LLVMLinkage::LLVMInternalLinkage);
+
+        let mut array_data = Vec::with_capacity(elements.len());
+        for e in elements {
+            array_data.push(ValueRef::from_const(ctx, e).value);
+        }
+
+        let const_array = LLVMConstArray(element_type, array_data.as_mut_ptr(), array_data.len() as c_uint);
+        LLVMSetInitializer(glob, const_array);
+
+        ValueRef::new(glob, array_type)
     }
 
     pub unsafe fn store(&self, ctx: &Context, val: &ValueRef)
@@ -186,8 +223,8 @@ impl ValueRef
 
             Type::Struct(ref st) => unsafe {
                 let index = match *index {
-                    Operand::Const(ByteCodeConstant::Int(v)) => v as usize,
-                    Operand::Const(ByteCodeConstant::UInt(v)) => v as usize,
+                    Operand::Const(Constant::Int(v)) => v as usize,
+                    Operand::Const(Constant::UInt(v)) => v as usize,
                     _ => panic!("Struct member access has to be through an integer"),
                 };
 
@@ -199,8 +236,8 @@ impl ValueRef
 
             Type::Sum(ref st) => unsafe {
                 let index = match *index {
-                    Operand::Const(ByteCodeConstant::Int(v)) => v as usize,
-                    Operand::Const(ByteCodeConstant::UInt(v)) => v as usize,
+                    Operand::Const(Constant::Int(v)) => v as usize,
+                    Operand::Const(Constant::UInt(v)) => v as usize,
                     _ => panic!("Sum type member access has to be through an integer"),
                 };
 

@@ -26,7 +26,7 @@ use std::process::exit;
 use clap::ArgMatches;
 use parser::{ParserOptions, parse_file};
 use typechecker::{type_check_module};
-use bytecode::{compile_to_byte_code, optimize_module, ByteCodeModule, OptimizationLevel, START_CODE_FUNCTION};
+use bytecode::{compile_to_byte_code, optimize_module, ByteCodeModule, OptimizationLevel};
 use compileerror::{CompileResult, CompileError};
 use llvmbackend::{CodeGenOptions, llvm_code_generation, link};
 use interpreter::{run_byte_code, debug_byte_code};
@@ -65,7 +65,7 @@ fn parse(parser_options: &ParserOptions, input_file: &str, dump_flags: &str, opt
         println!("------\n");
     }
 
-    let mut bc_mod = compile_to_byte_code(&module);
+    let mut bc_mod = compile_to_byte_code(&module)?;
     if optimize {
         optimize_module(&mut bc_mod, OptimizationLevel::Normal);
     } else {
@@ -142,9 +142,9 @@ fn run_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
     };
 
     let ret = if run_debugger {
-        debug_byte_code(&bc_mod, START_CODE_FUNCTION)?
+        debug_byte_code(&bc_mod)?
     } else {
-        run_byte_code(&bc_mod, START_CODE_FUNCTION)?
+        run_byte_code(&bc_mod)?
     };
 
     Ok(ret.to_exit_code())

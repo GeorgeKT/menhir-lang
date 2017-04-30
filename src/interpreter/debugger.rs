@@ -129,10 +129,11 @@ fn cont(io: &mut ShellIO, dc: &mut DebuggerContext) -> ExecResult
     }
 }
 
-pub fn debug_byte_code(module: &ByteCodeModule, function: &str) -> ExecutionResult<Value>
+pub fn debug_byte_code(module: &ByteCodeModule) -> ExecutionResult<Value>
 {
     let mut interpreter = Interpreter::new(true);
-    let index = interpreter.start(function, module)?;
+    let function = module.main_function_name();
+    let index = interpreter.start(&function, module)?;
     index.print(module);
     let mut shell = Shell::new(DebuggerContext{
         interpreter: interpreter,

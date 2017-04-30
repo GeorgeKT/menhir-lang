@@ -82,12 +82,12 @@ mod test
 
         assert!(m.get_function("test::foo").is_some());
         assert!(m.get_function("test::bar").is_some());
-        assert!(m.get_function("main").is_some());
+        assert!(m.get_function("test::main").is_some());
 
         optimize_module(&mut m, OptimizationLevel::Normal);
 
         assert!(m.get_function("test::foo").is_none());
         assert!(m.get_function("test::bar").is_some());
-        assert!(m.get_function("main").is_some());
+        assert!(m.get_function("test::main").is_some());
     }
 }

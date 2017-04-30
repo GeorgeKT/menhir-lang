@@ -13,7 +13,8 @@ use super::context::Context;
 use super::instructions::*;
 use super::valueref::ValueRef;
 
-pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature)
+
+pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, name_override: Option<&str>)
 {
     let ret_type = ctx.resolve_type(&sig.return_type);
     let mut arg_types: Vec<_> = sig.args.iter().map(|arg|{
@@ -26,7 +27,8 @@ pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature)
     }).collect();
 
     let function_type = LLVMFunctionType(ret_type, arg_types.as_mut_ptr(), arg_types.len() as libc::c_uint, 0);
-    let name = CString::new(sig.name.as_bytes()).expect("Invalid string");
+    let llvm_name = name_override.unwrap_or(&sig.name);
+    let name = CString::new(llvm_name.as_bytes()).expect("Invalid string");
     let func = LLVMAddFunction(ctx.module, name.into_raw(), function_type);
     let fi = FunctionInstance::new(&sig.name, func, sig.return_type.clone(), sig.get_type());
     ctx.add_function(Rc::new(fi));
@@ -109,5 +111,5 @@ pub unsafe fn add_libc_functions(ctx: &mut Context)
         Span::default()
     );
 
-    gen_function_sig(ctx, &memcpy_sig);
+    gen_function_sig(ctx, &memcpy_sig, None);
 }

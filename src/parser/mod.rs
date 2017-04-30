@@ -413,7 +413,6 @@ fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, span: &Span,
 
     let (full_name, self_type) = match &name[..]
     {
-        "main" => (name.into(), Type::Unknown),
         _ if name.starts_with('~') => {
             let self_type = ptr_type(unresolved_type(&name[1..], Vec::new()));
             (namespaced(namespace, &name), self_type)

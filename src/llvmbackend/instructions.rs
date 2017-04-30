@@ -25,12 +25,12 @@ pub unsafe fn const_bool(ctx: &Context, v: bool) -> LLVMValueRef
     LLVMConstInt(LLVMInt1TypeInContext(ctx.context), if v {1} else {0}, 0)
 }
 
-unsafe fn const_float(ctx: &Context, v: f64) -> LLVMValueRef
+pub unsafe fn const_float(ctx: &Context, v: f64) -> LLVMValueRef
 {
     LLVMConstReal(LLVMDoubleTypeInContext(ctx.context), v)
 }
 
-unsafe fn const_char(ctx: &Context, c: char) -> LLVMValueRef
+pub unsafe fn const_char(ctx: &Context, c: char) -> LLVMValueRef
 {
     LLVMConstInt(LLVMInt32TypeInContext(ctx.context), c as c_ulonglong, 0)
 }
@@ -72,15 +72,7 @@ pub unsafe fn get_operand(ctx: &Context, operand: &Operand) -> ValueRef
                 .value.address_of()
         }
 
-        Operand::Const(ByteCodeConstant::String(ref s)) => {
-            ValueRef::const_string(ctx, s)
-        },
-
-        Operand::Const(ByteCodeConstant::Int(v)) => ValueRef::new(const_int(ctx, v), Type::Int),
-        Operand::Const(ByteCodeConstant::UInt(v)) => ValueRef::new(const_uint(ctx, v), Type::UInt),
-        Operand::Const(ByteCodeConstant::Float(v)) => ValueRef::new(const_float(ctx, v), Type::Float),
-        Operand::Const(ByteCodeConstant::Char(v)) => ValueRef::new(const_char(ctx, v), Type::Char),
-        Operand::Const(ByteCodeConstant::Bool(v)) => ValueRef::new(const_bool(ctx, v), Type::Bool),
+        Operand::Const(ref c) => ValueRef::from_const(ctx, c),
     }
 }
 
@@ -359,10 +351,6 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
 
         Instruction::Cast{ref dst, ref src} => {
             gen_cast(ctx, dst, src);
-        }
-
-        Instruction::GlobalAlloc(ref _var) => {
-            panic!("NYI");
         }
 
         Instruction::StackAlloc(ref var) => {
