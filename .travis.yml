@@ -18,6 +18,7 @@ before_install:
         - sudo apt-get remove -y llvm
         - sudo apt-get install -y llvm-4.0 llvm-4.0-dev llvm-4.0-runtime lld-4.0
         - sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-4.0 200
+        - which llvm-config
         - llvm-config --version
         - export RUST_TEST_THREADS=1
 
