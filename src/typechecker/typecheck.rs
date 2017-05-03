@@ -1092,6 +1092,14 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
             }
             valid(nt.typ.clone())
         },
+        Expression::OptionalToBool(ref mut inner) => {
+            let inner_type = type_check_expression(ctx, inner, &None)?;
+            if !inner_type.is_optional() {
+                type_error_result(&inner.span(), format!("Expecting optional type"))
+            } else {
+                valid(Type::Bool)
+            }
+        }
         Expression::ToOptional(ref mut t) => {
             type_check_expression(ctx, &mut t.inner, &None)?;
             valid(t.optional_type.clone())

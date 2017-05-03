@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash 
 if [ "$1" == "release" ]; then
 	mode="--release"
 else
@@ -27,9 +27,9 @@ for file in testcode/*.cobra; do
 		build/${name}
 		test_ret_value=$?
 		test_expected_ret_value=$(head -n 1 $file | cut -b 6-)
-		if [ "$?" -eq "$test_expected_ret_value" ]; then
+		if [ "$test_ret_value" -ne "$test_expected_ret_value" ]; then
 			fail_count=$((fail_count + 1))
-			echo "  Run failed, expected $test_ret_value, got $test_expected_ret_value"
+			echo "  Run failed, expected $test_expected_ret_value, got $test_ret_value"
 		else
 			success_count=$((success_count + 1))
 			echo "  Run succeeded"

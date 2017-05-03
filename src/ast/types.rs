@@ -198,14 +198,8 @@ impl Type
                 Some(to_optional(expr.clone(), self.clone()))
             }
 
-            (&Type::Bool, &Type::Optional(ref inner)) => {
-                Some(bin_op_with_type(
-                    BinaryOperator::NotEquals,
-                    expr.clone(),
-                    nil_expr_with_type(Span::default(), inner.deref().clone()),
-                    expr.span(),
-                    Type::Bool
-                ))
+            (&Type::Bool, &Type::Optional(_)) => {
+                Some(Expression::OptionalToBool(Box::new(expr.clone())))
             }
 
             (&Type::Optional(ref inner), _) if from_type.is_optional_of(&Type::Unknown) => {
@@ -331,6 +325,15 @@ impl Type
     {
         if let Type::Pointer(_) = *self {
             true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_pointer_to_optional(&self) -> bool
+    {
+        if let Type::Pointer(ref inner) = *self {
+            inner.is_optional()
         } else {
             false
         }

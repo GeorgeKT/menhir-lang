@@ -401,6 +401,10 @@ fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &
             Ok(Expression::Nil(span.clone()))
         },
 
+        Expression::OptionalToBool(ref inner) => {
+            Ok(Expression::OptionalToBool(inner.clone()))
+        },
+
         Expression::ToOptional(ref t) => {
             let inner = substitute_expr(ctx, generic_args, &t.inner)?;
             Ok(to_optional(inner, t.optional_type.clone()))
@@ -587,6 +591,10 @@ fn resolve_generics(ctx: &TypeCheckerContext, new_functions: &mut FunctionMap, m
 
         Expression::Cast(ref t) => {
             resolve_generics(ctx, new_functions, module, &t.inner)
+        },
+
+        Expression::OptionalToBool(ref inner) => {
+            resolve_generics(ctx, new_functions, module, inner)
         },
 
         Expression::Nil(_) |

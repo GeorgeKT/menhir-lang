@@ -92,13 +92,24 @@ impl ValueRef
         match *element_type
         {
             Type::Optional(ref inner) => {
-                let is_nil_ptr = LLVMBuildStructGEP(ctx.builder, self.value, 0, cstr!("is_nil_ptr"));
-                LLVMBuildStore(ctx.builder, const_bool(ctx, false), is_nil_ptr);
-                let inner_ptr = LLVMBuildStructGEP(ctx.builder, self.value, 1, cstr!("inner_ptr"));
-                if inner.pass_by_value() {
-                    LLVMBuildStore(ctx.builder, val.load(ctx), inner_ptr);
+                let dst_opt_flag_ptr = LLVMBuildStructGEP(ctx.builder, self.value, 0, cstr!("dst_opt_flag_ptr"));
+                let dst_data_ptr = LLVMBuildStructGEP(ctx.builder, self.value, 1, cstr!("dst_data_ptr"));
+                if val.typ.is_pointer_to_optional() {
+                    let src_opt_flag_ptr = LLVMBuildStructGEP(ctx.builder, val.value, 0, cstr!("src_opt_flag_ptr"));
+                    let src_data_ptr = LLVMBuildStructGEP(ctx.builder, val.value, 1, cstr!("src_data_ptr"));
+                    LLVMBuildStore(ctx.builder, LLVMBuildLoad(ctx.builder, src_opt_flag_ptr, cstr!("src_is_nil")), dst_opt_flag_ptr);
+                    if inner.pass_by_value() {
+                        LLVMBuildStore(ctx.builder, LLVMBuildLoad(ctx.builder, src_data_ptr, cstr!("src_data")), dst_data_ptr);
+                    } else {
+                        copy(ctx, dst_data_ptr, src_data_ptr, ctx.resolve_type(inner))
+                    }
                 } else {
-                    copy(ctx, inner_ptr, val.value, ctx.resolve_type(inner))
+                    LLVMBuildStore(ctx.builder, const_bool(ctx, true), dst_opt_flag_ptr);
+                    if inner.pass_by_value() {
+                        LLVMBuildStore(ctx.builder, val.load(ctx), dst_data_ptr);
+                    } else {
+                        copy(ctx, dst_data_ptr, val.value, ctx.resolve_type(inner))
+                    }
                 }
             },
 
@@ -162,21 +173,20 @@ impl ValueRef
         }
     }
 
-    pub fn is_nil(&self, ctx: &Context) -> ValueRef
+    pub fn load_optional_flag(&self, ctx: &Context) -> ValueRef
     {
-        match self.typ
+        let typ = self.typ.get_pointer_element_type().unwrap_or(&self.typ);
+        match *typ
         {
             Type::Optional(_) => unsafe {
-                let is_nil_ptr = LLVMBuildStructGEP(ctx.builder, self.value, 0, cstr!("is_nil_ptr"));
+                let opt_flag_ptr = LLVMBuildStructGEP(ctx.builder, self.value, 0, cstr!("opt_flag_ptr"));
                 ValueRef::new(
-                    LLVMBuildLoad(ctx.builder, is_nil_ptr, cstr!("is_nil")),
+                    LLVMBuildLoad(ctx.builder, opt_flag_ptr, cstr!("is_nil")),
                     Type::Bool
                 )
             },
 
-            _ => unsafe{
-                ValueRef::new(const_bool(ctx, false), Type::Bool)
-            }
+            _ => panic!("is_nil not allowed on type {}", self.typ)
         }
     }
 
@@ -186,8 +196,8 @@ impl ValueRef
         match *element_type
         {
             Type::Optional(_) => unsafe {
-                let is_nil_ptr = LLVMBuildStructGEP(ctx.builder, self.value, 0, cstr!("is_nil_ptr"));
-                LLVMBuildStore(ctx.builder, const_bool(ctx, true), is_nil_ptr);
+                let opt_flag_ptr = LLVMBuildStructGEP(ctx.builder, self.value, 0, cstr!("opt_flag_ptr"));
+                LLVMBuildStore(ctx.builder, const_bool(ctx, false), opt_flag_ptr);
             },
 
             _ => panic!("storenil only allowed on optional type"),

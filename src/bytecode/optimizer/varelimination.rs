@@ -142,7 +142,7 @@ fn eliminate_vars_pass(func: &mut ByteCodeFunction) -> usize
             Instruction::LoadMember{ref dst, ref obj, ..} |
             Instruction::AddressOfMember{ref dst, ref obj, ..} |
             Instruction::GetProperty{ref obj, ref dst, ..} |
-            Instruction::IsNil{ref dst, ref obj}=> {
+            Instruction::LoadOptionalFlag{ref dst, ref obj}=> {
                 vars.remove(&obj.name);
                 vars.remove(&dst.name);
             }

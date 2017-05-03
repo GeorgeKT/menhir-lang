@@ -26,4 +26,5 @@ before_install:
 script:
         - cargo build
         - cargo test --all
-        - ./run_compiler_tests.sh
+        - ./run_compiler_tests.sh debug
+        - ./run_compiler_tests.sh release

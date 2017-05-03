@@ -11,38 +11,6 @@ pub struct IfExpression
     pub typ: Type,
 }
 
-impl IfExpression
-{
-    pub fn to_match(&self) -> MatchExpression
-    {
-        MatchExpression{
-            target: self.condition.clone(),
-            cases: vec![
-                MatchCase{
-                    pattern: Pattern::Literal(Literal::Bool(Span::default(), true)),
-                    to_execute: self.on_true.clone(),
-                    span: self.on_true.span(),
-                },
-                MatchCase{
-                    pattern: Pattern::Any(Span::default()),
-                    to_execute: if let Some(ref expr) = self.on_false {
-                        expr.clone()
-                    } else {
-                        Expression::Void
-                    },
-                    span: if let Some(ref expr) = self.on_false {
-                        expr.span()
-                    } else {
-                        Span::default()
-                    },
-                },
-            ],
-            typ: self.typ.clone(),
-            span: self.span.clone(),
-        }
-    }
-}
-
 pub fn single_if_expression(condition: Expression, on_true: Expression, span: Span) -> Expression
 {
     Expression::If(Box::new(IfExpression{

@@ -521,12 +521,12 @@ impl Interpreter
         self.update_variable(&dst.name, new_value)
     }
 
-    fn is_nil(&mut self, dst: &Var, obj: &Var) -> ExecutionResult<()>
+    fn load_optional_flag(&mut self, dst: &Var, obj: &Var) -> ExecutionResult<()>
     {
         let v = self.get_variable(&obj.name)?.apply(|val: &Value| {
             match *val {
-                Value::Optional(ref ov) => ov.apply(|v: &Value| Ok(v.is_nil())),
-                Value::Nil => Ok(true),
+                Value::Optional(ref ov) => ov.apply(|v: &Value| Ok(!v.is_nil())),
+                Value::Nil => Ok(false),
                 _ => Ok(false)
             }
         });
@@ -609,8 +609,8 @@ impl Interpreter
                 next
             },
 
-            Instruction::IsNil{ref dst, ref obj} => {
-                self.is_nil(dst, obj)?;
+            Instruction::LoadOptionalFlag{ref dst, ref obj} => {
+                self.load_optional_flag(dst, obj)?;
                 next
             },
 

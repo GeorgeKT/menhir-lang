@@ -48,6 +48,7 @@ pub enum Expression
     While(Box<WhileLoop>),
     For(Box<ForLoop>),
     Nil(Nil),
+    OptionalToBool(Box<Expression>),
     ToOptional(Box<ToOptional>),
     Cast(Box<TypeCast>),
     Void,
@@ -149,6 +150,7 @@ impl Expression
             Expression::While(ref w) => w.span.clone(),
             Expression::For(ref f) => f.span.clone(),
             Expression::Nil(ref nt) => nt.span.clone(),
+            Expression::OptionalToBool(ref inner) => inner.span(),
             Expression::ToOptional(ref t) => t.inner.span(),
             Expression::Cast(ref t) => t.span.clone(),
             Expression::Void => Span::default(),
@@ -177,6 +179,7 @@ impl Expression
             Expression::AddressOf(ref a) => ptr_type(a.inner.get_type()),
             Expression::Assign(ref a) => a.typ.clone(),
             Expression::Nil(ref nt) => nt.typ.clone(),
+            Expression::OptionalToBool(_) => Type::Bool,
             Expression::ToOptional(ref t) => optional_type(t.inner.get_type()),
             Expression::Cast(ref t) => t.destination_type.clone(),
             Expression::Void |
@@ -231,6 +234,10 @@ impl TreePrinter for Expression
             Expression::While(ref w) => w.print(level),
             Expression::For(ref f) => f.print(level),
             Expression::Nil(_) => println!("{}nil", p),
+            Expression::OptionalToBool(ref n) => {
+                println!("{}nil?", p);
+                n.print(level + 1)
+            },
             Expression::ToOptional(ref t) => {
                 println!("{}to_optional (type: {})", p, t.optional_type);
                 t.inner.print(level + 1)

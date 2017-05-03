@@ -338,10 +338,10 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             dst_var.value.create_slice(ctx, &src_var.value, start, len);
         }
 
-        Instruction::IsNil{ref dst, ref obj} => {
+        Instruction::LoadOptionalFlag{ref dst, ref obj} => {
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
-            dst_var.value.store(ctx, &obj_var.value.is_nil(ctx));
+            dst_var.value.store(ctx, &obj_var.value.load_optional_flag(ctx));
         }
 
         Instruction::StoreNil(ref dst) => {

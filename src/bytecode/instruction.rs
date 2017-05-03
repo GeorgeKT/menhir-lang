@@ -60,13 +60,13 @@ impl fmt::Display for Constant
     {
         match *self
         {
-            Constant::Int(v) => writeln!(f, "(int {})", v),
-            Constant::UInt(v) => writeln!(f, "(uint {})", v),
-            Constant::Float(v) => writeln!(f, "(float {})", v),
-            Constant::Char(v) => writeln!(f, "(char {})", v),
-            Constant::String(ref v) => writeln!(f, "(string {})", v),
-            Constant::Bool(v) => writeln!(f, "(bool {})", v),
-            Constant::Array(ref m) => writeln!(f, "[{}]", join(m.iter(), ", ")),
+            Constant::Int(v) => write!(f, "(int {})", v),
+            Constant::UInt(v) => write!(f, "(uint {})", v),
+            Constant::Float(v) => write!(f, "(float {})", v),
+            Constant::Char(v) => write!(f, "(char {})", v),
+            Constant::String(ref v) => write!(f, "(string {})", v),
+            Constant::Bool(v) => write!(f, "(bool {})", v),
+            Constant::Array(ref m) => write!(f, "[{}]", join(m.iter(), ", ")),
         }
     }
 }
@@ -170,7 +170,7 @@ pub enum Instruction
     Call{dst: Option<Var>, func: String, args: Vec<Operand>},
     Slice{dst: Var, src: Var, start: Operand, len: Operand},
     Cast{dst: Var, src: Operand},
-    IsNil{dst: Var, obj: Var},
+    LoadOptionalFlag{dst: Var, obj: Var},
     StoreNil(Var),
     StackAlloc(Var),
     HeapAlloc(Var),
@@ -348,9 +348,9 @@ pub fn cast_instr(dst: &Var, src: &Var) -> Instruction
     }
 }
 
-pub fn is_nil_instr(dst: &Var, obj: &Var) -> Instruction
+pub fn load_optional_flag_instr(dst: &Var, obj: &Var) -> Instruction
 {
-    Instruction::IsNil{
+    Instruction::LoadOptionalFlag{
         dst: dst.clone(),
         obj: obj.clone()
     }
@@ -457,8 +457,8 @@ impl fmt::Display for Instruction
                 writeln!(f, "  slice {} {} {} {}", dst, src, start, len)
             },
 
-            Instruction::IsNil{ref dst, ref obj} => {
-                writeln!(f, "  nil? {} {}", dst, obj)
+            Instruction::LoadOptionalFlag{ref dst, ref obj} => {
+                writeln!(f, "  loadoptf {} {}", dst, obj)
             }
 
             Instruction::StoreNil(ref v) => {

@@ -483,15 +483,14 @@ fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc
 
         Pattern::Nil(_) => {
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(is_nil_instr(&cond, &target));
-            func.add(branch_if_instr(&cond, match_case_bb, next_bb));
+            func.add(load_optional_flag_instr(&cond, &target));
+            func.add(branch_if_instr(&cond, next_bb, match_case_bb));
             match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false);
         },
 
         Pattern::Optional(ref o) => {
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(is_nil_instr(&cond, &target));
-            func.add(unary_op_instr(&cond, UnaryOperator::Not, var_op(&cond)));
+            func.add(load_optional_flag_instr(&cond, &target));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
 
             func.set_current_bb(match_case_bb);
@@ -609,24 +608,19 @@ fn optional_compare_to_bc(
     equals: bool,
     inner_type: &Type)
 {
-    let l_is_nil_bb = func.create_basic_block();
-    let l_is_not_nil_bb = func.create_basic_block();
     let set_to_true_bb = func.create_basic_block();
     let set_to_false_bb = func.create_basic_block();
     let compare_inner_bb = func.create_basic_block();
     let end_bb = func.create_basic_block();
 
-    let l_is_nil = stack_alloc(func, &Type::Bool, None);
-    let r_is_nil = stack_alloc(func, &Type::Bool, None);
-    func.add(is_nil_instr(&l_is_nil, l));
-    func.add(is_nil_instr(&r_is_nil, r));
+    let l_is_ok = stack_alloc(func, &Type::Bool, None);
+    let r_is_ok = stack_alloc(func, &Type::Bool, None);
+    let both_ok = stack_alloc(func, &Type::Bool, None);
+    func.add(load_optional_flag_instr(&l_is_ok, l));
+    func.add(load_optional_flag_instr(&r_is_ok, r));
+    func.add(binary_op_instr(&both_ok, BinaryOperator::And, var_op(&l_is_ok), var_op(&r_is_ok)));
+    func.add(branch_if_instr(&both_ok, compare_inner_bb, set_to_false_bb));
 
-    func.add(branch_if_instr(&l_is_nil, l_is_nil_bb, l_is_not_nil_bb));
-    func.set_current_bb(l_is_nil_bb);
-    func.add(branch_if_instr(&r_is_nil, set_to_true_bb, set_to_false_bb));
-
-    func.set_current_bb(l_is_not_nil_bb);
-    func.add(branch_if_instr(&r_is_nil, set_to_false_bb, compare_inner_bb));
 
     func.set_current_bb(compare_inner_bb);
     let l_inner = stack_alloc(func, inner_type, None);
@@ -668,25 +662,25 @@ fn binary_op_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, op:
             },
 
             BinaryOperator::Or => {
-                let l_is_nil = stack_alloc(func, &Type::Bool, None);
-                let true_bb = func.create_basic_block();
-                let false_bb = func.create_basic_block();
+                let l_is_valid = stack_alloc(func, &Type::Bool, None);
+                let store_r_bb = func.create_basic_block();
+                let store_l_bb = func.create_basic_block();
                 let end_bb = func.create_basic_block();
-                func.add(is_nil_instr(&l_is_nil, &l));
-                func.add(branch_if_instr(&l_is_nil, true_bb, false_bb));
+                func.add(load_optional_flag_instr(&l_is_valid, &l));
+                func.add(branch_if_instr(&l_is_valid, store_l_bb, store_r_bb));
 
-                func.set_current_bb(true_bb);
+                func.set_current_bb(store_r_bb);
                 func.add(store_instr(&dst, &r));
                 func.add(Instruction::Branch(end_bb));
 
-                func.set_current_bb(false_bb);
+                func.set_current_bb(store_l_bb);
                 func.add(load_instr(&dst, &l));
                 func.add(Instruction::Branch(end_bb));
                 func.set_current_bb(end_bb);
             },
 
             _ => {
-                panic!("Operator {} not supported on optioanl", op.operator);
+                panic!("Operator {} not supported on optional", op.operator);
             }
         },
 
@@ -695,6 +689,37 @@ fn binary_op_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, op:
         }
     }
 
+    dst
+}
+
+fn if_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, if_expr: &IfExpression) -> Var
+{
+    let dst = get_dst(func, &if_expr.typ);
+    let true_bb = func.create_basic_block();
+    let end_bb = func.create_basic_block();
+
+    func.push_destination(None);
+    let cond = to_bc(bc_mod, func, &if_expr.condition);
+    func.pop_destination();
+
+    func.push_destination(Some(dst.clone()));
+
+    if let Some(ref on_false) = if_expr.on_false {
+        let false_bb = func.create_basic_block();
+        func.add(branch_if_instr(&cond, true_bb, false_bb));
+        func.set_current_bb(false_bb);
+        expr_to_bc(bc_mod, func, on_false);
+        func.add(Instruction::Branch(end_bb));
+    } else {
+        func.add(branch_if_instr(&cond, true_bb, end_bb));
+    }
+
+    func.set_current_bb(true_bb);
+    expr_to_bc(bc_mod, func, &if_expr.on_true);
+    func.add(Instruction::Branch(end_bb));
+
+    func.pop_destination();
+    func.set_current_bb(end_bb);
     dst
 }
 
@@ -826,8 +851,7 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         },
 
         Expression::If(ref i) => {
-            let match_expr = i.to_match();
-            Some(match_to_bc(bc_mod, func, &match_expr))
+            Some(if_to_bc(bc_mod, func, i))
         },
 
         Expression::ArrayToSlice(ref ats) => {
@@ -870,6 +894,15 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
             func.add(Instruction::StoreNil(dst.clone()));
             Some(dst)
         },
+
+        Expression::OptionalToBool(ref n) => {
+            let dst = get_dst(func, &Type::Bool);
+            func.push_destination(None);
+            let inner_var = to_bc(bc_mod, func, n);
+            func.pop_destination();
+            func.add(load_optional_flag_instr(&dst, &inner_var));
+            Some(dst)
+        }
 
         Expression::ToOptional(ref t) => {
             let dst = get_dst(func, &t.optional_type);
