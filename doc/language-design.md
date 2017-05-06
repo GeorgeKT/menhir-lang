@@ -1,4 +1,4 @@
-# Cobra Language Design
+# Nomad Language Design
 
 ## Design Decisions
 

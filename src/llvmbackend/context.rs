@@ -170,7 +170,7 @@ impl Context
             .map_err(|e| format!("Unable to create directory for {}: {}", opts.build_dir, e))?;
 
 
-        let obj_file_name = format!("{}/{}.cobra.o", opts.build_dir, self.name);
+        let obj_file_name = format!("{}/{}.nomad.o", opts.build_dir, self.name);
         println!("  Building {}", obj_file_name);
         self.target_machine.emit_to_file(self.module, &obj_file_name)?;
         Ok(obj_file_name)

@@ -73,7 +73,7 @@ fn run_tests_in_directory(dir: fs::ReadDir) -> usize
     paths.sort();
 
     for path in &paths {
-        if path.extension().unwrap_or_default() == "cobra" {
+        if path.extension().unwrap_or_default() == "nomad" {
             let r = run_test(&path, false);
             println!("{}: {:?}", path.file_stem().unwrap().to_str().unwrap(), r);
             if !r.is_ok()  {

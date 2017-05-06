@@ -67,7 +67,7 @@ struct DebuggerContext<'a>
 fn help(io: &mut ShellIO, _dc: &mut DebuggerContext) -> ExecResult
 {
     writeln!(io, r#"
-Cobra interpreter debugger commands:
+Nomad interpreter debugger commands:
     help, h:                print this help message
     quit, q:                quit the debugger
     print <var>, p <var>:   print a variable
