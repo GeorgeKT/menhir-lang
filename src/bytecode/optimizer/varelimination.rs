@@ -26,7 +26,7 @@ impl VarInfo
     {
         match self.typ
         {
-            Type::Int | Type::UInt | Type::Float | Type::Bool | Type::String => true,
+            Type::Int(_) | Type::UInt(_) | Type::Float(_) | Type::Bool | Type::String => true,
             _ => false,
         }
     }

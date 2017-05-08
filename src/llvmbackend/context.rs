@@ -30,25 +30,24 @@ impl StackFrame
 }
 
 
-pub struct Context
+pub struct Context<'a>
 {
     pub context: LLVMContextRef,
     pub module: LLVMModuleRef,
     pub builder: LLVMBuilderRef,
-    pub target_machine: TargetMachine,
+    pub target_machine: &'a TargetMachine,
     name: String,
     stack: Vec<StackFrame>,
 }
 
-impl Context
+impl<'a> Context<'a>
 {
-    pub fn new(module_name: &str) -> Result<Context, String>
+    pub fn new(module_name: &str, target_machine: &'a TargetMachine) -> Result<Context<'a>, String>
     {
         unsafe {
             let context_name = CString::new(module_name).expect("Invalid module name");
             let context = LLVMContextCreate();
-            let target_machine = TargetMachine::new()?;
-            Ok(Context {
+            Ok(Context::<'a> {
                 context: context,
                 module: LLVMModuleCreateWithNameInContext(context_name.as_ptr(), context),
                 builder: LLVMCreateBuilderInContext(context),
@@ -132,14 +131,6 @@ impl Context
         unsafe{
             use llvmbackend::types::to_llvm_type;
             to_llvm_type(self.context, &self.target_machine, typ)
-        }
-    }
-
-    pub fn native_int_type(&self) -> LLVMTypeRef
-    {
-        unsafe{
-            use llvmbackend::types::native_int_type;
-            native_int_type(self.context, &self.target_machine)
         }
     }
 
@@ -232,7 +223,7 @@ impl Context
 }
 
 
-impl Drop for Context
+impl<'a> Drop for Context<'a>
 {
     fn drop(&mut self)
     {

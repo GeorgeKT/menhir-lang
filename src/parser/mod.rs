@@ -15,6 +15,7 @@ use std::rc::Rc;
 use ast::*;
 use compileerror::{CompileResult, parse_error_result};
 use span::{Span};
+use target::native_int_size;
 use self::tokenqueue::{TokenQueue};
 use self::lexer::{Lexer};
 use self::tokens::{Token, TokenKind};
@@ -59,11 +60,43 @@ fn eat_comma(tq: &mut TokenQueue) -> CompileResult<()>
     Ok(())
 }
 
+fn number_to_literal(number: u64, force_unsigned: bool, span: &Span) -> CompileResult<Literal>
+{
+    let int_sizes = [IntSize::I8, IntSize::I16, IntSize::I32, IntSize::I64];
+    let mut selected_int_size = IntSize::I8;
+    for int_size in &int_sizes {
+        let lim = if force_unsigned {
+            if int_size.size_in_bits() == 64 {
+                u64::max_value()
+            } else {
+                2u64.pow(int_size.size_in_bits()) - 1
+            }
+        } else {
+            2u64.pow(int_size.size_in_bits() - 1) - 1
+        };
+
+        if number <= lim {
+            selected_int_size = *int_size;
+        }
+    }
+
+    let native_size = native_int_size();
+    if selected_int_size.size_in_bits() < native_size.size_in_bits() {
+        selected_int_size = native_size;
+    }
+
+    if force_unsigned {
+        Ok(Literal::UInt(span.clone(), number, selected_int_size))
+    } else {
+        Ok(Literal::Int(span.clone(), number as i64, selected_int_size))
+    }
+}
+
 fn parse_number(tq: &mut TokenQueue, num: &str, span: &Span) -> CompileResult<Literal>
 {
     if num.find('.').is_some() || num.find('e').is_some() {
         match num.parse::<f64>() {
-            Ok(_) => Ok(Literal::Float(span.clone(), num.into())),
+            Ok(_) => Ok(Literal::Float(span.clone(), num.into(), FloatSize::F64)),
             Err(_) => parse_error_result(span, format!("{} is not a valid floating point number", num))
         }
     } else {
@@ -75,13 +108,8 @@ fn parse_number(tq: &mut TokenQueue, num: &str, span: &Span) -> CompileResult<Li
         };
 
         // Should be an integer
-        match num.parse::<usize>() {
-            Ok(i) =>
-                if force_unsigned || i > (isize::max_value() as usize) {
-                    Ok(Literal::UInt(span.clone(), i))
-                } else {
-                    Ok(Literal::Int(span.clone(), i as isize))
-                },
+        match num.parse::<u64>() {
+            Ok(i) => number_to_literal(i, force_unsigned, span),
             Err(_) => parse_error_result(span, format!("{} is not a valid integer", num))
         }
     }
@@ -255,6 +283,32 @@ fn parse_generic_arg_list(tq: &mut TokenQueue, indent_level: usize) -> CompileRe
     let args = parse_comma_separated_list(tq, TokenKind::BinaryOperator(BinaryOperator::GreaterThan), parse_type, indent_level)?;
     Ok(args)
 }
+
+fn to_primitive(name: &str) -> Option<Type>
+{
+    use target;
+    match name
+    {
+        "int8" => Some(Type::Int(IntSize::I8)),
+        "int16" => Some(Type::Int(IntSize::I16)),
+        "int32" => Some(Type::Int(IntSize::I32)),
+        "int64" => Some(Type::Int(IntSize::I64)),
+        "int" => Some(target::native_int_type()),
+        "uint8" => Some(Type::UInt(IntSize::I8)),
+        "uint16" => Some(Type::UInt(IntSize::I16)),
+        "uint32" => Some(Type::UInt(IntSize::I32)),
+        "uint64" => Some(Type::UInt(IntSize::I64)),
+        "uint" => Some(target::native_uint_type()),
+        "float" | "float32" => Some(Type::Float(FloatSize::F32)),
+        "double" | "float64" => Some(Type::Float(FloatSize::F64)),
+        "string" => Some(Type::String),
+        "bool" => Some(Type::Bool),
+        "char" => Some(Type::Char),
+        "Self" => Some(Type::SelfType),
+        _ => None,
+    }
+}
+
 
 fn parse_start_of_type(tq: &mut TokenQueue, indent_level: usize) -> CompileResult<Type>
 {

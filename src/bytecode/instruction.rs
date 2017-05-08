@@ -1,7 +1,8 @@
 use std::fmt;
 use itertools::free::join;
-use ast::{UnaryOperator, BinaryOperator, Type, ptr_type, array_type};
+use ast::{UnaryOperator, BinaryOperator, Type, IntSize, FloatSize, ptr_type, array_type};
 use bytecode::function::{BasicBlockRef, Var};
+use target::native_int_size;
 
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -26,9 +27,9 @@ impl fmt::Display for ByteCodeProperty
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Constant
 {
-    Int(isize),
-    UInt(usize),
-    Float(f64),
+    Int(i64, IntSize),
+    UInt(u64, IntSize),
+    Float(f64, FloatSize),
     Char(char),
     String(String),
     Bool(bool),
@@ -41,9 +42,9 @@ impl Constant
     {
         match *self
         {
-            Constant::Int(_) => Type::Int,
-            Constant::UInt(_) => Type::UInt,
-            Constant::Float(_) => Type::Float,
+            Constant::Int(_, int_size) => Type::Int(int_size),
+            Constant::UInt(_, int_size) => Type::UInt(int_size),
+            Constant::Float(_, float_size) => Type::Float(float_size),
             Constant::Char(_) => Type::Char,
             Constant::String(_) => Type::String,
             Constant::Bool(_) => Type::Bool,
@@ -60,9 +61,9 @@ impl fmt::Display for Constant
     {
         match *self
         {
-            Constant::Int(v) => write!(f, "(int {})", v),
-            Constant::UInt(v) => write!(f, "(uint {})", v),
-            Constant::Float(v) => write!(f, "(float {})", v),
+            Constant::Int(v, int_size) => write!(f, "(int{} {})", int_size, v),
+            Constant::UInt(v, int_size) => write!(f, "(uint{} {})", int_size, v),
+            Constant::Float(v, float_size) => write!(f, "(float{} {})", float_size, v),
             Constant::Char(v) => write!(f, "(char {})", v),
             Constant::String(ref v) => write!(f, "(string {})", v),
             Constant::Bool(v) => write!(f, "(bool {})", v),
@@ -83,19 +84,19 @@ pub enum Operand
 
 impl Operand
 {
-    pub fn const_int(v: isize) -> Operand
+    pub fn const_int(v: i64, int_size: IntSize) -> Operand
     {
-        Operand::Const(Constant::Int(v))
+        Operand::Const(Constant::Int(v, int_size))
     }
 
-    pub fn const_uint(v: usize) -> Operand
+    pub fn const_uint(v: u64, int_size: IntSize) -> Operand
     {
-        Operand::Const(Constant::UInt(v))
+        Operand::Const(Constant::UInt(v, int_size))
     }
 
-    pub fn const_float(v: f64) -> Operand
+    pub fn const_float(v: f64, float_size: FloatSize) -> Operand
     {
-        Operand::Const(Constant::Float(v))
+        Operand::Const(Constant::Float(v, float_size))
     }
 
     pub fn const_bool(v: bool) -> Operand
@@ -144,11 +145,11 @@ pub fn var_op(v: &Var) -> Operand
     Operand::Var(v.clone())
 }
 
-pub fn float_op(fstr: &str) -> Operand
+pub fn float_op(fstr: &str, float_size: FloatSize) -> Operand
 {
     match fstr.parse::<f64>()
     {
-        Ok(f) => Operand::const_float(f),
+        Ok(f) => Operand::const_float(f, float_size),
         Err(_) => panic!("Internal Compiler Error: {} is not a valid floating point number", fstr)
     }
 }
@@ -230,7 +231,7 @@ pub fn load_member_instr(dst: &Var, obj: &Var, member_index: usize) -> Instructi
     Instruction::LoadMember{
         dst: dst.clone(),
         obj: obj.clone(),
-        member_index: Operand::const_uint(member_index),
+        member_index: Operand::const_uint(member_index as u64, native_int_size()),
     }
 }
 
@@ -238,7 +239,7 @@ pub fn store_member_instr(obj: &Var, member_index: usize, src: Var) -> Instructi
 {
     Instruction::StoreMember{
         obj: obj.clone(),
-        member_index: Operand::const_uint(member_index),
+        member_index: Operand::const_uint(member_index as u64, native_int_size()),
         src: Operand::Var(src),
     }
 }
@@ -256,7 +257,7 @@ pub fn address_of_member_instr(dst: &Var, obj: &Var, member_index: usize) -> Ins
     Instruction::AddressOfMember{
         dst: dst.clone(),
         obj: obj.clone(),
-        member_index: Operand::const_uint(member_index),
+        member_index: Operand::const_uint(member_index as u64, native_int_size()),
     }
 }
 

@@ -9,15 +9,16 @@ use ast::{Type, UnaryOperator, BinaryOperator, ptr_type};
 use super::function::gen_function_ptr;
 use super::valueref::ValueRef;
 use super::context::Context;
+use super::types::native_llvm_int_type;
 
-pub unsafe fn const_int(ctx: &Context, v: isize) -> LLVMValueRef
+pub unsafe fn const_int(ctx: &Context, v: i64) -> LLVMValueRef
 {
-    LLVMConstInt(ctx.native_int_type(), v as c_ulonglong, 1)
+    LLVMConstInt(native_llvm_int_type(ctx.context), v as c_ulonglong, 1)
 }
 
-pub unsafe fn const_uint(ctx: &Context, v: usize) -> LLVMValueRef
+pub unsafe fn const_uint(ctx: &Context, v: u64) -> LLVMValueRef
 {
-    LLVMConstInt(ctx.native_int_type(), v as c_ulonglong, 0)
+    LLVMConstInt(native_llvm_int_type(ctx.context), v as c_ulonglong, 0)
 }
 
 pub unsafe fn const_bool(ctx: &Context, v: bool) -> LLVMValueRef
@@ -83,7 +84,7 @@ pub unsafe fn copy(ctx: &Context, dst: LLVMValueRef, src: LLVMValueRef, typ: LLV
     let mut args = vec![
         LLVMBuildBitCast(ctx.builder, dst, void_ptr_type, cstr!("dst_cast")),
         LLVMBuildBitCast(ctx.builder, src, void_ptr_type, cstr!("src_cast")),
-        const_uint(ctx, ctx.target_machine.size_of_type(typ))
+        const_uint(ctx, ctx.target_machine.size_of_type(typ) as u64)
     ];
     LLVMBuildCall(ctx.builder, func.function, args.as_mut_ptr(), args.len() as c_uint, cstr!("ac"));
 }
@@ -138,9 +139,9 @@ unsafe fn gen_unary_op(ctx: &Context, dst: &Var, operator: UnaryOperator, src: &
     let src_value = get_operand(ctx, src).load(ctx);
     let result = match (operator, &dst.typ)
     {
-        (UnaryOperator::Sub, &Type::Int) |
-        (UnaryOperator::Sub, &Type::UInt) => LLVMBuildNeg(ctx.builder, src_value, cstr!("neg")),
-        (UnaryOperator::Sub, &Type::Float) => LLVMBuildFNeg(ctx.builder, src_value, cstr!("neg")),
+        (UnaryOperator::Sub, &Type::Int(_)) |
+        (UnaryOperator::Sub, &Type::UInt(_)) => LLVMBuildNeg(ctx.builder, src_value, cstr!("neg")),
+        (UnaryOperator::Sub, &Type::Float(_)) => LLVMBuildFNeg(ctx.builder, src_value, cstr!("neg")),
         (UnaryOperator::Not, &Type::Bool) => LLVMBuildNot(ctx.builder, src_value, cstr!("not")),
         _ => panic!("Unsupported unary operator"),
     };
@@ -156,55 +157,55 @@ unsafe fn gen_binary_op(ctx: &Context, dst: &Var, op: BinaryOperator, left: &Ope
 
     let value = match (op, left_type)
     {
-        (BinaryOperator::Add, Type::Int) => LLVMBuildAdd(ctx.builder, left, right, cstr!("bop")),
-        (BinaryOperator::Add, Type::UInt) => LLVMBuildAdd(ctx.builder, left, right, cstr!("bop")),
-        (BinaryOperator::Add, Type::Float) => LLVMBuildFAdd(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Add, Type::Int(_)) => LLVMBuildAdd(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Add, Type::UInt(_)) => LLVMBuildAdd(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Add, Type::Float(_)) => LLVMBuildFAdd(ctx.builder, left, right, cstr!("bop")),
 
-        (BinaryOperator::Sub, Type::Int) => LLVMBuildSub(ctx.builder, left, right, cstr!("bop")),
-        (BinaryOperator::Sub, Type::UInt) => LLVMBuildSub(ctx.builder, left, right, cstr!("bop")),
-        (BinaryOperator::Sub, Type::Float) => LLVMBuildFSub(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Sub, Type::Int(_)) => LLVMBuildSub(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Sub, Type::UInt(_)) => LLVMBuildSub(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Sub, Type::Float(_)) => LLVMBuildFSub(ctx.builder, left, right, cstr!("bop")),
 
-        (BinaryOperator::Mul, Type::Int) => LLVMBuildMul(ctx.builder, left, right, cstr!("bop")),
-        (BinaryOperator::Mul, Type::UInt) => LLVMBuildMul(ctx.builder, left, right, cstr!("bop")),
-        (BinaryOperator::Mul, Type::Float) => LLVMBuildFMul(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Mul, Type::Int(_)) => LLVMBuildMul(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Mul, Type::UInt(_)) => LLVMBuildMul(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Mul, Type::Float(_)) => LLVMBuildFMul(ctx.builder, left, right, cstr!("bop")),
 
-        (BinaryOperator::Div, Type::Int) => LLVMBuildSDiv(ctx.builder, left, right, cstr!("bop")),
-        (BinaryOperator::Div, Type::UInt) => LLVMBuildUDiv(ctx.builder, left, right, cstr!("bop")),
-        (BinaryOperator::Div, Type::Float) => LLVMBuildFDiv(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Div, Type::Int(_)) => LLVMBuildSDiv(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Div, Type::UInt(_)) => LLVMBuildUDiv(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Div, Type::Float(_)) => LLVMBuildFDiv(ctx.builder, left, right, cstr!("bop")),
 
-        (BinaryOperator::Mod, Type::Int) => LLVMBuildSRem(ctx.builder, left, right, cstr!("bop")),
-        (BinaryOperator::Mod, Type::UInt) => LLVMBuildURem(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Mod, Type::Int(_)) => LLVMBuildSRem(ctx.builder, left, right, cstr!("bop")),
+        (BinaryOperator::Mod, Type::UInt(_)) => LLVMBuildURem(ctx.builder, left, right, cstr!("bop")),
 
-        (BinaryOperator::LessThan, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, left, right, cstr!("bop")),
-        (BinaryOperator::LessThan, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULT, left, right, cstr!("bop")),
-        (BinaryOperator::LessThan, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealULT, left, right, cstr!("bop")),
+        (BinaryOperator::LessThan, Type::Int(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLT, left, right, cstr!("bop")),
+        (BinaryOperator::LessThan, Type::UInt(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULT, left, right, cstr!("bop")),
+        (BinaryOperator::LessThan, Type::Float(_)) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealULT, left, right, cstr!("bop")),
         (BinaryOperator::LessThan, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULT, left, right, cstr!("bop")),
 
-        (BinaryOperator::GreaterThan, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, left, right, cstr!("bop")),
-        (BinaryOperator::GreaterThan, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGT, left, right, cstr!("bop")),
-        (BinaryOperator::GreaterThan, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUGT, left, right, cstr!("bop")),
+        (BinaryOperator::GreaterThan, Type::Int(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGT, left, right, cstr!("bop")),
+        (BinaryOperator::GreaterThan, Type::UInt(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGT, left, right, cstr!("bop")),
+        (BinaryOperator::GreaterThan, Type::Float(_)) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUGT, left, right, cstr!("bop")),
         (BinaryOperator::GreaterThan, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGT, left, right, cstr!("bop")),
 
-        (BinaryOperator::LessThanEquals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLE, left, right, cstr!("bop")),
-        (BinaryOperator::LessThanEquals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULE, left, right, cstr!("bop")),
-        (BinaryOperator::LessThanEquals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealULE, left, right, cstr!("bop")),
+        (BinaryOperator::LessThanEquals, Type::Int(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSLE, left, right, cstr!("bop")),
+        (BinaryOperator::LessThanEquals, Type::UInt(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULE, left, right, cstr!("bop")),
+        (BinaryOperator::LessThanEquals, Type::Float(_)) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealULE, left, right, cstr!("bop")),
         (BinaryOperator::LessThanEquals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntULE, left, right, cstr!("bop")),
 
-        (BinaryOperator::GreaterThanEquals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGE, left, right, cstr!("bop")),
-        (BinaryOperator::GreaterThanEquals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGE, left, right, cstr!("bop")),
-        (BinaryOperator::GreaterThanEquals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUGE, left, right, cstr!("bop")),
+        (BinaryOperator::GreaterThanEquals, Type::Int(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntSGE, left, right, cstr!("bop")),
+        (BinaryOperator::GreaterThanEquals, Type::UInt(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGE, left, right, cstr!("bop")),
+        (BinaryOperator::GreaterThanEquals, Type::Float(_)) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUGE, left, right, cstr!("bop")),
         (BinaryOperator::GreaterThanEquals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntUGE, left, right, cstr!("bop")),
 
-        (BinaryOperator::Equals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
-        (BinaryOperator::Equals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
-        (BinaryOperator::Equals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUEQ, left, right, cstr!("bop")),
+        (BinaryOperator::Equals, Type::Int(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
+        (BinaryOperator::Equals, Type::UInt(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
+        (BinaryOperator::Equals, Type::Float(_)) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUEQ, left, right, cstr!("bop")),
         (BinaryOperator::Equals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
         (BinaryOperator::Equals, Type::Bool) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
         (BinaryOperator::Equals, Type::Enum(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntEQ, left, right, cstr!("bop")),
 
-        (BinaryOperator::NotEquals, Type::Int) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
-        (BinaryOperator::NotEquals, Type::UInt) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
-        (BinaryOperator::NotEquals, Type::Float) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUNE, left, right, cstr!("bop")),
+        (BinaryOperator::NotEquals, Type::Int(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
+        (BinaryOperator::NotEquals, Type::UInt(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
+        (BinaryOperator::NotEquals, Type::Float(_)) => LLVMBuildFCmp(ctx.builder, LLVMRealPredicate::LLVMRealUNE, left, right, cstr!("bop")),
         (BinaryOperator::NotEquals, Type::Char) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
         (BinaryOperator::NotEquals, Type::Bool) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
         (BinaryOperator::NotEquals, Type::Enum(_)) => LLVMBuildICmp(ctx.builder, LLVMIntPredicate::LLVMIntNE, left, right, cstr!("bop")),
@@ -227,20 +228,20 @@ unsafe fn gen_cast(ctx: &mut Context, dst: &Var, src: &Operand)
     let src_type = src.get_type();
     let casted = match (&dst.typ, &src_type)
     {
-        (&Type::UInt, &Type::Int) |
-        (&Type::Int, &Type::UInt) =>
+        (&Type::UInt(_), &Type::Int(_)) |
+        (&Type::Int(_), &Type::UInt(_)) =>
             LLVMBuildIntCast(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("cast_to_int")),
 
-        (&Type::Int, &Type::Float) =>
+        (&Type::Int(_), &Type::Float(_)) =>
             LLVMBuildFPToSI(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("cast_to_int")),
 
-        (&Type::UInt, &Type::Float) =>
+        (&Type::UInt(_), &Type::Float(_)) =>
             LLVMBuildFPToUI(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("cast_to_int")),
 
-        (&Type::Float, &Type::Int) =>
+        (&Type::Float(_), &Type::Int(_)) =>
             LLVMBuildSIToFP(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("cast_to_int")),
 
-        (&Type::Float, &Type::UInt) =>
+        (&Type::Float(_), &Type::UInt(_)) =>
             LLVMBuildUIToFP(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("cast_to_int")),
 
         _ => panic!("Cast from type {} to type {} is not allowed", src_type, dst.typ),

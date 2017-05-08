@@ -6,6 +6,7 @@ use super::typeresolver::resolve_types;
 use super::matchchecker::check_match_is_exhaustive;
 use super::genericmapper::fill_in_generics;
 use super::instantiategenerics::make_concrete;
+use target::native_uint_type;
 use span::Span;
 
 #[derive(Debug)]
@@ -178,7 +179,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
 fn type_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLiteral) -> TypeCheckResult
 {
     if a.elements.is_empty() {
-        a.array_type = array_type(Type::Int, 0);
+        a.array_type = array_type(native_uint_type(), 0);
         return valid(a.array_type.clone());
     }
 
@@ -343,7 +344,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Ty
                     Type::Sum(ref st) => {
                         let idx = st.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
                         let case = &st.cases[idx];
-                        if case.typ == Type::Int {
+                        if case.typ == native_uint_type() {
                             infer_case_type(ctx, &mut c.to_execute, &return_type)?
                         } else {
                             return type_error_result(&match_span, "Invalid pattern match, match should be with an empty sum case");
@@ -750,7 +751,7 @@ fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructIn
                     match case.typ
                     {
                         Type::Struct(ref s) => type_check_struct_members_in_initializer(ctx, s, si)?,
-                        Type::Int => Type::Int,
+                        Type::Int(p) => Type::Int(p),
                         _ => return type_error_result(&si.span, "Invalid sum type case"),
                     }
                 } else {
@@ -1043,12 +1044,12 @@ fn type_check_cast(ctx: &mut TypeCheckerContext, c: &mut TypeCast) -> TypeCheckR
     let inner_type = type_check_expression(ctx, &mut c.inner, &None)?;
     match (inner_type, &c.destination_type)
     {
-        (Type::Int, &Type::UInt) |
-        (Type::Int, &Type::Float) |
-        (Type::UInt, &Type::Int) |
-        (Type::UInt, &Type::Float) |
-        (Type::Float, &Type::Int) |
-        (Type::Float, &Type::UInt) => valid(c.destination_type.clone()),
+        (Type::Int(_), &Type::UInt(_)) |
+        (Type::Int(_), &Type::Float(_)) |
+        (Type::UInt(_), &Type::Int(_)) |
+        (Type::UInt(_), &Type::Float(_)) |
+        (Type::Float(_), &Type::Int(_)) |
+        (Type::Float(_), &Type::UInt(_)) => valid(c.destination_type.clone()),
         (inner_type, _) => type_error_result(&c.span, format!("Cast from type {} to type {} is not allowed", inner_type, c.destination_type))
     }
 }

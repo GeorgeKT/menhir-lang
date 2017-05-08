@@ -2,6 +2,7 @@ use std::io::Cursor;
 use ast::*;
 use parser::*;
 use super::lexer::Lexer;
+use target::{native_int_size, native_int_type};
 use span::{Pos, Span};
 
 fn span(sl: usize, so: usize, el: usize, eo: usize) -> Span
@@ -42,14 +43,14 @@ pub fn th_mod(data: &str) -> Module
 }
 
 
-pub fn number(v: isize, span: Span) -> Expression
+pub fn number(v: i64, span: Span) -> Expression
 {
-    Expression::Literal(Literal::Int(span, v))
+    Expression::Literal(Literal::Int(span, v, native_int_size()))
 }
 
-pub fn number_pattern(v: isize, span: Span) -> Pattern
+pub fn number_pattern(v: i64, span: Span) -> Pattern
 {
-    Pattern::Literal(Literal::Int(span, v))
+    Pattern::Literal(Literal::Int(span, v, native_int_size()))
 }
 
 pub fn name_ref(name: &str, span: Span) -> Expression
@@ -350,10 +351,10 @@ fn test_function_with_args()
     assert!(*md.functions.get("test::foo").unwrap() == Function::new(
         sig(
             "test::foo",
-            Type::Int,
+            native_int_type(),
             vec![
-                arg("a", Type::Int, span(1, 8, 1, 13)),
-                arg("b", Type::Int, span(1, 16, 1, 21)),
+                arg("a", native_int_type(), span(1, 8, 1, 13)),
+                arg("b", native_int_type(), span(1, 16, 1, 21)),
             ],
             span(1, 1, 1, 29)
         ),
@@ -370,7 +371,7 @@ fn test_function_with_no_args()
     assert!(*md.functions.get("test::foo").unwrap() == Function::new(
         sig(
             "test::foo",
-            Type::Int,
+            native_int_type(),
             Vec::new(),
             span(1, 1, 1, 15)
         ),
@@ -404,16 +405,16 @@ fn test_function_with_func_type()
     assert!(*md.functions.get("test::foo").unwrap() == Function::new(
         sig(
             "test::foo",
-            Type::Int,
+            native_int_type(),
             vec![
                 Argument::new(
                     "a",
                     func_type(
                         vec![
-                            Type::Int,
-                            Type::Int,
+                            native_int_type(),
+                            native_int_type(),
                         ],
-                        Type::Int,
+                        native_int_type(),
                     ),
                     false,
                     span(1, 8, 1, 29)
@@ -434,7 +435,7 @@ fn test_external_function()
     assert!(*md.externals.get("foo").unwrap() == ExternalFunction::new(
         sig(
             "foo",
-            Type::Int,
+            native_int_type(),
             Vec::new(),
             span(1, 11, 1, 22)
         ),
@@ -514,8 +515,8 @@ struct Point:
     assert!(*md.types.get("test::Point").unwrap() == TypeDeclaration::Struct(struct_declaration(
         "test::Point",
         vec![
-            struct_member_declaration("x", Type::Int, span(3, 5, 3, 10)),
-            struct_member_declaration("y", Type::Int, span(4, 5, 4, 10)),
+            struct_member_declaration("x", native_int_type(), span(3, 5, 3, 10)),
+            struct_member_declaration("y", native_int_type(), span(4, 5, 4, 10)),
         ],
         span(2, 1, 4, 10))
     ))
@@ -653,8 +654,8 @@ enum Foo:
                     struct_declaration(
                         "test::Bar",
                         vec![
-                            struct_member_declaration("x", Type::Int, span(3, 9, 3, 14)),
-                            struct_member_declaration("y", Type::Int, span(3, 17, 3, 22)),
+                            struct_member_declaration("x", native_int_type(), span(3, 9, 3, 14)),
+                            struct_member_declaration("y", native_int_type(), span(3, 17, 3, 22)),
                         ],
                         span(3, 5, 3, 23)
                     )
@@ -702,9 +703,9 @@ fn foo(p: Point<int>) -> int: 7
     assert!(*md.functions.get("test::foo").unwrap() == Function::new(
         sig(
             "test::foo",
-            Type::Int,
+            native_int_type(),
             vec![
-                arg("p", unresolved_type("Point", vec![Type::Int]), span(6, 8, 6, 20)),
+                arg("p", unresolved_type("Point", vec![native_int_type()]), span(6, 8, 6, 20)),
             ],
             span(6, 1, 6, 28)
         ),
@@ -757,10 +758,10 @@ interface Foo:
         "test::Foo".into(),
         vec![
             sig("bar",
-                Type::Int,
+                native_int_type(),
                 vec![
                     arg("self", ptr_type(Type::SelfType), span(3, 12, 3, 15)),
-                    arg("x", Type::Int, span(3, 18, 3, 23))
+                    arg("x", native_int_type(), span(3, 18, 3, 23))
                 ],
                 span(3, 8, 3, 31)
             )

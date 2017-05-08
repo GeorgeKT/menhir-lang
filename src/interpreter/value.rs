@@ -11,8 +11,8 @@ pub enum Value
     Uninitialized,
     Void,
     Nil,
-    Int(isize),
-    UInt(usize),
+    Int(i64),
+    UInt(u64),
     Float(f64),
     Char(char),
     Bool(bool),
@@ -71,9 +71,9 @@ impl Value
     {
         match *cst
         {
-            Constant::Int(v) => Value::Int(v),
-            Constant::UInt(v) => Value::UInt(v),
-            Constant::Float(v) => Value::Float(v),
+            Constant::Int(v, _) => Value::Int(v),
+            Constant::UInt(v, _) => Value::UInt(v),
+            Constant::Float(v, _) => Value::Float(v),
             Constant::Char(v) => Value::Char(v as char),
             Constant::String(ref s) => Value::String(s.clone()),
             Constant::Bool(v) => Value::Bool(v),
@@ -96,9 +96,9 @@ impl Value
             Type::SelfType => panic!("Self type must be resolved at this point"),
             Type::Void |
             Type::Func(_) => Ok(Value::Void), // Use void, seeing that we can't fill in the function pointer yet
-            Type::Int => Ok(Value::Int(0)),
-            Type::UInt => Ok(Value::UInt(0)),
-            Type::Float => Ok(Value::Float(0.0)),
+            Type::Int(_) => Ok(Value::Int(0)),
+            Type::UInt(_) => Ok(Value::UInt(0)),
+            Type::Float(_) => Ok(Value::Float(0.0)),
             Type::Char => Ok(Value::Char('x')),
             Type::Bool => Ok(Value::Bool(false)),
             Type::String => Ok(Value::String(String::default())),
@@ -139,10 +139,10 @@ impl Value
         match (self, prop)
         {
             (&Value::Array(ref a), ByteCodeProperty::Len) |
-            (&Value::Slice(ref a), ByteCodeProperty::Len) => Ok(Value::UInt(a.len())),
-            (&Value::String(ref s), ByteCodeProperty::Len) => Ok(Value::UInt(s.len())),
+            (&Value::Slice(ref a), ByteCodeProperty::Len) => Ok(Value::UInt(a.len() as u64)),
+            (&Value::String(ref s), ByteCodeProperty::Len) => Ok(Value::UInt(s.len() as u64)),
             (&Value::Sum(idx, _), ByteCodeProperty::SumTypeIndex) |
-            (&Value::Enum(idx), ByteCodeProperty::SumTypeIndex) => Ok(Value::UInt(idx)),
+            (&Value::Enum(idx), ByteCodeProperty::SumTypeIndex) => Ok(Value::UInt(idx as u64)),
             _  => Err(format!("Unknown property {}", prop)),
         }
     }

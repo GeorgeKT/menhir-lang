@@ -21,6 +21,7 @@ use std::process::{Output, Command};
 use llvm::core::*;
 
 use bytecode::{ByteCodeModule};
+pub use self::target::TargetMachine;
 use self::valueref::ValueRef;
 use self::function::{gen_function, gen_function_sig, add_libc_functions};
 use self::context::Context;
@@ -34,7 +35,8 @@ pub struct CodeGenOptions
     pub optimize: bool,
 }
 
-fn llvm_init()
+
+pub fn llvm_init() -> Result<TargetMachine, String>
 {
     unsafe {
         use llvm::initialization::*;
@@ -58,15 +60,13 @@ fn llvm_init()
         LLVMInitializeIPA(pass_registry);
         LLVMInitializeCodeGen(pass_registry);
         LLVMInitializeTarget(pass_registry);
+        TargetMachine::new()
     }
 }
 
-
-pub fn llvm_code_generation(bc_mod: &ByteCodeModule) -> Result<Context, String>
+pub fn llvm_code_generation<'a>(bc_mod: &ByteCodeModule, target_machine: &'a TargetMachine) -> Result<Context<'a>, String>
 {
-    llvm_init();
-
-    let mut ctx = Context::new(&bc_mod.name)?;
+    let mut ctx = Context::new(&bc_mod.name, target_machine)?;
 
     unsafe {
         add_libc_functions(&mut ctx);

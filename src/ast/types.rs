@@ -3,6 +3,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 use itertools::free::join;
 use ast::*;
+use target::native_uint_type;
 use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
@@ -114,14 +115,63 @@ pub enum GenericType
     Restricted(Vec<Type>),
 }
 
+
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, Serialize, Deserialize)]
+pub enum IntSize
+{
+    I8,
+    I16,
+    I32,
+    I64,
+}
+
+impl IntSize
+{
+    pub fn size_in_bits(&self) -> u32
+    {
+        match *self {
+            IntSize::I8 => 8,
+            IntSize::I16 => 16,
+            IntSize::I32 => 32,
+            IntSize::I64 => 64,
+        }
+    }
+}
+
+impl fmt::Display for IntSize
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
+    {
+        write!(f, "{}", self.size_in_bits())
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, Serialize, Deserialize)]
+pub enum FloatSize
+{
+    F32,
+    F64
+}
+
+impl fmt::Display for FloatSize
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
+    {
+        match *self {
+            FloatSize::F32 => write!(f, "32"),
+            FloatSize::F64 => write!(f, "64"),
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub enum Type
 {
     Void,
     Unknown,
-    Int,
-    UInt,
-    Float,
+    Int(IntSize),
+    UInt(IntSize),
+    Float(FloatSize),
     Char,
     Bool,
     String,
@@ -235,8 +285,8 @@ impl Type
 
         match *self
         {
-            Type::Int | Type::UInt => op == BinaryOperator::Mod || GENERAL_NUMERIC_OPERATORS.contains(&op),
-            Type::Float => GENERAL_NUMERIC_OPERATORS.contains(&op),
+            Type::Int(_) | Type::UInt(_) => op == BinaryOperator::Mod || GENERAL_NUMERIC_OPERATORS.contains(&op),
+            Type::Float(_) => GENERAL_NUMERIC_OPERATORS.contains(&op),
             Type::Char=> COMPARISON_OPERATORS.contains(&op),
             Type::Bool => COMPARISON_OPERATORS.contains(&op) || op == BinaryOperator::And || op == BinaryOperator::Or,
             Type::String | Type::Pointer(_) | Type::Optional(_) => op == BinaryOperator::Equals || op == BinaryOperator::NotEquals,
@@ -265,7 +315,7 @@ impl Type
     {
         match *self
         {
-            Type::Int | Type::UInt | Type::Float => true,
+            Type::Int(_) | Type::UInt(_) | Type::Float(_) => true,
             _ => false,
         }
     }
@@ -295,7 +345,7 @@ impl Type
             Type::Array(_) | Type::Slice(_) | Type::String => {
                 match name
                 {
-                    "len" => Some((Type::UInt, MemberAccessType::Property(Property::Len))),
+                    "len" => Some((native_uint_type(), MemberAccessType::Property(Property::Len))),
                     _ => None,
                 }
             },
@@ -355,9 +405,9 @@ impl Type
     {
         match *self
         {
-            Type::Int |
-            Type::UInt |
-            Type::Float |
+            Type::Int(_) |
+            Type::UInt(_) |
+            Type::Float(_) |
             Type::Char |
             Type::Bool |
             Type::Pointer(_) |
@@ -502,9 +552,9 @@ impl fmt::Display for Type
         {
             Type::Void => write!(f, "void"),
             Type::Unknown => write!(f, "unknown"),
-            Type::Int => write!(f, "int"),
-            Type::UInt => write!(f, "uint"),
-            Type::Float => write!(f, "float"),
+            Type::Int(precision) => write!(f, "int{}", precision),
+            Type::UInt(precision) => write!(f, "uint{}", precision),
+            Type::Float(precision) => write!(f, "float{}", precision),
             Type::Char => write!(f, "char"),
             Type::Bool => write!(f, "bool"),
             Type::String => write!(f, "string"),
@@ -567,20 +617,5 @@ impl TreePrinter for TypeAlias
     fn print(&self, level: usize)
     {
         println!("{}{} = {} ({})", prefix(level), self.name, self.original, self.span);
-    }
-}
-
-pub fn to_primitive(name: &str) -> Option<Type>
-{
-    match name
-    {
-        "int" => Some(Type::Int),
-        "uint" => Some(Type::UInt),
-        "float" => Some(Type::Float),
-        "string" => Some(Type::String),
-        "bool" => Some(Type::Bool),
-        "char" => Some(Type::Char),
-        "Self" => Some(Type::SelfType),
-        _ => None,
     }
 }

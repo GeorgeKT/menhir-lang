@@ -132,8 +132,8 @@ mod tests
         let ctx = TypeCheckerContext::new();
         let mut tm = GenericMapping::new();
         let ga = generic_type("a");
-        assert!(fill_in_generics(&ctx, &Type::Int, &ga, &mut tm, &Span::default()) == Ok(Type::Int));
-        assert!(make_concrete(&ctx, &tm, &ga, &Span::default()).unwrap() == Type::Int);
+        assert!(fill_in_generics(&ctx, &Type::Int(IntSize::I32), &ga, &mut tm, &Span::default()) == Ok(Type::Int(IntSize::I32)));
+        assert!(make_concrete(&ctx, &tm, &ga, &Span::default()).unwrap() == Type::Int(IntSize::I32));
     }
 
     #[test]
@@ -142,11 +142,11 @@ mod tests
         let ctx = TypeCheckerContext::new();
         let mut tm = GenericMapping::new();
         let ga = slice_type(generic_type("a"));
-        let r = fill_in_generics(&ctx, &slice_type(Type::Int), &ga, &mut tm, &Span::default());
+        let r = fill_in_generics(&ctx, &slice_type(Type::Int(IntSize::I32)), &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
-        assert!(r == Ok(slice_type(Type::Int)));
-        assert!(make_concrete(&ctx, &tm, &generic_type("a"), &Span::default()).unwrap() == Type::Int);
+        assert!(r == Ok(slice_type(Type::Int(IntSize::I32))));
+        assert!(make_concrete(&ctx, &tm, &generic_type("a"), &Span::default()).unwrap() == Type::Int(IntSize::I32));
     }
 
     #[test]
@@ -155,11 +155,11 @@ mod tests
         let ctx = TypeCheckerContext::new();
         let mut tm = GenericMapping::new();
         let ga = array_type(generic_type("a"), 10);
-        let r = fill_in_generics(&ctx, &array_type(Type::Int, 10), &ga, &mut tm, &Span::default());
+        let r = fill_in_generics(&ctx, &array_type(Type::Int(IntSize::I32), 10), &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
-        assert!(r == Ok(array_type(Type::Int, 10)));
-        assert!(make_concrete(&ctx, &tm, &generic_type("a"), &Span::default()).unwrap() == Type::Int);
+        assert!(r == Ok(array_type(Type::Int(IntSize::I32), 10)));
+        assert!(make_concrete(&ctx, &tm, &generic_type("a"), &Span::default()).unwrap() == Type::Int(IntSize::I32));
     }
 
     #[test]
@@ -168,12 +168,12 @@ mod tests
         let ctx = TypeCheckerContext::new();
         let mut tm = GenericMapping::new();
         let gptr = ptr_type(generic_type("a"));
-        let aptr = ptr_type(Type::Int);
+        let aptr = ptr_type(Type::Int(IntSize::I32));
         let r = fill_in_generics(&ctx, &aptr, &gptr, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
-        assert!(r == Ok(ptr_type(Type::Int)));
-        assert!(make_concrete(&ctx, &tm, &generic_type("a"), &Span::default()).unwrap() == Type::Int);
+        assert!(r == Ok(ptr_type(Type::Int(IntSize::I32))));
+        assert!(make_concrete(&ctx, &tm, &generic_type("a"), &Span::default()).unwrap() == Type::Int(IntSize::I32));
     }
 
     #[test]
@@ -182,13 +182,13 @@ mod tests
         let ctx = TypeCheckerContext::new();
         let mut tm = GenericMapping::new();
         let ga = func_type(vec![generic_type("a"), generic_type("b"), generic_type("c")], generic_type("d"));
-        let aa = func_type(vec![Type::Int, Type::Float, Type::Bool], string_type());
+        let aa = func_type(vec![Type::Int(IntSize::I32), Type::Float(FloatSize::F64), Type::Bool], string_type());
         let r = fill_in_generics(&ctx, &aa, &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
         assert!(r == Ok(aa));
-        assert!(make_concrete(&ctx, &tm, &generic_type("a"), &Span::default()).unwrap() == Type::Int);
-        assert!(make_concrete(&ctx, &tm, &generic_type("b"), &Span::default()).unwrap() == Type::Float);
+        assert!(make_concrete(&ctx, &tm, &generic_type("a"), &Span::default()).unwrap() == Type::Int(IntSize::I32));
+        assert!(make_concrete(&ctx, &tm, &generic_type("b"), &Span::default()).unwrap() == Type::Float(FloatSize::F64));
         assert!(make_concrete(&ctx, &tm, &generic_type("c"), &Span::default()).unwrap() == Type::Bool);
         assert!(make_concrete(&ctx, &tm, &generic_type("d"), &Span::default()).unwrap() == string_type());
     }
@@ -199,7 +199,7 @@ mod tests
         let ctx = TypeCheckerContext::new();
         let mut tm = GenericMapping::new();
         let ga = func_type(vec![generic_type("a"), generic_type("b"), generic_type("c")], generic_type("d"));
-        let aa = func_type(vec![Type::Int, Type::Float, Type::Bool, Type::Int], string_type());
+        let aa = func_type(vec![Type::Int(IntSize::I32), Type::Float(FloatSize::F64), Type::Bool, Type::Int(IntSize::I32)], string_type());
         let r = fill_in_generics(&ctx, &aa, &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
@@ -211,14 +211,14 @@ mod tests
     {
         let ctx = TypeCheckerContext::new();
         let mut tm = GenericMapping::new();
-        let ga = func_type(vec![generic_type("a"), generic_type("b"), generic_type("c"), Type::Int], generic_type("d"));
-        let aa = func_type(vec![Type::Int, Type::Float, Type::Bool, Type::Int], string_type());
+        let ga = func_type(vec![generic_type("a"), generic_type("b"), generic_type("c"), Type::Int(IntSize::I32)], generic_type("d"));
+        let aa = func_type(vec![Type::Int(IntSize::I32), Type::Float(FloatSize::F64), Type::Bool, Type::Int(IntSize::I32)], string_type());
         let r = fill_in_generics(&ctx, &aa, &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
         assert!(r == Ok(aa));
-        assert!(make_concrete(&ctx, &tm, &generic_type("a"), &Span::default()).unwrap() == Type::Int);
-        assert!(make_concrete(&ctx, &tm, &generic_type("b"), &Span::default()).unwrap() == Type::Float);
+        assert!(make_concrete(&ctx, &tm, &generic_type("a"), &Span::default()).unwrap() == Type::Int(IntSize::I32));
+        assert!(make_concrete(&ctx, &tm, &generic_type("b"), &Span::default()).unwrap() == Type::Float(FloatSize::F64));
         assert!(make_concrete(&ctx, &tm, &generic_type("c"), &Span::default()).unwrap() == Type::Bool);
         assert!(make_concrete(&ctx, &tm, &generic_type("d"), &Span::default()).unwrap() == string_type());
     }
@@ -229,11 +229,11 @@ mod tests
         let ctx = TypeCheckerContext::new();
         let mut tm = GenericMapping::new();
         let ga = generic_type("a");
-        let r = fill_in_generics(&ctx, &array_type(Type::Int, 10), &ga, &mut tm, &Span::default());
+        let r = fill_in_generics(&ctx, &array_type(Type::Int(IntSize::I32), 10), &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
-        assert!(r == Ok(array_type(Type::Int, 10)));
-        assert!(make_concrete(&ctx, &tm, &ga, &Span::default()).unwrap() == array_type(Type::Int, 10));
+        assert!(r == Ok(array_type(Type::Int(IntSize::I32), 10)));
+        assert!(make_concrete(&ctx, &tm, &ga, &Span::default()).unwrap() == array_type(Type::Int(IntSize::I32), 10));
     }
 
     #[test]
@@ -241,8 +241,8 @@ mod tests
     {
         let ctx = TypeCheckerContext::new();
         let mut tm = GenericMapping::new();
-        add(&mut tm, &generic_type("a"), &Type::Int, &Span::default()).unwrap();
-        add(&mut tm, &generic_type("b"), &Type::Float, &Span::default()).unwrap();
+        add(&mut tm, &generic_type("a"), &Type::Int(IntSize::I32), &Span::default()).unwrap();
+        add(&mut tm, &generic_type("b"), &Type::Float(FloatSize::F64), &Span::default()).unwrap();
         add(&mut tm, &generic_type("c"), &Type::Bool, &Span::default()).unwrap();
 
         let ga = func_type(vec![generic_type("a"), generic_type("b")], generic_type("c"));
@@ -250,6 +250,6 @@ mod tests
         let r = fill_in_generics(&ctx, &aa, &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
-        assert!(r == Ok(func_type(vec![Type::Int, Type::Float], Type::Bool)));
+        assert!(r == Ok(func_type(vec![Type::Int(IntSize::I32), Type::Float(FloatSize::F64)], Type::Bool)));
     }
 }

@@ -194,7 +194,7 @@ impl Interpreter
             match (op, val)
             {
                 (UnaryOperator::Sub, Value::Int(num)) => Value::Int(-num),
-                (UnaryOperator::Sub, Value::UInt(num)) => Value::Int(-(num as isize)),
+                (UnaryOperator::Sub, Value::UInt(num)) => Value::Int(-(num as i64)),
                 (UnaryOperator::Sub, Value::Float(num)) => Value::Float(-num),
                 (UnaryOperator::Not, Value::Bool(b)) => Value::Bool(!b),
                 _ => return Err(format!("Invalid unary op {}", op)),
@@ -351,8 +351,8 @@ impl Interpreter
     {
         match *member_index
         {
-            Operand::Const(Constant::Int(index)) if index >= 0 => Ok(index as usize),
-            Operand::Const(Constant::UInt(index)) => Ok(index as usize),
+            Operand::Const(Constant::Int(index, _)) if index >= 0 => Ok(index as usize),
+            Operand::Const(Constant::UInt(index, _)) => Ok(index as usize),
             Operand::Var(ref v) =>
                 match self.get_variable(&v.name)?.clone_value()?
                 {
@@ -510,12 +510,12 @@ impl Interpreter
         let new_value =
             match (src_val, &dst.typ)
             {
-                (Value::Int(s), &Type::UInt) => Ok(Value::UInt(s as usize)),
-                (Value::Int(s), &Type::Float) => Ok(Value::Float(s as f64)),
-                (Value::UInt(s), &Type::Int) => Ok(Value::Int(s as isize)),
-                (Value::UInt(s), &Type::Float) => Ok(Value::Float(s as f64)),
-                (Value::Float(s), &Type::Int) => Ok(Value::Int(s as isize)),
-                (Value::Float(s), &Type::UInt) => Ok(Value::UInt(s as usize)),
+                (Value::Int(s), &Type::UInt(_)) => Ok(Value::UInt(s as u64)),
+                (Value::Int(s), &Type::Float(_)) => Ok(Value::Float(s as f64)),
+                (Value::UInt(s), &Type::Int(_)) => Ok(Value::Int(s as i64)),
+                (Value::UInt(s), &Type::Float(_)) => Ok(Value::Float(s as f64)),
+                (Value::Float(s), &Type::Int(_)) => Ok(Value::Int(s as i64)),
+                (Value::Float(s), &Type::UInt(_)) => Ok(Value::UInt(s as u64)),
                 _ => Err(String::from("Unsupported type cast")),
             }?;
         self.update_variable(&dst.name, new_value)

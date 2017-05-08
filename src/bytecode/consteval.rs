@@ -1,4 +1,4 @@
-use ast::{Expression, Literal, UnaryOperator, UnaryOp, BinaryOperator, BinaryOp, Block};
+use ast::{Expression, Literal, UnaryOperator, UnaryOp, BinaryOperator, BinaryOp, Block, IntSize};
 use bytecode::Constant;
 
 macro_rules! try_opt {
@@ -14,15 +14,15 @@ macro_rules! try_opt {
 fn lit_to_const(lit: &Literal) -> Option<Constant>
 {
     match lit {
-        &Literal::Int(_, v) => Some(Constant::Int(v)),
-        &Literal::UInt(_, v) => Some(Constant::UInt(v)),
+        &Literal::Int(_, v, int_size) => Some(Constant::Int(v, int_size)),
+        &Literal::UInt(_, v, int_size) => Some(Constant::UInt(v, int_size)),
         &Literal::Bool(_, v) => Some(Constant::Bool(v)),
         &Literal::Char(_, v) => Some(Constant::Char(v)),
         &Literal::String(_, ref v) => Some(Constant::String(v.clone())),
 
-        &Literal::Float(_, ref v) => {
+        &Literal::Float(_, ref v, float_size) => {
             match v.parse::<f64>() {
-                Ok(f) => Some(Constant::Float(f)),
+                Ok(f) => Some(Constant::Float(f, float_size)),
                 Err(_) => panic!("Internal Compiler Error: {} is not a valid floating point number", v)
             }
         }
@@ -51,14 +51,14 @@ fn unary_op_to_const(uop: &UnaryOp) -> Option<Constant>
         (UnaryOperator::Not, Constant::Bool(v)) =>
             Some(Constant::Bool(!v)),
 
-        (UnaryOperator::Sub, Constant::Int(v)) =>
-            Some(Constant::Int(-v)),
+        (UnaryOperator::Sub, Constant::Int(v, int_size)) =>
+            Some(Constant::Int(-v, int_size)),
 
-        (UnaryOperator::Sub, Constant::UInt(v)) =>
-            Some(Constant::Int(-(v as isize))),
+        (UnaryOperator::Sub, Constant::UInt(v, int_size)) =>
+            Some(Constant::Int(-(v as i64), int_size)),
 
-        (UnaryOperator::Sub, Constant::Float(v)) =>
-            Some(Constant::Float(-v)),
+        (UnaryOperator::Sub, Constant::Float(v, float_size)) =>
+            Some(Constant::Float(-v, float_size)),
 
         _ => None,
     }
@@ -70,55 +70,55 @@ fn binary_op_to_const(bop: &BinaryOp) -> Option<Constant>
     let right = try_opt!(expr_to_const(&bop.right));
     
     match (bop.operator, left, right) {
-        (BinaryOperator::Add, Constant::Int(l), Constant::Int(r)) => Some(Constant::Int(l + r)),
-        (BinaryOperator::Add, Constant::UInt(l), Constant::UInt(r)) => Some(Constant::UInt(l + r)),
-        (BinaryOperator::Add, Constant::Float(l), Constant::Float(r)) => Some(Constant::Float(l + r)),
+        (BinaryOperator::Add, Constant::Int(l, ls), Constant::Int(r, _)) => Some(Constant::Int(l + r, ls)),
+        (BinaryOperator::Add, Constant::UInt(l, ls), Constant::UInt(r, _)) => Some(Constant::UInt(l + r, ls)),
+        (BinaryOperator::Add, Constant::Float(l, ls), Constant::Float(r, _)) => Some(Constant::Float(l + r, ls)),
 
-        (BinaryOperator::Sub, Constant::Int(l), Constant::Int(r)) => Some(Constant::Int(l - r)),
-        (BinaryOperator::Sub, Constant::UInt(l), Constant::UInt(r)) => Some(Constant::UInt(l - r)),
-        (BinaryOperator::Sub, Constant::Float(l), Constant::Float(r)) => Some(Constant::Float(l - r)),
+        (BinaryOperator::Sub, Constant::Int(l, ls), Constant::Int(r, _)) => Some(Constant::Int(l - r, ls)),
+        (BinaryOperator::Sub, Constant::UInt(l, ls), Constant::UInt(r, _)) => Some(Constant::UInt(l - r, ls)),
+        (BinaryOperator::Sub, Constant::Float(l, ls), Constant::Float(r, _)) => Some(Constant::Float(l - r, ls)),
 
-        (BinaryOperator::Mul, Constant::Int(l), Constant::Int(r)) => Some(Constant::Int(l * r)),
-        (BinaryOperator::Mul, Constant::UInt(l), Constant::UInt(r)) => Some(Constant::UInt(l * r)),
-        (BinaryOperator::Mul, Constant::Float(l), Constant::Float(r)) => Some(Constant::Float(l * r)),
+        (BinaryOperator::Mul, Constant::Int(l, ls), Constant::Int(r, _)) => Some(Constant::Int(l * r, ls)),
+        (BinaryOperator::Mul, Constant::UInt(l, ls), Constant::UInt(r, _)) => Some(Constant::UInt(l * r, ls)),
+        (BinaryOperator::Mul, Constant::Float(l, ls), Constant::Float(r, _)) => Some(Constant::Float(l * r, ls)),
 
-        (BinaryOperator::Div, Constant::Int(l), Constant::Int(r)) => Some(Constant::Int(l / r)),
-        (BinaryOperator::Div, Constant::UInt(l), Constant::UInt(r)) => Some(Constant::UInt(l / r)),
-        (BinaryOperator::Div, Constant::Float(l), Constant::Float(r)) => Some(Constant::Float(l / r)),
+        (BinaryOperator::Div, Constant::Int(l, ls), Constant::Int(r, _)) => Some(Constant::Int(l / r, ls)),
+        (BinaryOperator::Div, Constant::UInt(l, ls), Constant::UInt(r, _)) => Some(Constant::UInt(l / r, ls)),
+        (BinaryOperator::Div, Constant::Float(l, ls), Constant::Float(r, _)) => Some(Constant::Float(l / r, ls)),
 
-        (BinaryOperator::Mod, Constant::Int(l), Constant::Int(r)) => Some(Constant::Int(l % r)),
-        (BinaryOperator::Mod, Constant::UInt(l), Constant::UInt(r)) => Some(Constant::UInt(l % r)),
+        (BinaryOperator::Mod, Constant::Int(l, ls), Constant::Int(r, _)) => Some(Constant::Int(l % r, ls)),
+        (BinaryOperator::Mod, Constant::UInt(l, ls), Constant::UInt(r, _)) => Some(Constant::UInt(l % r, ls)),
 
-        (BinaryOperator::LessThan, Constant::Int(l), Constant::Int(r)) => Some(Constant::Bool(l < r)),
-        (BinaryOperator::LessThan, Constant::UInt(l), Constant::UInt(r)) => Some(Constant::Bool(l < r)),
-        (BinaryOperator::LessThan, Constant::Float(l), Constant::Float(r)) => Some(Constant::Bool(l < r)),
+        (BinaryOperator::LessThan, Constant::Int(l, _), Constant::Int(r, _)) => Some(Constant::Bool(l < r)),
+        (BinaryOperator::LessThan, Constant::UInt(l, _), Constant::UInt(r, _)) => Some(Constant::Bool(l < r)),
+        (BinaryOperator::LessThan, Constant::Float(l, _), Constant::Float(r, _)) => Some(Constant::Bool(l < r)),
         (BinaryOperator::LessThan, Constant::Char(l), Constant::Char(r)) => Some(Constant::Bool(l < r)),
 
-        (BinaryOperator::GreaterThan, Constant::Int(l), Constant::Int(r)) => Some(Constant::Bool(l > r)),
-        (BinaryOperator::GreaterThan, Constant::UInt(l), Constant::UInt(r)) => Some(Constant::Bool(l > r)),
-        (BinaryOperator::GreaterThan, Constant::Float(l), Constant::Float(r)) => Some(Constant::Bool(l > r)),
+        (BinaryOperator::GreaterThan, Constant::Int(l, _), Constant::Int(r, _)) => Some(Constant::Bool(l > r)),
+        (BinaryOperator::GreaterThan, Constant::UInt(l, _), Constant::UInt(r, _)) => Some(Constant::Bool(l > r)),
+        (BinaryOperator::GreaterThan, Constant::Float(l, _), Constant::Float(r, _)) => Some(Constant::Bool(l > r)),
         (BinaryOperator::GreaterThan, Constant::Char(l), Constant::Char(r)) => Some(Constant::Bool(l > r)),
 
-        (BinaryOperator::LessThanEquals, Constant::Int(l), Constant::Int(r)) => Some(Constant::Bool(l <= r)),
-        (BinaryOperator::LessThanEquals, Constant::UInt(l), Constant::UInt(r)) => Some(Constant::Bool(l <= r)),
-        (BinaryOperator::LessThanEquals, Constant::Float(l), Constant::Float(r)) => Some(Constant::Bool(l <= r)),
+        (BinaryOperator::LessThanEquals, Constant::Int(l, _), Constant::Int(r, _)) => Some(Constant::Bool(l <= r)),
+        (BinaryOperator::LessThanEquals, Constant::UInt(l, _), Constant::UInt(r, _)) => Some(Constant::Bool(l <= r)),
+        (BinaryOperator::LessThanEquals, Constant::Float(l, _), Constant::Float(r, _)) => Some(Constant::Bool(l <= r)),
         (BinaryOperator::LessThanEquals, Constant::Char(l), Constant::Char(r)) => Some(Constant::Bool(l <= r)),
 
-        (BinaryOperator::GreaterThanEquals, Constant::Int(l), Constant::Int(r)) => Some(Constant::Bool(l >= r)),
-        (BinaryOperator::GreaterThanEquals, Constant::UInt(l), Constant::UInt(r)) => Some(Constant::Bool(l >= r)),
-        (BinaryOperator::GreaterThanEquals, Constant::Float(l), Constant::Float(r)) => Some(Constant::Bool(l >= r)),
+        (BinaryOperator::GreaterThanEquals, Constant::Int(l, _), Constant::Int(r, _)) => Some(Constant::Bool(l >= r)),
+        (BinaryOperator::GreaterThanEquals, Constant::UInt(l, _), Constant::UInt(r, _)) => Some(Constant::Bool(l >= r)),
+        (BinaryOperator::GreaterThanEquals, Constant::Float(l, _), Constant::Float(r, _)) => Some(Constant::Bool(l >= r)),
         (BinaryOperator::GreaterThanEquals, Constant::Char(l), Constant::Char(r)) => Some(Constant::Bool(l >= r)),
 
-        (BinaryOperator::Equals, Constant::Int(l), Constant::Int(r)) => Some(Constant::Bool(l == r)),
-        (BinaryOperator::Equals, Constant::UInt(l), Constant::UInt(r)) => Some(Constant::Bool(l == r)),
-        (BinaryOperator::Equals, Constant::Float(l), Constant::Float(r)) => Some(Constant::Bool(l == r)),
+        (BinaryOperator::Equals, Constant::Int(l, _), Constant::Int(r, _)) => Some(Constant::Bool(l == r)),
+        (BinaryOperator::Equals, Constant::UInt(l, _), Constant::UInt(r, _)) => Some(Constant::Bool(l == r)),
+        (BinaryOperator::Equals, Constant::Float(l, _), Constant::Float(r, _)) => Some(Constant::Bool(l == r)),
         (BinaryOperator::Equals, Constant::Char(l), Constant::Char(r)) => Some(Constant::Bool(l == r)),
         (BinaryOperator::Equals, Constant::Bool(l), Constant::Bool(r)) => Some(Constant::Bool(l == r)),
         (BinaryOperator::Equals, Constant::String(ref l), Constant::String(ref r)) => Some(Constant::Bool(*l == *r)),
 
-        (BinaryOperator::NotEquals, Constant::Int(l), Constant::Int(r)) => Some(Constant::Bool(l != r)),
-        (BinaryOperator::NotEquals, Constant::UInt(l), Constant::UInt(r)) => Some(Constant::Bool(l != r)),
-        (BinaryOperator::NotEquals, Constant::Float(l), Constant::Float(r)) => Some(Constant::Bool(l != r)),
+        (BinaryOperator::NotEquals, Constant::Int(l, _), Constant::Int(r, _)) => Some(Constant::Bool(l != r)),
+        (BinaryOperator::NotEquals, Constant::UInt(l, _), Constant::UInt(r, _)) => Some(Constant::Bool(l != r)),
+        (BinaryOperator::NotEquals, Constant::Float(l, _), Constant::Float(r, _)) => Some(Constant::Bool(l != r)),
         (BinaryOperator::NotEquals, Constant::Char(l), Constant::Char(r)) => Some(Constant::Bool(l != r)),
         (BinaryOperator::NotEquals, Constant::Bool(l), Constant::Bool(r)) => Some(Constant::Bool(l != r)),
         (BinaryOperator::NotEquals, Constant::String(ref l), Constant::String(ref r)) => Some(Constant::Bool(*l != *r)),
@@ -132,7 +132,7 @@ fn binary_op_to_const(bop: &BinaryOp) -> Option<Constant>
 
 fn block_to_const(block: &Block) -> Option<Constant>
 {
-    let mut ret = Constant::Int(0);
+    let mut ret = Constant::Int(0, IntSize::I64);
     for e in &block.expressions {
         ret = try_opt!(expr_to_const(e));
     }

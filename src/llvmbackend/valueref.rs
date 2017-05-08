@@ -7,6 +7,7 @@ use ast::*;
 use bytecode::{ByteCodeProperty, Operand, Constant};
 use super::context::Context;
 use super::instructions::{const_uint, const_int, const_bool, const_float, const_char, copy, get_operand};
+use target::native_uint_type;
 
 #[derive(Clone)]
 pub struct ValueRef
@@ -30,9 +31,9 @@ impl ValueRef
     {
         match *cst {
             Constant::String(ref s) => ValueRef::const_string(ctx, s),
-            Constant::Int(v) => ValueRef::new(const_int(ctx, v), Type::Int),
-            Constant::UInt(v) => ValueRef::new(const_uint(ctx, v), Type::UInt),
-            Constant::Float(v) => ValueRef::new(const_float(ctx, v), Type::Float),
+            Constant::Int(v, int_size) => ValueRef::new(const_int(ctx, v), Type::Int(int_size)),
+            Constant::UInt(v, int_size) => ValueRef::new(const_uint(ctx, v), Type::UInt(int_size)),
+            Constant::Float(v, float_size) => ValueRef::new(const_float(ctx, v), Type::Float(float_size)),
             Constant::Char(v) => ValueRef::new(const_char(ctx, v), Type::Char),
             Constant::Bool(v) => ValueRef::new(const_bool(ctx, v), Type::Bool),
             Constant::Array(ref elements) => ValueRef::const_array(ctx, elements),
@@ -58,7 +59,7 @@ impl ValueRef
         LLVMBuildStore(ctx.builder, LLVMBuildBitCast(ctx.builder, glob, LLVMPointerType(char_type, 0), cstr!("str_ptr")), string_data_ptr);
 
         let string_len_ptr = ret.slice_len_ptr(ctx);
-        LLVMBuildStore(ctx.builder, const_uint(ctx, s.len()), string_len_ptr);
+        LLVMBuildStore(ctx.builder, const_uint(ctx, s.len() as u64), string_len_ptr);
 
         ret
     }
@@ -233,8 +234,8 @@ impl ValueRef
 
             Type::Struct(ref st) => unsafe {
                 let index = match *index {
-                    Operand::Const(Constant::Int(v)) => v as usize,
-                    Operand::Const(Constant::UInt(v)) => v as usize,
+                    Operand::Const(Constant::Int(v, _)) => v as usize,
+                    Operand::Const(Constant::UInt(v, _)) => v as usize,
                     _ => panic!("Struct member access has to be through an integer"),
                 };
 
@@ -246,8 +247,8 @@ impl ValueRef
 
             Type::Sum(ref st) => unsafe {
                 let index = match *index {
-                    Operand::Const(Constant::Int(v)) => v as usize,
-                    Operand::Const(Constant::UInt(v)) => v as usize,
+                    Operand::Const(Constant::Int(v, _)) => v as usize,
+                    Operand::Const(Constant::UInt(v, _)) => v as usize,
                     _ => panic!("Sum type member access has to be through an integer"),
                 };
 
@@ -299,8 +300,8 @@ impl ValueRef
         {
             (&Type::Array(ref a), ByteCodeProperty::Len) => unsafe {
                 ValueRef::new(
-                    const_uint(ctx, a.len),
-                    Type::UInt
+                    const_uint(ctx, a.len as u64),
+                    native_uint_type()
                 )
             },
 
@@ -309,7 +310,7 @@ impl ValueRef
                 let len_ptr = self.slice_len_ptr(ctx);
                 ValueRef::new(
                     LLVMBuildLoad(ctx.builder, len_ptr, cstr!("len")),
-                    Type::UInt
+                    native_uint_type(),
                 )
             },
 
@@ -317,7 +318,7 @@ impl ValueRef
                 let sti_ptr = LLVMBuildStructGEP(ctx.builder, self.value, 0, cstr!("sti_ptr"));
                 ValueRef::new(
                     LLVMBuildLoad(ctx.builder, sti_ptr, cstr!("sti")),
-                    Type::UInt
+                    native_uint_type(),
                 )
             },
 
@@ -334,7 +335,7 @@ impl ValueRef
         {
             (&Type::Sum(_), ByteCodeProperty::SumTypeIndex) => unsafe {
                 let sti_ptr = LLVMBuildStructGEP(ctx.builder, self.value, 0, cstr!("sti_ptr"));
-                LLVMBuildStore(ctx.builder, const_uint(ctx, value), sti_ptr);
+                LLVMBuildStore(ctx.builder, const_uint(ctx, value as u64), sti_ptr);
             },
 
             _ => panic!("Set property not allowed")

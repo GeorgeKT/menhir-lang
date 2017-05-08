@@ -6,6 +6,8 @@ use llvm::prelude::*;
 use llvm::core::*;
 use llvm::target_machine::*;
 use llvm::target::*;
+use ast::IntSize;
+use target::Target;
 
 pub struct TargetMachine
 {
@@ -55,12 +57,6 @@ impl TargetMachine
         LLVMStoreSizeOfType(self.target_data, typ) as usize
     }
 
-    // Get the native integer size in bytes
-    pub unsafe fn native_int_size(&self) -> usize
-    {
-        LLVMPointerSize(self.target_data) as usize
-    }
-
     pub unsafe fn emit_to_file(&self, module: LLVMModuleRef, obj_file_name: &str) -> Result<(), String>
     {
         let mut error_message: *mut c_char = ptr::null_mut();
@@ -81,6 +77,20 @@ impl Drop for TargetMachine
     {
         unsafe {
             LLVMDisposeTargetMachine(self.target_machine);
+        }
+    }
+}
+
+impl Target for TargetMachine
+{
+    fn int_size(&self) -> IntSize
+    {
+        match unsafe{LLVMPointerSize(self.target_data)} {
+            1 => IntSize::I8,
+            2 => IntSize::I16,
+            4 => IntSize::I32,
+            8 => IntSize::I64,
+            v => panic!("Not supported native integer size: {}", v),
         }
     }
 }

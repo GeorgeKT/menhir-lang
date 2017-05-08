@@ -9,7 +9,7 @@ use super::value::Value;
 pub struct Test
 {
     pub name: String,
-    pub ret: isize,
+    pub ret: i64,
     pub code: String,
 }
 
@@ -25,12 +25,12 @@ impl Test
         let ret: String = data.chars().skip(5).take_while(|c| c.is_numeric()).collect();
         Test{
             name: path.file_stem().unwrap().to_str().unwrap().into(),
-            ret: isize::from_str_radix(&ret, 10).unwrap(),
+            ret: i64::from_str_radix(&ret, 10).unwrap(),
             code: data,
         }
     }
 
-    pub fn run(&self, dump: bool) -> ExecutionResult<isize>
+    pub fn run(&self, dump: bool) -> ExecutionResult<i64>
     {
         let mut bc_mod = match generate_byte_code(&self.code, dump)
         {
@@ -52,7 +52,7 @@ impl Test
 }
 
 
-fn run_test(prog: &Path, dump: bool) -> ExecutionResult<isize>
+fn run_test(prog: &Path, dump: bool) -> ExecutionResult<i64>
 {
     let test = Test::load(prog);
     let ret = test.run(dump)?;

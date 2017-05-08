@@ -19,6 +19,7 @@ mod typechecker;
 mod span;
 mod llvmbackend;
 mod interpreter;
+mod target;
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -28,8 +29,9 @@ use parser::{ParserOptions, parse_file};
 use typechecker::{type_check_module};
 use bytecode::{compile_to_byte_code, optimize_module, ByteCodeModule, OptimizationLevel};
 use compileerror::{CompileResult, CompileError};
-use llvmbackend::{CodeGenOptions, llvm_code_generation, link};
+use llvmbackend::{CodeGenOptions, llvm_code_generation, llvm_init, link};
 use interpreter::{run_byte_code, debug_byte_code};
+use target::{register_target};
 
 
 fn default_output_file(input_file: &str) -> String
@@ -76,12 +78,18 @@ fn parse(parser_options: &ParserOptions, input_file: &str, dump_flags: &str, opt
     Ok(bc_mod)
 }
 
+
+
+
 fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
 {
     let input_file = matches.value_of("INPUT_FILE").expect("No input file given");
     let optimize = matches.is_present("OPTIMIZE");
     let output_file = matches.value_of("OUTPUT_FILE").map(|v| v.to_string()).unwrap_or_else(|| default_output_file(&input_file));
     let binary_type = matches.value_of("BINARY_TYPE").unwrap_or("exe");
+
+    let target_machine = llvm_init()?;
+    register_target(&target_machine);
 
     let parser_options = ParserOptions{
         import_dirs: matches.value_of("IMPORTS")
@@ -108,7 +116,7 @@ fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
                 optimize: optimize,
             };
 
-            let ctx = llvm_code_generation(&bc_mod).map_err(|msg| CompileError::Other(msg))?;
+            let ctx = llvm_code_generation(&bc_mod, &target_machine).map_err(|msg| CompileError::Other(msg))?;
             link(&ctx, &opts)?;
             Ok(0)
         }
@@ -122,6 +130,9 @@ fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
 
 fn run_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
 {
+    let target_machine = llvm_init()?;
+    register_target(&target_machine);
+
     let input_file = matches.value_of("INPUT_FILE").expect("Missing input file argument");
     let run_debugger = matches.is_present("DEBUG");
     let optimize = matches.is_present("OPTIMIZE");

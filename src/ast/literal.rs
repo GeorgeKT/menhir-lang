@@ -1,14 +1,14 @@
-use ast::{Type, ArrayLiteral, TreePrinter, prefix};
+use ast::{Type, ArrayLiteral, TreePrinter, FloatSize, IntSize, prefix};
 use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Literal
 {
-    Int(Span, isize),
-    UInt(Span, usize),
+    Int(Span, i64, IntSize),
+    UInt(Span, u64, IntSize),
     Bool(Span, bool),
     Char(Span, char),
-    Float(Span, String), // Keep as string until we generate code, so we can compare it
+    Float(Span, String, FloatSize), // Keep as string until we generate code, so we can compare it
     String(Span, String),
     Array(ArrayLiteral),
 }
@@ -19,9 +19,9 @@ impl Literal
     {
         match *self
         {
-            Literal::Int(_, _) => Type::Int,
-            Literal::UInt(_, _) => Type::UInt,
-            Literal::Float(_, _) => Type::Float,
+            Literal::Int(_, _, int_size) => Type::Int(int_size),
+            Literal::UInt(_, _, int_size) => Type::UInt(int_size),
+            Literal::Float(_, _, float_size) => Type::Float(float_size),
             Literal::Bool(_, _) => Type::Bool,
             Literal::Char(_, _) => Type::Char,
             Literal::String(_, _) => Type::String,
@@ -33,9 +33,9 @@ impl Literal
     {
         match *self
         {
-            Literal::Int(ref span, _) |
-            Literal::UInt(ref span, _) |
-            Literal::Float(ref span, _) |
+            Literal::Int(ref span, _, _) |
+            Literal::UInt(ref span, _, _) |
+            Literal::Float(ref span, _, _) |
             Literal::Bool(ref span, _) |
             Literal::Char(ref span, _) |
             Literal::String(ref span, _) => span.clone(),
@@ -51,9 +51,9 @@ impl TreePrinter for Literal
         let p = prefix(level);
         match *self
         {
-            Literal::Int(ref s, v) => println!("{}int {} ({})", p, v, s),
-            Literal::UInt(ref s, v) => println!("{}uint {} ({})", p, v, s),
-            Literal::Float(ref s, ref v) => println!("{}float {} ({})", p, v, s),
+            Literal::Int(ref s, v, int_size) => println!("{}int{} {} ({})", p, int_size, v, s),
+            Literal::UInt(ref s, v, int_size) => println!("{}uint{} {} ({})", p, int_size, v, s),
+            Literal::Float(ref s, ref v, float_size) => println!("{}float{} {} ({})", p, float_size, v, s),
             Literal::Bool(ref s, v) => println!("{}bool {} ({})", p, v, s),
             Literal::Char(ref s, v) => println!("{}char {} ({})", p, v, s),
             Literal::String(ref s, ref v) => println!("{}string {} ({})", p, v, s),
