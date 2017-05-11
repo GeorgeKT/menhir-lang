@@ -6,7 +6,7 @@ use ast::*;
 use target::native_uint_type;
 use span::Span;
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct SumTypeCase
 {
     pub name: String,
@@ -19,7 +19,7 @@ pub trait SumTypeCaseIndexOf
     fn num_cases(&self) -> usize;
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct SumType
 {
     pub name: String,
@@ -39,7 +39,7 @@ impl SumTypeCaseIndexOf for SumType
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct EnumType
 {
     pub name: String,
@@ -59,48 +59,48 @@ impl SumTypeCaseIndexOf for EnumType
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct StructMember
 {
     pub name: String,
     pub typ: Type,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct StructType
 {
     pub name: String,
     pub members: Vec<StructMember>,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct FuncType
 {
     pub args: Vec<Type>,
     pub return_type: Type,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct ArrayType
 {
     pub element_type: Type,
     pub len: usize,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct SliceType
 {
     pub element_type: Type,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct UnresolvedType
 {
     pub name: String,
     pub generic_args: Vec<Type>,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct InterfaceType
 {
     pub name: String,
@@ -108,7 +108,7 @@ pub struct InterfaceType
     pub functions: Vec<FunctionSignature>
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub enum GenericType
 {
     Any(String),
@@ -116,7 +116,7 @@ pub enum GenericType
 }
 
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 pub enum IntSize
 {
     I8,
@@ -146,7 +146,7 @@ impl fmt::Display for IntSize
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
 pub enum FloatSize
 {
     F32,
@@ -164,7 +164,7 @@ impl fmt::Display for FloatSize
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub enum Type
 {
     Void,
@@ -189,7 +189,7 @@ pub enum Type
     Interface(Rc<InterfaceType>),
 }
 
-#[derive(Debug,  Eq, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug,  Eq, PartialEq, Clone)]
 pub struct TypeAlias
 {
     pub name: String,

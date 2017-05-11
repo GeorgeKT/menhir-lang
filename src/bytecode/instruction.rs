@@ -5,7 +5,7 @@ use bytecode::function::{BasicBlockRef, Var};
 use target::native_int_size;
 
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy)]
 pub enum ByteCodeProperty
 {
     Len,
@@ -24,7 +24,7 @@ impl fmt::Display for ByteCodeProperty
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub enum Constant
 {
     Int(i64, IntSize),
@@ -73,7 +73,7 @@ impl fmt::Display for Constant
 }
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum Operand
 {
     Var(Var),
@@ -155,7 +155,7 @@ pub fn float_op(fstr: &str, float_size: FloatSize) -> Operand
 }
 
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum Instruction
 {
     Store{dst: Var, src: Operand},

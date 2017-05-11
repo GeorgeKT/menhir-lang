@@ -2,7 +2,7 @@ use std::fmt;
 
 pub const TOP_PRECEDENCE: usize = 2000;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum BinaryOperator
 {
     Add,
@@ -65,7 +65,7 @@ impl BinaryOperator
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum UnaryOperator
 {
     Not,
