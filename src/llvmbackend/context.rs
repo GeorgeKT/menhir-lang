@@ -216,6 +216,7 @@ impl<'a> Context<'a>
                 LLVMDisposeMessage(error_message);
                 Err(e)
             } else {
+                LLVMDisposeMessage(error_message);
                 Ok(())
             }
         }

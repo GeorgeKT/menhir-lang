@@ -1,4 +1,4 @@
-use std::ffi::CString;
+use std::ffi::{CString};
 use std::collections::HashMap;
 use std::rc::Rc;
 use libc;
@@ -29,8 +29,9 @@ pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, name_
 
     let function_type = LLVMFunctionType(ret_type, arg_types.as_mut_ptr(), arg_types.len() as libc::c_uint, 0);
     let llvm_name = name_override.unwrap_or(&sig.name);
-    let name = CString::new(llvm_name.as_bytes()).expect("Invalid string");
-    let func = LLVMAddFunction(ctx.module, name.into_raw(), function_type);
+    let cstring = CString::new(llvm_name.as_bytes()).expect("Invalid string");
+    let name = cstring.as_ptr();
+    let func = LLVMAddFunction(ctx.module, name, function_type);
     let fi = FunctionInstance::new(&sig.name, func, sig.return_type.clone(), sig.get_type());
     ctx.add_function(Rc::new(fi));
 }
