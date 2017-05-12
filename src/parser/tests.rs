@@ -219,11 +219,11 @@ fn test_precedence_8()
     assert!(e == bin_op(
         BinaryOperator::Add,
         name_ref("b", span(1, 1, 1, 1)),
-        Expression::Call(Call::new(
+        Expression::Call(Box::new(Call::new(
             name_ref2("c", span(1, 5, 1, 5)),
             vec![number(6, span(1, 7, 1, 7), &target)],
             span(1, 5, 1, 8)
-        )),
+        ))),
         span(1, 1, 1, 8),
     ));
 }
@@ -235,11 +235,11 @@ fn test_precedence_9()
     let e = th_expr("c(6) + b", &target);
     assert!(e == bin_op(
         BinaryOperator::Add,
-        Expression::Call(Call::new(
+        Expression::Call(Box::new(Call::new(
             name_ref2("c", span(1, 1, 1, 1)),
             vec![number(6, span(1, 3, 1, 3), &target)],
             span(1, 1, 1, 4)
-        )),
+        ))),
         name_ref("b", span(1, 8, 1, 8)),
         span(1, 1, 1, 8),
     ));
@@ -286,11 +286,12 @@ fn test_namespaced_call()
     let target = Target::new(IntSize::I32);
     let e = th_expr("foo::bar(7)", &target);
     assert!(e == Expression::Call(
-        Call::new(
+        Box::new(Call::new(
             name_ref2("foo::bar", span(1, 1, 1, 8)),
             vec![number(7, span(1, 10, 1, 10), &target)],
             span(1, 1, 1, 11),
-        )));
+        )))
+    );
 }
 
 #[test]
@@ -635,11 +636,11 @@ a.b()
         member_access(
             name_ref("a", span(2, 1, 2, 1)),
             MemberAccessType::Call(
-                Call::new(
+                Box::new(Call::new(
                     name_ref2("b", span(2, 3, 2, 3)),
                     Vec::new(),
                     span(2, 3, 2, 5)
-                ),
+                )),
             ),
             span(2, 1, 2, 5)
         )
