@@ -790,10 +790,12 @@ fn member_call_to_call(left: &Expression, call: &Call) -> Expression
     args.push(first_arg);
     args.extend(call.args.iter().cloned());
     Expression::Call(
-        Call::new(
-            call.callee.clone(),
-            args,
-            call.span.clone(),
+        Box::new(
+            Call::new(
+                call.callee.clone(),
+                args,
+                call.span.clone(),
+            )
         )
     )
 }
@@ -1001,7 +1003,7 @@ fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign) -> TypeCheckR
                 return type_error_result(&nr.span, format!("Attempting to modify {}, which is not mutable", nr.name));
             }
         }
-        _ => return type_error_result(&a.left.span(), format!("Attempting to modify a non mutable expression")),
+        _ => return type_error_result(&a.left.span(), "Attempting to modify a non mutable expression"),
     }
 
     type_check_with_conversion(ctx, &mut a.right, &left_type)?;
@@ -1096,7 +1098,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::OptionalToBool(ref mut inner) => {
             let inner_type = type_check_expression(ctx, inner, &None)?;
             if !inner_type.is_optional() {
-                type_error_result(&inner.span(), format!("Expecting optional type"))
+                type_error_result(&inner.span(), "Expecting optional type")
             } else {
                 valid(Type::Bool)
             }

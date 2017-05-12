@@ -65,10 +65,10 @@ impl TokenQueue
         self.tokens.get(index)
     }
 
-    pub fn expect(&mut self, kind: TokenKind) -> CompileResult<Token>
+    pub fn expect(&mut self, kind: &TokenKind) -> CompileResult<Token>
     {
         self.pop().and_then(|tok|
-            if tok.kind == kind {
+            if tok.kind == *kind {
                 Ok(tok)
             } else {
                 parse_error_result(&tok.span, format!("Unexpected token {}, expecting {}", tok.kind, kind))
@@ -116,20 +116,20 @@ impl TokenQueue
         }
     }
 
-    pub fn is_next(&self, kind: TokenKind) -> bool
+    pub fn is_next(&self, kind: &TokenKind) -> bool
     {
         match self.tokens.front()
         {
-            Some(tok) => tok.kind == kind,
+            Some(tok) => tok.kind == *kind,
             None => false,
         }
     }
 
-    pub fn is_next_at(&self, index: usize, kind: TokenKind) -> bool
+    pub fn is_next_at(&self, index: usize, kind: &TokenKind) -> bool
     {
         match self.peek_at(index)
         {
-            Some(tok) => tok.kind == kind,
+            Some(tok) => tok.kind == *kind,
             None => false,
         }
     }

@@ -57,7 +57,7 @@ impl SymbolTable
 
     pub fn get_variable(&self, name: &str) -> Option<Rc<VariableInstance>>
     {
-        self.vars.get(name).map(|v| v.clone())
+        self.vars.get(name).cloned()
     }
 
     pub fn add_function(&mut self, f: Rc<FunctionInstance>)
@@ -75,6 +75,6 @@ impl SymbolTable
 
     pub fn get_function(&self, name: &str) -> Option<Rc<FunctionInstance>>
     {
-        self.funcs.get(name).map(|fi_rc| fi_rc.clone())
+        self.funcs.get(name).cloned()
     }
 }

@@ -31,7 +31,7 @@ fn stack_alloc(func: &mut ByteCodeFunction, typ: &Type, name: Option<&str>) -> V
 
 fn get_dst(func: &mut ByteCodeFunction, typ: &Type) -> Var
 {
-    assert!(*typ != Type::Unknown);
+    assert_ne!(*typ, Type::Unknown);
     if let Some(dst) = func.get_destination() {
         return dst;
     }
@@ -244,7 +244,7 @@ fn member_access_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction,
     match (var_typ, &sma.right)
     {
         (&Type::Struct(_), &MemberAccessType::Name(ref field)) => {
-            func.add(load_member_instr(&dst, &var, field.index, target.int_size));
+            func.add(load_member_instr(dst, &var, field.index, target.int_size));
         },
 
         (&Type::Array(ref at), &MemberAccessType::Property(Property::Len)) => {
@@ -277,7 +277,7 @@ fn name_pattern_match_to_bc(
         Type::Enum(ref et) => {
             let idx = et.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(&target), Operand::const_uint(idx as u64, target_machine.int_size)));
+            func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(target), Operand::const_uint(idx as u64, target_machine.int_size)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
         },
         Type::Sum(ref st) => {
@@ -401,7 +401,7 @@ fn match_case_to_bc(
     let add_literal_case = |bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, op: Operand| {
         func.push_destination(None);
         let cond = stack_alloc(func, &Type::Bool, None);
-        func.add(binary_op_instr(&cond, BinaryOperator::Equals, op, var_op(&target)));
+        func.add(binary_op_instr(&cond, BinaryOperator::Equals, op, var_op(target)));
         func.add(branch_if_instr(&cond, match_case_bb, next_bb));
         func.pop_destination();
         match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false, target_machine);
@@ -473,7 +473,7 @@ fn match_case_to_bc(
             let arr = func.new_var(a.array_type.clone());
             array_lit_to_bc(bc_mod, func, a, &arr, target_machine);
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(&arr), var_op(&target)));
+            func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(&arr), var_op(target)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
             func.pop_destination();
             match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false, target_machine);
@@ -482,7 +482,7 @@ fn match_case_to_bc(
         Pattern::Literal(Literal::String(_, ref s)) => {
             func.push_destination(None);
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(binary_op_instr(&cond, BinaryOperator::Equals, Operand::const_string(&s[..]), var_op(&target)));
+            func.add(binary_op_instr(&cond, BinaryOperator::Equals, Operand::const_string(&s[..]), var_op(target)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
             func.pop_destination();
             match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false, target_machine);
@@ -494,14 +494,14 @@ fn match_case_to_bc(
 
         Pattern::Nil(_) => {
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(load_optional_flag_instr(&cond, &target));
+            func.add(load_optional_flag_instr(&cond, target));
             func.add(branch_if_instr(&cond, next_bb, match_case_bb));
             match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false, target_machine);
         },
 
         Pattern::Optional(ref o) => {
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(load_optional_flag_instr(&cond, &target));
+            func.add(load_optional_flag_instr(&cond, target));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
 
             func.set_current_bb(match_case_bb);

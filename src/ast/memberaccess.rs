@@ -37,7 +37,7 @@ pub fn field(name: &str, index: usize) -> Field
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum MemberAccessType
 {
-    Call(Call),
+    Call(Box<Call>),
     Name(Field),
     Property(Property),
 }
@@ -45,7 +45,7 @@ pub enum MemberAccessType
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct MemberAccess
 {
-    pub left: Box<Expression>,
+    pub left: Expression,
     pub right: MemberAccessType,
     pub span: Span,
     pub typ: Type,
@@ -53,12 +53,16 @@ pub struct MemberAccess
 
 pub fn member_access(left: Expression, right: MemberAccessType, span: Span) -> Expression
 {
-    Expression::MemberAccess(MemberAccess{
-        left: Box::new(left),
-        right: right,
-        span: span,
-        typ: Type::Unknown,
-    })
+    Expression::MemberAccess(
+        Box::new(
+            MemberAccess {
+                left,
+                right,
+                span,
+                typ: Type::Unknown
+            }
+        )
+    )
 }
 
 

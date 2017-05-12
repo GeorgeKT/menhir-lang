@@ -300,7 +300,7 @@ impl ByteCodeFunction
                 let replacements = f(&block.instructions[idx]);
                 if !replacements.is_empty() {
                     block.instructions.remove(idx);
-                    for r in replacements.into_iter() {
+                    for r in replacements {
                         block.instructions.insert(idx, r);
                         idx += 1;
                     }

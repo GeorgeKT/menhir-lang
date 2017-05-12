@@ -40,7 +40,7 @@ unsafe fn sum_type_to_llvm_type(context: LLVMContextRef, target_machine: &Target
     let mut largest_type = ptr::null_mut();
     for c in &st.cases {
         let case_typ = to_llvm_type(context, target_machine, &c.typ);
-        if largest_type == ptr::null_mut() || target_machine.size_of_type(case_typ) > target_machine.size_of_type(largest_type) {
+        if largest_type.is_null() || target_machine.size_of_type(case_typ) > target_machine.size_of_type(largest_type) {
             largest_type = case_typ;
         }
     }
@@ -105,14 +105,13 @@ pub unsafe fn to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachi
         Type::Void => LLVMVoidTypeInContext(context),
         Type::Int(IntSize::I8) | Type::UInt(IntSize::I8) => LLVMInt8TypeInContext(context),
         Type::Int(IntSize::I16) | Type::UInt(IntSize::I16) => LLVMInt16TypeInContext(context),
-        Type::Int(IntSize::I32) | Type::UInt(IntSize::I32) => LLVMInt32TypeInContext(context),
+        Type::Char | Type::Int(IntSize::I32) | Type::UInt(IntSize::I32) => LLVMInt32TypeInContext(context),
         Type::Int(IntSize::I64) | Type::UInt(IntSize::I64) => LLVMInt64TypeInContext(context),
         Type::Enum(_) => native_llvm_int_type(context, target_machine),
         Type::Bool => LLVMInt1TypeInContext(context),
         Type::Float(FloatSize::F32) => LLVMFloatTypeInContext(context),
         Type::Float(FloatSize::F64) => LLVMDoubleTypeInContext(context),
-        Type::Char => LLVMInt32TypeInContext(context),
-        Type::Pointer(ref inner) => LLVMPointerType(to_llvm_type(context, target_machine, &inner), 0),
+        Type::Pointer(ref inner) => LLVMPointerType(to_llvm_type(context, target_machine, inner), 0),
         Type::Array(ref at) => array_to_llvm_type(context, target_machine, at),
         Type::Slice(ref st) => slice_to_llvm_type(context, target_machine, st),
         Type::String => string_to_llvm_type(context, target_machine),

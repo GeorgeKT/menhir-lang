@@ -106,7 +106,7 @@ pub fn llvm_code_generation<'a>(bc_mod: &ByteCodeModule, target_machine: &'a Tar
 pub fn link(ctx: &Context, opts: &CodeGenOptions) -> Result<(), String>
 {
     let obj_file = unsafe{
-        ctx.gen_object_file(&opts)?
+        ctx.gen_object_file(opts)?
     };
 
     let program_path = format!("{}/{}", opts.build_dir, opts.program_name);

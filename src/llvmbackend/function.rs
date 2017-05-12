@@ -79,7 +79,7 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction)
     let mut blocks = HashMap::new();
     blocks.insert(0, entry_bb);
 
-    for (bb_ref, bb) in func.blocks.iter() {
+    for (bb_ref, bb) in &func.blocks {
         if bb.name != "entry" {
             let bb_name = CString::new(bb.name.as_bytes()).expect("Invalid block name");
             let new_bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, bb_name.as_ptr());
@@ -87,7 +87,7 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction)
         }
     }
 
-    for (bb_ref, block) in func.blocks.iter() {
+    for (bb_ref, block) in &func.blocks {
         let bb = blocks.get(bb_ref).expect("Unknown basic block");
         LLVMPositionBuilderAtEnd(ctx.builder, *bb);
         for inst in &block.instructions {

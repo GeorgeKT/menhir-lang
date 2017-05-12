@@ -48,7 +48,7 @@ fn dump_byte_code(bc_mod: &ByteCodeModule, dump_flags: &str)
 
 fn parse(parser_options: &ParserOptions, input_file: &str, dump_flags: &str, optimize: bool, target: &Target) -> CompileResult<ByteCodeModule>
 {
-    let mut module = parse_file(&parser_options, input_file, target)?;
+    let mut module = parse_file(parser_options, input_file, target)?;
     type_check_module(&mut module, target)?;
 
     if dump_flags.contains("ast") || dump_flags.contains("all") {
@@ -66,7 +66,7 @@ fn parse(parser_options: &ParserOptions, input_file: &str, dump_flags: &str, opt
         optimize_module(&mut bc_mod, OptimizationLevel::Minimal);
     }
 
-    dump_byte_code(&bc_mod, &dump_flags);
+    dump_byte_code(&bc_mod, dump_flags);
     Ok(bc_mod)
 }
 
@@ -74,7 +74,7 @@ fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
 {
     let input_file = matches.value_of("INPUT_FILE").expect("No input file given");
     let optimize = matches.is_present("OPTIMIZE");
-    let output_file = matches.value_of("OUTPUT_FILE").map(|v| v.to_string()).unwrap_or_else(|| default_output_file(&input_file));
+    let output_file = matches.value_of("OUTPUT_FILE").map(|v| v.to_string()).unwrap_or_else(|| default_output_file(input_file));
     let target_machine = llvm_init()?;
 
     let parser_options = ParserOptions{
@@ -83,7 +83,7 @@ fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
             .unwrap_or_else(Vec::new),
     };
 
-    let bc_mod = parse(&parser_options, &input_file, &dump_flags, optimize, &target_machine.target)?;
+    let bc_mod = parse(&parser_options, input_file, dump_flags, optimize, &target_machine.target)?;
     let opts = CodeGenOptions{
         dump_ir: dump_flags.contains("ir") || dump_flags.contains("all"),
         build_dir: "build".into(),
@@ -91,7 +91,7 @@ fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
         optimize: optimize,
     };
 
-    let ctx = llvm_code_generation(&bc_mod, &target_machine).map_err(|msg| CompileError::Other(msg))?;
+    let ctx = llvm_code_generation(&bc_mod, &target_machine).map_err(CompileError::Other)?;
     link(&ctx, &opts)?;
     Ok(0)
 }
@@ -117,7 +117,7 @@ fn run() -> CompileResult<i32>
     let dump_flags = matches.value_of("DUMP").unwrap_or("");
 
     if let Some(build_matches) = matches.subcommand_matches("build") {
-        build_command(&build_matches, &dump_flags)
+        build_command(build_matches, dump_flags)
     } else {
         println!("{}", matches.usage());
         Ok(1)

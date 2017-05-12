@@ -13,21 +13,21 @@ macro_rules! try_opt {
 
 fn lit_to_const(lit: &Literal) -> Option<Constant>
 {
-    match lit {
-        &Literal::Int(_, v, int_size) => Some(Constant::Int(v, int_size)),
-        &Literal::UInt(_, v, int_size) => Some(Constant::UInt(v, int_size)),
-        &Literal::Bool(_, v) => Some(Constant::Bool(v)),
-        &Literal::Char(_, v) => Some(Constant::Char(v)),
-        &Literal::String(_, ref v) => Some(Constant::String(v.clone())),
+    match *lit {
+        Literal::Int(_, v, int_size) => Some(Constant::Int(v, int_size)),
+        Literal::UInt(_, v, int_size) => Some(Constant::UInt(v, int_size)),
+        Literal::Bool(_, v) => Some(Constant::Bool(v)),
+        Literal::Char(_, v) => Some(Constant::Char(v)),
+        Literal::String(_, ref v) => Some(Constant::String(v.clone())),
 
-        &Literal::Float(_, ref v, float_size) => {
+        Literal::Float(_, ref v, float_size) => {
             match v.parse::<f64>() {
                 Ok(f) => Some(Constant::Float(f, float_size)),
-                Err(_) => panic!("Internal Compiler Error: {} is not a valid floating point number", v)
+                _ => panic!("Internal Compiler Error: {} is not a valid floating point number", v)
             }
         }
 
-        &Literal::Array(ref array_lit) => {
+        Literal::Array(ref array_lit) => {
             let mut elements = Vec::with_capacity(array_lit.elements.len());
             for e in &array_lit.elements {
                 if let Some(c) = expr_to_const(e) {
@@ -64,6 +64,7 @@ fn unary_op_to_const(uop: &UnaryOp) -> Option<Constant>
     }
 }
 
+#[cfg_attr(feature = "cargo-clippy", allow(float_cmp))]
 fn binary_op_to_const(bop: &BinaryOp) -> Option<Constant>
 {
     let left = try_opt!(expr_to_const(&bop.left));

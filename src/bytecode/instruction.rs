@@ -149,7 +149,7 @@ pub fn float_op(fstr: &str, float_size: FloatSize) -> Operand
     match fstr.parse::<f64>()
     {
         Ok(f) => Operand::const_float(f, float_size),
-        Err(_) => panic!("Internal Compiler Error: {} is not a valid floating point number", fstr)
+        _ => panic!("Internal Compiler Error: {} is not a valid floating point number", fstr)
     }
 }
 

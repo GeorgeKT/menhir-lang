@@ -74,7 +74,7 @@ impl Lexer
         }
     }
 
-    fn to_start_of_line(&mut self)
+    fn start_of_new_line(&mut self)
     {
         self.state = LexState::StartOfLine;
         self.indent_level = 0;
@@ -86,7 +86,7 @@ impl Lexer
         match c
         {
             '\n' => {
-                self.to_start_of_line();
+                self.start_of_new_line();
                 Ok(())
             }
             ' ' | '\t' => Ok(()),
@@ -116,7 +116,7 @@ impl Lexer
     fn comment(&mut self, c: char) -> CompileResult<()>
     {
         if c == '\n' {
-            self.to_start_of_line();
+            self.start_of_new_line();
         }
         Ok(())
     }

@@ -118,7 +118,7 @@ impl<'a> Context<'a>
     {
         for sf in self.stack.iter().rev()
         {
-            if sf.current_function != ptr::null_mut() {
+            if !sf.current_function.is_null() {
                 return sf.current_function;
             }
         }
@@ -130,7 +130,7 @@ impl<'a> Context<'a>
     {
         unsafe{
             use llvmbackend::types::to_llvm_type;
-            to_llvm_type(self.context, &self.target_machine, typ)
+            to_llvm_type(self.context, self.target_machine, typ)
         }
     }
 
@@ -187,7 +187,7 @@ impl<'a> Context<'a>
         LLVMInitializeFunctionPassManager(function_passes);
 
         let mut func = LLVMGetFirstFunction(self.module);
-        while func != ptr::null_mut() {
+        while !func.is_null() {
             LLVMRunFunctionPassManager(function_passes, func);
             func = LLVMGetNextFunction(func);
         }
@@ -230,7 +230,7 @@ impl<'a> Drop for Context<'a>
     {
         unsafe {
             LLVMDisposeBuilder(self.builder);
-            if self.module != ptr::null_mut() {
+            if !self.module.is_null() {
                 LLVMDisposeModule(self.module);
             }
             LLVMContextDispose(self.context);

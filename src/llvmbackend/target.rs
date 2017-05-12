@@ -36,7 +36,7 @@ unsafe fn create_target_machine() -> Result<LLVMTargetMachineRef, String>
     );
 
     LLVMDisposeMessage(target_triple);
-    if target_machine == ptr::null_mut() {
+    if target_machine.is_null() {
         let e = format!("Unable to get a LLVM target machine for {}", target_triple_str);
         return Err(e);
     }

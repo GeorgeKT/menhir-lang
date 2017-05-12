@@ -31,7 +31,7 @@ pub enum Expression
     UnaryOp(Box<UnaryOp>),
     BinaryOp(Box<BinaryOp>),
     Block(Box<Block>),
-    Call(Call),
+    Call(Box<Call>),
     NameRef(NameRef),
     Match(Box<MatchExpression>),
     If(Box<IfExpression>),
@@ -39,7 +39,7 @@ pub enum Expression
     Binding(Box<BindingExpression>),
     Bindings(Box<BindingList>),
     StructInitializer(StructInitializer),
-    MemberAccess(MemberAccess),
+    MemberAccess(Box<MemberAccess>),
     New(Box<NewExpression>),
     Delete(Box<DeleteExpression>),
     ArrayToSlice(Box<ArrayToSlice>),
@@ -100,10 +100,8 @@ impl Expression
 
     pub fn set_precedence(&mut self, precedence: usize)
     {
-        match *self
-        {
-            Expression::BinaryOp(ref mut op) => op.precedence = precedence,
-            _ => (),
+        if let Expression::BinaryOp(ref mut op) = *self {
+            op.precedence = precedence;
         }
     }
 

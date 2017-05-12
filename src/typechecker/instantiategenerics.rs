@@ -97,7 +97,7 @@ fn make_concrete_type(ctx: &TypeCheckerContext, mapping: &GenericMapping, generi
     }
 
     if let Some(concrete) = mapping.get(generic) {
-        return check_interface_constraints(ctx, generic, &concrete);
+        return check_interface_constraints(ctx, generic, concrete);
     }
 
     let typ = match *generic
@@ -265,7 +265,7 @@ fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &
 
         Expression::Call(ref c) => {
             let new_c = substitute_call(ctx, generic_args, c)?;
-            Ok(Expression::Call(new_c))
+            Ok(Expression::Call(Box::new(new_c)))
         },
 
         Expression::Lambda(ref l) => {
@@ -351,7 +351,7 @@ fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &
             {
                 MemberAccessType::Call(ref c) => {
                     let new_c = substitute_call(ctx, generic_args, c)?;
-                    MemberAccessType::Call(new_c)
+                    MemberAccessType::Call(Box::new(new_c))
                 },
                 _ => sma.right.clone(),
             };

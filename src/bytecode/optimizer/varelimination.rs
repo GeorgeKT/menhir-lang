@@ -77,14 +77,15 @@ fn replace_var_by_initializer(instr: &mut Instruction, var: &str, initializer: &
 
     match *instr
     {
-        Instruction::Store{ref mut src, ..} => do_replace(src),
+        Instruction::Store{ref mut src, ..} |
+        Instruction::UnaryOp{ref mut src, ..} |
+        Instruction::Cast{ref mut src, ..} => do_replace(src),
         Instruction::AddressOfMember{ref mut member_index, ..} |
         Instruction::LoadMember{ref mut member_index, ..} => do_replace(member_index),
         Instruction::StoreMember{ref mut member_index, ref mut src, ..} => {
             do_replace(member_index);
             do_replace(src);
         },
-        Instruction::UnaryOp{ref mut src, ..} => do_replace(src),
         Instruction::BinaryOp{ref mut left, ref mut right, ..} => {
             do_replace(left);
             do_replace(right);
@@ -98,7 +99,6 @@ fn replace_var_by_initializer(instr: &mut Instruction, var: &str, initializer: &
             do_replace(start);
             do_replace(len);
         },
-        Instruction::Cast{ref mut src, ..} => do_replace(src),
         Instruction::Return(ref mut v) => do_replace(v),
         Instruction::BranchIf{ref mut cond, ..} => do_replace(cond),
         _ => (),
@@ -124,7 +124,8 @@ fn eliminate_vars_pass(func: &mut ByteCodeFunction) -> usize
             Instruction::Load{ref dst, ..} |
             Instruction::UnaryOp{ref dst, ..} |
             Instruction::BinaryOp{ref dst, ..} |
-            Instruction::Slice{ref dst, ..} => {
+            Instruction::Slice{ref dst, ..} |
+            Instruction::StoreNil(ref dst) => {
                 vars.remove(&dst.name);
             }
 
@@ -144,10 +145,6 @@ fn eliminate_vars_pass(func: &mut ByteCodeFunction) -> usize
             Instruction::GetProperty{ref obj, ref dst, ..} |
             Instruction::LoadOptionalFlag{ref dst, ref obj}=> {
                 vars.remove(&obj.name);
-                vars.remove(&dst.name);
-            }
-
-            Instruction::StoreNil(ref dst) => {
                 vars.remove(&dst.name);
             }
 
@@ -176,7 +173,7 @@ fn eliminate_vars_pass(func: &mut ByteCodeFunction) -> usize
         if var_info.can_be_replaced_by_initializer() {
             func.for_each_instruction_mut(|instr| {
                 if let Some(ref init) = var_info.initializer {
-                    replace_var_by_initializer(instr, &var, init);
+                    replace_var_by_initializer(instr, var, init);
                 }
                 true
             });

@@ -18,7 +18,7 @@ pub unsafe fn const_int(ctx: &Context, v: i64) -> LLVMValueRef
 
 pub unsafe fn const_uint(ctx: &Context, v: u64) -> LLVMValueRef
 {
-    LLVMConstInt(native_llvm_int_type(ctx.context, &ctx.target_machine), v as c_ulonglong, 0)
+    LLVMConstInt(native_llvm_int_type(ctx.context, ctx.target_machine), v as c_ulonglong, 0)
 }
 
 pub unsafe fn const_bool(ctx: &Context, v: bool) -> LLVMValueRef
@@ -270,14 +270,8 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             dst_var.value.store(ctx, &src_var.value);
         }
 
-        Instruction::LoadMember{ref dst, ref obj, ref member_index} => { ;
-            let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
-            let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
-            let member_ptr = obj_var.value.get_member_ptr(ctx, member_index);
-            dst_var.value.store(ctx, &member_ptr);
-        }
-
-        Instruction::AddressOfMember{ref dst, ref obj, ref member_index} => {
+        Instruction::LoadMember{ref dst, ref obj, ref member_index} |
+        Instruction::AddressOfMember{ref dst, ref obj, ref member_index} => { ;
             let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
             let obj_var = ctx.get_variable(&obj.name).expect("Unknown variable");
             let member_ptr = obj_var.value.get_member_ptr(ctx, member_index);
@@ -366,10 +360,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             ctx.add_variable(&var.name, ValueRef::new(value, ptr_type(var.typ.clone())))
         }
 
-        Instruction::StartScope => {
-        }
-
-        Instruction::EndScope => {
+        Instruction::StartScope | Instruction::EndScope | Instruction::Exit => {
         }
 
         Instruction::Return(ref operand) => {
@@ -393,9 +384,6 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
 
         Instruction::Delete(ref var) => {
             LLVMBuildFree(ctx.builder, get_variable(ctx, &var.name).value);
-        }
-
-        Instruction::Exit => {
         }
     }
 }
