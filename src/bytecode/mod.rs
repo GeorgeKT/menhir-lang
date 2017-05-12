@@ -64,13 +64,15 @@ pub mod test
     use parser::{ParserOptions, parse_module};
     use bytecode::{ByteCodeModule, compile_to_byte_code};
     use typechecker::type_check_module;
-    use ast::TreePrinter;
+    use ast::{TreePrinter, IntSize};
+    use target::Target;
 
     pub fn generate_byte_code(prog: &str, dump: bool) -> CompileResult<ByteCodeModule>
     {
+        let target = Target::new(IntSize::I32);
         let mut cursor = Cursor::new(prog);
         let parser_options = ParserOptions::default();
-        let mut md = parse_module(&parser_options, &mut cursor, "test", "")?;
+        let mut md = parse_module(&parser_options, &mut cursor, "test", "", &target)?;
 
         if dump {
             println!("Before type check");
@@ -78,7 +80,7 @@ pub mod test
             println!("-----------------");
         }
 
-        type_check_module(&mut md)?;
+        type_check_module(&mut md, &target)?;
 
         if dump {
             println!("After type check");
@@ -86,7 +88,7 @@ pub mod test
             println!("-----------------");
         }
 
-        let bc_mod = compile_to_byte_code(&md)?;
+        let bc_mod = compile_to_byte_code(&md, &target)?;
         if dump {
             println!("ByteCode:");
             println!("{}", bc_mod);

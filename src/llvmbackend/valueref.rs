@@ -7,7 +7,7 @@ use ast::*;
 use bytecode::{ByteCodeProperty, Operand, Constant};
 use super::context::Context;
 use super::instructions::{const_uint, const_int, const_bool, const_float, const_char, copy, get_operand};
-use target::native_uint_type;
+
 
 #[derive(Clone)]
 pub struct ValueRef
@@ -296,12 +296,13 @@ impl ValueRef
         let element_type = self.typ.get_pointer_element_type()
             .unwrap_or_else(|| panic!("Get property not allowed on type {}", self.typ));
 
+        let native_uint_type = ctx.target_machine.target.native_uint_type.clone();
         match (element_type, prop)
         {
             (&Type::Array(ref a), ByteCodeProperty::Len) => unsafe {
                 ValueRef::new(
                     const_uint(ctx, a.len as u64),
-                    native_uint_type()
+                    native_uint_type
                 )
             },
 
@@ -310,7 +311,7 @@ impl ValueRef
                 let len_ptr = self.slice_len_ptr(ctx);
                 ValueRef::new(
                     LLVMBuildLoad(ctx.builder, len_ptr, cstr!("len")),
-                    native_uint_type(),
+                    native_uint_type,
                 )
             },
 
@@ -318,7 +319,7 @@ impl ValueRef
                 let sti_ptr = LLVMBuildStructGEP(ctx.builder, self.value, 0, cstr!("sti_ptr"));
                 ValueRef::new(
                     LLVMBuildLoad(ctx.builder, sti_ptr, cstr!("sti")),
-                    native_uint_type(),
+                    native_uint_type,
                 )
             },
 

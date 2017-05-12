@@ -1,13 +1,16 @@
 use parser::{th_expr, th_mod};
 use super::typecheck::{type_check_expression, type_check_module};
 use super::typecheckercontext::TypeCheckerContext;
-use ast::Type;
+use ast::{IntSize, Type};
 use compileerror::{CompileResult};
+use target::Target;
+
 
 fn type_check(expr: &str) -> CompileResult<Type>
 {
-	let mut ctx = TypeCheckerContext::new();
-	let mut e = th_expr(expr);
+    let target = Target::new(IntSize::I32);
+	let mut ctx = TypeCheckerContext::new(&target);
+	let mut e = th_expr(expr, &target);
 	let r = type_check_expression(&mut ctx, &mut e, &None);
 	println!("result: {:?}", r);
 	r
@@ -16,8 +19,9 @@ fn type_check(expr: &str) -> CompileResult<Type>
 
 fn type_check_mod(expr: &str) -> CompileResult<()>
 {
-	let mut md = th_mod(expr);
-	let r = type_check_module(&mut md);
+    let target = Target::new(IntSize::I32);
+	let mut md = th_mod(expr, &target);
+	let r = type_check_module(&mut md, &target);
 	println!("result: {:?}", r);
 	r
 }

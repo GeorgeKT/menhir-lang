@@ -8,7 +8,6 @@ use llvm::prelude::*;
 use ast::*;
 use bytecode::*;
 use span::Span;
-use target::native_uint_type;
 use super::symboltable::FunctionInstance;
 use super::context::Context;
 use super::instructions::*;
@@ -108,7 +107,7 @@ pub unsafe fn add_libc_functions(ctx: &mut Context)
         vec![
             Argument::new("dst", ptr_type(Type::Void), false, Span::default()),
             Argument::new("src", ptr_type(Type::Void), false, Span::default()),
-            Argument::new("size", native_uint_type(), false, Span::default())
+            Argument::new("size", ctx.target_machine.target.native_uint_type.clone(), false, Span::default())
         ],
         Span::default()
     );

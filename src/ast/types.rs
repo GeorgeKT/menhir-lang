@@ -3,7 +3,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 use itertools::free::join;
 use ast::*;
-use target::native_uint_type;
+use target::Target;
 use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
@@ -338,14 +338,14 @@ impl Type
         }
     }
 
-    pub fn get_property_type(&self, name: &str) -> Option<(Type, MemberAccessType)>
+    pub fn get_property_type(&self, name: &str, target: &Target) -> Option<(Type, MemberAccessType)>
     {
         match *self
         {
             Type::Array(_) | Type::Slice(_) | Type::String => {
                 match name
                 {
-                    "len" => Some((native_uint_type(), MemberAccessType::Property(Property::Len))),
+                    "len" => Some((target.native_uint_type.clone(), MemberAccessType::Property(Property::Len))),
                     _ => None,
                 }
             },

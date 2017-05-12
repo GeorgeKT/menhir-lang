@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use ast::*;
-use target::{native_uint_type, native_int_size};
+use target::{Target};
 use bytecode::{ByteCodeModule, ByteCodeFunction};
 use super::consteval::expr_to_const;
 use super::function::*;
@@ -39,17 +39,17 @@ fn get_dst(func: &mut ByteCodeFunction, typ: &Type) -> Var
     stack_alloc(func, typ, None)
 }
 
-fn array_lit_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, a: &ArrayLiteral, dst: &Var)
+fn array_lit_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, a: &ArrayLiteral, dst: &Var, target: &Target)
 {
     for (idx, element) in a.elements.iter().enumerate() {
         func.push_destination(None);
-        let v = to_bc(bc_mod, func, element);
+        let v = to_bc(bc_mod, func, element, target);
         func.pop_destination();
-        func.add(store_member_instr(dst, idx, v));
+        func.add(store_member_instr(dst, idx, v, target.int_size));
     }
 }
 
-fn call_args_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, c: &Call, self_arg: Option<Var>) -> Vec<Operand>
+fn call_args_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, c: &Call, self_arg: Option<Var>, target: &Target) -> Vec<Operand>
 {
     func.push_destination(None);
     let mut args = Vec::new();
@@ -57,32 +57,32 @@ fn call_args_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, c: 
         args.push(Operand::Var(s));
     }
 
-    args.extend(c.args.iter().map(|arg| Operand::Var(to_bc(bc_mod, func, arg))));
+    args.extend(c.args.iter().map(|arg| Operand::Var(to_bc(bc_mod, func, arg, target))));
     func.pop_destination();
     args
 }
 
-fn call_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, c: &Call, self_arg: Option<Var>) -> Option<Var>
+fn call_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, c: &Call, self_arg: Option<Var>, target: &Target) -> Option<Var>
 {
     if let Type::Void = c.return_type {
-        let args = call_args_to_bc(bc_mod, func, c, self_arg);
+        let args = call_args_to_bc(bc_mod, func, c, self_arg, target);
         func.add(void_call_instr(&c.callee.name, args));
         None
     } else {
         let dst = get_dst(func, &c.return_type);
-        let args = call_args_to_bc(bc_mod, func, c, self_arg);
+        let args = call_args_to_bc(bc_mod, func, c, self_arg, target);
         func.add(call_instr(&dst, &c.callee.name, args));
         Some(dst)
     }
 }
 
 
-fn struct_initializer_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, si: &StructInitializer, dst: &Var)
+fn struct_initializer_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, si: &StructInitializer, dst: &Var, target: &Target)
 {
     let init_members = |bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, si: &StructInitializer, dst: &Var| {
         for (idx, expr) in si.member_initializers.iter().enumerate() {
-            let v = to_bc(bc_mod, func, expr);
-            func.add(store_member_instr(dst, idx, v));
+            let v = to_bc(bc_mod, func, expr, target);
+            func.add(store_member_instr(dst, idx, v, target.int_size));
         }
     };
 
@@ -91,22 +91,22 @@ fn struct_initializer_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunc
         func.add(set_prop_instr(dst, ByteCodeProperty::SumTypeIndex, idx));
 
         let struct_ptr = stack_alloc(func, &ptr_type(st.cases[idx].typ.clone()), None);
-        func.add(load_member_instr(&struct_ptr, dst, idx));
+        func.add(load_member_instr(&struct_ptr, dst, idx, target.int_size));
         init_members(bc_mod, func, si, &struct_ptr);
     } else {
         init_members(bc_mod, func, si, dst);
     }
 }
 
-fn block_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, b: &Block) -> Option<Var>
+fn block_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, b: &Block, target: &Target) -> Option<Var>
 {
     let do_block = |bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, b: &Block| {
         for (idx, e) in b.expressions.iter().enumerate() {
             if idx == b.expressions.len() - 1 {
-                expr_to_bc(bc_mod, func, e);
+                expr_to_bc(bc_mod, func, e, target);
             } else {
                 func.push_destination(None);
-                expr_to_bc(bc_mod, func, e);
+                expr_to_bc(bc_mod, func, e, target);
                 func.pop_destination();
             }
         }
@@ -127,55 +127,55 @@ fn block_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, b: &Blo
     }
 }
 
-fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &Var, func: &mut ByteCodeFunction)
+fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &Var, func: &mut ByteCodeFunction, target: &Target)
 {
     for (idx, name) in p.bindings.iter().enumerate() {
         if name != "_" {
             let v = stack_alloc(func, &p.types[idx], Some(name));
-            func.add(load_member_instr(&v, struct_var, idx));
+            func.add(load_member_instr(&v, struct_var, idx, target.int_size));
             func.add_named_var(v);
         }
     }
 }
 
-fn add_binding(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, b: &Binding)
+fn add_binding(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, b: &Binding, target: &Target)
 {
     match b.binding_type
     {
         BindingType::Name(ref name) => {
             let dst = stack_alloc(func, &b.typ, Some(name));
             func.push_destination(Some(dst));
-            expr_to_bc(bc_mod, func, &b.init);
+            expr_to_bc(bc_mod, func, &b.init, target);
             func.pop_destination();
         },
 
         BindingType::Struct(ref s) => {
             let dst = stack_alloc(func, &b.typ, None);
             func.push_destination(Some(dst.clone()));
-            expr_to_bc(bc_mod, func, &b.init);
-            add_struct_pattern_bindings(s, &dst, func);
+            expr_to_bc(bc_mod, func, &b.init, target);
+            add_struct_pattern_bindings(s, &dst, func, target);
             func.pop_destination();
         },
     }
 }
 
-fn binding_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, l: &BindingExpression) -> Option<Var>
+fn binding_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, l: &BindingExpression, target: &Target) -> Option<Var>
 {
     let dst = get_dst(func, &l.typ);
     func.push_scope();
     for b in &l.bindings{
-        add_binding(bc_mod, func, b);
+        add_binding(bc_mod, func, b, target);
     }
 
     func.push_destination(Some(dst.clone()));
-    to_bc(bc_mod, func, &l.expression);
+    to_bc(bc_mod, func, &l.expression, target);
     func.pop_destination();
     func.pop_scope();
     Some(dst)
 }
 
 
-fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef) -> Option<Var>
+fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef, target: &Target) -> Option<Var>
 {
     let add_name_ref = |func: &mut ByteCodeFunction, nr: &NameRef| {
         let v = Var::named(&nr.name, nr.typ.clone());
@@ -205,7 +205,7 @@ fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef) -> Option<Var>
             if let Some(idx) = et.index_of(&nr.name) {
                 // enums are integers
                 let dst = get_dst(func, &nr.typ);
-                func.add(store_operand_instr(&dst, Operand::const_uint(idx as u64, native_int_size())));
+                func.add(store_operand_instr(&dst, Operand::const_uint(idx as u64, target.int_size)));
                 Some(dst)
             } else {
                 add_name_ref(func, nr)
@@ -229,10 +229,10 @@ fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef) -> Option<Var>
     }
 }
 
-fn member_access_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, sma: &MemberAccess, dst: &Var)
+fn member_access_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, sma: &MemberAccess, dst: &Var, target: &Target)
 {
     func.push_destination(None);
-    let var = to_bc(bc_mod, func, &sma.left);
+    let var = to_bc(bc_mod, func, &sma.left, target);
     func.pop_destination();
 
     let var_typ = if let Type::Pointer(ref inner) = var.typ {
@@ -244,11 +244,11 @@ fn member_access_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction,
     match (var_typ, &sma.right)
     {
         (&Type::Struct(_), &MemberAccessType::Name(ref field)) => {
-            func.add(load_member_instr(&dst, &var, field.index));
+            func.add(load_member_instr(&dst, &var, field.index, target.int_size));
         },
 
         (&Type::Array(ref at), &MemberAccessType::Property(Property::Len)) => {
-            func.add(store_operand_instr(dst, Operand::const_uint(at.len as u64, native_int_size())))
+            func.add(store_operand_instr(dst, Operand::const_uint(at.len as u64, target.int_size)))
         },
 
         (&Type::String, &MemberAccessType::Property(Property::Len)) => {
@@ -269,22 +269,23 @@ fn name_pattern_match_to_bc(
     match_end_bb: BasicBlockRef,
     match_case_bb: BasicBlockRef,
     next_bb: BasicBlockRef,
-    nr: &NameRef)
+    nr: &NameRef,
+    target_machine: &Target)
 {
     match nr.typ
     {
         Type::Enum(ref et) => {
             let idx = et.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(&target), Operand::const_uint(idx as u64, native_int_size())));
+            func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(&target), Operand::const_uint(idx as u64, target_machine.int_size)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
         },
         Type::Sum(ref st) => {
             let idx = st.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
-            let sum_type_index = stack_alloc(func, &native_uint_type(), None);
+            let sum_type_index = stack_alloc(func, &target_machine.native_uint_type, None);
             func.add(get_prop_instr(&sum_type_index, target, ByteCodeProperty::SumTypeIndex));
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(&sum_type_index), Operand::const_uint(idx as u64, native_int_size())));
+            func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(&sum_type_index), Operand::const_uint(idx as u64, target_machine.int_size)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
         },
         _ => {
@@ -292,7 +293,7 @@ fn name_pattern_match_to_bc(
         }
     }
 
-    match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false);
+    match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false, target_machine);
 }
 
 
@@ -303,10 +304,11 @@ fn match_case_body_to_bc(
     match_case_bb: BasicBlockRef,
     match_end_bb: BasicBlockRef,
     next_bb: BasicBlockRef,
-    end_scope: bool)
+    end_scope: bool,
+    target: &Target)
 {
     func.set_current_bb(match_case_bb);
-    expr_to_bc(bc_mod, func, &mc.to_execute);
+    expr_to_bc(bc_mod, func, &mc.to_execute, target);
     if end_scope {
         func.pop_scope();
     }
@@ -319,25 +321,25 @@ fn array_pattern_match_to_bc(
     ap: &ArrayPattern,
     seq: &Var,
     match_case_bb: BasicBlockRef,
-    next_bb: BasicBlockRef)
+    next_bb: BasicBlockRef,
+    target: &Target)
 {
     let head_type = seq.typ.get_element_type().expect("Invalid array type");
     let head = stack_alloc(func, &head_type, Some(&ap.head));
-    func.add(load_member_instr(&head, seq, 0));
+    func.add(load_member_instr(&head, seq, 0, target.int_size));
 
     let tail = stack_alloc(func, &slice_type(head_type), Some(&ap.tail));
-    let uint_type = native_uint_type();
-    let tail_len = stack_alloc(func, &uint_type, None);
-    let seq_len = stack_alloc(func, &uint_type, None);
+    let tail_len = stack_alloc(func, &target.native_uint_type, None);
+    let seq_len = stack_alloc(func, &target.native_uint_type, None);
     func.add(get_prop_instr(&seq_len, seq, ByteCodeProperty::Len));
-    func.add(binary_op_instr(&tail_len, BinaryOperator::Sub, var_op(&seq_len), Operand::const_uint(1, native_int_size())));
-    func.add(slice_instr(&tail, seq, Operand::const_uint(1, native_int_size()), var_op(&tail_len)));
+    func.add(binary_op_instr(&tail_len, BinaryOperator::Sub, var_op(&seq_len), Operand::const_uint(1, target.int_size)));
+    func.add(slice_instr(&tail, seq, Operand::const_uint(1, target.int_size), var_op(&tail_len)));
 
 
-    let length = stack_alloc(func, &native_uint_type(), None);
+    let length = stack_alloc(func, &target.native_uint_type, None);
     func.add(get_prop_instr(&length, seq, ByteCodeProperty::Len));
     let cond = stack_alloc(func, &Type::Bool, None);
-    func.add(binary_op_instr(&cond, BinaryOperator::GreaterThan, var_op(&length), Operand::const_uint(0, native_int_size())));
+    func.add(binary_op_instr(&cond, BinaryOperator::GreaterThan, var_op(&length), Operand::const_uint(0, target.int_size)));
     func.add(branch_if_instr(&cond, match_case_bb, next_bb));
 }
 
@@ -349,7 +351,8 @@ fn struct_pattern_match_to_bc(
     match_end_bb: BasicBlockRef,
     match_case_bb: BasicBlockRef,
     next_bb: BasicBlockRef,
-    p: &StructPattern)
+    p: &StructPattern,
+    target_machine: &Target)
 {
     func.push_destination(None);
     match p.typ
@@ -359,32 +362,38 @@ fn struct_pattern_match_to_bc(
             func.set_current_bb(match_case_bb);
 
             func.push_scope();
-            add_struct_pattern_bindings(p, target, func);
+            add_struct_pattern_bindings(p, target, func, target_machine);
         },
         Type::Sum(ref st) => {
-            let target_sum_type_index = stack_alloc(func, &native_uint_type(), None);
+            let target_sum_type_index = stack_alloc(func, &target_machine.native_uint_type, None);
             func.add(get_prop_instr(&target_sum_type_index, target, ByteCodeProperty::SumTypeIndex));
             let idx = st.index_of(&p.name).expect("Internal Compiler Error: cannot determine index of sum type case");
             let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(&target_sum_type_index), Operand::const_uint(idx as u64, native_int_size())));
+            func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(&target_sum_type_index), Operand::const_uint(idx as u64, target_machine.int_size)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
 
             func.set_current_bb(match_case_bb);
 
             func.push_scope();
             let struct_ptr = stack_alloc(func, &ptr_type(st.cases[idx].typ.clone()), None);
-            func.add(address_of_member_instr(&struct_ptr, target, idx));
+            func.add(address_of_member_instr(&struct_ptr, target, idx, target_machine.int_size));
 
-            add_struct_pattern_bindings(p, &struct_ptr, func);
+            add_struct_pattern_bindings(p, &struct_ptr, func, target_machine);
         },
         _ => panic!("Internal Compiler Error: Expression is not a valid match pattern"),
     }
 
     func.pop_destination();
-    match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, true);
+    match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, true, target_machine);
 }
 
-fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc: &MatchCase, target: &Var, match_end_bb: BasicBlockRef)
+fn match_case_to_bc(
+    bc_mod: &mut ByteCodeModule,
+    func: &mut ByteCodeFunction,
+    mc: &MatchCase,
+    target: &Var,
+    match_end_bb: BasicBlockRef,
+    target_machine: &Target)
 {
     let match_case_bb = func.create_basic_block();
     let next_bb = func.create_basic_block();
@@ -395,7 +404,7 @@ fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc
         func.add(binary_op_instr(&cond, BinaryOperator::Equals, op, var_op(&target)));
         func.add(branch_if_instr(&cond, match_case_bb, next_bb));
         func.pop_destination();
-        match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false);
+        match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false, target_machine);
     };
 
     match mc.pattern
@@ -421,28 +430,28 @@ fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc
         },
 
         Pattern::Name(ref nr) => {
-            name_pattern_match_to_bc(bc_mod, func, mc, target, match_end_bb, match_case_bb, next_bb, nr)
+            name_pattern_match_to_bc(bc_mod, func, mc, target, match_end_bb, match_case_bb, next_bb, nr, target_machine)
         },
 
         Pattern::Any(_) => {
             func.add(Instruction::Branch(match_case_bb));
-            match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false);
+            match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false, target_machine);
         },
 
         Pattern::EmptyArray(_) => {
             match target.typ
             {
                 Type::Array(_) | Type::Slice(_) => {
-                    let len = stack_alloc(func, &native_uint_type(), None);
+                    let len = stack_alloc(func, &target_machine.native_uint_type, None);
                     let cond = stack_alloc(func, &Type::Bool, None);
                     func.add(get_prop_instr(&len, target, ByteCodeProperty::Len));
-                    func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(&len), Operand::const_uint(0, native_int_size())));
+                    func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(&len), Operand::const_uint(0, target_machine.int_size)));
                     func.add(branch_if_instr(&cond, match_case_bb, next_bb))
                 },
                 _ => panic!("Internal Compiler Error: Match expression cannot be matched with an empty array pattern"),
             }
 
-            match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false);
+            match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false, target_machine);
         },
 
         Pattern::Array(ref ap) => {
@@ -450,24 +459,24 @@ fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc
             {
                 Type::Array(_) | Type::Slice(_) => {
                     func.push_destination(None);
-                    array_pattern_match_to_bc(func, ap, target, match_case_bb, next_bb);
+                    array_pattern_match_to_bc(func, ap, target, match_case_bb, next_bb, target_machine);
                     func.pop_destination();
                 },
                 _ => panic!("Internal Compiler Error: Match expression cannot be matched with an array pattern"),
             }
 
-            match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false);
+            match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false, target_machine);
         },
 
         Pattern::Literal(Literal::Array(ref a)) => {
             func.push_destination(None);
             let arr = func.new_var(a.array_type.clone());
-            array_lit_to_bc(bc_mod, func, a, &arr);
+            array_lit_to_bc(bc_mod, func, a, &arr, target_machine);
             let cond = stack_alloc(func, &Type::Bool, None);
             func.add(binary_op_instr(&cond, BinaryOperator::Equals, var_op(&arr), var_op(&target)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
             func.pop_destination();
-            match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false);
+            match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false, target_machine);
         },
 
         Pattern::Literal(Literal::String(_, ref s)) => {
@@ -476,18 +485,18 @@ fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc
             func.add(binary_op_instr(&cond, BinaryOperator::Equals, Operand::const_string(&s[..]), var_op(&target)));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
             func.pop_destination();
-            match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false);
+            match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false, target_machine);
         },
 
         Pattern::Struct(ref p) => {
-            struct_pattern_match_to_bc(bc_mod, func, mc, target, match_end_bb, match_case_bb, next_bb, p);
+            struct_pattern_match_to_bc(bc_mod, func, mc, target, match_end_bb, match_case_bb, next_bb, p, target_machine);
         },
 
         Pattern::Nil(_) => {
             let cond = stack_alloc(func, &Type::Bool, None);
             func.add(load_optional_flag_instr(&cond, &target));
             func.add(branch_if_instr(&cond, next_bb, match_case_bb));
-            match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false);
+            match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, false, target_machine);
         },
 
         Pattern::Optional(ref o) => {
@@ -501,15 +510,15 @@ fn match_case_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, mc
             let binding = stack_alloc(func, &o.inner_type, Some(&o.binding));
             func.add(load_instr(&binding, target));
             func.add_named_var(binding);
-            match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, true);
+            match_case_body_to_bc(bc_mod, func, mc, match_case_bb, match_end_bb, next_bb, true, target_machine);
         },
     }
 }
 
-fn match_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, m: &MatchExpression) -> Var
+fn match_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, m: &MatchExpression, target: &Target) -> Var
 {
     func.push_destination(None);
-    let target_var = to_bc(bc_mod, func, &m.target);
+    let target_var = to_bc(bc_mod, func, &m.target, target);
     func.pop_destination();
     let match_end_bb = func.create_basic_block();
 
@@ -517,7 +526,7 @@ fn match_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, m: &Mat
     func.push_scope();
     func.push_destination(Some(dst.clone()));
     for mc in &m.cases {
-        match_case_to_bc(bc_mod, func, mc, &target_var, match_end_bb);
+        match_case_to_bc(bc_mod, func, mc, &target_var, match_end_bb, target);
     }
     func.pop_destination();
 
@@ -527,7 +536,7 @@ fn match_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, m: &Mat
     dst
 }
 
-fn while_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, w: &WhileLoop)
+fn while_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, w: &WhileLoop, target: &Target)
 {
     let cond_bb = func.create_basic_block();
     let body_bb = func.create_basic_block();
@@ -535,33 +544,32 @@ fn while_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, w: &Whi
 
     func.add(Instruction::Branch(cond_bb));
     func.set_current_bb(cond_bb);
-    let cond = to_bc(bc_mod, func, &w.cond);
+    let cond = to_bc(bc_mod, func, &w.cond, target);
     func.add(branch_if_instr(&cond, body_bb, post_while_bb));
     func.set_current_bb(body_bb);
-    expr_to_bc(bc_mod, func, &w.body);
+    expr_to_bc(bc_mod, func, &w.body, target);
     func.add(Instruction::Branch(cond_bb));
 
     func.set_current_bb(post_while_bb);
 }
 
-fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLoop)
+fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLoop, target: &Target)
 {
-    let uint_type = native_uint_type();
     func.push_scope();
     func.push_destination(None);
-    let iterable = to_bc(bc_mod, func, &f.iterable);
+    let iterable = to_bc(bc_mod, func, &f.iterable, target);
     func.pop_destination();
 
     let loop_variable = stack_alloc(func, &f.loop_variable_type, Some(&f.loop_variable));
 
-    let index = stack_alloc(func, &uint_type, None);
-    func.add(store_operand_instr(&index, Operand::const_uint(0, native_int_size())));
+    let index = stack_alloc(func, &target.native_uint_type, None);
+    func.add(store_operand_instr(&index, Operand::const_uint(0, target.int_size)));
 
 
     let len = if let Type::Array(ref at) = iterable.typ {
-        Operand::const_uint(at.len as u64, native_int_size())
+        Operand::const_uint(at.len as u64, target.int_size)
     } else {
-        let len = stack_alloc(func, &uint_type, None);
+        let len = stack_alloc(func, &target.native_uint_type, None);
         func.add(get_prop_instr(&len, &iterable, ByteCodeProperty::Len));
         var_op(&len)
     };
@@ -579,28 +587,28 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
     func.set_current_bb(body_bb);
     func.add(load_member_instr_with_var(&loop_variable, &iterable, &index));
     func.push_destination(None);
-    expr_to_bc(bc_mod, func, &f.body);
+    expr_to_bc(bc_mod, func, &f.body, target);
     func.pop_destination();
-    func.add(binary_op_instr(&index, BinaryOperator::Add, var_op(&index), Operand::const_uint(1, native_int_size())));
+    func.add(binary_op_instr(&index, BinaryOperator::Add, var_op(&index), Operand::const_uint(1, target.int_size)));
     func.add(Instruction::Branch(cond_bb));
 
     func.set_current_bb(post_for_bb);
     func.pop_scope();
 }
 
-fn cast_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, c: &TypeCast) -> Var
+fn cast_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, c: &TypeCast, target: &Target) -> Var
 {
     let dst = get_dst(func, &c.destination_type);
     func.push_destination(None);
-    let inner = to_bc(bc_mod, func, &c.inner);
+    let inner = to_bc(bc_mod, func, &c.inner, target);
     func.pop_destination();
     func.add(cast_instr(&dst, &inner));
     dst
 }
 
-fn to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &Expression) -> Var
+fn to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &Expression, target: &Target) -> Var
 {
-    expr_to_bc(bc_mod, func, expr).expect("Expression must return a value")
+    expr_to_bc(bc_mod, func, expr, target).expect("Expression must return a value")
 }
 
 fn optional_compare_to_bc(
@@ -645,11 +653,11 @@ fn optional_compare_to_bc(
     func.set_current_bb(end_bb);
 }
 
-fn binary_op_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, op: &BinaryOp) -> Var
+fn binary_op_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, op: &BinaryOp, target: &Target) -> Var
 {
     func.push_destination(None);
-    let l = to_bc(bc_mod, func, &op.left);
-    let r = to_bc(bc_mod, func, &op.right);
+    let l = to_bc(bc_mod, func, &op.left, target);
+    let r = to_bc(bc_mod, func, &op.right, target);
     func.pop_destination();
 
     let dst = get_dst(func, &op.typ);
@@ -695,14 +703,14 @@ fn binary_op_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, op:
     dst
 }
 
-fn if_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, if_expr: &IfExpression) -> Var
+fn if_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, if_expr: &IfExpression, target: &Target) -> Var
 {
     let dst = get_dst(func, &if_expr.typ);
     let true_bb = func.create_basic_block();
     let end_bb = func.create_basic_block();
 
     func.push_destination(None);
-    let cond = to_bc(bc_mod, func, &if_expr.condition);
+    let cond = to_bc(bc_mod, func, &if_expr.condition, target);
     func.pop_destination();
 
     func.push_destination(Some(dst.clone()));
@@ -711,14 +719,14 @@ fn if_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, if_expr: &
         let false_bb = func.create_basic_block();
         func.add(branch_if_instr(&cond, true_bb, false_bb));
         func.set_current_bb(false_bb);
-        expr_to_bc(bc_mod, func, on_false);
+        expr_to_bc(bc_mod, func, on_false, target);
         func.add(Instruction::Branch(end_bb));
     } else {
         func.add(branch_if_instr(&cond, true_bb, end_bb));
     }
 
     func.set_current_bb(true_bb);
-    expr_to_bc(bc_mod, func, &if_expr.on_true);
+    expr_to_bc(bc_mod, func, &if_expr.on_true, target);
     func.add(Instruction::Branch(end_bb));
 
     func.pop_destination();
@@ -726,7 +734,7 @@ fn if_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, if_expr: &
     dst
 }
 
-fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &Expression) -> Option<Var>
+fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &Expression, target: &Target) -> Option<Var>
 {
     match *expr
     {
@@ -734,7 +742,7 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
 
         Expression::UnaryOp(ref u) => {
             func.push_destination(None);
-            let v = to_bc(bc_mod, func, &u.expression);
+            let v = to_bc(bc_mod, func, &u.expression, target);
             func.pop_destination();
             let dst = get_dst(func, &u.typ);
             func.add(unary_op_instr(&dst, u.operator, var_op(&v)));
@@ -742,7 +750,7 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         },
 
         Expression::BinaryOp(ref op) => {
-            Some(binary_op_to_bc(bc_mod, func, op))
+            Some(binary_op_to_bc(bc_mod, func, op, target))
         },
 
         Expression::Literal(Literal::Int(_, v, int_size)) => {
@@ -784,34 +792,34 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         Expression::Literal(Literal::Array(ref a)) => {
             let dst = get_dst(func, &a.array_type);
             func.push_destination(None);
-            array_lit_to_bc(bc_mod, func, a, &dst);
+            array_lit_to_bc(bc_mod, func, a, &dst, target);
             func.pop_destination();
             Some(dst)
         },
 
         Expression::Call(ref c) => {
-            call_to_bc(bc_mod, func, c, None)
+            call_to_bc(bc_mod, func, c, None, target)
         },
 
         Expression::StructInitializer(ref si) => {
             let dst = get_dst(func, &si.typ);
             func.push_destination(None);
-            struct_initializer_to_bc(bc_mod, func, si, &dst);
+            struct_initializer_to_bc(bc_mod, func, si, &dst, target);
             func.pop_destination();
             Some(dst)
         },
 
         Expression::Block(ref b) => {
-            block_to_bc(bc_mod, func, b)
+            block_to_bc(bc_mod, func, b, target)
         },
 
         Expression::Binding(ref l) => {
-            binding_to_bc(bc_mod, func, l)
+            binding_to_bc(bc_mod, func, l, target)
         },
 
         Expression::Bindings(ref l) => {
             for b in &l.bindings {
-                add_binding(bc_mod, func, b);
+                add_binding(bc_mod, func, b, target);
             }
             None
         },
@@ -820,19 +828,19 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
             let dst = get_dst(func, &n.typ);
             func.add(Instruction::HeapAlloc(dst.clone()));
             func.push_destination(Some(dst.clone()));
-            expr_to_bc(bc_mod, func, &n.inner);
+            expr_to_bc(bc_mod, func, &n.inner, target);
             func.pop_destination();
             Some(dst)
         },
 
         Expression::Delete(ref d) => {
-            let to_delete = to_bc(bc_mod, func, &d.inner);
+            let to_delete = to_bc(bc_mod, func, &d.inner, target);
             func.add(Instruction::Delete(to_delete));
             None
         },
 
         Expression::Lambda(ref l) => {
-            let lambda = func_to_bc(&l.sig, bc_mod, &l.expr);
+            let lambda = func_to_bc(&l.sig, bc_mod, &l.expr, target);
             let dst = get_dst(func, &l.sig.get_type());
             func.add(store_func_instr(&dst, &lambda.sig.name));
             bc_mod.functions.insert(l.sig.name.clone(), lambda);
@@ -840,34 +848,34 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         },
 
         Expression::NameRef(ref nr) => {
-            name_ref_to_bc(func, nr)
+            name_ref_to_bc(func, nr, target)
         },
 
         Expression::MemberAccess(ref sma) => {
             let dst = get_dst(func, &sma.typ);
-            member_access_to_bc(bc_mod, func, sma, &dst);
+            member_access_to_bc(bc_mod, func, sma, &dst, target);
             Some(dst)
         },
 
         Expression::Match(ref m) => {
-            Some(match_to_bc(bc_mod, func, m))
+            Some(match_to_bc(bc_mod, func, m, target))
         },
 
         Expression::If(ref i) => {
-            Some(if_to_bc(bc_mod, func, i))
+            Some(if_to_bc(bc_mod, func, i, target))
         },
 
         Expression::ArrayToSlice(ref ats) => {
             let dst = get_dst(func, &ats.slice_type);
-            let array_var = to_bc(bc_mod, func, &ats.inner);
-            let end = stack_alloc(func, &native_uint_type(), None);
+            let array_var = to_bc(bc_mod, func, &ats.inner, target);
+            let end = stack_alloc(func, &target.native_uint_type, None);
             func.add(get_prop_instr(&end, &array_var, ByteCodeProperty::Len));
-            func.add(slice_instr(&dst, &array_var, Operand::const_uint(0, native_int_size()), var_op(&end)));
+            func.add(slice_instr(&dst, &array_var, Operand::const_uint(0, target.int_size), var_op(&end)));
             Some(dst)
         },
 
         Expression::AddressOf(ref a) => {
-            let inner_var = to_bc(bc_mod, func, &a.inner);
+            let inner_var = to_bc(bc_mod, func, &a.inner, target);
             let dst = get_dst(func, &a.typ);
             func.add(address_of_instr(&dst, &inner_var));
             Some(dst)
@@ -875,20 +883,20 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
 
         Expression::Assign(ref a) => {
             func.push_destination(None);
-            let r = to_bc(bc_mod, func, &a.right);
-            let l = to_bc(bc_mod, func, &a.left);
+            let r = to_bc(bc_mod, func, &a.right, target);
+            let l = to_bc(bc_mod, func, &a.left, target);
             func.add(store_instr(&l, &r));
             func.pop_destination();
             Some(l)
         },
 
         Expression::While(ref w) => {
-            while_to_bc(bc_mod, func, w);
+            while_to_bc(bc_mod, func, w, target);
             None
         },
 
         Expression::For(ref f) => {
-            for_to_bc(bc_mod, func, f);
+            for_to_bc(bc_mod, func, f, target);
             None
         },
 
@@ -901,7 +909,7 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         Expression::OptionalToBool(ref n) => {
             let dst = get_dst(func, &Type::Bool);
             func.push_destination(None);
-            let inner_var = to_bc(bc_mod, func, n);
+            let inner_var = to_bc(bc_mod, func, n, target);
             func.pop_destination();
             func.add(load_optional_flag_instr(&dst, &inner_var));
             Some(dst)
@@ -910,22 +918,22 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         Expression::ToOptional(ref t) => {
             let dst = get_dst(func, &t.optional_type);
             func.push_destination(None);
-            let inner = to_bc(bc_mod, func, &t.inner);
+            let inner = to_bc(bc_mod, func, &t.inner, target);
             func.pop_destination();
             func.add(store_instr(&dst, &inner));
             Some(dst)
         },
 
         Expression::Cast(ref c) => {
-            Some(cast_to_bc(bc_mod, func, c))
+            Some(cast_to_bc(bc_mod, func, c, target))
         },
     }
 }
 
-fn func_to_bc(sig: &FunctionSignature, bc_mod: &mut ByteCodeModule, expression: &Expression) -> ByteCodeFunction
+fn func_to_bc(sig: &FunctionSignature, bc_mod: &mut ByteCodeModule, expression: &Expression, target: &Target) -> ByteCodeFunction
 {
     let mut llfunc = ByteCodeFunction::new(sig);
-    match expr_to_bc(bc_mod, &mut llfunc, expression)
+    match expr_to_bc(bc_mod, &mut llfunc, expression, target)
     {
         Some(var) => {
             llfunc.add(ret_instr(&var));
@@ -942,7 +950,7 @@ fn func_to_bc(sig: &FunctionSignature, bc_mod: &mut ByteCodeModule, expression: 
 use compileerror::{CompileResult, type_error_result};
 
 
-pub fn compile_to_byte_code(md: &Module) -> CompileResult<ByteCodeModule>
+pub fn compile_to_byte_code(md: &Module, target: &Target) -> CompileResult<ByteCodeModule>
 {
     let mut ll_mod = ByteCodeModule{
         name: md.name.clone(),
@@ -965,7 +973,7 @@ pub fn compile_to_byte_code(md: &Module) -> CompileResult<ByteCodeModule>
 
     for func in md.functions.values() {
         if !func.is_generic() {
-            let new_func = func_to_bc(&func.sig, &mut ll_mod, &func.expression);
+            let new_func = func_to_bc(&func.sig, &mut ll_mod, &func.expression, target);
             ll_mod.functions.insert(func.sig.name.clone(), new_func);
         }
     }

@@ -2,6 +2,7 @@ use std::collections::{HashMap};
 use ast::*;
 use compileerror::*;
 use span::Span;
+use target::Target;
 
 
 #[derive(Debug)]
@@ -68,19 +69,21 @@ impl StackFrame
 }
 
 #[derive(Debug)]
-pub struct TypeCheckerContext
+pub struct TypeCheckerContext<'a>
 {
     stack: Vec<StackFrame>,
     globals: StackFrame,
+    pub target: &'a Target
 }
 
-impl TypeCheckerContext
+impl<'a> TypeCheckerContext<'a>
 {
-    pub fn new() -> TypeCheckerContext
+    pub fn new(target: &'a Target) -> TypeCheckerContext<'a>
     {
         TypeCheckerContext{
             stack: vec![],
             globals: StackFrame::new(false),
+            target: target
         }
     }
 

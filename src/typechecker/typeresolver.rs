@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use std::ops::Deref;
 use ast::*;
 use super::typecheckercontext::TypeCheckerContext;
-use target::native_uint_type;
 use compileerror::{CompileResult, unknown_name_result};
 
 #[derive(Eq, PartialEq, Debug)]
@@ -158,11 +157,11 @@ fn resolve_sum_case_types(ctx: &mut TypeCheckerContext, st: &mut SumTypeDeclarat
         }
         else
         {
-            case_types.push(sum_type_case(&c.name, native_uint_type())); // Use integer type for cases without structs
+            case_types.push(sum_type_case(&c.name, ctx.target.native_uint_type.clone())); // Use integer type for cases without structs
         }
     }
 
-    if case_types.iter().all(|ct| ct.typ == native_uint_type())
+    if case_types.iter().all(|ct| ct.typ == ctx.target.native_uint_type)
     {
         let case_names: Vec<String> = st.cases.iter().map(|c| c.name.clone()).collect();
         st.typ = enum_type(&st.name, case_names);

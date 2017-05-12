@@ -13,12 +13,12 @@ use super::types::native_llvm_int_type;
 
 pub unsafe fn const_int(ctx: &Context, v: i64) -> LLVMValueRef
 {
-    LLVMConstInt(native_llvm_int_type(ctx.context), v as c_ulonglong, 1)
+    LLVMConstInt(native_llvm_int_type(ctx.context, ctx.target_machine), v as c_ulonglong, 1)
 }
 
 pub unsafe fn const_uint(ctx: &Context, v: u64) -> LLVMValueRef
 {
-    LLVMConstInt(native_llvm_int_type(ctx.context), v as c_ulonglong, 0)
+    LLVMConstInt(native_llvm_int_type(ctx.context, &ctx.target_machine), v as c_ulonglong, 0)
 }
 
 pub unsafe fn const_bool(ctx: &Context, v: bool) -> LLVMValueRef

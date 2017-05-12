@@ -2,7 +2,6 @@ use std::fmt;
 use itertools::free::join;
 use ast::{UnaryOperator, BinaryOperator, Type, IntSize, FloatSize, ptr_type, array_type};
 use bytecode::function::{BasicBlockRef, Var};
-use target::native_int_size;
 
 
 #[derive(Debug, Clone, Copy)]
@@ -226,20 +225,20 @@ pub fn load_member_instr_with_var(dst: &Var, obj: &Var, member_index: &Var) -> I
     }
 }
 
-pub fn load_member_instr(dst: &Var, obj: &Var, member_index: usize) -> Instruction
+pub fn load_member_instr(dst: &Var, obj: &Var, member_index: usize, int_size: IntSize) -> Instruction
 {
     Instruction::LoadMember{
         dst: dst.clone(),
         obj: obj.clone(),
-        member_index: Operand::const_uint(member_index as u64, native_int_size()),
+        member_index: Operand::const_uint(member_index as u64, int_size),
     }
 }
 
-pub fn store_member_instr(obj: &Var, member_index: usize, src: Var) -> Instruction
+pub fn store_member_instr(obj: &Var, member_index: usize, src: Var, int_size: IntSize) -> Instruction
 {
     Instruction::StoreMember{
         obj: obj.clone(),
-        member_index: Operand::const_uint(member_index as u64, native_int_size()),
+        member_index: Operand::const_uint(member_index as u64, int_size),
         src: Operand::Var(src),
     }
 }
@@ -252,12 +251,12 @@ pub fn address_of_instr(dst: &Var, obj: &Var) -> Instruction
     }
 }
 
-pub fn address_of_member_instr(dst: &Var, obj: &Var, member_index: usize) -> Instruction
+pub fn address_of_member_instr(dst: &Var, obj: &Var, member_index: usize, int_size: IntSize) -> Instruction
 {
     Instruction::AddressOfMember{
         dst: dst.clone(),
         obj: obj.clone(),
-        member_index: Operand::const_uint(member_index as u64, native_int_size()),
+        member_index: Operand::const_uint(member_index as u64, int_size),
     }
 }
 

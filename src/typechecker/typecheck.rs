@@ -6,7 +6,7 @@ use super::typeresolver::resolve_types;
 use super::matchchecker::check_match_is_exhaustive;
 use super::genericmapper::fill_in_generics;
 use super::instantiategenerics::make_concrete;
-use target::native_uint_type;
+use target::Target;
 use span::Span;
 
 #[derive(Debug)]
@@ -179,7 +179,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
 fn type_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLiteral) -> TypeCheckResult
 {
     if a.elements.is_empty() {
-        a.array_type = array_type(native_uint_type(), 0);
+        a.array_type = array_type(ctx.target.native_uint_type.clone(), 0);
         return valid(a.array_type.clone());
     }
 
@@ -344,7 +344,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Ty
                     Type::Sum(ref st) => {
                         let idx = st.index_of(&nr.name).expect("Internal Compiler Error: cannot determine index of sum type case");
                         let case = &st.cases[idx];
-                        if case.typ == native_uint_type() {
+                        if case.typ == ctx.target.native_uint_type {
                             infer_case_type(ctx, &mut c.to_execute, &return_type)?
                         } else {
                             return type_error_result(&match_span, "Invalid pattern match, match should be with an empty sum case");
@@ -857,7 +857,7 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
 
         (&mut MemberAccessType::Name(ref mut field), &Type::Array(_)) |
         (&mut MemberAccessType::Name(ref mut field), &Type::String) => {
-            if let Some((typ, member_access_type)) = left_type.get_property_type(&field.name) {
+            if let Some((typ, member_access_type)) = left_type.get_property_type(&field.name, ctx.target) {
                 (typ, Some(member_access_type))
             } else {
                 return type_error_result(
@@ -1122,10 +1122,10 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
 /*
     Type check and infer all the unkown types
 */
-pub fn type_check_module(module: &mut Module) -> CompileResult<()>
+pub fn type_check_module(module: &mut Module, target: &Target) -> CompileResult<()>
 {
     loop {
-        let mut ctx = TypeCheckerContext::new();
+        let mut ctx = TypeCheckerContext::new(target);
         resolve_types(&mut ctx, module)?;
 
         for global in module.globals.values_mut() {

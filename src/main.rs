@@ -23,7 +23,7 @@ use typechecker::{type_check_module};
 use bytecode::{compile_to_byte_code, optimize_module, ByteCodeModule, OptimizationLevel};
 use compileerror::{CompileResult, CompileError};
 use llvmbackend::{CodeGenOptions, llvm_code_generation, llvm_init, link};
-use target::{register_target};
+use target::Target;
 
 
 fn default_output_file(input_file: &str) -> String
@@ -46,10 +46,10 @@ fn dump_byte_code(bc_mod: &ByteCodeModule, dump_flags: &str)
     }
 }
 
-fn parse(parser_options: &ParserOptions, input_file: &str, dump_flags: &str, optimize: bool) -> CompileResult<ByteCodeModule>
+fn parse(parser_options: &ParserOptions, input_file: &str, dump_flags: &str, optimize: bool, target: &Target) -> CompileResult<ByteCodeModule>
 {
-    let mut module = parse_file(&parser_options, input_file)?;
-    type_check_module(&mut module)?;
+    let mut module = parse_file(&parser_options, input_file, target)?;
+    type_check_module(&mut module, target)?;
 
     if dump_flags.contains("ast") || dump_flags.contains("all") {
         println!("AST:");
@@ -59,7 +59,7 @@ fn parse(parser_options: &ParserOptions, input_file: &str, dump_flags: &str, opt
         println!("------\n");
     }
 
-    let mut bc_mod = compile_to_byte_code(&module)?;
+    let mut bc_mod = compile_to_byte_code(&module, target)?;
     if optimize {
         optimize_module(&mut bc_mod, OptimizationLevel::Normal);
     } else {
@@ -76,7 +76,6 @@ fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
     let optimize = matches.is_present("OPTIMIZE");
     let output_file = matches.value_of("OUTPUT_FILE").map(|v| v.to_string()).unwrap_or_else(|| default_output_file(&input_file));
     let target_machine = llvm_init()?;
-    register_target(&target_machine);
 
     let parser_options = ParserOptions{
         import_dirs: matches.value_of("IMPORTS")
@@ -84,7 +83,7 @@ fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
             .unwrap_or_else(Vec::new),
     };
 
-    let bc_mod = parse(&parser_options, &input_file, &dump_flags, optimize)?;
+    let bc_mod = parse(&parser_options, &input_file, &dump_flags, optimize, &target_machine.target)?;
     let opts = CodeGenOptions{
         dump_ir: dump_flags.contains("ir") || dump_flags.contains("all"),
         build_dir: "build".into(),

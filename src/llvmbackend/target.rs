@@ -48,6 +48,7 @@ pub struct TargetMachine
 {
     pub target_machine: LLVMTargetMachineRef,
     pub target_data: LLVMTargetDataRef,
+    pub target: Target
 }
 
 impl TargetMachine
@@ -55,9 +56,19 @@ impl TargetMachine
     pub unsafe fn new() -> Result<TargetMachine, String>
     {
         let target_machine = create_target_machine()?;
+        let target_data = LLVMCreateTargetDataLayout(target_machine);
+        let int_size = match LLVMPointerSize(target_data) {
+            1 => IntSize::I8,
+            2 => IntSize::I16,
+            4 => IntSize::I32,
+            8 => IntSize::I64,
+            v => panic!("Not supported native integer size: {}", v),
+        };
+
         Ok(TargetMachine{
             target_machine,
-            target_data: LLVMCreateTargetDataLayout(target_machine),
+            target_data,
+            target: Target::new(int_size)
         })
     }
 
@@ -87,20 +98,6 @@ impl Drop for TargetMachine
         unsafe {
             LLVMDisposeTargetMachine(self.target_machine);
             LLVMDisposeTargetData(self.target_data);
-        }
-    }
-}
-
-impl Target for TargetMachine
-{
-    fn int_size(&self) -> IntSize
-    {
-        match unsafe{LLVMPointerSize(self.target_data)} {
-            1 => IntSize::I8,
-            2 => IntSize::I16,
-            4 => IntSize::I32,
-            8 => IntSize::I64,
-            v => panic!("Not supported native integer size: {}", v),
         }
     }
 }

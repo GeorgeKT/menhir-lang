@@ -1,36 +1,21 @@
 use ast::{IntSize, Type};
 
-pub trait Target
+#[derive(Debug)]
+pub struct Target
 {
-    fn int_size(&self) -> IntSize;
+    pub int_size: IntSize,
+    pub native_int_type: Type,
+    pub native_uint_type: Type,
 }
 
-static mut NATIVE_INT_SIZE: IntSize = IntSize::I64;
-
-pub fn native_int_size() -> IntSize
+impl Target
 {
-    unsafe {
-        NATIVE_INT_SIZE
-    }
-}
-
-pub fn native_int_type() -> Type
-{
-    unsafe {
-        Type::Int(NATIVE_INT_SIZE)
-    }
-}
-
-pub fn native_uint_type() -> Type
-{
-    unsafe {
-        Type::UInt(NATIVE_INT_SIZE)
-    }
-}
-
-pub fn register_target(target: &Target)
-{
-    unsafe {
-        NATIVE_INT_SIZE = target.int_size();
+    pub fn new(int_size: IntSize) -> Target
+    {
+        Target{
+            int_size,
+            native_int_type: Type::Int(int_size),
+            native_uint_type: Type::UInt(int_size)
+        }
     }
 }
