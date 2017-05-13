@@ -80,6 +80,7 @@ fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
     let input_file = matches.value_of("INPUT_FILE").expect("No input file given");
     let optimize = matches.is_present("OPTIMIZE");
     let target_machine = llvm_init()?;
+    println!("Compiling for {}", target_machine.target.triplet);
 
     let output_type = match matches.value_of("LIB") {
         Some("static") => OutputType::StaticLib,
@@ -118,6 +119,7 @@ fn run() -> CompileResult<i32>
         (author: "Joris Guisson <joris.guisson@gmail.com>")
         (about: "Nomad language compiler")
         (@arg DUMP: -d --dump +takes_value "Dump internal compiler state for debug purposes. Argument can be all, ast, bytecode or ir. A comma separated list of these values is also supported.")
+        (@arg TARGET_TRIPLET: -t --triplet "Print the default target triplet of the current system, and exit")
         (@subcommand build =>
             (about: "Build a menhir file")
             (version: "0.1")
@@ -132,7 +134,11 @@ fn run() -> CompileResult<i32>
     let matches = app.get_matches();
     let dump_flags = matches.value_of("DUMP").unwrap_or("");
 
-    if let Some(build_matches) = matches.subcommand_matches("build") {
+    if matches.is_present("TARGET_TRIPLET") {
+        let target_machine = llvm_init()?;
+        print!("{}", target_machine.target.triplet);
+        Ok(0)
+    } else if let Some(build_matches) = matches.subcommand_matches("build") {
         build_command(build_matches, dump_flags)
     } else {
         println!("{}", matches.usage());

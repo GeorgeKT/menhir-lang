@@ -13,7 +13,6 @@ unsafe fn create_target_machine() -> Result<(String, LLVMTargetMachineRef), Stri
 {
     let target_triple = LLVMGetDefaultTargetTriple();
     let target_triple_str = CStr::from_ptr(target_triple).to_str().expect("Invalid target triple");
-    println!("Compiling for {}", target_triple_str);
 
     let mut target: LLVMTargetRef = ptr::null_mut();
     let mut error_message: *mut c_char = ptr::null_mut();

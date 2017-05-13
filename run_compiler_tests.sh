@@ -5,14 +5,18 @@ else
 	mode=""
 fi
 
-triplet="x86_64-pc-linux-gnu"
-
 cargo build ${mode} 
 if [ $? != 0 ]; then
 	echo "Failed to build the compiler"
 	exit 1
 fi
 
+triplet=$(cargo run ${mode} -- --triplet 2> /dev/null)
+if [ -z "${triplet}" ]; then
+    echo "Failed to determine the target triplet"
+    exit 1
+fi
+echo "Current target triplet: ${triplet}"
 fail_count=0
 success_count=0
 
