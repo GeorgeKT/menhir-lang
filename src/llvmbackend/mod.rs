@@ -34,11 +34,19 @@ use self::valueref::ValueRef;
 use self::function::{gen_function, gen_function_sig, add_libc_functions};
 use self::context::Context;
 
+#[derive(Copy, Clone, Debug)]
+pub enum OutputType
+{
+    Binary,
+    StaticLib,
+    SharedLib,
+}
 
 pub struct CodeGenOptions
 {
     pub build_dir: String,
-    pub program_name: String,
+    pub output_file_name: String,
+    pub output_type: OutputType,
     pub dump_ir: bool,
     pub optimize: bool,
 }
@@ -109,12 +117,29 @@ pub fn link(ctx: &Context, opts: &CodeGenOptions) -> Result<(), String>
         ctx.gen_object_file(opts)?
     };
 
-    let program_path = format!("{}/{}", opts.build_dir, opts.program_name);
+    let output_file_path = format!("{}/{}", opts.build_dir, opts.output_file_name);
 
-    let mut cmd = Command::new("gcc");
-    cmd.arg("-o").arg(&program_path).arg(obj_file);
+    let mut cmd = match opts.output_type {
+        OutputType::Binary => {
+            let mut cmd = Command::new("gcc");
+            cmd.arg("-o").arg(&output_file_path).arg(obj_file);
+            cmd
+        },
 
-    println!("  Linking {}", program_path);
+        OutputType::StaticLib => {
+            let mut cmd = Command::new("ar");
+            cmd.arg("rcs").arg(&output_file_path).arg(obj_file);
+            cmd
+        }
+
+        OutputType::SharedLib => {
+            let mut cmd = Command::new("gcc");
+            cmd.arg("-shared").arg("-o").arg(&output_file_path).arg(obj_file);
+            cmd
+        }
+    };
+
+    println!("  Linking {}", output_file_path);
     let output: Output = cmd
         .output()
         .map_err(|e| format!("Unable to spawn the linker: {}", e))?;
@@ -122,7 +147,7 @@ pub fn link(ctx: &Context, opts: &CodeGenOptions) -> Result<(), String>
 
     if !output.status.success() {
         let out = String::from_utf8(output.stderr).expect("Invalid stdout from ld");
-        let msg = format!("Linking {} failed:\n{}", program_path, out);
+        let msg = format!("Linking {} failed:\n{}", output_file_path, out);
         return Err(msg);
     }
 

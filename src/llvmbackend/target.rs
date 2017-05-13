@@ -9,7 +9,7 @@ use llvm::target::*;
 use ast::IntSize;
 use target::Target;
 
-unsafe fn create_target_machine() -> Result<LLVMTargetMachineRef, String>
+unsafe fn create_target_machine() -> Result<(String, LLVMTargetMachineRef), String>
 {
     let target_triple = LLVMGetDefaultTargetTriple();
     let target_triple_str = CStr::from_ptr(target_triple).to_str().expect("Invalid target triple");
@@ -41,7 +41,7 @@ unsafe fn create_target_machine() -> Result<LLVMTargetMachineRef, String>
         return Err(e);
     }
 
-    Ok(target_machine)
+    Ok((target_triple_str.into(), target_machine))
 }
 
 pub struct TargetMachine
@@ -55,7 +55,7 @@ impl TargetMachine
 {
     pub unsafe fn new() -> Result<TargetMachine, String>
     {
-        let target_machine = create_target_machine()?;
+        let (target_triplet, target_machine) = create_target_machine()?;
         let target_data = LLVMCreateTargetDataLayout(target_machine);
         let int_size = match LLVMPointerSize(target_data) {
             1 => IntSize::I8,
@@ -68,7 +68,7 @@ impl TargetMachine
         Ok(TargetMachine{
             target_machine,
             target_data,
-            target: Target::new(int_size)
+            target: Target::new(int_size, target_triplet)
         })
     }
 

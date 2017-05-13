@@ -8,7 +8,7 @@ use target::Target;
 
 fn type_check(expr: &str) -> CompileResult<Type>
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
 	let mut ctx = TypeCheckerContext::new(&target);
 	let mut e = th_expr(expr, &target);
 	let r = type_check_expression(&mut ctx, &mut e, &None);
@@ -19,7 +19,7 @@ fn type_check(expr: &str) -> CompileResult<Type>
 
 fn type_check_mod(expr: &str) -> CompileResult<()>
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
 	let mut md = th_mod(expr, &target);
 	let r = type_check_module(&mut md, &target);
 	println!("result: {:?}", r);

@@ -69,7 +69,7 @@ pub mod test
 
     pub fn generate_byte_code(prog: &str, dump: bool) -> CompileResult<ByteCodeModule>
     {
-        let target = Target::new(IntSize::I32);
+        let target = Target::new(IntSize::I32, "");
         let mut cursor = Cursor::new(prog);
         let parser_options = ParserOptions::default();
         let mut md = parse_module(&parser_options, &mut cursor, "test", "", &target)?;

@@ -130,7 +130,7 @@ mod tests
     #[test]
     fn test_simple()
     {
-        let target = Target::new(IntSize::I32);
+        let target = Target::new(IntSize::I32, "");
         let ctx = TypeCheckerContext::new(&target);
         let mut tm = GenericMapping::new();
         let ga = generic_type("a");
@@ -141,7 +141,7 @@ mod tests
     #[test]
     fn test_slice()
     {
-        let target = Target::new(IntSize::I32);
+        let target = Target::new(IntSize::I32, "");
         let ctx = TypeCheckerContext::new(&target);
         let mut tm = GenericMapping::new();
         let ga = slice_type(generic_type("a"));
@@ -155,7 +155,7 @@ mod tests
     #[test]
     fn test_array()
     {
-        let target = Target::new(IntSize::I32);
+        let target = Target::new(IntSize::I32, "");
         let ctx = TypeCheckerContext::new(&target);
         let mut tm = GenericMapping::new();
         let ga = array_type(generic_type("a"), 10);
@@ -169,7 +169,7 @@ mod tests
     #[test]
     fn test_pointer()
     {
-        let target = Target::new(IntSize::I32);
+        let target = Target::new(IntSize::I32, "");
         let ctx = TypeCheckerContext::new(&target);
         let mut tm = GenericMapping::new();
         let gptr = ptr_type(generic_type("a"));
@@ -184,7 +184,7 @@ mod tests
     #[test]
     fn test_func()
     {
-        let target = Target::new(IntSize::I32);
+        let target = Target::new(IntSize::I32, "");
         let ctx = TypeCheckerContext::new(&target);
         let mut tm = GenericMapping::new();
         let ga = func_type(vec![generic_type("a"), generic_type("b"), generic_type("c")], generic_type("d"));
@@ -202,7 +202,7 @@ mod tests
     #[test]
     fn test_func_wrong_args()
     {
-        let target = Target::new(IntSize::I32);
+        let target = Target::new(IntSize::I32, "");
         let ctx = TypeCheckerContext::new(&target);
         let mut tm = GenericMapping::new();
         let ga = func_type(vec![generic_type("a"), generic_type("b"), generic_type("c")], generic_type("d"));
@@ -216,7 +216,7 @@ mod tests
     #[test]
     fn test_mixed_func()
     {
-        let target = Target::new(IntSize::I32);
+        let target = Target::new(IntSize::I32, "");
         let ctx = TypeCheckerContext::new(&target);
         let mut tm = GenericMapping::new();
         let ga = func_type(vec![generic_type("a"), generic_type("b"), generic_type("c"), Type::Int(IntSize::I32)], generic_type("d"));
@@ -234,7 +234,7 @@ mod tests
     #[test]
     fn test_simple_complex_mix()
     {
-        let target = Target::new(IntSize::I32);
+        let target = Target::new(IntSize::I32, "");
         let ctx = TypeCheckerContext::new(&target);
         let mut tm = GenericMapping::new();
         let ga = generic_type("a");
@@ -248,7 +248,7 @@ mod tests
     #[test]
     fn test_with_already_filled_in_map()
     {
-        let target = Target::new(IntSize::I32);
+        let target = Target::new(IntSize::I32, "");
         let ctx = TypeCheckerContext::new(&target);
         let mut tm = GenericMapping::new();
         add(&mut tm, &generic_type("a"), &Type::Int(IntSize::I32), &Span::default()).unwrap();

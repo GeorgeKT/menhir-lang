@@ -70,7 +70,7 @@ pub fn name_ref2(name: &str, span: Span) -> NameRef
 #[test]
 fn test_basic_expressions()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     assert!(th_expr("1000", &target) == number(1000, span(1, 1, 1, 4), &target));
     assert!(th_expr("id", &target) == name_ref("id", span(1, 1, 1, 2)));
     assert!(th_expr("-1000", &target) == unary_op(UnaryOperator::Sub, number(1000, span(1, 2, 1, 5), &target), span(1, 1, 1, 5)));
@@ -82,7 +82,7 @@ fn test_basic_expressions()
 #[test]
 fn test_binary_ops()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let ops = [
         (BinaryOperator::Add, "+"),
         (BinaryOperator::Sub, "-"),
@@ -116,7 +116,7 @@ fn test_binary_ops()
 #[test]
 fn test_precedence()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr("a + b * c", &target);
     assert!(e == bin_op(
         BinaryOperator::Add,
@@ -130,7 +130,7 @@ fn test_precedence()
 #[test]
 fn test_precedence_2()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr("a * b + c ", &target);
     assert!(e == bin_op(
         BinaryOperator::Add,
@@ -143,7 +143,7 @@ fn test_precedence_2()
 #[test]
 fn test_precedence_3()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr("a * b + c / d ", &target);
     assert!(e == bin_op(
         BinaryOperator::Add,
@@ -156,7 +156,7 @@ fn test_precedence_3()
 #[test]
 fn test_precedence_4()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr("a && b || c && d ", &target);
     assert!(e == bin_op(
         BinaryOperator::Or,
@@ -169,7 +169,7 @@ fn test_precedence_4()
 #[test]
 fn test_precedence_5()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr("a >= b && c < d", &target);
     assert!(e == bin_op(
         BinaryOperator::And,
@@ -182,7 +182,7 @@ fn test_precedence_5()
 #[test]
 fn test_precedence_6()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr("a * (b + c)", &target);
     assert!(e == bin_op(
         BinaryOperator::Mul,
@@ -201,7 +201,7 @@ fn test_precedence_6()
 #[test]
 fn test_precedence_7()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr("b + -c", &target);
     assert!(e == bin_op(
         BinaryOperator::Add,
@@ -214,7 +214,7 @@ fn test_precedence_7()
 #[test]
 fn test_precedence_8()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr("b + c(6)", &target);
     assert!(e == bin_op(
         BinaryOperator::Add,
@@ -231,7 +231,7 @@ fn test_precedence_8()
 #[test]
 fn test_precedence_9()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr("c(6) + b", &target);
     assert!(e == bin_op(
         BinaryOperator::Add,
@@ -248,7 +248,7 @@ fn test_precedence_9()
 #[test]
 fn test_precedence_10()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr("4 + 5 * 7 - 9 / 3 + 5 % 4", &target);
 
     let mul = bin_op(
@@ -283,7 +283,7 @@ fn test_precedence_10()
 #[test]
 fn test_namespaced_call()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr("foo::bar(7)", &target);
     assert!(e == Expression::Call(
         Box::new(Call::new(
@@ -297,7 +297,7 @@ fn test_namespaced_call()
 #[test]
 fn test_array_literal()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr("[1, 2, 3]", &target);
     assert!(e == Expression::Literal(array_lit(
         vec![
@@ -331,7 +331,7 @@ fn test_array_generator()
 #[test]
 fn test_array_pattern()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_pattern("[head | tail]", &target);
     assert!(e == array_pattern("head", "tail", span(1, 1, 1, 13)));
 }
@@ -339,7 +339,7 @@ fn test_array_pattern()
 #[test]
 fn test_array_concat()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr("a + [1, 2]", &target);
     assert!(e == bin_op(
         BinaryOperator::Add,
@@ -364,7 +364,7 @@ fn arg(name: &str, typ: Type, span: Span) -> Argument
 #[test]
 fn test_function_with_args()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let md = th_mod("fn foo(a: int, b: int) -> int: 7", &target);
     assert!(*md.functions.get("test::foo").unwrap() == Function::new(
         sig(
@@ -385,7 +385,7 @@ fn test_function_with_args()
 #[test]
 fn test_function_with_no_args()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let md = th_mod("fn foo() -> int: 7", &target);
     assert!(*md.functions.get("test::foo").unwrap() == Function::new(
         sig(
@@ -403,7 +403,7 @@ fn test_function_with_no_args()
 #[test]
 fn test_function_with_no_return_type()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let md = th_mod("fn foo(): 7", &target);
     assert!(*md.functions.get("test::foo").unwrap() == Function::new(
         sig(
@@ -421,7 +421,7 @@ fn test_function_with_no_return_type()
 #[test]
 fn test_function_with_func_type()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let md = th_mod("fn foo(a: fn(int, int) -> int) -> int: 7", &target);
     assert!(*md.functions.get("test::foo").unwrap() == Function::new(
         sig(
@@ -452,7 +452,7 @@ fn test_function_with_func_type()
 #[test]
 fn test_external_function()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let md = th_mod("extern fn foo() -> int", &target);
     assert!(*md.externals.get("foo").unwrap() == ExternalFunction::new(
         sig(
@@ -468,7 +468,7 @@ fn test_external_function()
 #[test]
 fn test_lambda()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr("fn(a, b) -> a + b", &target);
     assert!(e == lambda(
         vec![
@@ -488,7 +488,7 @@ fn test_lambda()
 #[test]
 fn test_match()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr(r#"
 match a:
     0 => 1
@@ -509,7 +509,7 @@ match a:
 #[test]
 fn test_let()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr(r#"
 let x = 5, y = 7 in x * y
 "#, &target);
@@ -532,7 +532,7 @@ let x = 5, y = 7 in x * y
 #[test]
 fn test_struct()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let md = th_mod(r#"
 struct Point:
     x: int
@@ -551,7 +551,7 @@ struct Point:
 #[test]
 fn test_generic_struct()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let md = th_mod(r#"
 struct Point:
     x: $a
@@ -570,7 +570,7 @@ struct Point:
 #[test]
 fn test_struct_initializer()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr(r#"
 Point{6, 7}
 "#, &target);
@@ -587,7 +587,7 @@ Point{6, 7}
 #[test]
 fn test_anonymous_struct_initializer()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr(r#"
 {6, 7}
 "#, &target);
@@ -604,7 +604,7 @@ fn test_anonymous_struct_initializer()
 #[test]
 fn test_member_access()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr(r#"
 a.b.c.d
 "#, &target);
@@ -628,7 +628,7 @@ a.b.c.d
 #[test]
 fn test_member_access_call()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr(r#"
 a.b()
 "#, &target);
@@ -650,7 +650,7 @@ a.b()
 #[test]
 fn test_sum_types()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let md = th_mod(r#"
 enum Option:
     Some
@@ -669,7 +669,7 @@ enum Option:
 #[test]
 fn test_sum_types_with_data()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let md = th_mod(r#"
 enum Foo:
     Bar{x: int, y: int}
@@ -717,7 +717,7 @@ enum Foo:
 #[test]
 fn test_generic_type_declaration()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let md = th_mod(r#"
 struct Point:
     x: $a
@@ -752,7 +752,7 @@ fn foo(p: Point<int>) -> int: 7
 #[test]
 fn test_if()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr(r#"
 if true: 5 else 10"#, &target);
     assert!(e == if_expression(
@@ -766,7 +766,7 @@ if true: 5 else 10"#, &target);
 #[test]
 fn test_block()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let e = th_expr(r#"
 (a; b; c; 7)"#, &target);
     assert!(e == block(
@@ -784,7 +784,7 @@ fn test_block()
 #[test]
 fn test_interface()
 {
-    let target = Target::new(IntSize::I32);
+    let target = Target::new(IntSize::I32, "");
     let md = th_mod(r#"
 interface Foo:
     fn bar(self, x: int) -> int

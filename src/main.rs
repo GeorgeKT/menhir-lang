@@ -22,18 +22,23 @@ use parser::{ParserOptions, parse_file};
 use typechecker::{type_check_module};
 use bytecode::{compile_to_byte_code, optimize_module, ByteCodeModule, OptimizationLevel};
 use compileerror::{CompileResult, CompileError};
-use llvmbackend::{CodeGenOptions, llvm_code_generation, llvm_init, link};
+use llvmbackend::{CodeGenOptions, OutputType, llvm_code_generation, llvm_init, link};
 use target::Target;
 
 
-fn default_output_file(input_file: &str) -> String
+fn default_output_file(input_file: &str, output_type: OutputType) -> String
 {
-    Path::new(&input_file)
+    let stem = Path::new(&input_file)
         .file_stem()
         .expect("Invalid input file")
         .to_str()
-        .expect("Invalid input file")
-        .into()
+        .expect("Invalid input file");
+
+    match output_type {
+        OutputType::Binary => stem.into(),
+        OutputType::StaticLib => format!("lib{}.a", stem),
+        OutputType::SharedLib => format!("lib{}.so", stem),
+    }
 }
 
 fn dump_byte_code(bc_mod: &ByteCodeModule, dump_flags: &str)
@@ -74,8 +79,17 @@ fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
 {
     let input_file = matches.value_of("INPUT_FILE").expect("No input file given");
     let optimize = matches.is_present("OPTIMIZE");
-    let output_file = matches.value_of("OUTPUT_FILE").map(|v| v.to_string()).unwrap_or_else(|| default_output_file(input_file));
     let target_machine = llvm_init()?;
+
+    let output_type = match matches.value_of("LIB") {
+        Some("static") => OutputType::StaticLib,
+        Some("shared") => OutputType::SharedLib,
+        _ => OutputType::Binary,
+    };
+
+    let output_file = matches.value_of("OUTPUT_FILE")
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| default_output_file(input_file, output_type));
 
     let parser_options = ParserOptions{
         import_dirs: matches.value_of("IMPORTS")
@@ -86,8 +100,9 @@ fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
     let bc_mod = parse(&parser_options, input_file, dump_flags, optimize, &target_machine.target)?;
     let opts = CodeGenOptions{
         dump_ir: dump_flags.contains("ir") || dump_flags.contains("all"),
-        build_dir: "build".into(),
-        program_name: output_file.into(),
+        build_dir: format!("build/{}", target_machine.target.triplet),
+        output_file_name: output_file.into(),
+        output_type: output_type,
         optimize: optimize,
     };
 
@@ -110,6 +125,7 @@ fn run() -> CompileResult<i32>
             (@arg OUTPUT_FILE: -o --output +takes_value "Name of binary to create (by default input file without the extensions)")
             (@arg OPTIMIZE: -O --optimize "Optimize the code")
             (@arg IMPORTS: -I --imports +takes_value "Directory to look for imports, use a comma separated list for more then one.")
+            (@arg LIB: -l --lib +takes_value possible_value[static shared] "Create a library, type of library must be pass")
         )
     );
 
