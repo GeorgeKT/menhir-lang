@@ -104,7 +104,7 @@ fn run() -> CompileResult<i32>
         (about: "Nomad language compiler")
         (@arg DUMP: -d --dump +takes_value "Dump internal compiler state for debug purposes. Argument can be all, ast, bytecode or ir. A comma separated list of these values is also supported.")
         (@subcommand build =>
-            (about: "Build a nomad file")
+            (about: "Build a menhir file")
             (version: "0.1")
             (@arg INPUT_FILE: +required "File to build")
             (@arg OUTPUT_FILE: -o --output +takes_value "Name of binary to create (by default input file without the extensions)")

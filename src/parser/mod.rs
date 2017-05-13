@@ -1024,7 +1024,7 @@ pub fn parse_file(options: &ParserOptions, file_path: &str, target: &Target) -> 
 
 fn parse_import(options: &ParserOptions, import_name: &str, target: &Target) -> CompileResult<Module>
 {
-    let file_name = format!("{}.nomad", import_name);
+    let file_name = format!("{}.mhr", import_name);
     for dir in &options.import_dirs {
         let dwf = dir.join(&file_name);
         if let Ok(mut file) = fs::File::open(&dwf) {

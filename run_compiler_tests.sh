@@ -14,8 +14,8 @@ fi
 fail_count=0
 success_count=0
 
-for file in testcode/*.nomad; do
-	name=$(basename -s .nomad ${file})
+for file in testcode/*.mhr; do
+	name=$(basename -s .mhr ${file})
 	echo "Testing ${name}"
 	if ! cargo run ${mode} -- build ${file} &> /tmp/compile_output.log; then
 		echo "*********************"

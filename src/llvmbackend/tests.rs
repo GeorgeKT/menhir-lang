@@ -74,7 +74,7 @@ fn run_tests_in_directory(dir: fs::ReadDir, target_machine: &TargetMachine) -> u
     paths.sort();
 
     for path in &paths {
-        if path.extension().unwrap_or_default() == "nomad" {
+        if path.extension().unwrap_or_default() == "mhr" {
             let r = run_test(&path, false, target_machine);
             println!("{}: {:?}", path.file_stem().unwrap().to_str().unwrap(), r);
             if !r.is_ok()  {
