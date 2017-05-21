@@ -38,7 +38,11 @@ pub unsafe fn const_char(ctx: &Context, c: char) -> LLVMValueRef
 
 unsafe fn get_variable(ctx: &Context, name: &str) -> ValueRef
 {
-    ctx.get_variable(name).expect("Unknown variable").value.clone()
+    if let Some(var) = ctx.get_variable(name) {
+        var.value.clone()
+    } else {
+        panic!("Unknown variable {}", name);
+    }
 }
 
 #[allow(unused)]
@@ -102,6 +106,8 @@ unsafe fn get_function_arg(ctx: &Context, operand: &Operand) -> LLVMValueRef
             let inner_type = src.typ.get_pointer_element_type().expect("Expecting pointer type here");
             if inner_type.pass_by_value() {
                 src.load(ctx)
+            } else if v.typ == src.typ {
+                src.value
             } else {
                 let llvm_type = ctx.resolve_type(inner_type);
                 let dst = stack_alloc(ctx, llvm_type, "argcopy");
@@ -315,6 +321,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             let mut func_args = args.iter()
                 .map(|a| get_function_arg(ctx, a))
                 .collect::<Vec<_>>();
+
             if let Some(ref dst) = *dst {
                 let dst_var = ctx.get_variable(&dst.name).expect("Unknown variable");
                 let ret = ValueRef::new(
@@ -360,7 +367,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
             ctx.add_variable(&var.name, ValueRef::new(value, ptr_type(var.typ.clone())))
         }
 
-        Instruction::StartScope | Instruction::EndScope | Instruction::Exit => {
+        Instruction::StartScope | Instruction::EndScope => {
         }
 
         Instruction::Return(ref operand) => {

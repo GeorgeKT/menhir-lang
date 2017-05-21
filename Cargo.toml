@@ -9,3 +9,6 @@ itertools = "0.5"
 uuid = { version = "0.2", features = ["v4"] }
 llvm-sys = "40"
 libc = "*"
+toml = "0.4"
+serde_derive = "1.0"
+serde = "1.0"

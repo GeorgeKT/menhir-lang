@@ -244,6 +244,36 @@ fn substitute_call(ctx: &TypeCheckerContext, generic_args: &GenericMapping, c: &
     Ok(Call::new(c.callee.clone(), new_args, c.span.clone()))
 }
 
+fn substitute_name_ref(ctx: &TypeCheckerContext, generic_args: &GenericMapping, nr: &NameRef) -> CompileResult<NameRef>
+{
+    let new_nr = NameRef{
+        name: nr.name.clone(),
+        span: nr.span.clone(),
+        typ: make_concrete(ctx, generic_args, &nr.typ, &nr.span)?,
+    };
+    Ok(new_nr)
+}
+
+fn substitute_member_access(ctx: &TypeCheckerContext, generic_args: &GenericMapping, sma: &MemberAccess) -> CompileResult<MemberAccess>
+{
+    let left = substitute_expr(ctx, generic_args, &sma.left)?;
+    let right = match sma.right
+    {
+        MemberAccessType::Call(ref c) => {
+            let new_c = substitute_call(ctx, generic_args, c)?;
+            MemberAccessType::Call(Box::new(new_c))
+        },
+        _ => sma.right.clone(),
+    };
+
+    Ok(MemberAccess{
+        left,
+        right,
+        span: sma.span.clone(),
+        typ: sma.typ.clone(),
+    })
+}
+
 fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &Expression) -> CompileResult<Expression>
 {
     match *e
@@ -327,12 +357,7 @@ fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &
         Expression::Literal(ref lit) => Ok(Expression::Literal(lit.clone())),
 
         Expression::NameRef(ref nr) => {
-            let new_nr = NameRef{
-                name: nr.name.clone(),
-                span: nr.span.clone(),
-                typ: make_concrete(ctx, generic_args, &nr.typ, &nr.span)?,
-            };
-            Ok(Expression::NameRef(new_nr))
+            Ok(Expression::NameRef(substitute_name_ref(ctx, generic_args, nr)?))
         },
 
         Expression::StructInitializer(ref si) => {
@@ -346,17 +371,8 @@ fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &
         },
 
         Expression::MemberAccess(ref sma) => {
-            let left = substitute_expr(ctx, generic_args, &sma.left)?;
-            let right = match sma.right
-            {
-                MemberAccessType::Call(ref c) => {
-                    let new_c = substitute_call(ctx, generic_args, c)?;
-                    MemberAccessType::Call(Box::new(new_c))
-                },
-                _ => sma.right.clone(),
-            };
-
-            Ok(member_access(left, right, sma.span.clone()))
+            let ma = substitute_member_access(ctx, generic_args, sma)?;
+            Ok(Expression::MemberAccess(Box::new(ma)))
         },
 
         Expression::New(ref n) => {
@@ -380,7 +396,13 @@ fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &
         },
 
         Expression::Assign(ref a) => {
-            let l = substitute_expr(ctx, generic_args, &a.left)?;
+            let l = match a.left {
+                AssignTarget::Var(ref nr) =>
+                    AssignTarget::Var(substitute_name_ref(ctx, generic_args, nr)?),
+
+                AssignTarget::MemberAccess(ref ma) =>
+                    AssignTarget::MemberAccess(substitute_member_access(ctx, generic_args, ma)?),
+            };
             let r = substitute_expr(ctx, generic_args, &a.right)?;
             Ok(assign(l, r, a.span.clone()))
         },
@@ -571,7 +593,6 @@ fn resolve_generics(ctx: &TypeCheckerContext, new_functions: &mut FunctionMap, m
         },
 
         Expression::Assign(ref a) => {
-            resolve_generics(ctx, new_functions, module, &a.left)?;
             resolve_generics(ctx, new_functions, module, &a.right)
         },
 

@@ -13,7 +13,7 @@ use bytecode::{
 
 fn rvo_needed(func: &ByteCodeFunction) -> bool
 {
-    !func.sig.return_type.pass_by_value()
+    !func.sig.return_type.pass_by_value() && func.sig.return_type != Type::Void
 }
 
 fn rvo_func(func: &mut ByteCodeFunction)

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use ast::*;
 use target::{Target};
 use bytecode::{ByteCodeModule, ByteCodeFunction};
+use compileerror::{CompileResult, type_error_result};
 use super::consteval::expr_to_const;
 use super::function::*;
 use super::instruction::*;
@@ -226,6 +227,31 @@ fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef, target: &Target) ->
         _ => {
             add_name_ref(func, nr)
         }
+    }
+}
+
+
+fn member_store_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, sma: &MemberAccess, val: Var, target: &Target)
+{
+    func.push_destination(None);
+    let var = to_bc(bc_mod, func, &sma.left, target);
+    func.pop_destination();
+
+    let var_typ = if let Type::Pointer(ref inner) = var.typ {
+        &inner
+    } else {
+        &var.typ
+    };
+
+    match (var_typ, &sma.right)
+    {
+        (&Type::Struct(_), &MemberAccessType::Name(ref field)) => {
+            func.add(store_member_instr(&var, field.index, val, target.int_size));
+        },
+
+        _ => {
+            panic!("Internal Compiler Error: Invalid member store")
+        },
     }
 }
 
@@ -734,6 +760,24 @@ fn if_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, if_expr: &
     dst
 }
 
+fn assign_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, assign: &Assign, target: &Target)
+{
+    func.push_destination(None);
+    let r = to_bc(bc_mod, func, &assign.right, target);
+    match assign.left {
+        AssignTarget::Var(ref nr) => {
+            let var = Var::named(&nr.name, nr.typ.clone());
+            func.add(store_instr(&var, &r));
+        },
+
+        AssignTarget::MemberAccess(ref ma) => {
+            member_store_to_bc(bc_mod, func, ma, r, target);
+        },
+    }
+
+    func.pop_destination();
+}
+
 fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &Expression, target: &Target) -> Option<Var>
 {
     match *expr
@@ -882,12 +926,8 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         },
 
         Expression::Assign(ref a) => {
-            func.push_destination(None);
-            let r = to_bc(bc_mod, func, &a.right, target);
-            let l = to_bc(bc_mod, func, &a.left, target);
-            func.add(store_instr(&l, &r));
-            func.pop_destination();
-            Some(l)
+            assign_to_bc(bc_mod, func, a, target);
+            None
         },
 
         Expression::While(ref w) => {
@@ -932,14 +972,14 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
 
 fn func_to_bc(sig: &FunctionSignature, bc_mod: &mut ByteCodeModule, expression: &Expression, target: &Target) -> ByteCodeFunction
 {
-    let mut llfunc = ByteCodeFunction::new(sig);
+    let mut llfunc = ByteCodeFunction::new(sig, false);
     match expr_to_bc(bc_mod, &mut llfunc, expression, target)
     {
-        Some(var) => {
-            llfunc.add(ret_instr(&var));
+        Some(ref var) if var.typ != Type::Void => {
+            llfunc.add(ret_instr(var));
         },
 
-        None => {
+        _ => {
             llfunc.add(Instruction::ReturnVoid);
         }
     }
@@ -947,34 +987,32 @@ fn func_to_bc(sig: &FunctionSignature, bc_mod: &mut ByteCodeModule, expression: 
     llfunc
 }
 
-use compileerror::{CompileResult, type_error_result};
-
-
-pub fn compile_to_byte_code(md: &Module, target: &Target) -> CompileResult<ByteCodeModule>
+pub fn compile_to_byte_code(pkg: &Package, target: &Target) -> CompileResult<ByteCodeModule>
 {
     let mut ll_mod = ByteCodeModule{
-        name: md.name.clone(),
+        name: pkg.name.clone(),
         functions: HashMap::new(),
         globals: HashMap::new(),
-        exit_function: ByteCodeFunction::exit(),
     };
 
-    for func in md.externals.values() {
-        ll_mod.functions.insert(func.sig.name.clone(), ByteCodeFunction::new(&func.sig));
-    }
-
-    for global in md.globals.values() {
-        if let Some(cst) = expr_to_const(&global.init) {
-            ll_mod.globals.insert(global.name.clone(), cst);
-        } else {
-            return type_error_result(&global.span, format!("Global {} must be initialized with a constant expression", global.name));
+    for md in pkg.modules.values() {
+        for func in md.externals.values() {
+            ll_mod.functions.insert(func.sig.name.clone(), ByteCodeFunction::new(&func.sig, true));
         }
-    }
 
-    for func in md.functions.values() {
-        if !func.is_generic() {
-            let new_func = func_to_bc(&func.sig, &mut ll_mod, &func.expression, target);
-            ll_mod.functions.insert(func.sig.name.clone(), new_func);
+        for global in md.globals.values() {
+            if let Some(cst) = expr_to_const(&global.init) {
+                ll_mod.globals.insert(global.name.clone(), cst);
+            } else {
+                return type_error_result(&global.span, format!("Global {} must be initialized with a constant expression", global.name));
+            }
+        }
+
+        for func in md.functions.values() {
+            if !func.is_generic() {
+                let new_func = func_to_bc(&func.sig, &mut ll_mod, &func.expression, target);
+                ll_mod.functions.insert(func.sig.name.clone(), new_func);
+            }
         }
     }
 

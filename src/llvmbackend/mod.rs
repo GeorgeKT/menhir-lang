@@ -34,12 +34,23 @@ use self::valueref::ValueRef;
 use self::function::{gen_function, gen_function_sig, add_libc_functions};
 use self::context::Context;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Deserialize)]
 pub enum OutputType
 {
+    #[serde(rename = "binary")]
     Binary,
+    #[serde(rename = "staticlib")]
     StaticLib,
+    #[serde(rename = "sharedlib")]
     SharedLib,
+}
+
+impl Default for OutputType
+{
+    fn default() -> Self
+    {
+        OutputType::Binary
+    }
 }
 
 pub struct CodeGenOptions
@@ -101,7 +112,9 @@ pub fn llvm_code_generation<'a>(bc_mod: &ByteCodeModule, target_machine: &'a Tar
         }
 
         for func in bc_mod.functions.values() {
-            gen_function(&mut ctx, func);
+            if !func.external {
+                gen_function(&mut ctx, func);
+            }
         }
 
         ctx.verify()?;

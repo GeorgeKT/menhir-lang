@@ -1,9 +1,8 @@
 use std::fmt;
 use std::collections::{BTreeMap, HashMap};
 use itertools::free::join;
-use ast::{Type, FunctionSignature, sig};
+use ast::{Type, FunctionSignature};
 use bytecode::instruction::Instruction;
-use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Var
@@ -129,6 +128,7 @@ pub struct ByteCodeFunction
 {
     pub sig: FunctionSignature,
     pub blocks: BTreeMap<BasicBlockRef, BasicBlock>,
+    pub external: bool,
     current_bb: usize,
     bb_counter: usize,
     var_counter: usize,
@@ -139,11 +139,12 @@ pub struct ByteCodeFunction
 
 impl ByteCodeFunction
 {
-    pub fn new(sig: &FunctionSignature) -> ByteCodeFunction
+    pub fn new(sig: &FunctionSignature, external: bool) -> ByteCodeFunction
     {
         let mut f = ByteCodeFunction{
             sig: sig.clone(),
             blocks: BTreeMap::new(),
+            external: external,
             current_bb: 0,
             bb_counter: 0,
             var_counter: 0,
@@ -151,23 +152,15 @@ impl ByteCodeFunction
             destinations: Vec::new(),
         };
 
-        let entry = f.create_basic_block();
-        f.set_current_bb(entry);
+        if !external {
+            let entry = f.create_basic_block();
+            f.set_current_bb(entry);
 
-        for arg in &sig.args {
-            f.add_named_var(Var::named(&arg.name, arg.typ.clone()));
+            for arg in &sig.args {
+                f.add_named_var(Var::named(&arg.name, arg.typ.clone()));
+            }
         }
         f
-    }
-
-    pub fn exit() -> ByteCodeFunction
-    {
-        let function_sig = sig("@exit", Type::Void, vec![], Span::default());
-        let mut function = ByteCodeFunction::new(&function_sig);
-        function.add(Instruction::Exit);
-        function.add(Instruction::Exit);
-        function.add(Instruction::Exit);
-        function
     }
 
     fn add_instruction(&mut self, inst: Instruction)

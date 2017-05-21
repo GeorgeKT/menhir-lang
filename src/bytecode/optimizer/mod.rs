@@ -38,7 +38,9 @@ pub fn optimize_module(module: &mut ByteCodeModule, lvl: OptimizationLevel)
     eliminate_unused_functions(module);
     return_value_optimization(module);
     for func in module.functions.values_mut() {
-        optimize_function(func, lvl);
+        if !func.external {
+            optimize_function(func, lvl);
+        }
     }
 }
 

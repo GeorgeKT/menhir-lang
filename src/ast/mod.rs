@@ -1,4 +1,5 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap};
+use std::rc::Rc;
 
 mod arrays;
 mod assign;
@@ -9,18 +10,21 @@ mod expression;
 mod function;
 mod heap;
 mod ifexpression;
+mod import;
 mod interface;
 mod lambda;
 mod literal;
 mod loops;
 mod matchexpression;
 mod memberaccess;
+mod module;
 mod nameref;
 mod operations;
 mod operator;
 mod pattern;
 mod structs;
 mod sumtype;
+mod typedeclaration;
 mod types;
 
 pub use self::arrays::*;
@@ -32,18 +36,21 @@ pub use self::expression::*;
 pub use self::function::*;
 pub use self::heap::*;
 pub use self::ifexpression::*;
+pub use self::import::*;
 pub use self::interface::*;
 pub use self::lambda::*;
 pub use self::literal::*;
 pub use self::loops::*;
 pub use self::matchexpression::*;
 pub use self::memberaccess::*;
+pub use self::module::*;
 pub use self::nameref::NameRef;
 pub use self::operations::*;
 pub use self::operator::*;
 pub use self::pattern::*;
 pub use self::structs::*;
 pub use self::sumtype::*;
+pub use self::typedeclaration::*;
 pub use self::types::*;
 
 pub fn prefix(level: usize) -> String
@@ -63,114 +70,21 @@ pub trait TreePrinter
 pub type GenericMapping = HashMap<Type, Type>;
 
 
-
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub enum TypeDeclaration
-{
-    Interface(Interface),
-    Struct(StructDeclaration),
-    Sum(SumTypeDeclaration),
-    //Alias(TypeAlias),
-}
-
-impl TypeDeclaration
-{
-    pub fn name(&self) -> &str
-    {
-        match *self
-        {
-            TypeDeclaration::Interface(ref i) => &i.name,
-            TypeDeclaration::Struct(ref sd) => &sd.name,
-            TypeDeclaration::Sum(ref s) => &s.name,
-            //TypeDeclaration::Alias(ref t) => &t.name,
-        }
-    }
-}
-
-impl TreePrinter for TypeDeclaration
-{
-    fn print(&self, level: usize)
-    {
-        match *self
-        {
-            TypeDeclaration::Interface(ref i) => i.print(level),
-            TypeDeclaration::Struct(ref sd) => sd.print(level),
-            TypeDeclaration::Sum(ref s) => s.print(level),
-            //TypeDeclaration::Alias(ref t) => t.print(level),
-        }
-    }
-}
-
-pub struct Module
+pub struct Package
 {
     pub name: String,
-    pub globals: HashMap<String, GlobalBinding>,
-    pub functions: HashMap<String, Function>,
-    pub externals: HashMap<String, ExternalFunction>,
-    pub types: HashMap<String, TypeDeclaration>,
-    pub imports: HashSet<String>,
+    pub modules: HashMap<String, Module>,
+    pub imports: HashMap<String, Rc<Import>>,
 }
 
-impl Module
+impl Package
 {
-    pub fn new(name: &str) -> Module
+    pub fn new(name: &str) -> Package
     {
-        Module{
+        Package{
             name: name.into(),
-            globals: HashMap::new(),
-            functions: HashMap::new(),
-            externals: HashMap::new(),
-            types: HashMap::new(),
-            imports: HashSet::new(),
-        }
-    }
-
-    pub fn import(&mut self, other: &Module)
-    {
-        self.imports.insert(other.name.clone());
-
-        for (name, global) in &other.globals {
-            let name = format!("{}::{}", other.name, name);
-            self.globals.insert(name, global.clone());
-        }
-
-        for func in other.functions.values() {
-            let name = format!("{}::{}", other.name, func.sig.name);
-            self.functions.insert(name, func.clone());
-        }
-
-        for func in other.externals.values() {
-            let name = format!("{}::{}", other.name, func.sig.name);
-            self.externals.insert(name, func.clone());
-        }
-
-        for typ in other.types.values() {
-            let name = format!("{}::{}", other.name, typ.name());
-            self.types.insert(name, typ.clone());
-        }
-    }
-}
-
-impl TreePrinter for Module
-{
-    fn print(&self, level: usize)
-    {
-        let p = prefix(level);
-        println!("{}Module: {}", p, self.name);
-        for t in self.types.values() {
-            t.print(level + 1);
-        }
-
-        for global in self.globals.values() {
-            global.print(level + 1);
-        }
-
-        for func in self.externals.values() {
-            func.print(level + 1);
-        }
-
-        for func in self.functions.values() {
-            func.print(level + 1);
+            modules: HashMap::new(),
+            imports: HashMap::new(),
         }
     }
 }

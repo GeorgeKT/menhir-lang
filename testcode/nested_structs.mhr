@@ -1,0 +1,14 @@
+#ret:7
+struct C:
+    d: int
+
+struct B:
+    c: C
+
+struct A:
+    b: B
+
+fn main() -> int:
+    var a = A{B{C{5}}}
+    a.b.c.d = 7
+    a.b.c.d

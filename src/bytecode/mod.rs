@@ -18,7 +18,6 @@ pub struct ByteCodeModule
     pub name: String,
     pub functions: HashMap<String, ByteCodeFunction>,
     pub globals: HashMap<String, Constant>,
-    pub exit_function: ByteCodeFunction,
 }
 
 impl ByteCodeModule
@@ -30,11 +29,7 @@ impl ByteCodeModule
 
     pub fn get_function(&self, name: &str) -> Option<&ByteCodeFunction>
     {
-        if name == self.exit_function.sig.name {
-            Some(&self.exit_function)
-        } else {
-            self.functions.get(name)
-        }
+        self.functions.get(name)
     }
 }
 

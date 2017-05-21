@@ -1,16 +1,34 @@
-use ast::{Expression, Type, TreePrinter, prefix};
+use ast::{Expression, NameRef, MemberAccess, Type, TreePrinter, prefix};
 use span::{Span};
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum AssignTarget
+{
+    Var(NameRef),
+    MemberAccess(MemberAccess),
+}
+
+impl TreePrinter for AssignTarget
+{
+    fn print(&self, level: usize)
+    {
+        match *self {
+            AssignTarget::Var(ref nr) => nr.print(level),
+            AssignTarget::MemberAccess(ref ma) => ma.print(level),
+        }
+    }
+}
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Assign
 {
-    pub left: Expression,
+    pub left: AssignTarget,
     pub right: Expression,
     pub typ: Type,
     pub span: Span,
 }
 
-pub fn assign(left: Expression, right: Expression, span: Span) -> Expression
+pub fn assign(left: AssignTarget, right: Expression, span: Span) -> Expression
 {
     Expression::Assign(Box::new(Assign{
         left: left,
