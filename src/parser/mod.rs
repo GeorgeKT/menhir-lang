@@ -1025,7 +1025,7 @@ pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize, target: &Targe
     parse_expression_continued(tq, lhs, indent_level, target)
 }
 
-fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool, indent_level: usize, target: &Target) -> CompileResult<()>
+fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool, indent_level: usize, namespace: &str, target: &Target) -> CompileResult<()>
 {
     while !is_end_of_bindings(tq, indent_level)
     {
@@ -1037,7 +1037,7 @@ fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool
             return parse_error_result(&span, format!("Global {} already defined in this module", name));
         }
 
-        module.globals.insert(name.clone(), global_binding(name, init, mutable, span.expanded(tq.pos())));
+        module.globals.insert(name.clone(), global_binding(namespaced(namespace, &name), init, mutable, span.expanded(tq.pos())));
         eat_comma(tq)?;
     }
 
@@ -1121,11 +1121,11 @@ fn parse_module<Input: Read>(
             }
 
             TokenKind::Let => {
-                parse_global_bindings(module, &mut tq, false, indent_level, target)?;
+                parse_global_bindings(module, &mut tq, false, indent_level, namespace, target)?;
             }
 
             TokenKind::Var => {
-                parse_global_bindings(module, &mut tq, true, indent_level, target)?;
+                parse_global_bindings(module, &mut tq, true, indent_level, namespace, target)?;
             }
 
             TokenKind::Struct => {
