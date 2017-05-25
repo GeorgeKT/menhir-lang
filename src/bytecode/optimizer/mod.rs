@@ -58,7 +58,7 @@ mod test
     fn test_block_elimination()
     {
         let func_sig = sig("foo", Type::Void, vec![], Span::default());
-        let mut func = ByteCodeFunction::new(&func_sig);
+        let mut func = ByteCodeFunction::new(&func_sig, false);
         let bb1 = func.create_basic_block();
         let bb2 = func.create_basic_block();
         func.add(Instruction::Branch(bb1));

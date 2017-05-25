@@ -230,28 +230,56 @@ fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef, target: &Target) ->
     }
 }
 
+fn member_store_lhs_to_bc(func: &mut ByteCodeFunction, lhs: &Expression, target: &Target) -> (Var, Vec<(usize, Type)>)
+{
+    match *lhs {
+        Expression::NameRef(ref nr) => {
+            let var = name_ref_to_bc(func, nr, target).expect("Unknown variable");
+            (var, Vec::new())
+        },
+        Expression::MemberAccess(ref inner_ma) => {
+            let (var, mut fields) = member_store_lhs_to_bc(func, &inner_ma.left, target);
+            let inner_ma_typ = if let Type::Pointer(ref p) = inner_ma.typ {
+                p
+            } else {
+                &inner_ma.typ
+            };
 
-fn member_store_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, sma: &MemberAccess, val: Var, target: &Target)
+            match (inner_ma_typ, &inner_ma.right) {
+                (&Type::Struct(_), &MemberAccessType::Name(ref field)) => {
+                    fields.push((field.index, inner_ma.typ.clone()));
+                    (var, fields)
+                },
+
+                _ => panic!("Internal Compiler Error: Invalid member store"),
+            }
+
+        }
+
+        _ => panic!("Internal Compiler Error: Expecting name or member access"),
+    }
+}
+
+
+fn member_store_to_bc(func: &mut ByteCodeFunction, sma: &MemberAccess, val: Var, target: &Target)
 {
     func.push_destination(None);
-    let var = to_bc(bc_mod, func, &sma.left, target);
+    let (var, fields) = member_store_lhs_to_bc(func, &sma.left, target);
     func.pop_destination();
 
-    let var_typ = if let Type::Pointer(ref inner) = var.typ {
-        &inner
-    } else {
-        &var.typ
-    };
+    let mut ptr = var;
+    for (field, field_type) in fields {
+        let dst = get_dst(func, &ptr_type(field_type));
+        func.add(address_of_member_instr(&dst, &ptr, field, target.int_size));
+        ptr = dst;
+    }
 
-    match (var_typ, &sma.right)
-    {
-        (&Type::Struct(_), &MemberAccessType::Name(ref field)) => {
-            func.add(store_member_instr(&var, field.index, val, target.int_size));
-        },
+    match sma.right {
+        MemberAccessType::Name(ref field) => {
+            func.add(store_member_instr(&ptr, field.index, val, target.int_size));
+        }
 
-        _ => {
-            panic!("Internal Compiler Error: Invalid member store")
-        },
+        _ => panic!("Internal Compiler Error: Invalid member store"),
     }
 }
 
@@ -270,7 +298,11 @@ fn member_access_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction,
     match (var_typ, &sma.right)
     {
         (&Type::Struct(_), &MemberAccessType::Name(ref field)) => {
-            func.add(load_member_instr(dst, &var, field.index, target.int_size));
+            if dst.typ.pass_by_value() {
+                func.add(load_member_instr(dst, &var, field.index, target.int_size));
+            } else {
+                func.add(address_of_member_instr(dst, &var, field.index, target.int_size));
+            }
         },
 
         (&Type::Array(ref at), &MemberAccessType::Property(Property::Len)) => {
@@ -771,7 +803,7 @@ fn assign_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, assign
         },
 
         AssignTarget::MemberAccess(ref ma) => {
-            member_store_to_bc(bc_mod, func, ma, r, target);
+            member_store_to_bc(func, ma, r, target);
         },
     }
 
@@ -896,7 +928,12 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         },
 
         Expression::MemberAccess(ref sma) => {
-            let dst = get_dst(func, &sma.typ);
+            let dst = if sma.typ.pass_by_value() {
+                get_dst(func, &sma.typ)
+            } else {
+                get_dst(func, &sma.typ.ptr_of())
+            };
+
             member_access_to_bc(bc_mod, func, sma, &dst, target);
             Some(dst)
         },

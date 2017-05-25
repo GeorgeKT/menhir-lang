@@ -1,8 +1,9 @@
 use std::fs::{File};
 use std::io::{Read};
-use std::path::{Path};
+use std::path::{Path, PathBuf};
 use toml;
 
+use ast::TreePrinter;
 use parser::{ParserOptions, parse_files};
 use llvmbackend::TargetMachine;
 use bytecode::{compile_to_byte_code, optimize_module, OptimizationLevel};
@@ -17,6 +18,7 @@ pub struct BuildOptions
     pub optimize: bool,
     pub dump_flags: String,
     pub target_machine: TargetMachine,
+    pub sources_directory: String,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -25,6 +27,7 @@ pub struct PackageTarget
     name: String,
     #[serde(rename = "type")]
     output_type: OutputType,
+    path: Option<PathBuf>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -57,7 +60,11 @@ impl PackageData
 
         Ok(PackageData{
             target: vec![
-                PackageTarget{name, output_type}
+                PackageTarget{
+                    name,
+                    output_type,
+                    path: Some(p.to_owned()),
+                }
             ],
             ..Default::default()
         })
@@ -96,24 +103,29 @@ fn output_file_name(name: &str, output_type: OutputType) -> String
 
 fn build_target(target: &PackageTarget, build_options: &BuildOptions) -> CompileResult<()>
 {
-    let file_name = format!("src/{}.mhr", target.name);
-    let single_file = Path::new(&file_name);
-    let mut pkg = if single_file.exists() && single_file.is_file() {
-        parse_files(&single_file, &target.name, &build_options.target_machine.target)?
+    let single_file = format!("{}/{}.mhr", build_options.sources_directory, target.name);
+    let dir_name = format!("{}/{}", build_options.sources_directory, target.name);
+
+    let path = if let Some(ref path) = target.path {
+        path.as_path()
     } else {
-        let dir_name = format!("src/{}", target.name);
-        let dir_path = Path::new(&dir_name);
-        parse_files(&dir_path, &target.name, &build_options.target_machine.target)?
+        let path = Path::new(&single_file);
+        if path.exists() {
+            path
+        } else {
+            Path::new(&dir_name)
+        }
+    };
+
+    let mut pkg = if path.exists() && path.is_file() {
+        parse_files(&path, &target.name, &build_options.target_machine.target)?
+    } else {
+        parse_files(&path, &target.name, &build_options.target_machine.target)?
     };
 
     if build_options.dump_flags.contains("ast") || build_options.dump_flags.contains("all") {
-        for module in pkg.modules.values() {
-            println!("AST: {}", module.name);
-            println!("------\n");
-            use ast::TreePrinter;
-            module.print(0);
-            println!("------\n");
-        }
+        println!("AST: {}", pkg.name);
+        pkg.print(0);
     }
 
     type_check_package(&mut pkg, &build_options.target_machine.target)?;

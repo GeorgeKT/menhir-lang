@@ -256,6 +256,17 @@ impl Type
                 Some(nil_expr_with_type(expr.span(), inner.deref().clone()))
             }
 
+            (&Type::Void, _) => {
+                Some(Expression::Block(Box::new(Block{
+                    expressions: vec![
+                        expr.clone(),
+                        Expression::Void,
+                    ],
+                    typ: Type::Void,
+                    span: expr.span(),
+                })))
+            }
+
             _ => None,
         }
     }
@@ -424,6 +435,11 @@ impl Type
         } else {
             None
         }
+    }
+
+    pub fn ptr_of(&self) -> Type
+    {
+        Type::Pointer(Rc::new(self.clone()))
     }
 }
 

@@ -34,12 +34,10 @@ pub fn th_pattern(data: &str, target: &Target) -> Pattern
 
 pub fn th_mod(data: &str, target: &Target) -> Module
 {
-    let mut cursor = Cursor::new(data);
-    let parser_options = ParserOptions::default();
-    let md = parse_module(&parser_options, &mut cursor, "test", "", target).expect("Parsing failed");
+    let mut pkg = parse_str(data, "test", target).expect("Parsing failed");
     println!("AST dump:");
-    md.print(0);
-    md
+    pkg.print(0);
+    pkg.modules.remove("test").expect("No module named test")
 }
 
 

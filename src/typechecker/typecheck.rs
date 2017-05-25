@@ -284,7 +284,6 @@ fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> Type
             return type_error_result(&fun.span, format!("Function {} has return type {}, but it is returning an expression of type {}",
                 fun.sig.name, fun.sig.return_type, et));
         }
-
     }
 
     fun.type_checked = true;
@@ -1141,7 +1140,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
     }
 }
 
-fn type_check_module(module: &mut Module, target: &Target) -> CompileResult<()>
+pub fn type_check_module(module: &mut Module, target: &Target) -> CompileResult<()>
 {
     loop {
         let mut ctx = TypeCheckerContext::new(target);

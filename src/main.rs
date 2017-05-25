@@ -40,7 +40,8 @@ fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
         },
         optimize: matches.is_present("OPTIMIZE"),
         dump_flags: dump_flags.into(),
-        target_machine: llvm_init()?
+        target_machine: llvm_init()?,
+        sources_directory: String::new(),
     };
 
     let output_type = match matches.value_of("LIB") {
@@ -72,7 +73,8 @@ fn build_package_command(matches: &ArgMatches, dump_flags: &str) -> CompileResul
         },
         optimize: matches.is_present("OPTIMIZE"),
         dump_flags: dump_flags.into(),
-        target_machine: llvm_init()?
+        target_machine: llvm_init()?,
+        sources_directory: "src".into(),
     };
     pkg.build(&build_options)?;
     Ok(0)

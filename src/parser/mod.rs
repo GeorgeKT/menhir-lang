@@ -10,7 +10,7 @@ pub use self::tests::{th_expr, th_mod};
 
 use std::path::{Path, PathBuf};
 use std::fs;
-use std::io::Read;
+use std::io::{Read};
 use std::rc::Rc;
 use std::ffi::OsStr;
 use std::ops::Deref;
@@ -813,6 +813,10 @@ fn parse_block(tq: &mut TokenQueue, current_file: &str, indent_level: usize, tar
             break;
         }
 
+        if tq.is_next(&TokenKind::Indent(block_indent_level)) {
+            continue;
+        }
+
         let e = parse_expression(tq, block_indent_level, target)?;
         expressions.push(e);
         ends_with_semicolon = false;
@@ -1084,7 +1088,7 @@ fn parse_import_name(tq: &mut TokenQueue) -> CompileResult<ImportName>
     Ok(ImportName::new(namespace, span))
 }
 
-pub fn parse_module<Input: Read>(
+fn parse_module<Input: Read>(
     module: &mut Module,
     input: &mut Input,
     namespace: &str,
@@ -1220,6 +1224,19 @@ pub fn parse_files(path: &Path, root_namespace: &str, target: &Target) -> Compil
         parse_file_tree(&mut pkg, path, root_namespace, target)?;
     }
 
+    Ok(pkg)
+}
+
+#[cfg(test)]
+pub fn parse_str(code: &str, root_namespace: &str, target: &Target) -> CompileResult<Package>
+{
+    use std::io::Cursor;
+    
+    let mut pkg = Package::new(root_namespace);
+    let mut module = Module::new(root_namespace);
+    let mut cursor = Cursor::new(code);
+    parse_module(&mut module, &mut cursor, root_namespace, "", target)?;
+    pkg.modules.insert(root_namespace.into(), module);
     Ok(pkg)
 }
 

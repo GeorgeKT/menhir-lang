@@ -88,3 +88,17 @@ impl Package
         }
     }
 }
+
+impl TreePrinter for Package
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        for module in self.modules.values() {
+            println!("{}module: {}", p, module.name);
+            module.print(level + 1);
+            println!("{}--------------------\n", p);
+        }
+    }
+}
+
