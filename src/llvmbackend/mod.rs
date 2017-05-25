@@ -25,10 +25,12 @@ mod tests;
 mod jit;
 */
 
+use std::ffi::CString;
 use std::process::{Output, Command};
+use llvm::LLVMLinkage;
 use llvm::core::*;
 
-use bytecode::{ByteCodeModule};
+use bytecode::{ByteCodeModule, Constant};
 pub use self::target::TargetMachine;
 use self::valueref::ValueRef;
 use self::function::{gen_function, gen_function_sig, add_libc_functions};
@@ -91,6 +93,16 @@ pub fn llvm_init() -> Result<TargetMachine, String>
     }
 }
 
+unsafe fn gen_global(ctx: &mut Context, glob_name: &str, glob_value: &Constant)
+{
+    let v = ValueRef::from_const(&ctx, glob_value);
+    let name = CString::new(glob_name.as_bytes()).expect("Invalid string");
+    let glob = LLVMAddGlobal(ctx.module, ctx.resolve_type(&v.typ), name.as_ptr());
+    LLVMSetLinkage(glob, LLVMLinkage::LLVMExternalLinkage);
+    LLVMSetInitializer(glob, v.value);
+    ctx.add_variable(glob_name, v);
+}
+
 pub fn llvm_code_generation<'a>(bc_mod: &ByteCodeModule, target_machine: &'a TargetMachine) -> Result<Context<'a>, String>
 {
     let mut ctx = Context::new(&bc_mod.name, target_machine)?;
@@ -99,8 +111,7 @@ pub fn llvm_code_generation<'a>(bc_mod: &ByteCodeModule, target_machine: &'a Tar
         add_libc_functions(&mut ctx);
 
         for (glob_name, glob_val) in &bc_mod.globals {
-            let v = ValueRef::from_const(&ctx, glob_val);
-            ctx.add_variable(glob_name, v);
+           gen_global(&mut ctx, glob_name, glob_val);
         }
 
         for func in bc_mod.functions.values() {
