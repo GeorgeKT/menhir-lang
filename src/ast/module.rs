@@ -32,7 +32,7 @@ impl Module
 
     pub fn get_exported_symbols(&self) -> Import
     {
-        let mut import = Import::new(self.name.split("::").map(String::from).collect());
+        let mut import = Import::new(self.name.clone());
         for (name, binding) in &self.globals {
             import.add_symbol(ImportSymbol::new(name, &binding.typ, binding.mutable, &binding.span));
         }

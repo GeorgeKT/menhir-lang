@@ -11,4 +11,5 @@ llvm-sys = "40"
 libc = "*"
 toml = "0.4"
 serde_derive = "1.0"
-serde = "1.0"
+serde = {version = "1.0", features = ["rc"] }
+rmp-serde = "0.13"

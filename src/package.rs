@@ -146,7 +146,7 @@ fn build_target(target: &PackageTarget, build_options: &BuildOptions) -> Compile
 
     let opts = CodeGenOptions{
         dump_ir: build_options.dump_flags.contains("ir") ||  build_options.dump_flags.contains("all"),
-        build_dir: format!("build/{}/{}",  build_options.target_machine.target.triplet, target.name),
+        build_dir: format!("build/{}/{}", build_options.target_machine.target.triplet, target.name),
         output_file_name: output_file_name(&target.name, target.output_type),
         output_type: target.output_type,
         optimize: build_options.optimize,
@@ -154,5 +154,18 @@ fn build_target(target: &PackageTarget, build_options: &BuildOptions) -> Compile
 
     let ctx = llvm_code_generation(&bc_mod, &build_options.target_machine).map_err(CompileError::Other)?;
     link(&ctx, &opts)?;
+
+
+    match opts.output_type
+    {
+        OutputType::SharedLib | OutputType::StaticLib => {
+            let path = format!("{}/{}.mhr.exports", opts.build_dir, target.name);
+            let file = File::create(&path)?;
+            println!("  Generating {}", path);
+            pkg.create_export_library(file)?;
+        }
+
+        _ => (),
+    }
     Ok(())
 }

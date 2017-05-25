@@ -4,6 +4,7 @@ use itertools::join;
 use span::Span;
 use super::{Type};
 
+
 #[derive(Eq, PartialEq, Hash)]
 pub struct ImportName
 {
@@ -32,6 +33,7 @@ impl fmt::Display for ImportName
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct ImportSymbol
 {
     pub name: String,
@@ -53,15 +55,16 @@ impl ImportSymbol
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Import
 {
-    pub namespace: Vec<String>,
+    pub namespace: String,
     pub symbols: HashMap<String, ImportSymbol>
 }
 
 impl Import
 {
-    pub fn new(namespace: Vec<String>) -> Import
+    pub fn new(namespace: String) -> Import
     {
         Import{
             namespace,
@@ -72,5 +75,19 @@ impl Import
     pub fn add_symbol(&mut self, sym: ImportSymbol)
     {
         self.symbols.insert(sym.name.clone(), sym);
+    }
+}
+
+
+impl fmt::Display for Import
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    {
+        writeln!(f, "{}:", self.namespace)?;
+        for symbol in self.symbols.values() {
+            writeln!(f, "  {}: type {}", symbol.name, symbol.typ)?;
+        }
+
+        Ok(())
     }
 }

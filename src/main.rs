@@ -8,6 +8,7 @@ extern crate toml;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
+extern crate rmp_serde;
 
 mod ast;
 mod compileerror;
@@ -19,6 +20,7 @@ mod llvmbackend;
 mod target;
 mod package;
 
+use std::fs::File;
 use std::path::{PathBuf};
 use std::process::exit;
 use clap::ArgMatches;
@@ -80,6 +82,18 @@ fn build_package_command(matches: &ArgMatches, dump_flags: &str) -> CompileResul
     Ok(0)
 }
 
+fn exports_command(matches: &ArgMatches) -> CompileResult<i32>
+{
+    let exports_file_path = matches.value_of("EXPORTS_FILE").ok_or(format!("No exports file given"))?;
+    let exports_file = File::open(&exports_file_path)?;
+    let exports = ast::load_export_library(exports_file)?;
+    for export in exports {
+        print!("{}", export);
+    }
+
+    Ok(0)
+}
+
 fn run() -> CompileResult<i32>
 {
     let app = clap_app!(cobrac =>
@@ -102,6 +116,10 @@ fn run() -> CompileResult<i32>
             (@arg OPTIMIZE: -O --optimize "Optimize the code")
             (@arg IMPORTS: -I --imports +takes_value "Directory to look for imports, use a comma separated list for more then one.")
         )
+        (@subcommand exports =>
+            (about: "List the exported symbols in an exports file")
+            (@arg EXPORTS_FILE: +required "Exports file")
+        )
     );
 
     let matches = app.get_matches();
@@ -111,10 +129,12 @@ fn run() -> CompileResult<i32>
         let target_machine = llvm_init()?;
         print!("{}", target_machine.target.triplet);
         Ok(0)
-    } else if let Some(build_matches) = matches.subcommand_matches("build") {
-        build_command(build_matches, dump_flags)
-    } else if let Some(build_matches) = matches.subcommand_matches("buildpkg") {
-        build_package_command(build_matches, dump_flags)
+    } else if let Some(matches) = matches.subcommand_matches("build") {
+        build_command(matches, dump_flags)
+    } else if let Some(matches) = matches.subcommand_matches("buildpkg") {
+        build_package_command(matches, dump_flags)
+    } else if let Some(matches) = matches.subcommand_matches("exports") {
+        exports_command(matches)
     } else {
         println!("{}", matches.usage());
         Ok(1)

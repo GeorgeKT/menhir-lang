@@ -1037,7 +1037,8 @@ fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool
             return parse_error_result(&span, format!("Global {} already defined in this module", name));
         }
 
-        module.globals.insert(name.clone(), global_binding(namespaced(namespace, &name), init, mutable, span.expanded(tq.pos())));
+        let full_name = namespaced(namespace, &name);
+        module.globals.insert(full_name.clone(), global_binding(full_name, init, mutable, span.expanded(tq.pos())));
         eat_comma(tq)?;
     }
 
