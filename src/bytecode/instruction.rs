@@ -8,6 +8,7 @@ use bytecode::function::{BasicBlockRef, Var};
 pub enum ByteCodeProperty
 {
     Len,
+    Data,
     SumTypeIndex,
 }
 
@@ -17,6 +18,7 @@ impl fmt::Display for ByteCodeProperty
     {
         match *self
         {
+            ByteCodeProperty::Data => write!(f, "data"),
             ByteCodeProperty::Len => write!(f, "len"),
             ByteCodeProperty::SumTypeIndex => write!(f, "sum_type_index"),
         }

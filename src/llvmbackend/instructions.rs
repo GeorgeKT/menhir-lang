@@ -250,6 +250,9 @@ unsafe fn gen_cast(ctx: &mut Context, dst: &Var, src: &Operand)
         (&Type::Float(_), &Type::UInt(_)) =>
             LLVMBuildUIToFP(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("cast_to_int")),
 
+        (&Type::Pointer(_), &Type::Pointer(_)) =>
+            LLVMBuildBitCast(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("ptr_cast")),
+
         _ => panic!("Cast from type {} to type {} is not allowed", src_type, dst.typ),
     };
 

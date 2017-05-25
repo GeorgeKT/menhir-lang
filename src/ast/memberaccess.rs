@@ -6,6 +6,7 @@ use span::Span;
 pub enum Property
 {
     Len,
+    Data,
 }
 
 impl fmt::Display for Property
@@ -15,6 +16,7 @@ impl fmt::Display for Property
         match *self
         {
             Property::Len => write!(f, "len"),
+            Property::Data => write!(f, "data"),
         }
     }
 }
@@ -81,6 +83,7 @@ impl TreePrinter for MemberAccess
                 match *prop
                 {
                     Property::Len => println!("{} .len", p),
+                    Property::Data => println!("{} .data", p)
                 }
             }
         }

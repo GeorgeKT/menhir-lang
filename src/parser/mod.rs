@@ -308,6 +308,7 @@ fn to_primitive(name: &str, target: &Target) -> Option<Type>
         "bool" => Some(Type::Bool),
         "char" => Some(Type::Char),
         "Self" => Some(Type::SelfType),
+        "void" => Some(Type::Void),
         _ => None,
     }
 }

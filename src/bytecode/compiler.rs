@@ -309,8 +309,14 @@ fn member_access_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction,
             func.add(store_operand_instr(dst, Operand::const_uint(at.len as u64, target.int_size)))
         },
 
+        (&Type::Slice(_), &MemberAccessType::Property(Property::Len)) |
         (&Type::String, &MemberAccessType::Property(Property::Len)) => {
             func.add(get_prop_instr(dst, &var, ByteCodeProperty::Len));
+        },
+
+        (&Type::Slice(_), &MemberAccessType::Property(Property::Data)) |
+        (&Type::String, &MemberAccessType::Property(Property::Data))  => {
+            func.add(get_prop_instr(dst, &var, ByteCodeProperty::Data));
         },
 
         _ => {

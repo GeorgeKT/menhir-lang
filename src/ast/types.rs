@@ -267,6 +267,14 @@ impl Type
                 })))
             }
 
+            (&Type::Pointer(ref to), &Type::Pointer(_)) => {
+                if *to.deref() == Type::Void {
+                    Some(type_cast(expr.clone(), ptr_type(Type::Void), expr.span()))
+                } else {
+                    None
+                }
+            }
+
             _ => None,
         }
     }
@@ -351,15 +359,19 @@ impl Type
 
     pub fn get_property_type(&self, name: &str, target: &Target) -> Option<(Type, MemberAccessType)>
     {
-        match *self
+        match (self, name)
         {
-            Type::Array(_) | Type::Slice(_) | Type::String => {
-                match name
-                {
-                    "len" => Some((target.native_uint_type.clone(), MemberAccessType::Property(Property::Len))),
-                    _ => None,
-                }
-            },
+            (&Type::Array(_), "len") |
+            (&Type::Slice(_), "len") |
+            (&Type::String, "len") =>
+                Some((target.native_uint_type.clone(), MemberAccessType::Property(Property::Len))),
+
+            (&Type::Slice(ref st), "data") =>
+                Some((ptr_type(st.element_type.clone()), MemberAccessType::Property(Property::Data))),
+
+            (&Type::String, "data") =>
+                Some((ptr_type(Type::UInt(IntSize::I8)), MemberAccessType::Property(Property::Data))),
+
             _ => None,
         }
     }
@@ -386,6 +398,14 @@ impl Type
     {
         if let Type::Pointer(_) = *self {
             true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_pointer_to(&self, t: &Type) -> bool {
+        if let Type::Pointer(ref inner) = *self {
+            *inner.deref() == *t
         } else {
             false
         }

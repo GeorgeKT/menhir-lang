@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::ops::Deref;
 use ast::*;
 use compileerror::{CompileResult, CompileError, type_error, unknown_type_result, unknown_name, type_error_result};
 use super::typecheckercontext::TypeCheckerContext;
@@ -851,6 +852,17 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
 
     let (typ, new_right) = match (&mut sma.right, left_type_ref)
     {
+        (&mut MemberAccessType::Property(Property::Len), &Type::Slice(_)) |
+        (&mut MemberAccessType::Property(Property::Len), &Type::Array(_)) |
+        (&mut MemberAccessType::Property(Property::Len), &Type::String) =>
+            (ctx.target.native_uint_type.clone(), None),
+
+        (&mut MemberAccessType::Property(Property::Data), &Type::String) =>
+            (ptr_type(Type::UInt(IntSize::I8)), None),
+
+        (&mut MemberAccessType::Property(Property::Data), &Type::Slice(ref st)) =>
+            (ptr_type(st.element_type.clone()), None),
+
         (&mut MemberAccessType::Name(ref mut field), &Type::Struct(ref st)) => {
             let (member_idx, member_type) = find_member_type(&st.members, &field.name, &sma.span)?;
             field.index = member_idx;
@@ -858,13 +870,13 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
         },
 
         (&mut MemberAccessType::Name(ref mut field), &Type::Array(_)) |
+        (&mut MemberAccessType::Name(ref mut field), &Type::Slice(_)) |
         (&mut MemberAccessType::Name(ref mut field), &Type::String) => {
             if let Some((typ, member_access_type)) = left_type.get_property_type(&field.name, ctx.target) {
                 (typ, Some(member_access_type))
             } else {
                 return type_error_result(
                     &sma.span,
-
                     format!("Type '{}' has no property named '{}'", left_type, field.name)
                 );
             }
@@ -1071,6 +1083,7 @@ fn type_check_cast(ctx: &mut TypeCheckerContext, c: &mut TypeCast) -> TypeCheckR
         (Type::UInt(_), &Type::Float(_)) |
         (Type::Float(_), &Type::Int(_)) |
         (Type::Float(_), &Type::UInt(_)) => valid(c.destination_type.clone()),
+        (Type::Pointer(_), &Type::Pointer(ref to)) if *to.deref() == Type::Void => valid(c.destination_type.clone()),
         (inner_type, _) => type_error_result(&c.span, format!("Cast from type {} to type {} is not allowed", inner_type, c.destination_type))
     }
 }
