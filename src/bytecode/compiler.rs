@@ -1036,7 +1036,9 @@ pub fn compile_to_byte_code(pkg: &Package, target: &Target) -> CompileResult<Byt
         name: pkg.name.clone(),
         functions: HashMap::new(),
         globals: HashMap::new(),
+        imported_functions: Vec::new(),
     };
+
 
     for md in pkg.modules.values() {
         for func in md.externals.values() {
@@ -1058,6 +1060,19 @@ pub fn compile_to_byte_code(pkg: &Package, target: &Target) -> CompileResult<Byt
             }
         }
     }
+
+
+    for import in pkg.imports.values() {
+        for symbol in import.symbols.values() {
+            if let Some(s) = FunctionSignature::from_type(&symbol.name, &symbol.typ) {
+                if ll_mod.functions.contains_key(&symbol.name) {
+                    continue;
+                }
+                ll_mod.imported_functions.push(ByteCodeFunction::new(&s, true));
+            }
+        }
+    }
+
 
     Ok(ll_mod)
 }

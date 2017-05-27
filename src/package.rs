@@ -1,24 +1,26 @@
 use std::fs::{File};
 use std::io::{Read};
+use std::rc::Rc;
 use std::path::{Path, PathBuf};
 use toml;
 
-use ast::TreePrinter;
-use parser::{ParserOptions, parse_files};
+use ast::{Import, TreePrinter};
+use parser::{parse_files};
 use llvmbackend::TargetMachine;
 use bytecode::{compile_to_byte_code, optimize_module, OptimizationLevel};
-use llvmbackend::{CodeGenOptions, OutputType, llvm_code_generation, link};
+use llvmbackend::{CodeGenOptions, OutputType, llvm_code_generation, link, LinkerFlags};
 use compileerror::{CompileResult, CompileError};
 use typechecker::type_check_package;
+use exportlibrary::ExportLibrary;
 
 
 pub struct BuildOptions
 {
-    pub parser_options: ParserOptions,
     pub optimize: bool,
     pub dump_flags: String,
     pub target_machine: TargetMachine,
     pub sources_directory: String,
+    pub import_directories: Vec<PathBuf>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -28,6 +30,7 @@ pub struct PackageTarget
     #[serde(rename = "type")]
     output_type: OutputType,
     path: Option<PathBuf>,
+    depends: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -64,6 +67,7 @@ impl PackageData
                     name,
                     output_type,
                     path: Some(p.to_owned()),
+                    depends: None,
                 }
             ],
             ..Default::default()
@@ -85,7 +89,7 @@ impl PackageData
     {
         println!("Compiling for {}", build_options.target_machine.target.triplet);
         for t in &self.target {
-            build_target(t, build_options)?;
+            t.build(build_options)?;
         }
 
         Ok(())
@@ -101,71 +105,133 @@ fn output_file_name(name: &str, output_type: OutputType) -> String
     }
 }
 
-fn build_target(target: &PackageTarget, build_options: &BuildOptions) -> CompileResult<()>
+#[derive(Default)]
+struct PackageTargetDeps
 {
-    let single_file = format!("{}/{}.mhr", build_options.sources_directory, target.name);
-    let dir_name = format!("{}/{}", build_options.sources_directory, target.name);
-
-    let path = if let Some(ref path) = target.path {
-        path.as_path()
-    } else {
-        let path = Path::new(&single_file);
-        if path.exists() {
-            path
-        } else {
-            Path::new(&dir_name)
-        }
-    };
-
-    let mut pkg = if path.exists() && path.is_file() {
-        parse_files(&path, &target.name, &build_options.target_machine.target)?
-    } else {
-        parse_files(&path, &target.name, &build_options.target_machine.target)?
-    };
-
-    if build_options.dump_flags.contains("ast") || build_options.dump_flags.contains("all") {
-        println!("AST: {}", pkg.name);
-        pkg.print(0);
-    }
-
-    type_check_package(&mut pkg, &build_options.target_machine.target)?;
-    let mut bc_mod = compile_to_byte_code(&pkg, &build_options.target_machine.target)?;
-
-    if build_options.dump_flags.contains("bytecode") || build_options.dump_flags.contains("all") {
-        println!("bytecode:");
-        println!("------\n");
-        println!("{}", bc_mod);
-        println!("------\n");
-    }
-
-    if build_options.optimize {
-        optimize_module(&mut bc_mod, OptimizationLevel::Normal);
-    } else {
-        optimize_module(&mut bc_mod, OptimizationLevel::Minimal);
-    }
-
-    let opts = CodeGenOptions{
-        dump_ir: build_options.dump_flags.contains("ir") ||  build_options.dump_flags.contains("all"),
-        build_dir: format!("build/{}/{}", build_options.target_machine.target.triplet, target.name),
-        output_file_name: output_file_name(&target.name, target.output_type),
-        output_type: target.output_type,
-        optimize: build_options.optimize,
-    };
-
-    let ctx = llvm_code_generation(&bc_mod, &build_options.target_machine).map_err(CompileError::Other)?;
-    link(&ctx, &opts)?;
-
-
-    match opts.output_type
-    {
-        OutputType::SharedLib | OutputType::StaticLib => {
-            let path = format!("{}/{}.mhr.exports", opts.build_dir, target.name);
-            let file = File::create(&path)?;
-            println!("  Generating {}", path);
-            pkg.create_export_library(file)?;
-        }
-
-        _ => (),
-    }
-    Ok(())
+    linker_flags: LinkerFlags,
+    imports: Vec<Rc<Import>>,
 }
+
+
+impl PackageTarget
+{
+    fn find_dependency(&self, dep: &str, build_options: &BuildOptions, deps: &mut PackageTargetDeps) -> CompileResult<()>
+    {
+        let path = format!("build/{}/{}/{}.mhr.exports", build_options.target_machine.target.triplet, dep, dep);
+        if let Ok(file) = File::open(&path) {
+            let export_library = ExportLibrary::load(file)?;
+            deps.imports.extend(export_library.imports.iter().cloned());
+
+            match export_library.output_type {
+                OutputType::StaticLib => {
+                    let lib_path = format!("build/{}/{}/lib{}.a",  build_options.target_machine.target.triplet, dep, dep);
+                    deps.linker_flags.linker_static_libs.push(lib_path);
+                    Ok(())
+                }
+
+                OutputType::SharedLib => {
+                    let lib_path = format!("build/{}/{}/",  build_options.target_machine.target.triplet, dep);
+                    deps.linker_flags.linker_paths.push(lib_path);
+                    deps.linker_flags.linker_shared_libs.push(dep.into());
+                    Ok(())
+                }
+
+                OutputType::Binary => {
+                    Err(CompileError::Other(format!("Depedency {} is a binary, it must be a static or shared library", dep)))
+                }
+            }
+
+
+        } else {
+            Err(CompileError::Other(format!("Unable to find dependency {}", dep)))
+        }
+    }
+
+    fn find_dependencies(&self, build_options: &BuildOptions) -> CompileResult<PackageTargetDeps>
+    {
+        let mut pkg_deps = PackageTargetDeps::default();
+        if let Some(ref deps) = self.depends {
+            for dep in deps {
+                self.find_dependency(dep, build_options, &mut pkg_deps)?;
+            }
+        }
+
+        Ok(pkg_deps)
+    }
+
+
+    fn build(&self, build_options: &BuildOptions) -> CompileResult<()>
+    {
+        println!("Building target {}", self.name);
+        let single_file = format!("{}/{}.mhr", build_options.sources_directory, self.name);
+        let dir_name = format!("{}/{}", build_options.sources_directory, self.name);
+
+        let path = if let Some(ref path) = self.path {
+            path.as_path()
+        } else {
+            let path = Path::new(&single_file);
+            if path.exists() {
+                path
+            } else {
+                Path::new(&dir_name)
+            }
+        };
+
+        let pkg_deps = self.find_dependencies(build_options)?;
+        let mut pkg = if path.exists() && path.is_file() {
+            parse_files(&path, &self.name, &build_options.target_machine.target, &pkg_deps.imports)?
+        } else {
+            parse_files(&path, &self.name, &build_options.target_machine.target, &pkg_deps.imports)?
+        };
+
+        if build_options.dump_flags.contains("ast") || build_options.dump_flags.contains("all") {
+            println!("AST: {}", pkg.name);
+            pkg.print(0);
+        }
+
+        type_check_package(&mut pkg, &build_options.target_machine.target)?;
+        let mut bc_mod = compile_to_byte_code(&pkg, &build_options.target_machine.target)?;
+
+        if build_options.dump_flags.contains("bytecode") || build_options.dump_flags.contains("all") {
+            println!("bytecode:");
+            println!("------\n");
+            println!("{}", bc_mod);
+            println!("------\n");
+        }
+
+        if build_options.optimize {
+            optimize_module(&mut bc_mod, OptimizationLevel::Normal);
+        } else {
+            optimize_module(&mut bc_mod, OptimizationLevel::Minimal);
+        }
+
+        let opts = CodeGenOptions{
+            dump_ir: build_options.dump_flags.contains("ir") ||  build_options.dump_flags.contains("all"),
+            build_dir: format!("build/{}/{}", build_options.target_machine.target.triplet, self.name),
+            output_file_name: output_file_name(&self.name, self.output_type),
+            output_type: self.output_type,
+            optimize: build_options.optimize,
+        };
+
+
+
+        let ctx = llvm_code_generation(&bc_mod, &build_options.target_machine).map_err(CompileError::Other)?;
+        link(&ctx, &opts, &pkg_deps.linker_flags)?;
+
+        match opts.output_type
+        {
+            OutputType::SharedLib | OutputType::StaticLib => {
+                let path = format!("{}/{}.mhr.exports", opts.build_dir, self.name);
+                let file = File::create(&path)?;
+                println!("  Generating {}", path);
+                let export_lib = ExportLibrary::new(&pkg, opts.output_type);
+                export_lib.save(file)?;
+            }
+
+            _ => (),
+        }
+        Ok(())
+    }
+}
+
+

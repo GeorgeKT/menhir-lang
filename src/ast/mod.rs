@@ -52,11 +52,6 @@ pub use self::types::*;
 
 use std::collections::{HashMap};
 use std::rc::Rc;
-use std::io;
-
-use serde;
-use serde::{Serialize};
-use rmp_serde;
 
 pub fn prefix(level: usize) -> String
 {
@@ -92,24 +87,8 @@ impl Package
             imports: HashMap::new(),
         }
     }
-
-    pub fn create_export_library<W: io::Write>(&self, writer: W) -> Result<(), String>
-    {
-        let mut s = rmp_serde::Serializer::new(writer);
-        self.serialize(&mut s)
-            .map_err(|e| format!("Serialization error: {}", e))
-    }
 }
 
-impl serde::Serialize for Package
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where S: serde::Serializer
-    {
-        serializer.collect_seq(self.modules.values()
-            .map(|module: &Module| module.get_exported_symbols()))
-    }
-}
 
 impl TreePrinter for Package
 {
@@ -122,11 +101,4 @@ impl TreePrinter for Package
             println!("{}--------------------\n", p);
         }
     }
-}
-
-pub fn load_export_library<R: io::Read>(reader: R) -> Result<Vec<Import>, String>
-{
-    let result = rmp_serde::decode::from_read(reader)
-        .map_err(|e| format!("Deserialization error: {}", e))?;
-    Ok(result)
 }

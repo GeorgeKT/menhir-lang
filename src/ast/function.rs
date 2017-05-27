@@ -44,6 +44,30 @@ pub struct FunctionSignature
 
 impl FunctionSignature
 {
+    pub fn from_type(name: &str, typ: &Type) -> Option<FunctionSignature>
+    {
+        if let Type::Func(ref ft) = *typ {
+            let s = FunctionSignature{
+                name: name.into(),
+                return_type: ft.return_type.clone(),
+                args: ft.args.iter().enumerate().map(|(idx, at)| {
+                   Argument::new(
+                       format!("arg{}", idx),
+                       at.clone(),
+                       false,
+                       Span::default()
+                   )
+                }).collect(),
+                span: Span::default(),
+                typ: typ.clone(),
+            };
+
+            Some(s)
+        } else {
+            None
+        }
+    }
+
     pub fn get_type(&self) -> Type
     {
         func_type(

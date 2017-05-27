@@ -83,7 +83,7 @@ impl fmt::Display for Import
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
     {
-        writeln!(f, "{}:", self.namespace)?;
+        writeln!(f, "Module {}:", self.namespace)?;
         for symbol in self.symbols.values() {
             writeln!(f, "  {}: type {}", symbol.name, symbol.typ)?;
         }

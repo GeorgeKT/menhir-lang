@@ -17,6 +17,7 @@ pub struct ByteCodeModule
 {
     pub name: String,
     pub functions: HashMap<String, ByteCodeFunction>,
+    pub imported_functions: Vec<ByteCodeFunction>,
     pub globals: HashMap<String, Constant>,
 }
 

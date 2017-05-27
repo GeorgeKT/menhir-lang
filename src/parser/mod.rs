@@ -8,7 +8,7 @@ mod tests;
 #[cfg(test)]
 pub use self::tests::{th_expr, th_mod};
 
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 use std::fs;
 use std::io::{Read};
 use std::rc::Rc;
@@ -23,21 +23,6 @@ use target::Target;
 use self::tokenqueue::{TokenQueue};
 use self::lexer::{Lexer};
 use self::tokens::{Token, TokenKind};
-
-pub struct ParserOptions
-{
-    pub import_dirs: Vec<PathBuf>,
-}
-
-impl Default for ParserOptions
-{
-    fn default() -> Self
-    {
-        ParserOptions{
-            import_dirs: Vec::new(),
-        }
-    }
-}
 
 fn is_end_of_expression(tok: &Token) -> bool
 {
@@ -1214,9 +1199,13 @@ fn parse_file_tree(pkg: &mut Package, dir: &Path, namespace: &str, target: &Targ
     Ok(())
 }
 
-pub fn parse_files(path: &Path, root_namespace: &str, target: &Target) -> CompileResult<Package>
+pub fn parse_files(path: &Path, root_namespace: &str, target: &Target, imports: &[Rc<Import>]) -> CompileResult<Package>
 {
     let mut pkg = Package::new(root_namespace);
+    for import in imports {
+        pkg.imports.insert(import.namespace.clone(), import.clone());
+    }
+
     if path.exists() && path.is_file() {
         pkg.modules.insert(root_namespace.into(), parse_file(path, root_namespace, target)?);
     } else {

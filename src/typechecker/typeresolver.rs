@@ -208,7 +208,7 @@ fn resolve_interface_types(ctx: &mut TypeCheckerContext, i: &mut Interface, mode
 fn add_import(ctx: &mut TypeCheckerContext, import: &Import) -> CompileResult<()>
 {
     for (name, symbol) in &import.symbols {
-        ctx.add(name, symbol.typ.clone(), symbol.mutable, &symbol.span)?;
+        ctx.add_external(name, symbol.typ.clone(), symbol.mutable, &symbol.span)?;
     }
     Ok(())
 }

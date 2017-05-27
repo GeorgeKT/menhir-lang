@@ -83,6 +83,7 @@ pub struct TypeCheckerContext<'a>
 {
     stack: Vec<StackFrame>,
     globals: StackFrame,
+    externals: StackFrame,
     pub target: &'a Target
 }
 
@@ -93,7 +94,8 @@ impl<'a> TypeCheckerContext<'a>
         TypeCheckerContext{
             stack: vec![],
             globals: StackFrame::new(false),
-            target: target
+            externals: StackFrame::new(false),
+            target: target,
         }
     }
 
@@ -110,7 +112,12 @@ impl<'a> TypeCheckerContext<'a>
             }
         }
 
-        self.globals.resolve(name)
+        let symbol = self.globals.resolve(name);
+        if symbol.is_some() {
+            return symbol;
+        }
+
+        self.externals.resolve(name)
     }
 
     pub fn add(&mut self, name: &str, t: Type, mutable: bool, span: &Span) -> CompileResult<()>
@@ -120,6 +127,11 @@ impl<'a> TypeCheckerContext<'a>
         } else {
             self.globals.add(name, t, mutable, span)
         }
+    }
+
+    pub fn add_external(&mut self, name: &str, t: Type, mutable: bool, span: &Span) -> CompileResult<()>
+    {
+        self.externals.add(name, t, mutable, span)
     }
 
     pub fn add_global(&mut self, name: &str, t: Type, mutable: bool, span: &Span) -> CompileResult<()>

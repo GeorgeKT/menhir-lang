@@ -13,6 +13,7 @@ extern crate rmp_serde;
 mod ast;
 mod compileerror;
 mod bytecode;
+mod exportlibrary;
 mod parser;
 mod typechecker;
 mod span;
@@ -21,29 +22,27 @@ mod target;
 mod package;
 
 use std::fs::File;
-use std::path::{PathBuf};
 use std::process::exit;
+use std::path::PathBuf;
 use clap::ArgMatches;
 
-use parser::{ParserOptions};
 use compileerror::{CompileResult};
 use llvmbackend::{OutputType, llvm_init};
 use package::{PackageData, BuildOptions};
+use exportlibrary::ExportLibrary;
 
 
 fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
 {
     let input_file = matches.value_of("INPUT_FILE").expect("No input file given");
     let build_options = BuildOptions{
-        parser_options: ParserOptions{
-            import_dirs: matches.value_of("IMPORTS")
-                .map(|dirs| dirs.split(',').map(PathBuf::from).collect())
-                .unwrap_or_else(Vec::new),
-        },
         optimize: matches.is_present("OPTIMIZE"),
         dump_flags: dump_flags.into(),
         target_machine: llvm_init()?,
         sources_directory: String::new(),
+        import_directories: matches.value_of("IMPORTS")
+            .map(|dirs| dirs.split(',').map(PathBuf::from).collect())
+            .unwrap_or_else(Vec::new),
     };
 
     let output_type = match matches.value_of("LIB") {
@@ -68,15 +67,13 @@ fn build_package_command(matches: &ArgMatches, dump_flags: &str) -> CompileResul
 
     let pkg = PackageData::load(package_toml)?;
     let build_options = BuildOptions{
-        parser_options: ParserOptions{
-            import_dirs: matches.value_of("IMPORTS")
-                .map(|dirs| dirs.split(',').map(PathBuf::from).collect())
-                .unwrap_or_else(Vec::new),
-        },
         optimize: matches.is_present("OPTIMIZE"),
         dump_flags: dump_flags.into(),
         target_machine: llvm_init()?,
         sources_directory: "src".into(),
+        import_directories: matches.value_of("IMPORTS")
+            .map(|dirs| dirs.split(',').map(PathBuf::from).collect())
+            .unwrap_or_else(Vec::new),
     };
     pkg.build(&build_options)?;
     Ok(0)
@@ -86,11 +83,8 @@ fn exports_command(matches: &ArgMatches) -> CompileResult<i32>
 {
     let exports_file_path = matches.value_of("EXPORTS_FILE").ok_or(format!("No exports file given"))?;
     let exports_file = File::open(&exports_file_path)?;
-    let exports = ast::load_export_library(exports_file)?;
-    for export in exports {
-        print!("{}", export);
-    }
-
+    let lib = ExportLibrary::load(exports_file)?;
+    println!("{}", lib);
     Ok(0)
 }
 
