@@ -106,6 +106,13 @@ pub fn llvm_init() -> Result<TargetMachine, String>
     }
 }
 
+pub fn llvm_shutdown()
+{
+    unsafe {
+        LLVMShutdown();
+    }
+}
+
 unsafe fn gen_global(ctx: &mut Context, glob_name: &str, glob_value: &Constant)
 {
     let v = ValueRef::from_const(&ctx, glob_value);

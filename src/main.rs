@@ -27,7 +27,7 @@ use std::path::PathBuf;
 use clap::ArgMatches;
 
 use compileerror::{CompileResult};
-use llvmbackend::{OutputType, llvm_init};
+use llvmbackend::{OutputType, llvm_init, llvm_shutdown};
 use package::{PackageData, BuildOptions};
 use exportlibrary::ExportLibrary;
 
@@ -140,9 +140,13 @@ fn main()
 {
     match run()
     {
-        Ok(ret) => exit(ret),
+        Ok(ret) => {
+            llvm_shutdown();
+            exit(ret)
+        },
         Err(e) => {
             e.print();
+            llvm_shutdown();
             exit(-1);
         },
     }
