@@ -6,7 +6,7 @@ use ast::*;
 use target::Target;
 use span::Span;
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct SumTypeCase
 {
     pub name: String,
@@ -19,7 +19,7 @@ pub trait SumTypeCaseIndexOf
     fn num_cases(&self) -> usize;
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct SumType
 {
     pub name: String,
@@ -39,7 +39,7 @@ impl SumTypeCaseIndexOf for SumType
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct EnumType
 {
     pub name: String,
@@ -59,48 +59,48 @@ impl SumTypeCaseIndexOf for EnumType
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct StructMember
 {
     pub name: String,
     pub typ: Type,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct StructType
 {
     pub name: String,
     pub members: Vec<StructMember>,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct FuncType
 {
     pub args: Vec<Type>,
     pub return_type: Type,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct ArrayType
 {
     pub element_type: Type,
     pub len: usize,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct SliceType
 {
     pub element_type: Type,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct UnresolvedType
 {
     pub name: String,
     pub generic_args: Vec<Type>,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct InterfaceType
 {
     pub name: String,
@@ -108,7 +108,7 @@ pub struct InterfaceType
     pub functions: Vec<FunctionSignature>
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub enum GenericType
 {
     Any(String),
@@ -116,7 +116,7 @@ pub enum GenericType
 }
 
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, Serialize, Deserialize)]
 pub enum IntSize
 {
     I8,
@@ -146,7 +146,7 @@ impl fmt::Display for IntSize
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Hash, Serialize, Deserialize)]
 pub enum FloatSize
 {
     F32,
@@ -164,7 +164,7 @@ impl fmt::Display for FloatSize
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub enum Type
 {
     Void,
@@ -189,7 +189,7 @@ pub enum Type
     Interface(Rc<InterfaceType>),
 }
 
-#[derive(Debug,  Eq, PartialEq, Clone)]
+#[derive(Debug,  Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct TypeAlias
 {
     pub name: String,
@@ -254,6 +254,25 @@ impl Type
 
             (&Type::Optional(ref inner), _) if from_type.is_optional_of(&Type::Unknown) => {
                 Some(nil_expr_with_type(expr.span(), inner.deref().clone()))
+            }
+
+            (&Type::Void, _) => {
+                Some(Expression::Block(Box::new(Block{
+                    expressions: vec![
+                        expr.clone(),
+                        Expression::Void,
+                    ],
+                    typ: Type::Void,
+                    span: expr.span(),
+                })))
+            }
+
+            (&Type::Pointer(ref to), &Type::Pointer(_)) => {
+                if *to.deref() == Type::Void {
+                    Some(type_cast(expr.clone(), ptr_type(Type::Void), expr.span()))
+                } else {
+                    None
+                }
             }
 
             _ => None,
@@ -340,15 +359,19 @@ impl Type
 
     pub fn get_property_type(&self, name: &str, target: &Target) -> Option<(Type, MemberAccessType)>
     {
-        match *self
+        match (self, name)
         {
-            Type::Array(_) | Type::Slice(_) | Type::String => {
-                match name
-                {
-                    "len" => Some((target.native_uint_type.clone(), MemberAccessType::Property(Property::Len))),
-                    _ => None,
-                }
-            },
+            (&Type::Array(_), "len") |
+            (&Type::Slice(_), "len") |
+            (&Type::String, "len") =>
+                Some((target.native_uint_type.clone(), MemberAccessType::Property(Property::Len))),
+
+            (&Type::Slice(ref st), "data") =>
+                Some((ptr_type(st.element_type.clone()), MemberAccessType::Property(Property::Data))),
+
+            (&Type::String, "data") =>
+                Some((ptr_type(Type::UInt(IntSize::I8)), MemberAccessType::Property(Property::Data))),
+
             _ => None,
         }
     }
@@ -375,6 +398,14 @@ impl Type
     {
         if let Type::Pointer(_) = *self {
             true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_pointer_to(&self, t: &Type) -> bool {
+        if let Type::Pointer(ref inner) = *self {
+            *inner.deref() == *t
         } else {
             false
         }
@@ -424,6 +455,11 @@ impl Type
         } else {
             None
         }
+    }
+
+    pub fn ptr_of(&self) -> Type
+    {
+        Type::Pointer(Rc::new(self.clone()))
     }
 }
 

@@ -30,7 +30,7 @@ for file in testcode/*.mhr; do
 		echo "---------------------"
 		fail_count=$((fail_count + 1))
 	else
-		build/${triplet}/${name}
+		build/${triplet}/${name}/${name}
 		test_ret_value=$?
 		test_expected_ret_value=$(head -n 1 $file | cut -b 6-)
 		if [ "$test_ret_value" -ne "$test_expected_ret_value" ]; then

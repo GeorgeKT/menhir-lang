@@ -13,7 +13,7 @@ use bytecode::{
 
 fn rvo_needed(func: &ByteCodeFunction) -> bool
 {
-    !func.sig.return_type.pass_by_value()
+    !func.sig.return_type.pass_by_value() && func.sig.return_type != Type::Void
 }
 
 fn rvo_func(func: &mut ByteCodeFunction)
@@ -58,6 +58,13 @@ pub fn return_value_optimization(module: &mut ByteCodeModule)
 {
     let mut to_replace = Vec::new();
     for func in module.functions.values_mut() {
+        if rvo_needed(func) {
+            rvo_func(func);
+            to_replace.push(func.sig.name.clone());
+        }
+    }
+
+    for func in &mut module.imported_functions {
         if rvo_needed(func) {
             rvo_func(func);
             to_replace.push(func.sig.name.clone());

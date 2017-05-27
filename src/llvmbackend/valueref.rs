@@ -87,6 +87,7 @@ impl ValueRef
         ValueRef::new(glob, array_type)
     }
 
+
     pub unsafe fn store(&self, ctx: &Context, val: &ValueRef)
     {
         let element_type = self.typ.get_pointer_element_type().unwrap_or_else(|| panic!("Store not allowed on type {}", self.typ));
@@ -121,7 +122,11 @@ impl ValueRef
 
             _ => {
                 if element_type.pass_by_value() {
-                    LLVMBuildStore(ctx.builder, val.load(ctx), self.value);
+                    if self.typ.is_pointer_to(&val.typ) {
+                        LLVMBuildStore(ctx.builder, val.value, self.value);
+                    } else {
+                        LLVMBuildStore(ctx.builder, val.load(ctx), self.value);
+                    }
                 } else {
                     copy(ctx, self.value, val.value, ctx.resolve_type(element_type))
                 }
@@ -312,6 +317,22 @@ impl ValueRef
                 ValueRef::new(
                     LLVMBuildLoad(ctx.builder, len_ptr, cstr!("len")),
                     native_uint_type,
+                )
+            },
+
+            (&Type::Slice(ref st), ByteCodeProperty::Data) => unsafe {
+                let data_ptr = self.slice_data_ptr(ctx);
+                ValueRef::new(
+                    LLVMBuildLoad(ctx.builder, data_ptr, cstr!("data")),
+                    st.element_type.ptr_of(),
+                )
+            },
+
+            (&Type::String, ByteCodeProperty::Data) => unsafe {
+                let data_ptr = self.slice_data_ptr(ctx);
+                ValueRef::new(
+                    LLVMBuildLoad(ctx.builder, data_ptr, cstr!("data")),
+                    ptr_type(Type::UInt(IntSize::I8)),
                 )
             },
 

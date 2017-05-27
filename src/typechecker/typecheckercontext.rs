@@ -1,4 +1,4 @@
-use std::collections::{HashMap};
+use std::collections::hash_map::{HashMap, Entry};
 use ast::*;
 use compileerror::*;
 use span::Span;
@@ -55,10 +55,20 @@ impl StackFrame
 
     pub fn add(&mut self, name: &str, t: Type, mutable: bool, span: &Span) -> CompileResult<()>
     {
-        if self.symbols.insert(name.into(), (t, mutable)).is_some() {
-            type_error_result(span, format!("Symbol {} has already been defined", name))
-        } else {
-            Ok(())
+        match self.symbols.entry(name.into()) {
+            Entry::Occupied(e) => {
+                let value = e.get();
+                if value.0 != t {
+                    type_error_result(span, format!("Symbol {} has already been defined with type {}", name, value.0))
+                } else {
+                    Ok(())
+                }
+            }
+
+            Entry::Vacant(v) => {
+                v.insert((t, mutable));
+                Ok(())
+            }
         }
     }
 
@@ -73,6 +83,7 @@ pub struct TypeCheckerContext<'a>
 {
     stack: Vec<StackFrame>,
     globals: StackFrame,
+    externals: StackFrame,
     pub target: &'a Target
 }
 
@@ -83,7 +94,8 @@ impl<'a> TypeCheckerContext<'a>
         TypeCheckerContext{
             stack: vec![],
             globals: StackFrame::new(false),
-            target: target
+            externals: StackFrame::new(false),
+            target: target,
         }
     }
 
@@ -100,7 +112,12 @@ impl<'a> TypeCheckerContext<'a>
             }
         }
 
-        self.globals.resolve(name)
+        let symbol = self.globals.resolve(name);
+        if symbol.is_some() {
+            return symbol;
+        }
+
+        self.externals.resolve(name)
     }
 
     pub fn add(&mut self, name: &str, t: Type, mutable: bool, span: &Span) -> CompileResult<()>
@@ -110,6 +127,11 @@ impl<'a> TypeCheckerContext<'a>
         } else {
             self.globals.add(name, t, mutable, span)
         }
+    }
+
+    pub fn add_external(&mut self, name: &str, t: Type, mutable: bool, span: &Span) -> CompileResult<()>
+    {
+        self.externals.add(name, t, mutable, span)
     }
 
     pub fn add_global(&mut self, name: &str, t: Type, mutable: bool, span: &Span) -> CompileResult<()>

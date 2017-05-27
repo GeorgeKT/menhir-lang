@@ -8,32 +8,21 @@ mod tests;
 #[cfg(test)]
 pub use self::tests::{th_expr, th_mod};
 
-use std::path::PathBuf;
+use std::path::{Path};
 use std::fs;
-use std::io::Read;
+use std::io::{Read};
 use std::rc::Rc;
+use std::ffi::OsStr;
+use std::ops::Deref;
+
 use ast::*;
-use compileerror::{CompileResult, parse_error_result};
+use compileerror::{CompileResult, CompileError, parse_error_result};
 use span::{Span};
 use target::Target;
+
 use self::tokenqueue::{TokenQueue};
 use self::lexer::{Lexer};
 use self::tokens::{Token, TokenKind};
-
-pub struct ParserOptions
-{
-    pub import_dirs: Vec<PathBuf>,
-}
-
-impl Default for ParserOptions
-{
-    fn default() -> Self
-    {
-        ParserOptions{
-            import_dirs: Vec::new(),
-        }
-    }
-}
 
 fn is_end_of_expression(tok: &Token) -> bool
 {
@@ -304,6 +293,7 @@ fn to_primitive(name: &str, target: &Target) -> Option<Type>
         "bool" => Some(Type::Bool),
         "char" => Some(Type::Char),
         "Self" => Some(Type::SelfType),
+        "void" => Some(Type::Void),
         _ => None,
     }
 }
@@ -809,6 +799,10 @@ fn parse_block(tq: &mut TokenQueue, current_file: &str, indent_level: usize, tar
             break;
         }
 
+        if tq.is_next(&TokenKind::Indent(block_indent_level)) {
+            continue;
+        }
+
         let e = parse_expression(tq, block_indent_level, target)?;
         expressions.push(e);
         ends_with_semicolon = false;
@@ -984,7 +978,12 @@ fn parse_expression_continued(tq: &mut TokenQueue, lhs: Expression, indent_level
         TokenKind::Assign => {
             let rhs = parse_expression(tq, indent_level, target)?;
             let span = lhs.span().expanded(tq.pos());
-            Ok(assign(lhs, rhs, span))
+
+            match lhs {
+                Expression::NameRef(nr) => Ok(assign(AssignTarget::Var(nr), rhs, span)),
+                Expression::MemberAccess(ma) => Ok(assign(AssignTarget::MemberAccess(*ma), rhs, span)),
+                _ => parse_error_result(&lhs.span(), "Expression not allowed on the left hand side of an assignment")
+            }
         },
 
         TokenKind::BinaryOperator(BinaryOperator::Dot) => {
@@ -1011,31 +1010,7 @@ pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize, target: &Targe
     parse_expression_continued(tq, lhs, indent_level, target)
 }
 
-pub fn parse_file(options: &ParserOptions, file_path: &str, target: &Target) -> CompileResult<Module>
-{
-    use std::path::Path;
-    use std::ffi::OsStr;
-
-    let mut file = fs::File::open(file_path)?;
-    let path = Path::new(file_path);
-    let module_name: &OsStr = path.file_stem().expect("Invalid filename");
-    parse_module(options, &mut file, module_name.to_str().expect("Invalid UTF8 filename"), file_path, target)
-}
-
-fn parse_import(options: &ParserOptions, import_name: &str, target: &Target) -> CompileResult<Module>
-{
-    let file_name = format!("{}.mhr", import_name);
-    for dir in &options.import_dirs {
-        let dwf = dir.join(&file_name);
-        if let Ok(mut file) = fs::File::open(&dwf) {
-            return parse_module(options, &mut file, import_name, dwf.to_str().expect("Invalid file name"), target);
-        }
-    }
-
-    parse_error_result(&Span::default(), format!("Unable to find file for import {}", import_name))
-}
-
-fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool, indent_level: usize, target: &Target) -> CompileResult<()>
+fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool, indent_level: usize, namespace: &str, target: &Target) -> CompileResult<()>
 {
     while !is_end_of_bindings(tq, indent_level)
     {
@@ -1047,7 +1022,8 @@ fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool
             return parse_error_result(&span, format!("Global {} already defined in this module", name));
         }
 
-        module.globals.insert(name.clone(), global_binding(name, init, mutable, span.expanded(tq.pos())));
+        let full_name = namespaced(namespace, &name);
+        module.globals.insert(full_name.clone(), global_binding(full_name, init, mutable, span.expanded(tq.pos())));
         eat_comma(tq)?;
     }
 
@@ -1076,11 +1052,37 @@ fn parse_interface(module: &mut Module, tq: &mut TokenQueue, namespace: &str, sp
     Ok(())
 }
 
-pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, name: &str, file_name: &str, target: &Target) -> CompileResult<Module>
+fn parse_import_name(tq: &mut TokenQueue) -> CompileResult<ImportName>
+{
+    let mut namespace = Vec::new();
+    let mut span = Span::default();
+    loop {
+        let (name, name_span) = tq.expect_identifier()?;
+        if namespace.is_empty() {
+            span = name_span;
+        } else {
+            span = span.expanded(name_span.end);
+        }
+
+        namespace.push(name);
+        if tq.is_next(&TokenKind::DoubleColon) {
+            tq.pop()?;
+        } else {
+            break;
+        }
+    }
+
+    Ok(ImportName::new(namespace, span))
+}
+
+fn parse_module<Input: Read>(
+    module: &mut Module,
+    input: &mut Input,
+    namespace: &str,
+    file_name: &str,
+    target: &Target) -> CompileResult<()>
 {
     let mut tq = Lexer::new(file_name).read(input)?;
-    let mut module = Module::new(name);
-    let namespace = name;
 
     let add_function = |module: &mut Module, func: Function| -> CompileResult<()> {
         if module.functions.contains_key(&func.sig.name) {
@@ -1101,15 +1103,15 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
             }
 
             TokenKind::Interface => {
-                parse_interface(&mut module, &mut tq, namespace, &tok.span, indent_level, target)?;
+                parse_interface(module, &mut tq, namespace, &tok.span, indent_level, target)?;
             }
 
             TokenKind::Let => {
-                parse_global_bindings(&mut module, &mut tq, false, indent_level, target)?;
+                parse_global_bindings(module, &mut tq, false, indent_level, namespace, target)?;
             }
 
             TokenKind::Var => {
-                parse_global_bindings(&mut module, &mut tq, true, indent_level, target)?;
+                parse_global_bindings(module, &mut tq, true, indent_level, namespace, target)?;
             }
 
             TokenKind::Struct => {
@@ -1144,12 +1146,8 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
             TokenKind::Import => {
                 loop
                 {
-                    let (name, _) = tq.expect_identifier()?;
-                    if !module.imports.contains(&name) {
-                        let m = parse_import(options, &name, target)?;
-                        module.import(&m);
-                    }
-
+                    let import = parse_import_name(&mut tq)?;
+                    module.import_names.insert(import);
                     if tq.is_next(&TokenKind::Comma) {
                         tq.pop()?;
                     } else {
@@ -1160,7 +1158,7 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
 
             TokenKind::Func => {
                 let func = parse_function_declaration(&mut tq, namespace, &tok.span, indent_level, target)?;
-                add_function(&mut module, func)?;
+                add_function(module, func)?;
             }
 
             _ => {
@@ -1170,5 +1168,66 @@ pub fn parse_module<Input: Read>(options: &ParserOptions, input: &mut Input, nam
         }
     }
 
+    Ok(())
+}
+
+fn parse_file(file_path: &Path, namespace: &str, target: &Target) -> CompileResult<Module>
+{
+    println!("  Parsing {}", file_path.to_string_lossy());
+    let mut module = Module::new(namespace);
+    let mut file = fs::File::open(file_path)?;
+    parse_module(&mut module, &mut file, namespace, file_path.to_string_lossy().deref(), target)?;
     Ok(module)
 }
+
+fn parse_file_tree(pkg: &mut Package, dir: &Path, namespace: &str, target: &Target) -> CompileResult<()>
+{
+    for entry in dir.read_dir()? {
+        if let Ok(entry) = entry {
+            let path = entry.path();
+            if path.is_dir() {
+                let sub_ns = format!("{}::{}", namespace, path.file_stem().expect("Path must have a stem").to_string_lossy());
+                parse_file_tree(pkg, &path, &sub_ns, target)?;
+            } else if path.extension() == Some(OsStr::new("mhr")) {
+                let sub_ns = format!("{}::{}", namespace, path.file_stem().expect("Path must have a stem").to_string_lossy());
+                let module = parse_file(&path, &sub_ns, target)?;
+                pkg.modules.insert(sub_ns, module);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub fn parse_files(path: &Path, root_namespace: &str, target: &Target, imports: &[Rc<Import>]) -> CompileResult<Package>
+{
+    let mut pkg = Package::new(root_namespace);
+    for import in imports {
+        pkg.imports.insert(import.namespace.clone(), import.clone());
+    }
+
+    if path.exists() && path.is_file() {
+        pkg.modules.insert(root_namespace.into(), parse_file(path, root_namespace, target)?);
+    } else {
+        if !path.exists() || !path.is_dir() {
+            return Err(CompileError::Other(format!("Cannot find {}.mhr or the directory {}", root_namespace, root_namespace)))
+        }
+        parse_file_tree(&mut pkg, path, root_namespace, target)?;
+    }
+
+    Ok(pkg)
+}
+
+#[cfg(test)]
+pub fn parse_str(code: &str, root_namespace: &str, target: &Target) -> CompileResult<Package>
+{
+    use std::io::Cursor;
+    
+    let mut pkg = Package::new(root_namespace);
+    let mut module = Module::new(root_namespace);
+    let mut cursor = Cursor::new(code);
+    parse_module(&mut module, &mut cursor, root_namespace, "", target)?;
+    pkg.modules.insert(root_namespace.into(), module);
+    Ok(pkg)
+}
+

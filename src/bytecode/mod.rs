@@ -17,8 +17,8 @@ pub struct ByteCodeModule
 {
     pub name: String,
     pub functions: HashMap<String, ByteCodeFunction>,
+    pub imported_functions: Vec<ByteCodeFunction>,
     pub globals: HashMap<String, Constant>,
-    pub exit_function: ByteCodeFunction,
 }
 
 impl ByteCodeModule
@@ -30,11 +30,7 @@ impl ByteCodeModule
 
     pub fn get_function(&self, name: &str) -> Option<&ByteCodeFunction>
     {
-        if name == self.exit_function.sig.name {
-            Some(&self.exit_function)
-        } else {
-            self.functions.get(name)
-        }
+        self.functions.get(name)
     }
 }
 
@@ -60,35 +56,32 @@ impl fmt::Display for ByteCodeModule
 pub mod test
 {
     use compileerror::CompileResult;
-    use std::io::Cursor;
-    use parser::{ParserOptions, parse_module};
+    use parser::{parse_str};
     use bytecode::{ByteCodeModule, compile_to_byte_code};
-    use typechecker::type_check_module;
+    use typechecker::type_check_package;
     use ast::{TreePrinter, IntSize};
     use target::Target;
 
     pub fn generate_byte_code(prog: &str, dump: bool) -> CompileResult<ByteCodeModule>
     {
         let target = Target::new(IntSize::I32, "");
-        let mut cursor = Cursor::new(prog);
-        let parser_options = ParserOptions::default();
-        let mut md = parse_module(&parser_options, &mut cursor, "test", "", &target)?;
+        let mut pkg = parse_str(prog, "test", &target)?;
 
         if dump {
             println!("Before type check");
-            md.print(2);
+            pkg.print(0);
             println!("-----------------");
         }
 
-        type_check_module(&mut md, &target)?;
+        type_check_package(&mut pkg, &target)?;
 
         if dump {
             println!("After type check");
-            md.print(2);
+            pkg.print(0);
             println!("-----------------");
         }
 
-        let bc_mod = compile_to_byte_code(&md, &target)?;
+        let bc_mod = compile_to_byte_code(&pkg, &target)?;
         if dump {
             println!("ByteCode:");
             println!("{}", bc_mod);

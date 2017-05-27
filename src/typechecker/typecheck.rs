@@ -1,3 +1,5 @@
+use std::rc::Rc;
+use std::ops::Deref;
 use ast::*;
 use compileerror::{CompileResult, CompileError, type_error, unknown_type_result, unknown_name, type_error_result};
 use super::typecheckercontext::TypeCheckerContext;
@@ -283,7 +285,6 @@ fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> Type
             return type_error_result(&fun.span, format!("Function {} has return type {}, but it is returning an expression of type {}",
                 fun.sig.name, fun.sig.return_type, et));
         }
-
     }
 
     fun.type_checked = true;
@@ -851,6 +852,17 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
 
     let (typ, new_right) = match (&mut sma.right, left_type_ref)
     {
+        (&mut MemberAccessType::Property(Property::Len), &Type::Slice(_)) |
+        (&mut MemberAccessType::Property(Property::Len), &Type::Array(_)) |
+        (&mut MemberAccessType::Property(Property::Len), &Type::String) =>
+            (ctx.target.native_uint_type.clone(), None),
+
+        (&mut MemberAccessType::Property(Property::Data), &Type::String) =>
+            (ptr_type(Type::UInt(IntSize::I8)), None),
+
+        (&mut MemberAccessType::Property(Property::Data), &Type::Slice(ref st)) =>
+            (ptr_type(st.element_type.clone()), None),
+
         (&mut MemberAccessType::Name(ref mut field), &Type::Struct(ref st)) => {
             let (member_idx, member_type) = find_member_type(&st.members, &field.name, &sma.span)?;
             field.index = member_idx;
@@ -858,13 +870,13 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
         },
 
         (&mut MemberAccessType::Name(ref mut field), &Type::Array(_)) |
+        (&mut MemberAccessType::Name(ref mut field), &Type::Slice(_)) |
         (&mut MemberAccessType::Name(ref mut field), &Type::String) => {
             if let Some((typ, member_access_type)) = left_type.get_property_type(&field.name, ctx.target) {
                 (typ, Some(member_access_type))
             } else {
                 return type_error_result(
                     &sma.span,
-
                     format!("Type '{}' has no property named '{}'", left_type, field.name)
                 );
             }
@@ -993,20 +1005,39 @@ fn type_check_address_of(ctx: &mut TypeCheckerContext, a: &mut AddressOfExpressi
     valid(a.typ.clone())
 }
 
+fn is_result_mutable(ctx: &TypeCheckerContext, e: &Expression) -> bool
+{
+    match *e {
+        Expression::NameRef(ref nr) =>
+            ctx.resolve(&nr.name).map(|rn| rn.mutable).unwrap_or(false),
+
+        Expression::MemberAccess(ref ma) =>
+            is_result_mutable(ctx, &ma.left),
+
+        _ => false
+    }
+}
+
 fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign) -> TypeCheckResult
 {
-    let left_type = type_check_expression(ctx, &mut a.left, &None)?;
-    match a.left
-    {
-        Expression::NameRef(ref nr) => {
+    let dst_type = match a.left {
+        AssignTarget::Var(ref mut nr) => {
+            type_check_name(ctx, nr, &None)?;
             if !ctx.resolve(&nr.name).map(|rn| rn.mutable).unwrap_or(false) {
-                return type_error_result(&nr.span, format!("Attempting to modify {}, which is not mutable", nr.name));
+                return type_error_result(&nr.span, format!("Attempting to modify non mutable variable {}", nr.name));
             }
+            nr.typ.clone()
         }
-        _ => return type_error_result(&a.left.span(), "Attempting to modify a non mutable expression"),
-    }
+        AssignTarget::MemberAccess(ref mut ma) => {
+            type_check_member_access(ctx, ma)?;
+            if !is_result_mutable(ctx, &ma.left) {
+                return type_error_result(&ma.span, "Attempting to modify non mutable expression");
+            }
+            ma.typ.clone()
+        }
+    };
 
-    type_check_with_conversion(ctx, &mut a.right, &left_type)?;
+    type_check_with_conversion(ctx, &mut a.right, &dst_type)?;
     a.typ = Type::Void;
     valid(Type::Void)
 }
@@ -1052,6 +1083,7 @@ fn type_check_cast(ctx: &mut TypeCheckerContext, c: &mut TypeCast) -> TypeCheckR
         (Type::UInt(_), &Type::Float(_)) |
         (Type::Float(_), &Type::Int(_)) |
         (Type::Float(_), &Type::UInt(_)) => valid(c.destination_type.clone()),
+        (Type::Pointer(_), &Type::Pointer(ref to)) if *to.deref() == Type::Void => valid(c.destination_type.clone()),
         (inner_type, _) => type_error_result(&c.span, format!("Cast from type {} to type {} is not allowed", inner_type, c.destination_type))
     }
 }
@@ -1121,9 +1153,6 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
     }
 }
 
-/*
-    Type check and infer all the unkown types
-*/
 pub fn type_check_module(module: &mut Module, target: &Target) -> CompileResult<()>
 {
     loop {
@@ -1150,6 +1179,62 @@ pub fn type_check_module(module: &mut Module, target: &Target) -> CompileResult<
             break;
         }
     }
+
+    module.type_checked = true;
+    Ok(())
+}
+
+fn unresolved_import_error(pkg: &Package) -> CompileResult<()>
+{
+    for module in pkg.modules.values() {
+        if module.type_checked {
+            continue;
+        }
+
+        for import_name in &module.import_names {
+            let import_ns = import_name.to_namespace_string();
+            if !module.imports.contains_key(&import_ns) {
+                return type_error_result(&import_name.span, format!("Cannot find import {}", import_ns))
+            }
+        }
+    }
+
+    Err(CompileError::Other("Cannot resolve all imports".into()))
+}
+
+/*
+    Type check and infer all the unkown types
+*/
+pub fn type_check_package(pkg: &mut Package, target: &Target) -> CompileResult<()>
+{
+    let mut count = 0;
+    while count < pkg.modules.len() {
+        let count_at_start = count;
+        for (name, module) in &mut pkg.modules {
+            if module.type_checked {
+                continue;
+            }
+
+            // Try to resolve all the imports
+            for import_name in &module.import_names {
+                let import = import_name.to_namespace_string();
+                if let Some(i) = pkg.imports.get(&import) {
+                    module.imports.insert(import, i.clone());
+                }
+            }
+
+            if module.import_names.len() == module.imports.len() {
+                type_check_module(module, target)?;
+                pkg.imports.insert(name.clone(), Rc::new(module.get_exported_symbols()));
+                count += 1;
+            }
+        }
+
+        if count_at_start == count {
+            return unresolved_import_error(pkg);
+        }
+    }
+
 
     Ok(())
 }

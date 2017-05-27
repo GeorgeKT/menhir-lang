@@ -7,4 +7,4 @@ mod typeresolver;
 #[cfg(test)]
 mod tests;
 
-pub use self::typecheck::{type_check_module};
+pub use self::typecheck::{type_check_package};

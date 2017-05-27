@@ -205,6 +205,14 @@ fn resolve_interface_types(ctx: &mut TypeCheckerContext, i: &mut Interface, mode
     Ok(TypeResolved::Yes)
 }
 
+fn add_import(ctx: &mut TypeCheckerContext, import: &Import) -> CompileResult<()>
+{
+    for (name, symbol) in &import.symbols {
+        ctx.add_external(name, symbol.typ.clone(), symbol.mutable, &symbol.span)?;
+    }
+    Ok(())
+}
+
 fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: ResolveMode) -> CompileResult<usize>
 {
     let mut num_resolved = 0;
@@ -264,6 +272,10 @@ fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: Re
 
 pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module) -> CompileResult<()>
 {
+    for import in module.imports.values() {
+        add_import(ctx, import)?;
+    }
+
     let mut num_resolved = 0;
     loop
     {

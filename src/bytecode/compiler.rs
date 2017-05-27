@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use ast::*;
 use target::{Target};
 use bytecode::{ByteCodeModule, ByteCodeFunction};
+use compileerror::{CompileResult, type_error_result};
 use super::consteval::expr_to_const;
 use super::function::*;
 use super::instruction::*;
@@ -229,6 +230,59 @@ fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef, target: &Target) ->
     }
 }
 
+fn member_store_lhs_to_bc(func: &mut ByteCodeFunction, lhs: &Expression, target: &Target) -> (Var, Vec<(usize, Type)>)
+{
+    match *lhs {
+        Expression::NameRef(ref nr) => {
+            let var = name_ref_to_bc(func, nr, target).expect("Unknown variable");
+            (var, Vec::new())
+        },
+        Expression::MemberAccess(ref inner_ma) => {
+            let (var, mut fields) = member_store_lhs_to_bc(func, &inner_ma.left, target);
+            let inner_ma_typ = if let Type::Pointer(ref p) = inner_ma.typ {
+                p
+            } else {
+                &inner_ma.typ
+            };
+
+            match (inner_ma_typ, &inner_ma.right) {
+                (&Type::Struct(_), &MemberAccessType::Name(ref field)) => {
+                    fields.push((field.index, inner_ma.typ.clone()));
+                    (var, fields)
+                },
+
+                _ => panic!("Internal Compiler Error: Invalid member store"),
+            }
+
+        }
+
+        _ => panic!("Internal Compiler Error: Expecting name or member access"),
+    }
+}
+
+
+fn member_store_to_bc(func: &mut ByteCodeFunction, sma: &MemberAccess, val: Var, target: &Target)
+{
+    func.push_destination(None);
+    let (var, fields) = member_store_lhs_to_bc(func, &sma.left, target);
+    func.pop_destination();
+
+    let mut ptr = var;
+    for (field, field_type) in fields {
+        let dst = get_dst(func, &ptr_type(field_type));
+        func.add(address_of_member_instr(&dst, &ptr, field, target.int_size));
+        ptr = dst;
+    }
+
+    match sma.right {
+        MemberAccessType::Name(ref field) => {
+            func.add(store_member_instr(&ptr, field.index, val, target.int_size));
+        }
+
+        _ => panic!("Internal Compiler Error: Invalid member store"),
+    }
+}
+
 fn member_access_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, sma: &MemberAccess, dst: &Var, target: &Target)
 {
     func.push_destination(None);
@@ -244,15 +298,25 @@ fn member_access_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction,
     match (var_typ, &sma.right)
     {
         (&Type::Struct(_), &MemberAccessType::Name(ref field)) => {
-            func.add(load_member_instr(dst, &var, field.index, target.int_size));
+            if dst.typ.pass_by_value() {
+                func.add(load_member_instr(dst, &var, field.index, target.int_size));
+            } else {
+                func.add(address_of_member_instr(dst, &var, field.index, target.int_size));
+            }
         },
 
         (&Type::Array(ref at), &MemberAccessType::Property(Property::Len)) => {
             func.add(store_operand_instr(dst, Operand::const_uint(at.len as u64, target.int_size)))
         },
 
+        (&Type::Slice(_), &MemberAccessType::Property(Property::Len)) |
         (&Type::String, &MemberAccessType::Property(Property::Len)) => {
             func.add(get_prop_instr(dst, &var, ByteCodeProperty::Len));
+        },
+
+        (&Type::Slice(_), &MemberAccessType::Property(Property::Data)) |
+        (&Type::String, &MemberAccessType::Property(Property::Data))  => {
+            func.add(get_prop_instr(dst, &var, ByteCodeProperty::Data));
         },
 
         _ => {
@@ -734,6 +798,24 @@ fn if_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, if_expr: &
     dst
 }
 
+fn assign_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, assign: &Assign, target: &Target)
+{
+    func.push_destination(None);
+    let r = to_bc(bc_mod, func, &assign.right, target);
+    match assign.left {
+        AssignTarget::Var(ref nr) => {
+            let var = Var::named(&nr.name, nr.typ.clone());
+            func.add(store_instr(&var, &r));
+        },
+
+        AssignTarget::MemberAccess(ref ma) => {
+            member_store_to_bc(func, ma, r, target);
+        },
+    }
+
+    func.pop_destination();
+}
+
 fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &Expression, target: &Target) -> Option<Var>
 {
     match *expr
@@ -852,7 +934,12 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         },
 
         Expression::MemberAccess(ref sma) => {
-            let dst = get_dst(func, &sma.typ);
+            let dst = if sma.typ.pass_by_value() {
+                get_dst(func, &sma.typ)
+            } else {
+                get_dst(func, &sma.typ.ptr_of())
+            };
+
             member_access_to_bc(bc_mod, func, sma, &dst, target);
             Some(dst)
         },
@@ -882,12 +969,8 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         },
 
         Expression::Assign(ref a) => {
-            func.push_destination(None);
-            let r = to_bc(bc_mod, func, &a.right, target);
-            let l = to_bc(bc_mod, func, &a.left, target);
-            func.add(store_instr(&l, &r));
-            func.pop_destination();
-            Some(l)
+            assign_to_bc(bc_mod, func, a, target);
+            None
         },
 
         Expression::While(ref w) => {
@@ -932,14 +1015,14 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
 
 fn func_to_bc(sig: &FunctionSignature, bc_mod: &mut ByteCodeModule, expression: &Expression, target: &Target) -> ByteCodeFunction
 {
-    let mut llfunc = ByteCodeFunction::new(sig);
+    let mut llfunc = ByteCodeFunction::new(sig, false);
     match expr_to_bc(bc_mod, &mut llfunc, expression, target)
     {
-        Some(var) => {
-            llfunc.add(ret_instr(&var));
+        Some(ref var) if var.typ != Type::Void => {
+            llfunc.add(ret_instr(var));
         },
 
-        None => {
+        _ => {
             llfunc.add(Instruction::ReturnVoid);
         }
     }
@@ -947,36 +1030,49 @@ fn func_to_bc(sig: &FunctionSignature, bc_mod: &mut ByteCodeModule, expression: 
     llfunc
 }
 
-use compileerror::{CompileResult, type_error_result};
-
-
-pub fn compile_to_byte_code(md: &Module, target: &Target) -> CompileResult<ByteCodeModule>
+pub fn compile_to_byte_code(pkg: &Package, target: &Target) -> CompileResult<ByteCodeModule>
 {
     let mut ll_mod = ByteCodeModule{
-        name: md.name.clone(),
+        name: pkg.name.clone(),
         functions: HashMap::new(),
         globals: HashMap::new(),
-        exit_function: ByteCodeFunction::exit(),
+        imported_functions: Vec::new(),
     };
 
-    for func in md.externals.values() {
-        ll_mod.functions.insert(func.sig.name.clone(), ByteCodeFunction::new(&func.sig));
-    }
 
-    for global in md.globals.values() {
-        if let Some(cst) = expr_to_const(&global.init) {
-            ll_mod.globals.insert(global.name.clone(), cst);
-        } else {
-            return type_error_result(&global.span, format!("Global {} must be initialized with a constant expression", global.name));
+    for md in pkg.modules.values() {
+        for func in md.externals.values() {
+            ll_mod.functions.insert(func.sig.name.clone(), ByteCodeFunction::new(&func.sig, true));
+        }
+
+        for global in md.globals.values() {
+            if let Some(cst) = expr_to_const(&global.init) {
+                ll_mod.globals.insert(global.name.clone(), cst);
+            } else {
+                return type_error_result(&global.span, format!("Global {} must be initialized with a constant expression", global.name));
+            }
+        }
+
+        for func in md.functions.values() {
+            if !func.is_generic() {
+                let new_func = func_to_bc(&func.sig, &mut ll_mod, &func.expression, target);
+                ll_mod.functions.insert(func.sig.name.clone(), new_func);
+            }
         }
     }
 
-    for func in md.functions.values() {
-        if !func.is_generic() {
-            let new_func = func_to_bc(&func.sig, &mut ll_mod, &func.expression, target);
-            ll_mod.functions.insert(func.sig.name.clone(), new_func);
+
+    for import in pkg.imports.values() {
+        for symbol in import.symbols.values() {
+            if let Some(s) = FunctionSignature::from_type(&symbol.name, &symbol.typ) {
+                if ll_mod.functions.contains_key(&symbol.name) {
+                    continue;
+                }
+                ll_mod.imported_functions.push(ByteCodeFunction::new(&s, true));
+            }
         }
     }
+
 
     Ok(ll_mod)
 }
