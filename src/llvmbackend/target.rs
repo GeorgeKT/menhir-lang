@@ -12,7 +12,7 @@ use target::Target;
 unsafe fn create_target_machine() -> Result<(String, LLVMTargetMachineRef), String>
 {
     let target_triple = LLVMGetDefaultTargetTriple();
-    let target_triple_str = CStr::from_ptr(target_triple).to_str().expect("Invalid target triple");
+    let target_triple_str = CStr::from_ptr(target_triple).to_str().expect("Invalid target triple").to_owned();
 
     let mut target: LLVMTargetRef = ptr::null_mut();
     let mut error_message: *mut c_char = ptr::null_mut();
@@ -40,7 +40,7 @@ unsafe fn create_target_machine() -> Result<(String, LLVMTargetMachineRef), Stri
         return Err(e);
     }
 
-    Ok((target_triple_str.into(), target_machine))
+    Ok((target_triple_str, target_machine))
 }
 
 pub struct TargetMachine
