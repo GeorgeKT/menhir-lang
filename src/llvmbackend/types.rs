@@ -8,12 +8,7 @@ use ast::*;
 
 unsafe fn string_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachine) -> LLVMTypeRef
 {
-    let element_type = LLVMInt8TypeInContext(context);
-    let mut member_types = vec![
-        LLVMPointerType(element_type, 0),      // Pointer to data
-        native_llvm_int_type(context, target_machine),  // Length in bytes of string
-    ];
-    LLVMStructTypeInContext(context, member_types.as_mut_ptr(), member_types.len() as c_uint, 0)
+    struct_to_llvm_type(context, target_machine, &string_type_representation(target_machine.target.int_size))
 }
 
 unsafe fn slice_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachine, slice_type: &SliceType) -> LLVMTypeRef

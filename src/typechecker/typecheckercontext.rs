@@ -101,6 +101,10 @@ impl<'a> TypeCheckerContext<'a>
 
     pub fn resolve(&self, name: &str) -> Option<ResolvedName>
     {
+        if name == "string" {
+            return Some(ResolvedName::new("string", Type::String, false))
+        }
+
         for sf in self.stack.iter().rev() {
             let t = sf.resolve(name);
             if t.is_some() {

@@ -80,12 +80,11 @@ fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> TypeChe
         },
 
         UnaryOperator::Not => {
-            if !e_type.is_bool() {
-                type_error_result(&u.span, format!("Unary operator {} expects a boolean expression", u.operator))
-            } else {
-                u.typ = Type::Bool;
-                valid(Type::Bool)
+            if e_type != Type::Bool {
+                type_check_with_conversion(ctx, &mut u.expression, &Type::Bool)?;
             }
+            u.typ = Type::Bool;
+            valid(Type::Bool)
         }
     }
 }
@@ -705,12 +704,18 @@ fn type_check_struct_members_in_initializer(ctx: &mut TypeCheckerContext, st: &S
 
         if t != expected_type
         {
-            return type_error_result(&mi.span(),
-                format!("Attempting to initialize member {} with type '{}', expecting an expression of type '{}'",
-                    idx, t, expected_type));
+            if let Some(new_mi) = expected_type.convert(&t, mi) {
+                *mi = new_mi;
+            } else {
+                return type_error_result(
+                    &mi.span(),
+                    format!("Attempting to initialize member {} with type '{}', expecting an expression of type '{}'",
+                            idx, t, expected_type)
+                );
+            }
         }
 
-        new_members.push(struct_member(&member.name, t));
+        new_members.push(struct_member(&member.name, expected_type));
     }
 
     Ok(struct_type(&st.name, new_members))
@@ -764,6 +769,14 @@ fn type_check_struct_initializer(ctx: &mut TypeCheckerContext, si: &mut StructIn
             si.typ = sum_type(&st.name, sum_type_cases);
             valid(si.typ.clone())
         },
+
+        Type::String => {
+            let string_rep = string_type_representation(ctx.target.int_size);
+            type_check_struct_members_in_initializer(ctx, &string_rep, si)?;
+            si.typ = Type::String;
+            valid(Type::String)
+        },
+
         _ => type_error_result(&si.span, format!("{} is not a struct", si.struct_name)),
     }
 }
@@ -1084,6 +1097,8 @@ fn type_check_cast(ctx: &mut TypeCheckerContext, c: &mut TypeCast) -> TypeCheckR
         (Type::Float(_), &Type::Int(_)) |
         (Type::Float(_), &Type::UInt(_)) => valid(c.destination_type.clone()),
         (Type::Pointer(_), &Type::Pointer(ref to)) if *to.deref() == Type::Void => valid(c.destination_type.clone()),
+        (Type::Pointer(ref from), &Type::Pointer(_)) if *from.deref() == Type::Void => valid(c.destination_type.clone()),
+        (Type::Pointer(_), &Type::Bool) => valid(Type::Bool),
         (inner_type, _) => type_error_result(&c.span, format!("Cast from type {} to type {} is not allowed", inner_type, c.destination_type))
     }
 }

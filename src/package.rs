@@ -2,6 +2,7 @@ use std::fs::{File};
 use std::io::{Read};
 use std::rc::Rc;
 use std::path::{Path, PathBuf};
+use std::env;
 use toml;
 
 use ast::{Import, TreePrinter};
@@ -115,36 +116,60 @@ struct PackageTargetDeps
 
 impl PackageTarget
 {
-    fn find_dependency(&self, dep: &str, build_options: &BuildOptions, deps: &mut PackageTargetDeps) -> CompileResult<()>
+    fn find_dependency_in_path(&self, dep: &str, deps_dir: &str, target_triplet: &str, deps: &mut PackageTargetDeps) -> CompileResult<bool>
     {
-        let path = format!("build/{}/{}/{}.mhr.exports", build_options.target_machine.target.triplet, dep, dep);
+        let path = format!("{}/{}/{}/{}.mhr.exports", deps_dir, target_triplet, dep, dep);
         if let Ok(file) = File::open(&path) {
             let export_library = ExportLibrary::load(file)?;
             deps.imports.extend(export_library.imports.iter().cloned());
 
             match export_library.output_type {
                 OutputType::StaticLib => {
-                    let lib_path = format!("build/{}/{}/lib{}.a",  build_options.target_machine.target.triplet, dep, dep);
+                    let lib_path = format!("{}/{}/{}/lib{}.a", deps_dir, target_triplet, dep, dep);
                     deps.linker_flags.linker_static_libs.push(lib_path);
-                    Ok(())
+                    Ok(true)
                 }
 
                 OutputType::SharedLib => {
-                    let lib_path = format!("build/{}/{}/",  build_options.target_machine.target.triplet, dep);
+                    let lib_path = format!("{}/{}/{}/", deps_dir, target_triplet, dep);
                     deps.linker_flags.linker_paths.push(lib_path);
                     deps.linker_flags.linker_shared_libs.push(dep.into());
-                    Ok(())
+                    Ok(true)
                 }
 
                 OutputType::Binary => {
-                    Err(CompileError::Other(format!("Depedency {} is a binary, it must be a static or shared library", dep)))
+                    Ok(false)
                 }
             }
 
 
         } else {
-            Err(CompileError::Other(format!("Unable to find dependency {}", dep)))
+            Ok(false)
         }
+    }
+
+    fn find_dependency(&self, dep: &str, build_options: &BuildOptions, deps: &mut PackageTargetDeps) -> CompileResult<()>
+    {
+        // Always try the build directory first
+        if self.find_dependency_in_path(dep, "build", &build_options.target_machine.target.triplet, deps)? {
+            return Ok(())
+        }
+
+        for import_dir in &build_options.import_directories {
+            if self.find_dependency_in_path(dep, &import_dir.to_string_lossy(), &build_options.target_machine.target.triplet, deps)? {
+                return Ok(())
+            }
+        }
+
+        if let Ok(import_paths) = env::var("MENHIR_IMPORT_DIRS") {
+            for path in import_paths.split(":") {
+                if self.find_dependency_in_path(dep, path, &build_options.target_machine.target.triplet, deps)? {
+                    return Ok(())
+                }
+            }
+        }
+
+        Err(CompileError::Other(format!("Unable to find dependency {}", dep)))
     }
 
     fn find_dependencies(&self, build_options: &BuildOptions) -> CompileResult<PackageTargetDeps>

@@ -267,12 +267,18 @@ impl Type
                 })))
             }
 
-            (&Type::Pointer(ref to), &Type::Pointer(_)) => {
+            (&Type::Pointer(ref to), &Type::Pointer(ref from)) => {
                 if *to.deref() == Type::Void {
                     Some(type_cast(expr.clone(), ptr_type(Type::Void), expr.span()))
+                } else if *from.deref() == Type::Void {
+                    Some(type_cast(expr.clone(), self.clone(), expr.span()))
                 } else {
                     None
                 }
+            }
+
+            (&Type::Bool, &Type::Pointer(_)) => {
+                Some(type_cast(expr.clone(), Type::Bool, expr.span()))
             }
 
             _ => None,
@@ -335,15 +341,6 @@ impl Type
         match *self
         {
             Type::Int(_) | Type::UInt(_) | Type::Float(_) => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_bool(&self) -> bool
-    {
-        match *self
-        {
-            Type::Bool => true,
             _ => false,
         }
     }
@@ -489,6 +486,17 @@ pub fn slice_type(element_type: Type) -> Type
 pub fn string_type() -> Type
 {
     Type::String
+}
+
+pub fn string_type_representation(native_int_size: IntSize) -> StructType
+{
+    StructType{
+        name: "string".into(),
+        members: vec![
+            struct_member("data", ptr_type(Type::UInt(IntSize::I8))),
+            struct_member("len", Type::UInt(native_int_size))
+        ]
+    }
 }
 
 pub fn sum_type_case(name: &str, typ: Type) -> SumTypeCase

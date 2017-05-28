@@ -3,6 +3,9 @@ name = "menhir"
 version = "0.1.0"
 authors = ["Joris Guisson <joris.guisson@gmail.com>"]
 
+[profile.release]
+debug = true
+
 [dependencies]
 clap = "2.*"
 itertools = "0.5"
