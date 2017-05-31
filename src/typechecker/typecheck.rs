@@ -290,9 +290,26 @@ fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> Type
     valid(fun.sig.typ.clone())
 }
 
+fn is_result_mutable(ctx: &TypeCheckerContext, e: &Expression) -> bool
+{
+    match *e {
+        Expression::Dereference(ref d) => is_result_mutable(ctx, &d.inner),
+        Expression::AddressOf(ref a) => is_result_mutable(ctx, &a.inner),
+
+        Expression::NameRef(ref nr) =>
+            ctx.resolve(&nr.name).map(|rn| rn.mutable).unwrap_or(false),
+
+        Expression::MemberAccess(ref ma) =>
+            is_result_mutable(ctx, &ma.left),
+
+        _ => false
+    }
+}
+
 fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> TypeCheckResult
 {
     let target_type = type_check_expression(ctx, &mut m.target, &None)?;
+    let target_is_mutable = is_result_mutable(ctx, &m.target);
     let mut return_type = Type::Unknown;
 
     for c in &mut m.cases
@@ -380,19 +397,12 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Ty
             },
 
             Pattern::Struct(ref mut p) => {
-                type_check_struct_pattern(ctx, p)?;
+                ctx.push_stack(false);
+                type_check_struct_pattern(ctx, p, target_is_mutable)?;
                 if p.typ != target_type {
                     return type_error_result(&match_span,
                         format!("Cannot pattern match an expression of type {} with an expression of type {}",
                             target_type, p.typ));
-                }
-
-                ctx.push_stack(false);
-
-                for (binding, typ) in p.bindings.iter().zip(p.types.iter()) {
-                    if binding != "_" {
-                        ctx.add(binding, typ.clone(), false, &p.span)?;
-                    }
                 }
 
                 let ct = infer_case_type(ctx, &mut c.to_execute, &return_type)?;
@@ -421,7 +431,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Ty
 
                 o.inner_type = target_type.get_element_type().expect("Optional type expected");
                 ctx.push_stack(false);
-                ctx.add(&o.binding, o.inner_type.clone(), false, &o.span)?;
+                ctx.add(&o.binding, o.inner_type.clone(), target_is_mutable, &o.span)?;
                 let ct = infer_case_type(ctx, &mut c.to_execute, &return_type)?;
                 ctx.pop_stack();
                 ct
@@ -553,6 +563,30 @@ fn type_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint: &O
     }
 }
 
+fn add_struct_bindings(ctx: &mut TypeCheckerContext, b: &mut StructPattern, struct_type: &StructType, mutable: bool) -> CompileResult<()>
+{
+    for (binding, member) in b.bindings.iter_mut().zip(struct_type.members.iter()) {
+        if binding.name == "_" {continue}
+
+
+
+        let mutable = match binding.mode {
+            StructPatternBindingMode::Value => {
+                binding.typ = member.typ.clone();
+                false
+            },
+
+            StructPatternBindingMode::Pointer => {
+                binding.typ = ptr_type(member.typ.clone());
+                mutable
+            },
+        };
+
+        ctx.add(&binding.name, binding.typ.clone(), mutable, &b.span)?;
+    }
+    Ok(())
+}
+
 fn type_check_binding(ctx: &mut TypeCheckerContext, b: &mut Binding) -> TypeCheckResult
 {
     b.typ = type_check_expression(ctx, &mut b.init, &None)?;
@@ -566,7 +600,7 @@ fn type_check_binding(ctx: &mut TypeCheckerContext, b: &mut Binding) -> TypeChec
         BindingType::Struct(ref mut s) => {
             s.typ = b.typ.clone();
 
-            if let Type::Struct(ref st) = s.typ
+            if let Type::Struct(ref st) = b.typ
             {
                 if st.members.len() != s.bindings.len() {
                     return type_error_result(&s.span,
@@ -574,12 +608,7 @@ fn type_check_binding(ctx: &mut TypeCheckerContext, b: &mut Binding) -> TypeChec
                             st.members.len(), s.bindings.len()));
                 }
 
-                s.types = st.members.iter().map(|sm| sm.typ.clone()).collect();
-                for (binding, typ) in s.bindings.iter().zip(s.types.iter()) {
-                    if binding != "_" {
-                        ctx.add(binding, typ.clone(), false, &s.span)?;
-                    }
-                }
+                add_struct_bindings(ctx, s, st, false)?;
             }
             else
             {
@@ -926,10 +955,10 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
     valid(sma.typ.clone())
 }
 
-fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern) -> TypeCheckResult
+fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern, target_is_mutable: bool) -> CompileResult<()>
 {
     if !p.typ.is_unknown() {
-        return valid(p.typ.clone());
+        return Ok(());
     }
 
     let resolved = ctx.resolve(&p.name).ok_or_else(|| unknown_name(&p.span, format!("Unknown struct {}", p.name)))?;
@@ -947,9 +976,9 @@ fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern
                             format!("Wrong number of bindings in pattern match (expecting {}, found {})",
                                 s.members.len(), p.bindings.len()))
                     } else {
-                        p.types = s.members.iter().map(|sm| sm.typ.clone()).collect();
+                        add_struct_bindings(ctx, p, s, target_is_mutable)?;
                         p.typ = Type::Sum(st.clone());
-                        valid(Type::Unknown)
+                        Ok(())
                     }
                 },
                 _ => type_error_result(&p.span, "Attempting to pattern match a normal sum type case with a struct"),
@@ -957,9 +986,9 @@ fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern
         },
 
         Type::Struct(ref st) => {
-            p.types = st.members.iter().map(|sm| sm.typ.clone()).collect();
+            add_struct_bindings(ctx, p, st, target_is_mutable)?;
             p.typ = Type::Struct(st.clone());
-            valid(Type::Unknown)
+            Ok(())
         },
         _ => type_error_result(&p.span, "Struct pattern is only allowed for structs and sum types containing structs")
     }
@@ -1011,25 +1040,24 @@ fn type_check_array_to_slice(ctx: &mut TypeCheckerContext, ats: &mut ArrayToSlic
     }
 }
 
-fn type_check_address_of(ctx: &mut TypeCheckerContext, a: &mut AddressOfExpression, type_hint: &Option<Type>) -> TypeCheckResult
+fn type_check_address_of(ctx: &mut TypeCheckerContext, a: &mut AddressOfExpression) -> TypeCheckResult
 {
-    let t = type_check_expression(ctx, &mut a.inner, type_hint)?;
+    let t = type_check_expression(ctx, &mut a.inner, &None)?;
     a.typ = ptr_type(t);
     valid(a.typ.clone())
 }
 
-fn is_result_mutable(ctx: &TypeCheckerContext, e: &Expression) -> bool
+fn type_check_dereference(ctx: &mut TypeCheckerContext, a: &mut DereferenceExpression) -> TypeCheckResult
 {
-    match *e {
-        Expression::NameRef(ref nr) =>
-            ctx.resolve(&nr.name).map(|rn| rn.mutable).unwrap_or(false),
-
-        Expression::MemberAccess(ref ma) =>
-            is_result_mutable(ctx, &ma.left),
-
-        _ => false
+    let t = type_check_expression(ctx, &mut a.inner, &None)?;
+    if let Type::Pointer(inner) = t {
+        a.typ = inner.deref().clone();
+        valid(a.typ.clone())
+    } else {
+        type_error_result(&a.span, "Attempting to dereference a non pointer type expression")
     }
 }
+
 
 fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign) -> TypeCheckResult
 {
@@ -1041,12 +1069,21 @@ fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign) -> TypeCheckR
             }
             nr.typ.clone()
         }
+
         AssignTarget::MemberAccess(ref mut ma) => {
             type_check_member_access(ctx, ma)?;
             if !is_result_mutable(ctx, &ma.left) {
                 return type_error_result(&ma.span, "Attempting to modify non mutable expression");
             }
             ma.typ.clone()
+        }
+
+        AssignTarget::Dereference(ref mut d) => {
+            type_check_dereference(ctx, d)?;
+            if !is_result_mutable(ctx, &d.inner) {
+                return type_error_result(&d.span, "Attempting to modify non mutable expression");
+            }
+            d.typ.clone()
         }
     };
 
@@ -1129,7 +1166,8 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::New(ref mut n) => type_check_new(ctx, n, type_hint),
         Expression::Delete(ref mut d) => type_check_delete(ctx, d, type_hint),
         Expression::ArrayToSlice(ref mut ats) => type_check_array_to_slice(ctx, ats, type_hint),
-        Expression::AddressOf(ref mut a) => type_check_address_of(ctx, a, type_hint),
+        Expression::AddressOf(ref mut a) => type_check_address_of(ctx, a),
+        Expression::Dereference(ref mut d) => type_check_dereference(ctx, d),
         Expression::Assign(ref mut a) => type_check_assign(ctx, a),
         Expression::While(ref mut w) => type_check_while(ctx, w),
         Expression::For(ref mut f) => type_check_for(ctx, f),

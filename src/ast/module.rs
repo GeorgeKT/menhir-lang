@@ -63,20 +63,25 @@ impl TreePrinter for Module
             println!("{} import {}", p, i.to_namespace_string());
         }
 
+        println!("{}", p);
         for t in self.types.values() {
             t.print(level + 1);
+            println!("{}", p);
         }
 
         for global in self.globals.values() {
             global.print(level + 1);
+            println!("{}", p);
         }
 
         for func in self.externals.values() {
             func.print(level + 1);
+            println!("{}", p);
         }
 
         for func in self.functions.values() {
             func.print(level + 1);
+            println!("{}", p);
         }
     }
 }

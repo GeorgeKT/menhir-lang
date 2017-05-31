@@ -130,12 +130,21 @@ fn block_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, b: &Blo
 
 fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &Var, func: &mut ByteCodeFunction, target: &Target)
 {
-    for (idx, name) in p.bindings.iter().enumerate() {
-        if name != "_" {
-            let v = stack_alloc(func, &p.types[idx], Some(name));
-            func.add(load_member_instr(&v, struct_var, idx, target.int_size));
-            func.add_named_var(v);
+    for (idx, b) in p.bindings.iter().enumerate() {
+        if b.name == "_" {continue}
+        let v = stack_alloc(func, &b.typ, Some(&b.name));
+
+        match b.mode {
+            StructPatternBindingMode::Value=> {
+                func.add(load_member_instr(&v, struct_var, idx, target.int_size));
+            },
+
+            StructPatternBindingMode::Pointer => {
+                func.add(address_of_member_instr(&v, struct_var, idx, target.int_size));
+            }
         }
+
+        func.add_named_var(v);
     }
 }
 
@@ -811,6 +820,11 @@ fn assign_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, assign
         AssignTarget::MemberAccess(ref ma) => {
             member_store_to_bc(func, ma, r, target);
         },
+
+        AssignTarget::Dereference(ref d) => {
+            let var = to_bc(bc_mod, func, &d.inner, target);
+            func.add(store_instr(&var, &r));
+        },
     }
 
     func.pop_destination();
@@ -965,6 +979,13 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
             let inner_var = to_bc(bc_mod, func, &a.inner, target);
             let dst = get_dst(func, &a.typ);
             func.add(address_of_instr(&dst, &inner_var));
+            Some(dst)
+        },
+
+        Expression::Dereference(ref d) => {
+            let inner_var = to_bc(bc_mod, func, &d.inner, target);
+            let dst = get_dst(func, &d.typ);
+            func.add(store_operand_instr(&dst, Operand::Dereference(inner_var)));
             Some(dst)
         },
 

@@ -79,6 +79,7 @@ pub enum Operand
 {
     Var(Var),
     AddressOf(Var),
+    Dereference(Var),
     Const(Constant),
     Func(String),
 }
@@ -121,6 +122,7 @@ impl Operand
         {
             Operand::Var(ref var) => var.typ.clone(),
             Operand::AddressOf(ref var) => ptr_type(var.typ.clone()),
+            Operand::Dereference(ref var) => var.typ.get_pointer_element_type().expect("Dereference on a non pointer").clone(),
             Operand::Const(ref c) => c.get_type(),
             Operand::Func(_) => Type::Unknown,
         }
@@ -135,6 +137,7 @@ impl fmt::Display for Operand
         {
             Operand::Var(ref var) => write!(f, "{}", var),
             Operand::AddressOf(ref var) => write!(f, "&{}", var),
+            Operand::Dereference(ref var) => write!(f, "*{}", var),
             Operand::Const(ref c) => write!(f, "{}", c),
             Operand::Func(ref func) => write!(f, "(func {})", func),
         }

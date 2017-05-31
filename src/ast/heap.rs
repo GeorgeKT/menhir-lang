@@ -24,14 +24,23 @@ pub struct AddressOfExpression
     pub span: Span,
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct DereferenceExpression
+{
+    pub inner: Expression,
+    pub typ: Type,
+    pub span: Span,
+}
+
+
 pub fn new(inner: Expression, span: Span) -> Expression
 {
     Expression::New(
         Box::new(
             NewExpression{
-                inner: inner,
+                inner,
                 typ: Type::Unknown,
-                span: span,
+                span,
             }
         )
     )
@@ -41,11 +50,7 @@ pub fn new_with_type(inner: Expression, typ: Type, span: Span) -> Expression
 {
     Expression::New(
         Box::new(
-            NewExpression{
-                inner: inner,
-                typ: typ,
-                span: span,
-            }
+            NewExpression{inner, typ, span}
         )
     )
 }
@@ -54,10 +59,7 @@ pub fn delete(inner: Expression, span: Span) -> Expression
 {
     Expression::Delete(
         Box::new(
-            DeleteExpression{
-                inner: inner,
-                span: span,
-            }
+            DeleteExpression{inner, span}
         )
     )
 }
@@ -67,9 +69,22 @@ pub fn address_of(inner: Expression, span: Span) -> Expression
     Expression::AddressOf(
         Box::new(
             AddressOfExpression{
-                inner: inner,
+                inner,
                 typ: Type::Unknown,
-                span: span,
+                span,
+            }
+        )
+    )
+}
+
+pub fn dereference(inner: Expression, span: Span) -> Expression
+{
+    Expression::Dereference(
+        Box::new(
+            DereferenceExpression{
+                inner,
+                typ: Type::Unknown,
+                span,
             }
         )
     )
@@ -101,6 +116,17 @@ impl TreePrinter for AddressOfExpression
     {
         let p = prefix(level);
         println!("{}address of (span: {})", p, self.span);
+        self.inner.print(level + 1)
+    }
+}
+
+
+impl TreePrinter for DereferenceExpression
+{
+    fn print(&self, level: usize)
+    {
+        let p = prefix(level);
+        println!("{}dereference (span: {})", p, self.span);
         self.inner.print(level + 1)
     }
 }

@@ -1,0 +1,23 @@
+#ret:42
+enum Foo:
+    Full{n: int}
+    Empty
+
+fn value_of(v: Foo) -> int:
+    match v:
+        Foo::Full{n} => n
+        Foo::Empty => 0
+
+fn increment(var foo: *Foo):
+    match *foo:
+        Foo::Full{*n} =>
+            *n = *n + 1
+        Foo::Empty =>
+            *foo = Foo::Full{20}
+
+fn main() -> int:
+    let f = Foo::Empty
+    increment(&f)
+    let g = Foo::Full{21}
+    increment(&g)
+    value_of(f) + value_of(g)

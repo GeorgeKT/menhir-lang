@@ -1,3 +1,4 @@
+use std::fmt;
 use itertools::free::join;
 use span::Span;
 use ast::{TreePrinter, NameRef, Literal, Type, prefix};
@@ -17,12 +18,37 @@ pub struct ArrayPattern
     pub span: Span,
 }
 
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+pub enum StructPatternBindingMode
+{
+    Value,
+    Pointer
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct StructPatternBinding
+{
+    pub name: String,
+    pub typ: Type,
+    pub mode: StructPatternBindingMode,
+}
+
+impl fmt::Display for StructPatternBinding
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    {
+        match self.mode {
+            StructPatternBindingMode::Value => write!(f, "{}", self.name),
+            StructPatternBindingMode::Pointer => write!(f, "*{}", self.name),
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct StructPattern
 {
     pub name: String,
-    pub bindings: Vec<String>,
-    pub types: Vec<Type>,
+    pub bindings: Vec<StructPatternBinding>,
     pub typ: Type,
     pub span: Span,
 }
@@ -81,12 +107,11 @@ pub fn empty_array_pattern(span: Span) -> Pattern
     Pattern::EmptyArray(EmptyArrayPattern{span: span})
 }
 
-pub fn struct_pattern(name: &str, bindings: Vec<String>, types: Vec<Type>, typ: Type, span: Span) -> StructPattern
+pub fn struct_pattern(name: &str, bindings: Vec<StructPatternBinding>, typ: Type, span: Span) -> StructPattern
 {
     StructPattern{
         name: name.into(),
         bindings: bindings,
-        types: types,
         typ: typ,
         span: span,
     }

@@ -77,6 +77,16 @@ pub unsafe fn get_operand(ctx: &Context, operand: &Operand) -> ValueRef
                 .value.address_of()
         }
 
+        Operand::Dereference(ref v) => {
+            let vr: &ValueRef = &ctx.get_variable(&v.name).expect("Unknown variable").value;
+            ValueRef::new(
+                vr.load(ctx),
+                vr.typ.get_pointer_element_type()
+                    .expect("Cannot dereference a non pointer type")
+                    .clone(),
+            )
+        }
+
         Operand::Const(ref c) => ValueRef::from_const(ctx, c),
     }
 }

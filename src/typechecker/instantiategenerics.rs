@@ -186,15 +186,20 @@ fn subsitute_bindings(ctx: &TypeCheckerContext, generic_args: &GenericMapping, l
 
 fn substitute_struct_pattern(ctx: &TypeCheckerContext, generic_args: &GenericMapping, p: &StructPattern) -> CompileResult<StructPattern>
 {
-    let mut types = Vec::with_capacity(p.types.len());
-    for t in &p.types {
-        types.push(make_concrete(ctx, generic_args, t, &p.span)?);
+    let mut bindings = Vec::with_capacity(p.bindings.len());
+    for b in &p.bindings {
+        bindings.push(
+            StructPatternBinding{
+                name: b.name.clone(),
+                typ: make_concrete(ctx, generic_args, &b.typ, &p.span)?,
+                mode: b.mode,
+            }
+        );
     }
 
     Ok(struct_pattern(
         &p.name,
-        p.bindings.clone(),
-        types,
+        bindings,
         make_concrete(ctx, generic_args, &p.typ, &p.span)?,
         p.span.clone()
     ))
@@ -395,6 +400,11 @@ fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &
             Ok(address_of(inner, a.span.clone()))
         },
 
+        Expression::Dereference(ref d) => {
+            let inner = substitute_expr(ctx, generic_args, &d.inner)?;
+            Ok(dereference(inner, d.span.clone()))
+        }
+
         Expression::Assign(ref a) => {
             let l = match a.left {
                 AssignTarget::Var(ref nr) =>
@@ -402,6 +412,15 @@ fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &
 
                 AssignTarget::MemberAccess(ref ma) =>
                     AssignTarget::MemberAccess(substitute_member_access(ctx, generic_args, ma)?),
+
+                AssignTarget::Dereference(ref d) => {
+                    let inner = substitute_expr(ctx, generic_args, &d.inner)?;
+                    AssignTarget::Dereference(DereferenceExpression{
+                        inner,
+                        typ: d.typ.clone(),
+                        span: d.span.clone()
+                    })
+                }
             };
             let r = substitute_expr(ctx, generic_args, &a.right)?;
             Ok(assign(l, r, a.span.clone()))
@@ -590,6 +609,10 @@ fn resolve_generics(ctx: &TypeCheckerContext, new_functions: &mut FunctionMap, m
 
         Expression::AddressOf(ref a) => {
             resolve_generics(ctx, new_functions, module, &a.inner)
+        },
+
+        Expression::Dereference(ref d) => {
+            resolve_generics(ctx, new_functions, module, &d.inner)
         },
 
         Expression::Assign(ref a) => {

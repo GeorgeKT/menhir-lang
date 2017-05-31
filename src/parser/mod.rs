@@ -497,12 +497,19 @@ fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, span: &Span,
 fn parse_struct_pattern(tq: &mut TokenQueue, name: &str, span: &Span, indent_level: usize, target: &Target) -> CompileResult<StructPattern>
 {
     tq.expect(&TokenKind::OpenCurly)?;
-    let parse_name = |tq: &mut TokenQueue, _indent_level: usize, _target: &Target| {
+    let parse_binding = |tq: &mut TokenQueue, _indent_level: usize, _target: &Target| {
+        let mode = if tq.is_next(&TokenKind::BinaryOperator(BinaryOperator::Mul)) {
+            tq.pop()?;
+            StructPatternBindingMode::Pointer
+        } else {
+            StructPatternBindingMode::Value
+        };
+
         let (name, _) = tq.expect_identifier()?;
-        Ok(name)
+        Ok(StructPatternBinding{name, typ: Type::Unknown, mode})
     };
-    let bindings = parse_comma_separated_list(tq, &TokenKind::CloseCurly, parse_name, indent_level, target)?;
-    Ok(struct_pattern(name, bindings, Vec::new(), Type::Unknown, span.expanded(tq.pos())))
+    let bindings = parse_comma_separated_list(tq, &TokenKind::CloseCurly, parse_binding, indent_level, target)?;
+    Ok(struct_pattern(name, bindings, Type::Unknown, span.expanded(tq.pos())))
 }
 
 pub fn parse_pattern(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<Pattern>
@@ -538,12 +545,13 @@ pub fn parse_pattern(tq: &mut TokenQueue, indent_level: usize, target: &Target) 
         }
 
         TokenKind::Identifier(id) => {
-            if id == "_" {
+            let name = parse_name(tq, id, &tok.span)?;
+            if name.name == "_" {
                 Ok(Pattern::Any(tok.span))
             } else if tq.is_next(&TokenKind::OpenCurly) {
-                parse_struct_pattern(tq, &id, &tok.span, indent_level, target).map(Pattern::Struct)
+                parse_struct_pattern(tq, &name.name, &tok.span, indent_level, target).map(Pattern::Struct)
             } else {
-                Ok(Pattern::Name(NameRef::new(id, tok.span)))
+                Ok(Pattern::Name(name))
             }
         }
 
@@ -568,7 +576,7 @@ fn parse_indented_block<T, P>(tq: &mut TokenQueue, indent_level: usize, parse_el
     while tq.is_in_same_block(block_indent_level)
     {
         tq.pop_indent()?;
-        let element = parse_element(tq, indent_level, target)?;
+        let element = parse_element(tq, block_indent_level, target)?;
         elements.push(element);
     }
 
@@ -582,8 +590,8 @@ fn parse_match(tq: &mut TokenQueue, span: &Span, indent_level: usize, target: &T
 
     let parse_match_case = |tq: &mut TokenQueue, indent_level: usize, target: &Target| {
         let pattern = parse_pattern(tq, indent_level, target)?;
-        tq.expect(&TokenKind::FatArrow)?;
-        let t = parse_expression(tq, indent_level, target)?;
+        let tok = tq.expect(&TokenKind::FatArrow)?;
+        let t = parse_block(tq, &tok.span.file, indent_level, target)?;
         let case_span = pattern.span().expanded(tq.pos());
         Ok(match_case(pattern, t, case_span))
     };
@@ -681,31 +689,36 @@ fn parse_if(tq: &mut TokenQueue, span: &Span, indent_level: usize, target: &Targ
 
 fn parse_sum_type(tq: &mut TokenQueue, namespace: &str, span: &Span, indent_level: usize, target: &Target) -> CompileResult<SumTypeDeclaration>
 {
-    let (name, _) = tq.expect_identifier()?;
+    let (sum_type_name, _) = tq.expect_identifier()?;
     tq.expect(&TokenKind::Colon)?;
 
     let parse_sum_type_case = |tq: &mut TokenQueue, indent_level: usize, target: &Target| {
         if tq.is_next_at(1, &TokenKind::OpenCurly)
         {
-            let sd = parse_struct_type(tq, namespace, indent_level, target)?;
+            let sd = parse_struct_type(tq, &sum_type_name, indent_level, target)?;
             let span = sd.span.clone();
-            let name = sd.name.clone();
+            let name = namespaced(namespace, &sd.name);
             Ok(sum_type_case_decl(&name, Some(sd), span))
         }
         else
         {
             let (case_name, case_name_span) = tq.expect_identifier()?;
-            Ok(sum_type_case_decl(&namespaced(namespace, &case_name), None, case_name_span))
+            let name = format!("{}::{}::{}", namespace, sum_type_name, case_name);
+            Ok(sum_type_case_decl(&name, None, case_name_span))
         }
     };
     let cases = parse_indented_block(tq, indent_level, parse_sum_type_case, target)?;
 
-    Ok(sum_type_decl(&namespaced(namespace, &name), cases, span.expanded(tq.pos())))
+    Ok(sum_type_decl(&namespaced(namespace, &sum_type_name), cases, span.expanded(tq.pos())))
 }
 
 fn namespaced(namespace: &str, name: &str) -> String
 {
-    format!("{}::{}", namespace, name)
+    if namespace.len() == 0 {
+        name.into()
+    } else {
+        format!("{}::{}", namespace, name)
+    }
 }
 
 fn parse_struct_type(tq: &mut TokenQueue, namespace: &str, indent_level: usize, target: &Target) -> CompileResult<StructDeclaration>
@@ -804,7 +817,23 @@ fn parse_block(tq: &mut TokenQueue, current_file: &str, indent_level: usize, tar
         }
 
         let e = parse_expression(tq, block_indent_level, target)?;
-        expressions.push(e);
+        if tq.is_next(&TokenKind::Assign) {
+            tq.pop()?;
+
+            let rhs = parse_expression(tq, block_indent_level, target)?;
+            let span = e.span().expanded(tq.pos());
+
+            let assign_expr = match e {
+                Expression::NameRef(nr) => assign(AssignTarget::Var(nr), rhs, span),
+                Expression::MemberAccess(ma) => assign(AssignTarget::MemberAccess(*ma), rhs, span),
+                Expression::Dereference(d) => assign(AssignTarget::Dereference(*d), rhs, span),
+                _ => return parse_error_result(&e.span(), "Expression not allowed on the left hand side of an assignment")
+            };
+            expressions.push(assign_expr);
+        } else {
+            expressions.push(e);
+        }
+
         ends_with_semicolon = false;
         while tq.is_next(&TokenKind::SemiColon) {
             tq.pop()?;
@@ -962,6 +991,17 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token, indent_level: usize, 
         TokenKind::BinaryOperator(BinaryOperator::Sub) =>
             parse_unary_expression(tq, UnaryOperator::Sub, &tok.span, indent_level, target),
 
+        TokenKind::Ampersand => {
+            let inner = parse_expression(tq, indent_level, target)?;
+            Ok(address_of(inner, tok.span.expanded(tq.pos())))
+        }
+
+        TokenKind::BinaryOperator(BinaryOperator::Mul) => {
+            let next_tok = tq.pop()?;
+            let inner = parse_expression_start(tq, next_tok, indent_level, target)?;
+            Ok(dereference(inner, tok.span.expanded(tq.pos())))
+        }
+
         _ => parse_error_result(&tok.span, format!("Unexpected token '{}'", tok)),
     }
 }
@@ -975,17 +1015,6 @@ fn parse_expression_continued(tq: &mut TokenQueue, lhs: Expression, indent_level
     let next = tq.pop()?;
     match next.kind
     {
-        TokenKind::Assign => {
-            let rhs = parse_expression(tq, indent_level, target)?;
-            let span = lhs.span().expanded(tq.pos());
-
-            match lhs {
-                Expression::NameRef(nr) => Ok(assign(AssignTarget::Var(nr), rhs, span)),
-                Expression::MemberAccess(ma) => Ok(assign(AssignTarget::MemberAccess(*ma), rhs, span)),
-                _ => parse_error_result(&lhs.span(), "Expression not allowed on the left hand side of an assignment")
-            }
-        },
-
         TokenKind::BinaryOperator(BinaryOperator::Dot) => {
             tq.push_front(next);
             parse_member_access(tq, lhs, indent_level, target)
@@ -1006,8 +1035,8 @@ fn parse_expression_continued(tq: &mut TokenQueue, lhs: Expression, indent_level
 pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<Expression>
 {
     let tok = tq.pop()?;
-    let lhs = parse_expression_start(tq, tok, indent_level, target)?;
-    parse_expression_continued(tq, lhs, indent_level, target)
+    let e_start = parse_expression_start(tq, tok, indent_level, target)?;
+    parse_expression_continued(tq, e_start, indent_level, target)
 }
 
 fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool, indent_level: usize, namespace: &str, target: &Target) -> CompileResult<()>

@@ -49,6 +49,7 @@ pub enum TokenKind
     Interface,
     Func,
     Indent(usize),
+    Ampersand,
     EOF,
 }
 
@@ -102,6 +103,7 @@ impl Display for TokenKind
             TokenKind::Interface => write!(fmt, "interface"),
             TokenKind::Func => write!(fmt, "fn"),
             TokenKind::Indent(lvl) => write!(fmt, "indent {}", lvl),
+            TokenKind::Ampersand => write!(fmt, "&"),
             TokenKind::EOF => write!(fmt, "EOF"),
         }
     }
