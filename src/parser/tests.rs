@@ -657,8 +657,8 @@ enum Option:
     assert!(*md.types.get("test::Option").unwrap() == TypeDeclaration::Sum(sum_type_decl(
         "test::Option",
         vec![
-            sum_type_case_decl("test::Some", None, span(3, 5, 3, 8)),
-            sum_type_case_decl("test::None", None, span(4, 5, 4, 8)),
+            sum_type_case_decl("test::Option::Some", None, span(3, 5, 3, 8)),
+            sum_type_case_decl("test::Option::None", None, span(4, 5, 4, 8)),
         ],
         span(2, 1, 4, 8))
     ))
@@ -680,10 +680,10 @@ enum Foo:
         "test::Foo",
         vec![
             sum_type_case_decl(
-                "test::Bar",
+                "test::Foo::Bar",
                 Some(
                     struct_declaration(
-                        "test::Bar",
+                        "Foo::Bar",
                         vec![
                             struct_member_declaration("x", target.native_int_type.clone(), span(3, 9, 3, 14)),
                             struct_member_declaration("y", target.native_int_type.clone(), span(3, 17, 3, 22)),
@@ -693,12 +693,12 @@ enum Foo:
                 ),
                 span(3, 5, 3, 23)
             ),
-            sum_type_case_decl("test::Foo", None, span(4, 5, 4, 7)),
+            sum_type_case_decl("test::Foo::Foo", None, span(4, 5, 4, 7)),
             sum_type_case_decl(
-                "test::Baz",
+                "test::Foo::Baz",
                 Some(
                     struct_declaration(
-                        "test::Baz",
+                        "Foo::Baz",
                         vec![
                             struct_member_declaration("bla", Type::Bool, span(5, 9, 5, 17)),
                         ],

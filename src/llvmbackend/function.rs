@@ -55,7 +55,7 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction)
         {
             Type::Func(ref ft) => {
                 gen_function_ptr(ctx, &arg.name, var, ft.return_type.clone(), arg.typ.clone());
-                ctx.add_variable(&arg.name, ValueRef::new(var, arg.typ.clone()));
+                ctx.set_variable(&arg.name, ValueRef::new(var, arg.typ.clone()));
             },
 
             _ => {
@@ -65,12 +65,12 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction)
                         // and use that instead
                         let argcopy = LLVMBuildAlloca(ctx.builder, ctx.resolve_type(&arg.typ), cstr!("argcopy"));
                         LLVMBuildStore(ctx.builder, var, argcopy);
-                        ctx.add_variable(&arg.name, ValueRef::new(argcopy, ptr_type(arg.typ.clone())));
+                        ctx.set_variable(&arg.name, ValueRef::new(argcopy, ptr_type(arg.typ.clone())));
                     } else {
-                        ctx.add_variable(&arg.name, ValueRef::new(var, arg.typ.clone()));
+                        ctx.set_variable(&arg.name, ValueRef::new(var, arg.typ.clone()));
                     }
                 } else {
-                    ctx.add_variable(&arg.name, ValueRef::new(var, ptr_type(arg.typ.clone())));
+                    ctx.set_variable(&arg.name, ValueRef::new(var, ptr_type(arg.typ.clone())));
                 }
             },
         }

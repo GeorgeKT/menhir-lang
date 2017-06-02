@@ -4,7 +4,7 @@ use std::fs::DirBuilder;
 use std::ptr;
 use llvm::prelude::*;
 use llvm::core::*;
-use ast::Type;
+use ast::{Type, ptr_type};
 use super::CodeGenOptions;
 use super::symboltable::{SymbolTable, FunctionInstance, VariableInstance};
 use super::target::TargetMachine;
@@ -59,13 +59,19 @@ impl<'a> Context<'a>
     }
 
 
-    pub fn add_variable(&mut self, name: &str, vr: ValueRef)
+    pub fn set_variable(&mut self, name: &str, vr: ValueRef)
     {
-        let var = Rc::new(VariableInstance{
-            value: vr,
-            name: name.into(),
-        });
-        self.add_variable_instance(var);
+        if let Some(vi) = self.get_variable_instance(name) {
+            unsafe {
+                vi.value.store(self, &vr);
+            }
+        } else {
+            let var = Rc::new(VariableInstance{
+                value: vr,
+                name: name.into(),
+            });
+            self.add_variable_instance(var);
+        }
     }
 
     pub fn add_variable_instance(&mut self, vi: Rc<VariableInstance>)
@@ -73,7 +79,25 @@ impl<'a> Context<'a>
         self.stack.last_mut().expect("Stack is empty").symbols.add_variable(vi);
     }
 
-    pub fn get_variable(&self, name: &str) -> Option<Rc<VariableInstance>>
+    pub fn stack_alloc(&mut self, name: &str, typ: &Type) -> LLVMValueRef
+    {
+        unsafe {
+            let typ = self.resolve_type(typ);
+            let func = self.get_current_function();
+            let entry_bb = LLVMGetEntryBasicBlock(func);
+            let current_bb = LLVMGetInsertBlock(self.builder);
+            // We allocate in the entry block
+            LLVMPositionBuilder(self.builder, entry_bb, LLVMGetFirstInstruction(entry_bb));
+
+            let name = CString::new(name).expect("Invalid string");
+            let alloc = LLVMBuildAlloca(self.builder, typ, name.as_ptr());
+            LLVMPositionBuilderAtEnd(self.builder, current_bb); // Position the builder where it was before
+            alloc
+        }
+
+    }
+
+    fn get_variable_instance(&self, name: &str) -> Option<Rc<VariableInstance>>
     {
         for sf in self.stack.iter().rev()
         {
@@ -82,8 +106,19 @@ impl<'a> Context<'a>
                 return v;
             }
         }
-
         None
+    }
+
+    pub fn get_variable(&mut self, name: &str, typ: &Type) -> ValueRef
+    {
+        if let Some(vi) = self.get_variable_instance(name) {
+            return vi.value.clone();
+        }
+
+        let val = self.stack_alloc(name, typ);
+        let ret = ValueRef::new(val, ptr_type(typ.clone()));
+        self.set_variable(name, ret.clone());
+        ret
     }
 
     pub fn add_function(&mut self, f: Rc<FunctionInstance>)

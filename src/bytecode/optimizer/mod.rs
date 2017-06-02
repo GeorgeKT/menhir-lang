@@ -3,12 +3,10 @@ use bytecode::function::{ByteCodeFunction};
 
 mod emptyblocks;
 mod unusedfunctions;
-mod varelimination;
 mod returnvalueoptimization;
 
 use self::emptyblocks::remove_empty_blocks;
 use self::unusedfunctions::eliminate_unused_functions;
-use self::varelimination::eliminate_vars;
 use self::returnvalueoptimization::return_value_optimization;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
@@ -28,7 +26,6 @@ pub fn optimize_function(func: &mut ByteCodeFunction, lvl: OptimizationLevel)
 
         OptimizationLevel::Normal => {
             remove_empty_blocks(func);
-            eliminate_vars(func);
         }
     }
 }

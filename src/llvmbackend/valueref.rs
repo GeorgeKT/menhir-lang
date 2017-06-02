@@ -211,7 +211,7 @@ impl ValueRef
     }
 
 
-    pub fn get_member_ptr(&self, ctx: &Context, index: &Operand) -> ValueRef
+    pub fn get_member_ptr(&self, ctx: &mut Context, index: &Operand) -> ValueRef
     {
         let zero_val = unsafe{const_int(ctx, 0)};
 
@@ -279,7 +279,7 @@ impl ValueRef
 
     }
 
-    pub fn store_member(&self, ctx: &Context, index: &Operand, value: &ValueRef)
+    pub fn store_member(&self, ctx: &mut Context, index: &Operand, value: &ValueRef)
     {
         let element_type = self.typ.get_pointer_element_type()
             .unwrap_or_else(|| panic!("Store member not allowed on type {}", self.typ));
@@ -374,7 +374,7 @@ impl ValueRef
         LLVMBuildStructGEP(ctx.builder, self.value, 1, cstr!("slice_len_ptr"))
     }
 
-    pub unsafe fn create_slice(&self, ctx: &Context, array: &ValueRef, start: &Operand, len: &Operand)
+    pub unsafe fn create_slice(&self, ctx: &mut Context, array: &ValueRef, start: &Operand, len: &Operand)
     {
         let inner_type = array.typ.get_pointer_element_type()
             .unwrap_or_else(|| panic!("Expecting an array or slice not a {}", array.typ));

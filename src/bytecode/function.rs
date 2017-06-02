@@ -179,15 +179,6 @@ impl ByteCodeFunction
                 self.add_instruction(inst);
             },
 
-            Instruction::StackAlloc(_) => {
-                let mut scope = self.scopes.last_mut().expect("Empty scope stack");
-                let insert_position = scope.insert_position;
-                self.blocks
-                    .get_mut(&scope.insert_block)
-                    .map(|bb| bb.instructions.insert(insert_position, inst));
-                scope.insert_position += 1;
-            },
-
             _ => {
                 self.add_instruction(inst);
             },
@@ -304,22 +295,23 @@ impl ByteCodeFunction
         }
     }
 
-    pub fn remove_instruction<Pred: Fn(&Instruction) -> bool>(&mut self, pred: Pred) {
-        for block in self.blocks.values_mut() {
-            block.instructions.retain(|instr| !pred(instr));
-        }
-    }
 
-/*
-    pub fn add_cleanup_target(&mut self, v: &Var)
-    {
-        for scope in self.scopes.iter_mut().rev() {
-            if scope.add_cleanup_target(v) {
-                break;
+    /*
+        pub fn remove_instruction<Pred: Fn(&Instruction) -> bool>(&mut self, pred: Pred) {
+            for block in self.blocks.values_mut() {
+                block.instructions.retain(|instr| !pred(instr));
             }
         }
-    }
-    */
+
+        pub fn add_cleanup_target(&mut self, v: &Var)
+        {
+            for scope in self.scopes.iter_mut().rev() {
+                if scope.add_cleanup_target(v) {
+                    break;
+                }
+            }
+        }
+        */
 }
 
 impl fmt::Display for ByteCodeFunction

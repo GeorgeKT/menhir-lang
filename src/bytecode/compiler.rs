@@ -15,16 +15,10 @@ fn stack_alloc(func: &mut ByteCodeFunction, typ: &Type, name: Option<&str>) -> V
         Some(n) => {
             let var = Var::named(n, typ.clone());
             func.add_named_var(var.clone());
-            if *typ != Type::Void {
-                func.add(Instruction::StackAlloc(var.clone()));
-            }
             var
         },
         None => {
             let var = func.new_var(typ.clone());
-            if *typ != Type::Void {
-                func.add(Instruction::StackAlloc(var.clone()));
-            }
             var
         }
     }
@@ -172,6 +166,7 @@ fn add_binding(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, b: &Bin
 fn binding_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, l: &BindingExpression, target: &Target) -> Option<Var>
 {
     let dst = get_dst(func, &l.typ);
+    func.add(Instruction::StackAlloc(dst.clone()));
     func.push_scope();
     for b in &l.bindings{
         add_binding(bc_mod, func, b, target);
@@ -588,16 +583,37 @@ fn match_case_to_bc(
     }
 }
 
-fn match_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, m: &MatchExpression, target: &Target) -> Var
+fn match_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, m: &MatchExpression, target: &Target) -> Option<Var>
 {
     func.push_destination(None);
-    let target_var = to_bc(bc_mod, func, &m.target, target);
+    let target_var = match m.target {
+        Expression::Dereference(ref de) => {
+            let inner_type = de.inner.get_type();
+            let v_inner_type = inner_type.get_pointer_element_type().expect("Dereference should be on a pointer type");
+            if v_inner_type.pass_by_value() {
+                dereference_to_bc(bc_mod, func, de, target)
+            } else {
+                to_bc(bc_mod, func, &de.inner, target)
+            }
+        }
+
+        _ => to_bc(bc_mod, func, &m.target, target),
+    };
+
     func.pop_destination();
     let match_end_bb = func.create_basic_block();
 
-    let dst = get_dst(func, &m.typ);
+    let dst = if m.typ == Type::Void {
+        None
+    } else {
+        let dst = get_dst(func, &m.typ);
+        func.add(Instruction::StackAlloc(dst.clone()));
+        Some(dst)
+    };
+
+
     func.push_scope();
-    func.push_destination(Some(dst.clone()));
+    func.push_destination(dst.clone());
     for mc in &m.cases {
         match_case_to_bc(bc_mod, func, mc, &target_var, match_end_bb, target);
     }
@@ -830,6 +846,14 @@ fn assign_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, assign
     func.pop_destination();
 }
 
+fn dereference_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, d: &DereferenceExpression, target: &Target) -> Var
+{
+    let inner_var = to_bc(bc_mod, func, &d.inner, target);
+    let dst = get_dst(func, &d.typ);
+    func.add(store_operand_instr(&dst, Operand::Dereference(inner_var)));
+    dst
+}
+
 fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &Expression, target: &Target) -> Option<Var>
 {
     match *expr
@@ -959,7 +983,7 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         },
 
         Expression::Match(ref m) => {
-            Some(match_to_bc(bc_mod, func, m, target))
+            match_to_bc(bc_mod, func, m, target)
         },
 
         Expression::If(ref i) => {
@@ -983,10 +1007,7 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         },
 
         Expression::Dereference(ref d) => {
-            let inner_var = to_bc(bc_mod, func, &d.inner, target);
-            let dst = get_dst(func, &d.typ);
-            func.add(store_operand_instr(&dst, Operand::Dereference(inner_var)));
-            Some(dst)
+            Some(dereference_to_bc(bc_mod, func, d, target))
         },
 
         Expression::Assign(ref a) => {

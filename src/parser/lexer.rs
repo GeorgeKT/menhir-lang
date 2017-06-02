@@ -102,7 +102,6 @@ impl Lexer
             ';' => {self.add(TokenKind::SemiColon, span); Ok(())},
             '~' => {self.add(TokenKind::Tilde, span); Ok(())},
             '?' => {self.add(TokenKind::QuestionMark, span); Ok(())},
-            '&' => {self.add(TokenKind::Ampersand, span); Ok(())},
             '0'...'9' => {self.start(c, LexState::Number); Ok(())},
             '\"' => {self.start(c, LexState::InString); Ok(())},
             '\'' => {self.start(c, LexState::InChar); Ok(())},
@@ -223,6 +222,7 @@ impl Lexer
             "::" => Ok(TokenKind::DoubleColon),
             "|" => Ok(TokenKind::Pipe),
             "." => Ok(TokenKind::BinaryOperator(BinaryOperator::Dot)),
+            "&" => Ok(TokenKind::Ampersand),
             _ => parse_error_result(&self.current_single_span(), format!("Invalid operator {}", self.data)),
         }
     }

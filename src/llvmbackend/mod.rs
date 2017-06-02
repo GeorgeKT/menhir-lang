@@ -120,7 +120,7 @@ unsafe fn gen_global(ctx: &mut Context, glob_name: &str, glob_value: &Constant)
     let glob = LLVMAddGlobal(ctx.module, ctx.resolve_type(&v.typ), name.as_ptr());
     LLVMSetLinkage(glob, LLVMLinkage::LLVMExternalLinkage);
     LLVMSetInitializer(glob, v.value);
-    ctx.add_variable(glob_name, v);
+    ctx.set_variable(glob_name, v);
 }
 
 pub fn llvm_code_generation<'a>(bc_mod: &ByteCodeModule, target_machine: &'a TargetMachine) -> Result<Context<'a>, String>
