@@ -79,6 +79,11 @@ pub unsafe fn get_operand(ctx: &mut Context, operand: &Operand) -> ValueRef
         }
 
         Operand::Const(ref c) => ValueRef::from_const(ctx, c),
+
+        Operand::SizeOf(ref typ) => {
+            let llvm_type = ctx.resolve_type(typ);
+            ValueRef::new(LLVMSizeOf(llvm_type), ctx.target_machine.target.native_uint_type.clone())
+        }
     }
 }
 
@@ -142,7 +147,7 @@ unsafe fn gen_unary_op(ctx: &mut Context, dst: &Var, operator: UnaryOperator, sr
 
 unsafe fn gen_binary_op(ctx: &mut Context, dst: &Var, op: BinaryOperator, left: &Operand, right: &Operand)
 {
-    let left_type = left.get_type();
+    let left_type = left.get_type(ctx.target_machine.target.int_size);
     let left = get_operand(ctx, left).load(ctx);
     let right = get_operand(ctx, right).load(ctx);
 
@@ -214,7 +219,7 @@ unsafe fn gen_binary_op(ctx: &mut Context, dst: &Var, op: BinaryOperator, left: 
 unsafe fn gen_cast(ctx: &mut Context, dst: &Var, src: &Operand)
 {
     let operand = get_operand(ctx, src);
-    let src_type = src.get_type();
+    let src_type = src.get_type(ctx.target_machine.target.int_size);
     let casted = match (&dst.typ, &src_type)
     {
         (&Type::UInt(_), &Type::Int(_)) |

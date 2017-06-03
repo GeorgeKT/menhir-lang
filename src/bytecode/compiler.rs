@@ -588,7 +588,7 @@ fn match_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, m: &Mat
     func.push_destination(None);
     let target_var = match m.target {
         Expression::Dereference(ref de) => {
-            let inner_type = de.inner.get_type();
+            let inner_type = de.inner.get_type(target.int_size);
             let v_inner_type = inner_type.get_pointer_element_type().expect("Dereference should be on a pointer type");
             if v_inner_type.pass_by_value() {
                 dereference_to_bc(bc_mod, func, de, target)
@@ -1052,6 +1052,12 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         Expression::Cast(ref c) => {
             Some(cast_to_bc(bc_mod, func, c, target))
         },
+
+        Expression::CompilerCall(CompilerCall::SizeOf(ref typ, _)) => {
+            let dst = get_dst(func, &target.native_uint_type);
+            func.add(store_operand_instr(&dst, Operand::SizeOf(typ.clone())));
+            Some(dst)
+        }
     }
 }
 

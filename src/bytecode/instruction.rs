@@ -82,6 +82,7 @@ pub enum Operand
     Dereference(Var),
     Const(Constant),
     Func(String),
+    SizeOf(Type),
 }
 
 impl Operand
@@ -116,7 +117,7 @@ impl Operand
         Operand::Const(Constant::String(s.into()))
     }
 
-    pub fn get_type(&self) -> Type
+    pub fn get_type(&self, int_size: IntSize) -> Type
     {
         match *self
         {
@@ -125,6 +126,7 @@ impl Operand
             Operand::Dereference(ref var) => var.typ.get_pointer_element_type().expect("Dereference on a non pointer").clone(),
             Operand::Const(ref c) => c.get_type(),
             Operand::Func(_) => Type::Unknown,
+            Operand::SizeOf(_) => Type::UInt(int_size),
         }
     }
 }
@@ -140,6 +142,7 @@ impl fmt::Display for Operand
             Operand::Dereference(ref var) => write!(f, "*{}", var),
             Operand::Const(ref c) => write!(f, "{}", c),
             Operand::Func(ref func) => write!(f, "(func {})", func),
+            Operand::SizeOf(ref typ) => write!(f, "@size({})", typ),
         }
     }
 }

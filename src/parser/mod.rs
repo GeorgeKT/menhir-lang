@@ -879,6 +879,22 @@ fn parse_for(tq: &mut TokenQueue, start: &Span, indent_level: usize, target: &Ta
     Ok(for_loop(&loop_variable, iterable, body, start.expanded(tq.pos())))
 }
 
+fn parse_compiler_call(tq: &mut TokenQueue, start: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression>
+{
+    let (name, name_span) = tq.expect_identifier()?;
+    match &name[..] {
+        "size" => {
+            tq.expect(&TokenKind::OpenParen)?;
+            let typ = parse_type(tq, indent_level, target)?;
+            tq.expect(&TokenKind::CloseParen)?;
+
+            Ok(Expression::CompilerCall(CompilerCall::SizeOf(typ, start.expanded(tq.pos()))))
+        }
+
+        _ => parse_error_result(&name_span, format!("Unknown compiler call {}", name))
+    }
+}
+
 fn parse_expression_start(tq: &mut TokenQueue, tok: Token, indent_level: usize, target: &Target) -> CompileResult<Expression>
 {
     match tok.kind
@@ -1000,6 +1016,10 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token, indent_level: usize, 
             let next_tok = tq.pop()?;
             let inner = parse_expression_start(tq, next_tok, indent_level, target)?;
             Ok(dereference(inner, tok.span.expanded(tq.pos())))
+        }
+
+        TokenKind::At => {
+            parse_compiler_call(tq, &tok.span, indent_level, target)
         }
 
         _ => parse_error_result(&tok.span, format!("Unexpected token '{}'", tok)),

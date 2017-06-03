@@ -1,0 +1,9 @@
+#ret:24
+
+struct Foo:
+    a: double
+    b: double
+    c: int
+
+fn main() -> uint:
+    @size(Foo)

@@ -5,7 +5,7 @@ use super::typecheckercontext::TypeCheckerContext;
 use compileerror::{CompileResult, unknown_name_result};
 
 #[derive(Eq, PartialEq, Debug)]
-enum TypeResolved
+pub enum TypeResolved
 {
     Yes,
     No,
@@ -72,7 +72,7 @@ fn resolve_type_helper(ctx: &TypeCheckerContext, typ: &Type) -> (Option<Type>, T
     }
 }
 
-fn resolve_type(ctx: &TypeCheckerContext, typ: &mut Type) -> TypeResolved
+pub fn resolve_type(ctx: &TypeCheckerContext, typ: &mut Type) -> TypeResolved
 {
     match resolve_type_helper(ctx, typ)
     {

@@ -457,6 +457,11 @@ fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &
         },
 
         Expression::Void => Ok(Expression::Void),
+
+        Expression::CompilerCall(CompilerCall::SizeOf(ref t, ref span)) => {
+            let new_t = make_concrete(ctx, generic_args, t, span)?;
+            Ok(Expression::CompilerCall(CompilerCall::SizeOf(new_t, span.clone())))
+        }
     }
 }
 
@@ -641,6 +646,7 @@ fn resolve_generics(ctx: &TypeCheckerContext, new_functions: &mut FunctionMap, m
             resolve_generics(ctx, new_functions, module, inner)
         },
 
+        Expression::CompilerCall(CompilerCall::SizeOf(_, _)) |
         Expression::Nil(_) |
         Expression::NameRef(_) |
         Expression::If(_) |

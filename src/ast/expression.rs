@@ -24,6 +24,7 @@ pub struct Nil
     pub span: Span,
 }
 
+
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
 {
@@ -52,6 +53,7 @@ pub enum Expression
     OptionalToBool(Box<Expression>),
     ToOptional(Box<ToOptional>),
     Cast(Box<TypeCast>),
+    CompilerCall(CompilerCall),
     Void,
 }
 
@@ -153,11 +155,12 @@ impl Expression
             Expression::OptionalToBool(ref inner) => inner.span(),
             Expression::ToOptional(ref t) => t.inner.span(),
             Expression::Cast(ref t) => t.span.clone(),
+            Expression::CompilerCall(CompilerCall::SizeOf(_, ref span)) => span.clone(),
             Expression::Void => Span::default(),
         }
     }
 
-    pub fn get_type(&self) -> Type
+    pub fn get_type(&self, int_size: IntSize) -> Type
     {
         match *self
         {
@@ -176,13 +179,14 @@ impl Expression
             Expression::MemberAccess(ref sma) => sma.typ.clone(),
             Expression::New(ref n) => n.typ.clone(),
             Expression::ArrayToSlice(ref a) => a.slice_type.clone(),
-            Expression::AddressOf(ref a) => ptr_type(a.inner.get_type()),
+            Expression::AddressOf(ref a) => ptr_type(a.inner.get_type(int_size)),
             Expression::Dereference(ref d) => d.typ.clone(),
             Expression::Assign(ref a) => a.typ.clone(),
             Expression::Nil(ref nt) => nt.typ.clone(),
             Expression::OptionalToBool(_) => Type::Bool,
-            Expression::ToOptional(ref t) => optional_type(t.inner.get_type()),
+            Expression::ToOptional(ref t) => optional_type(t.inner.get_type(int_size)),
             Expression::Cast(ref t) => t.destination_type.clone(),
+            Expression::CompilerCall(ref cc) => cc.get_type(int_size),
             Expression::Void |
             Expression::While(_) |
             Expression::Delete(_) |
@@ -248,6 +252,7 @@ impl TreePrinter for Expression
                 println!("{}cast to {} ({})", p, t.destination_type, t.span);
                 t.inner.print(level + 1)
             },
+            Expression::CompilerCall(ref cc) => cc.print(level),
             Expression::Void => println!("{}void", p),
         }
     }

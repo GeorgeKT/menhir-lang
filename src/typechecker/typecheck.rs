@@ -4,7 +4,7 @@ use ast::*;
 use compileerror::{CompileResult, CompileError, type_error, unknown_type_result, unknown_name, type_error_result};
 use super::typecheckercontext::TypeCheckerContext;
 use super::instantiategenerics::instantiate_generics;
-use super::typeresolver::resolve_types;
+use super::typeresolver::{resolve_type, resolve_types, TypeResolved};
 use super::matchchecker::check_match_is_exhaustive;
 use super::genericmapper::fill_in_generics;
 use super::instantiategenerics::make_concrete;
@@ -821,10 +821,10 @@ fn find_member_type(members: &[StructMember], member_name: &str, span: &Span) ->
         .ok_or_else(|| unknown_name(span, format!("Unknown struct member {}", member_name)))
 }
 
-fn member_call_to_call(left: &Expression, call: &Call) -> Expression
+fn member_call_to_call(left: &Expression, call: &Call, int_size: IntSize) -> Expression
 {
     let mut args = Vec::with_capacity(call.args.len() + 1);
-    let first_arg = match left.get_type()
+    let first_arg = match left.get_type(int_size)
     {
         Type::Pointer(_) => left.clone(),
         _ => address_of(left.clone(), left.span()),
@@ -927,13 +927,13 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
         (&mut MemberAccessType::Call(ref mut call), &Type::Struct(ref st)) => {
             let call_name = format!("{}.{}", st.name, call.callee.name);
             call.callee.name = call_name;
-            return replace_by(member_call_to_call(&sma.left, call));
+            return replace_by(member_call_to_call(&sma.left, call, ctx.target.int_size));
         },
 
         (&mut MemberAccessType::Call(ref mut call), &Type::Sum(ref st)) => {
             let call_name = format!("{}.{}", st.name, call.callee.name);
             call.callee.name = call_name;
-            return replace_by(member_call_to_call(&sma.left, call));
+            return replace_by(member_call_to_call(&sma.left, call, ctx.target.int_size));
         },
 
         (&mut MemberAccessType::Call(ref mut call), &Type::Generic(ref gt)) => {
@@ -1140,6 +1140,20 @@ fn type_check_cast(ctx: &mut TypeCheckerContext, c: &mut TypeCast) -> TypeCheckR
     }
 }
 
+fn type_check_compiler_call(ctx: &mut TypeCheckerContext, cc: &mut CompilerCall) -> TypeCheckResult
+{
+    match *cc {
+        CompilerCall::SizeOf(ref mut typ, ref span) => {
+            if resolve_type(ctx, typ) == TypeResolved::No {
+                type_error_result(span, format!("Unable to resolve type {}", typ))
+            } else {
+                valid(ctx.target.native_uint_type.clone())
+            }
+        }
+    }
+}
+
+
 pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: &Option<Type>) -> CompileResult<Type>
 {
     let type_check_result = match *e
@@ -1193,6 +1207,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
             valid(t.optional_type.clone())
         },
         Expression::Cast(ref mut t) => type_check_cast(ctx, t),
+        Expression::CompilerCall(ref mut cc) => type_check_compiler_call(ctx, cc),
     };
 
     match type_check_result

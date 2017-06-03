@@ -102,6 +102,7 @@ impl Lexer
             ';' => {self.add(TokenKind::SemiColon, span); Ok(())},
             '~' => {self.add(TokenKind::Tilde, span); Ok(())},
             '?' => {self.add(TokenKind::QuestionMark, span); Ok(())},
+            '@' => {self.add(TokenKind::At, span); Ok(())},
             '0'...'9' => {self.start(c, LexState::Number); Ok(())},
             '\"' => {self.start(c, LexState::InString); Ok(())},
             '\'' => {self.start(c, LexState::InChar); Ok(())},
