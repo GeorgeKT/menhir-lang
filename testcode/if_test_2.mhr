@@ -3,6 +3,8 @@ fn max(a: int, b: int) -> int:
     let v = a > b
     if v:
         a
+    else if a == b:
+        a
     else
         b
 

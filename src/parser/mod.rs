@@ -655,7 +655,6 @@ fn parse_if(tq: &mut TokenQueue, span: &Span, indent_level: usize, target: &Targ
     let cond = parse_expression(tq, indent_level, target)?;
     tq.expect(&TokenKind::Colon)?;
     let on_true = parse_block(tq, &span.file, indent_level, target)?;
-
     if tq.is_next(&TokenKind::Indent(indent_level)) {
         tq.pop_indent()?;
     }
@@ -663,7 +662,13 @@ fn parse_if(tq: &mut TokenQueue, span: &Span, indent_level: usize, target: &Targ
     if tq.is_next(&TokenKind::Else)
     {
         tq.expect(&TokenKind::Else)?;
-        let on_false = parse_block(tq, &span.file, indent_level, target)?;
+        let on_false = if tq.is_next(&TokenKind::If) {
+            let tok = tq.expect(&TokenKind::If)?;
+            parse_if(tq, &tok.span, indent_level, target)?
+        } else {
+            parse_block(tq, &span.file, indent_level, target)?
+        };
+
         Ok(if_expression(cond, on_true, on_false, span.expanded(tq.pos())))
     }
     else
