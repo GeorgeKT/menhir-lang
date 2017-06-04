@@ -9,7 +9,7 @@ use target::Target;
 pub struct StackFrame
 {
     symbols: HashMap<String, (Type, bool)>,
-    start_of_function: bool,
+    function_return_type: Option<Type>,
 }
 
 pub struct ResolvedName
@@ -33,11 +33,11 @@ impl ResolvedName
 
 impl StackFrame
 {
-    pub fn new(start_of_function: bool) -> StackFrame
+    pub fn new(function_return_type: Option<Type>) -> StackFrame
     {
         StackFrame{
             symbols: HashMap::new(),
-            start_of_function: start_of_function,
+            function_return_type,
         }
     }
 
@@ -93,8 +93,8 @@ impl<'a> TypeCheckerContext<'a>
     {
         TypeCheckerContext{
             stack: vec![],
-            globals: StackFrame::new(false),
-            externals: StackFrame::new(false),
+            globals: StackFrame::new(None),
+            externals: StackFrame::new(None),
             target: target,
         }
     }
@@ -111,7 +111,7 @@ impl<'a> TypeCheckerContext<'a>
                 return t;
             }
 
-            if sf.start_of_function {
+            if sf.function_return_type.is_some() {
                 break;
             }
         }
@@ -148,13 +148,24 @@ impl<'a> TypeCheckerContext<'a>
         self.stack.last_mut().expect("Empty stack").update(name, t, mutable)
     }
 
-    pub fn push_stack(&mut self, start_of_function: bool)
+    pub fn push_stack(&mut self, function_return_type: Option<Type>)
     {
-        self.stack.push(StackFrame::new(start_of_function));
+        self.stack.push(StackFrame::new(function_return_type));
     }
 
     pub fn pop_stack(&mut self)
     {
         self.stack.pop();
+    }
+
+    pub fn get_function_return_type(&self) -> Option<Type>
+    {
+        for sf in self.stack.iter().rev() {
+            if sf.function_return_type.is_some() {
+                return sf.function_return_type.clone();
+            }
+        }
+
+        None
     }
 }
