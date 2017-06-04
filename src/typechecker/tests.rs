@@ -99,15 +99,15 @@ fn foo(x: int) -> int:
 fn test_let()
 {
 	assert!(type_check(r#"
-let x = 6 in x + x
+(let x = 6; x + x)
 "#).is_ok());
 
 	assert!(type_check(r#"
-let x = 6 in x + y
+(let x = 6; x + y)
 "#).is_err());
 
 	assert!(type_check(r#"
-let x = [6, 7] in x.len
+(let x = [6, 7]; x.len)
 "#).is_ok());
 }
 

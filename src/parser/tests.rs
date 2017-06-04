@@ -505,29 +505,6 @@ match a:
 }
 
 #[test]
-fn test_let()
-{
-    let target = Target::new(IntSize::I32, "");
-    let e = th_expr(r#"
-let x = 5, y = 7 in x * y
-"#, &target);
-    assert!(e == binding_expression(
-        vec![
-            name_binding("x".into(), number(5, span(2, 9, 2, 9), &target), false, span(2, 5, 2, 9)),
-            name_binding("y".into(), number(7, span(2, 16, 2, 16), &target), false, span(2, 12, 2, 16)),
-        ],
-        bin_op_with_precedence(
-            BinaryOperator::Mul,
-            name_ref("x", span(2, 21, 2, 21)),
-            name_ref("y", span(2, 25, 2, 25)),
-            span(2, 21, 2, 25),
-            TOP_PRECEDENCE
-        ),
-        span(2, 1, 2, 25))
-    )
-}
-
-#[test]
 fn test_struct()
 {
     let target = Target::new(IntSize::I32, "");

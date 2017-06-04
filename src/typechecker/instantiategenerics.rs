@@ -331,12 +331,6 @@ fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &
             Ok(match_expression(target, cases, m.span.clone()))
         },
 
-        Expression::Binding(ref l) => {
-            let bindings = subsitute_bindings(ctx, generic_args, &l.bindings)?;
-            let expr = substitute_expr(ctx, generic_args, &l.expression)?;
-            Ok(binding_expression(bindings, expr, l.span.clone()))
-        },
-
         Expression::Bindings(ref l) => {
             let nb = subsitute_bindings(ctx, generic_args, &l.bindings)?;
             Ok(bindings(nb, l.span.clone()))
@@ -536,321 +530,31 @@ fn resolve_generic_call(ctx: &TypeCheckerContext, new_functions: &mut FunctionMa
     }
 }
 
-fn resolve_generics_in_pattern(ctx: &TypeCheckerContext, new_functions: &mut FunctionMap, module: &Module, p: &Pattern) -> CompileResult<()>
-{
-    match *p
-    {
-        Pattern::Literal(Literal::Array(ref al)) => {
-            for el in &al.elements {
-                resolve_generics(ctx, new_functions, module, el)?;
-            }
-            Ok(())
-        },
-        _ => Ok(())
-    }
-}
-
 fn resolve_generics(ctx: &TypeCheckerContext, new_functions: &mut FunctionMap, module: &Module, e: &Expression) -> CompileResult<()>
 {
-    match *e
-    {
-        Expression::UnaryOp(ref op) => resolve_generics(ctx, new_functions, module, &op.expression),
-        Expression::BinaryOp(ref op) => {
-            resolve_generics(ctx, new_functions, module, &op.left)?;
-            resolve_generics(ctx, new_functions, module, &op.right)
-        },
-
-        Expression::Literal(Literal::Array(ref a)) => {
-            for el in &a.elements {
-                resolve_generics(ctx, new_functions, module, el)?;
-            }
-            Ok(())
-        },
-
-        Expression::Call(ref c) => {
-            for a in &c.args {
-                resolve_generics(ctx, new_functions, module, a)?;
-            }
+    let mut rg = |e: &Expression| {
+        if let Expression::Call(ref c) = *e {
             if !c.generic_args.is_empty() {
-                resolve_generic_call(ctx, new_functions, module, c)
-            } else {
-                Ok(())
+                resolve_generic_call(ctx, new_functions, module, c)?;
             }
-        },
-
-        Expression::Match(ref m) => {
-            resolve_generics(ctx, new_functions, module, &m.target)?;
-            for c in &m.cases
-            {
-                resolve_generics_in_pattern(ctx, new_functions, module, &c.pattern)?;
-                resolve_generics(ctx, new_functions, module, &c.to_execute)?;
-            }
-            Ok(())
-        },
-
-        Expression::Lambda(ref l) => {
-            resolve_generics(ctx, new_functions, module, &l.expr)
-        },
-
-        Expression::Binding(ref l) => {
-            for b in &l.bindings {
-                resolve_generics(ctx, new_functions, module, &b.init)?
-            }
-
-            resolve_generics(ctx, new_functions, module, &l.expression)
-        },
-
-        Expression::Bindings(ref l) => {
-            for b in &l.bindings {
-                resolve_generics(ctx, new_functions, module, &b.init)?
-            }
-
-            Ok(())
-        },
-
-        Expression::StructInitializer(ref si) => {
-            for mi in &si.member_initializers {
-                resolve_generics(ctx, new_functions, module, mi)?;
-            }
-            Ok(())
         }
-
-        Expression::Block(ref b) => {
-            for e in &b.expressions {
-                resolve_generics(ctx, new_functions, module, e)?;
-            }
-            Ok(())
-        },
-
-        Expression::New(ref n) => {
-            resolve_generics(ctx, new_functions, module, &n.inner)
-        },
-
-        Expression::Delete(ref n) => {
-            resolve_generics(ctx, new_functions, module, &n.inner)
-        },
-
-        Expression::ArrayToSlice(ref ats) => {
-            resolve_generics(ctx, new_functions, module, &ats.inner)
-        },
-
-        Expression::AddressOf(ref a) => {
-            resolve_generics(ctx, new_functions, module, &a.inner)
-        },
-
-        Expression::Dereference(ref d) => {
-            resolve_generics(ctx, new_functions, module, &d.inner)
-        },
-
-        Expression::Assign(ref a) => {
-            resolve_generics(ctx, new_functions, module, &a.right)
-        },
-
-        Expression::While(ref w) => {
-            resolve_generics(ctx, new_functions, module, &w.cond)?;
-            resolve_generics(ctx, new_functions, module, &w.body)
-        },
-
-        Expression::For(ref f) => {
-            resolve_generics(ctx, new_functions, module, &f.iterable)?;
-            resolve_generics(ctx, new_functions, module, &f.body)
-        },
-
-        Expression::ToOptional(ref t) => {
-            resolve_generics(ctx, new_functions, module, &t.inner)
-        },
-
-        Expression::Cast(ref t) => {
-            resolve_generics(ctx, new_functions, module, &t.inner)
-        },
-
-        Expression::OptionalToBool(ref inner) => {
-            resolve_generics(ctx, new_functions, module, inner)
-        },
-
-        Expression::IndexOperation(ref iop) => {
-            resolve_generics(ctx, new_functions, module, &iop.target)?;
-            resolve_generics(ctx, new_functions, module, &iop.index_expr)
-        },
-
-        Expression::Return(ref r) => {
-            resolve_generics(ctx, new_functions, module, &r.expression)
-        }
-
-        Expression::CompilerCall(CompilerCall::SizeOf(_, _)) |
-        Expression::Nil(_) |
-        Expression::NameRef(_) |
-        Expression::If(_) |
-        Expression::MemberAccess(_) |
-        Expression::Literal(_) |
-        Expression::Void => Ok(()),
-    }
+        Ok(())
+    };
+    e.visit(&mut rg)
 }
 
-fn replace_generic_calls_in_pattern(new_functions: &FunctionMap, p: &mut Pattern) -> CompileResult<()>
+fn replace_generic_calls(e: &mut Expression) -> CompileResult<()>
 {
-    match *p
-    {
-        Pattern::Literal(Literal::Array(ref mut al)) => {
-            for el in &mut al.elements {
-                replace_generic_calls(new_functions, el)?;
-            }
-            Ok(())
-        },
-        _ => Ok(())
-    }
-}
-
-fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> CompileResult<()>
-{
-    match *e
-    {
-        Expression::UnaryOp(ref mut op) => replace_generic_calls(new_functions, &mut op.expression),
-        Expression::BinaryOp(ref mut op) => {
-            replace_generic_calls(new_functions, &mut op.left)?;
-            replace_generic_calls(new_functions, &mut op.right)
-        },
-
-        Expression::Literal(Literal::Array(ref mut a)) => {
-            for el in &mut a.elements {
-                replace_generic_calls(new_functions, el)?;
-            }
-            Ok(())
-        },
-
-        Expression::Call(ref mut call) => {
-            for a in &mut call.args {
-                replace_generic_calls(new_functions, a)?;
-            }
-
+    let mut replace_calls = |e: &mut Expression| {
+        if let Expression::Call(ref mut call) =  *e {
             if !call.generic_args.is_empty() {
                 call.callee.name = new_func_name(&call.callee.name, &call.generic_args);
             }
-
-            Ok(())
-        },
-
-        Expression::Lambda(ref mut l) => {
-            replace_generic_calls(new_functions, &mut l.expr)
-        },
-
-        Expression::Match(ref mut m) => {
-            replace_generic_calls(new_functions, &mut m.target)?;
-            for c in &mut m.cases
-            {
-                replace_generic_calls_in_pattern(new_functions, &mut c.pattern)?;
-                replace_generic_calls(new_functions, &mut c.to_execute)?;
-            }
-            Ok(())
-        },
-
-        Expression::Binding(ref mut l) => {
-            for b in &mut l.bindings {
-                replace_generic_calls(new_functions, &mut b.init)?
-            }
-
-            replace_generic_calls(new_functions, &mut l.expression)
-        },
-
-        Expression::Bindings(ref mut l) => {
-            for b in &mut l.bindings {
-                replace_generic_calls(new_functions, &mut b.init)?
-            }
-            Ok(())
-        },
-
-        Expression::Block(ref mut b) => {
-            for e in &mut b.expressions {
-                replace_generic_calls(new_functions, e)?;
-            }
-            Ok(())
-        },
-
-        Expression::New(ref mut n) => {
-            replace_generic_calls(new_functions, &mut n.inner)?;
-            Ok(())
-        },
-
-        Expression::Delete(ref mut d) => {
-            replace_generic_calls(new_functions, &mut d.inner)?;
-            Ok(())
-        },
-
-        Expression::ArrayToSlice(ref mut ats) => {
-            replace_generic_calls(new_functions, &mut ats.inner)?;
-            Ok(())
-        },
-
-        Expression::Return(ref mut r) => {
-            replace_generic_calls(new_functions, &mut r.expression)
-        },
-
-        Expression::If(ref mut i) => {
-            replace_generic_calls(new_functions, &mut i.condition)?;
-            replace_generic_calls(new_functions, &mut i.on_true)?;
-            if let Some(ref mut e) = i.on_false {
-                replace_generic_calls(new_functions, e)?;
-            }
-
-            Ok(())
         }
+        Ok(())
+    };
 
-        Expression::StructInitializer(ref mut si) => {
-            for e in &mut si.member_initializers {
-                replace_generic_calls(new_functions, e)?;
-            }
-            Ok(())
-        }
-
-        Expression::AddressOf(ref mut a) => {
-            replace_generic_calls(new_functions, &mut a.inner)
-        }
-
-        Expression::Dereference(ref mut d) => {
-            replace_generic_calls(new_functions, &mut d.inner)
-        }
-
-        Expression::While(ref mut w) => {
-            replace_generic_calls(new_functions, &mut w.cond)?;
-            replace_generic_calls(new_functions, &mut w.body)
-        }
-
-        Expression::Assign(ref mut a) => {
-            replace_generic_calls(new_functions, &mut a.right)
-        }
-
-        Expression::For(ref mut f) => {
-            replace_generic_calls(new_functions, &mut f.iterable)?;
-            replace_generic_calls(new_functions, &mut f.body)
-        }
-
-        Expression::OptionalToBool(ref mut o) => {
-            replace_generic_calls(new_functions, o)
-        }
-
-        Expression::MemberAccess(ref mut ma) => {
-            replace_generic_calls(new_functions, &mut ma.left)
-        }
-
-        Expression::ToOptional(ref mut t) => {
-            replace_generic_calls(new_functions, &mut t.inner)
-        }
-
-        Expression::Cast(ref mut c) => {
-            replace_generic_calls(new_functions, &mut c.inner)
-        }
-
-        Expression::IndexOperation(ref mut iop) => {
-            replace_generic_calls(new_functions, &mut iop.target)?;
-            replace_generic_calls(new_functions, &mut iop.index_expr)
-        }
-
-        Expression::Literal(_) |
-        Expression::Void |
-        Expression::CompilerCall(_) |
-        Expression::Nil(_) |
-        Expression::NameRef(_) => Ok(())
-    }
+    e.visit_mut(&mut replace_calls)
 }
 
 /*
@@ -869,7 +573,7 @@ pub fn instantiate_generics(module: &mut Module, ctx: &TypeCheckerContext) -> Co
     for f in module.functions.values_mut()
     {
         if !f.generics_resolved && !f.is_generic() {
-            replace_generic_calls(&new_functions, &mut f.expression)?;
+            replace_generic_calls(&mut f.expression)?;
             f.generics_resolved = true;
         }
     }

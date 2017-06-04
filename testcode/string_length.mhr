@@ -1,3 +1,4 @@
 #ret:5
 fn main() -> int:
-    let x = "Hello" in x.len as int
+    let x = "Hello"
+    x.len as int

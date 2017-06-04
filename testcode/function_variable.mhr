@@ -2,4 +2,5 @@
 fn triple(x: int) -> int: x * 3
 
 fn main() -> int:
-    let f = triple in f(5)
+    let f = triple
+    f(5)

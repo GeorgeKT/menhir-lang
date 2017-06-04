@@ -163,23 +163,6 @@ fn add_binding(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, b: &Bin
     }
 }
 
-fn binding_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, l: &BindingExpression, target: &Target) -> Option<Var>
-{
-    let dst = get_dst(func, &l.typ);
-    func.add(Instruction::StackAlloc(dst.clone()));
-    func.push_scope();
-    for b in &l.bindings{
-        add_binding(bc_mod, func, b, target);
-    }
-
-    func.push_destination(Some(dst.clone()));
-    to_bc(bc_mod, func, &l.expression, target);
-    func.pop_destination();
-    func.pop_scope();
-    Some(dst)
-}
-
-
 fn name_ref_to_bc(func: &mut ByteCodeFunction, nr: &NameRef, target: &Target) -> Option<Var>
 {
     let add_name_ref = |func: &mut ByteCodeFunction, nr: &NameRef| {
@@ -937,10 +920,6 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
 
         Expression::Block(ref b) => {
             block_to_bc(bc_mod, func, b, target)
-        },
-
-        Expression::Binding(ref l) => {
-            binding_to_bc(bc_mod, func, l, target)
         },
 
         Expression::Bindings(ref l) => {

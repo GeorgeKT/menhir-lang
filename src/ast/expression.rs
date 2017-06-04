@@ -1,3 +1,4 @@
+use std::error::Error;
 use span::Span;
 use ast::*;
 
@@ -43,7 +44,6 @@ pub enum Expression
     Match(Box<MatchExpression>),
     If(Box<IfExpression>),
     Lambda(Box<Lambda>),
-    Binding(Box<BindingExpression>),
     Bindings(Box<BindingList>),
     StructInitializer(StructInitializer),
     MemberAccess(Box<MemberAccess>),
@@ -151,7 +151,6 @@ impl Expression
             Expression::NameRef(ref nr) => nr.span.clone(),
             Expression::Match(ref m) => m.span.clone(),
             Expression::Lambda(ref l) => l.span.clone(),
-            Expression::Binding(ref l) => l.span.clone(),
             Expression::Bindings(ref l) => l.span.clone(),
             Expression::If(ref i) => i.span.clone(),
             Expression::StructInitializer(ref si) => si.span.clone(),
@@ -187,7 +186,6 @@ impl Expression
             Expression::NameRef(ref nr) => nr.typ.clone(),
             Expression::Match(ref m) => m.typ.clone(),
             Expression::Lambda(ref l) => l.sig.get_type(),
-            Expression::Binding(ref l) => l.typ.clone(),
             Expression::Bindings(ref l) => l.bindings.last().map(|b| b.typ.clone()).expect("Binding types are not known"),
             Expression::If(ref i) => i.typ.clone(),
             Expression::StructInitializer(ref si) => si.typ.clone(),
@@ -208,6 +206,340 @@ impl Expression
             Expression::While(_) |
             Expression::Delete(_) |
             Expression::For(_) => Type::Void,
+        }
+    }
+
+    pub fn visit_mut<E, Op>(&mut self, op: &mut Op) -> Result<(), E>
+        where E: Error,
+              Op: FnMut(&mut Expression) -> Result<(), E>
+    {
+        op(self)?;
+        match *self
+        {
+            Expression::UnaryOp(ref mut uop) => {
+                uop.expression.visit_mut(op)
+            },
+
+            Expression::BinaryOp(ref mut bop) => {
+                bop.left.visit_mut(op)?;
+                bop.right.visit_mut(op)
+            },
+
+            Expression::Literal(Literal::Array(ref mut a)) => {
+                for el in &mut a.elements {
+                    el.visit_mut(op)?;
+                }
+                Ok(())
+            },
+
+            Expression::Call(ref mut call) => {
+                for a in &mut call.args {
+                    a.visit_mut(op)?;
+                }
+                Ok(())
+            },
+
+            Expression::Lambda(ref mut l) => {
+                l.expr.visit_mut(op)
+            },
+
+            Expression::Match(ref mut m) => {
+                m.target.visit_mut(op)?;
+                for c in &mut m.cases
+                {
+                    if let Pattern::Literal(Literal::Array(ref mut al)) = c.pattern {
+                        for el in &mut al.elements {
+                            el.visit_mut(op)?;
+                        }
+                    }
+                    c.to_execute.visit_mut(op)?;
+                }
+                Ok(())
+            },
+
+            Expression::Bindings(ref mut l) => {
+                for b in &mut l.bindings {
+                    b.init.visit_mut(op)?
+                }
+                Ok(())
+            },
+
+            Expression::Block(ref mut b) => {
+                for e in &mut b.expressions {
+                    e.visit_mut(op)?;
+                }
+                Ok(())
+            },
+
+            Expression::New(ref mut n) => {
+                n.inner.visit_mut(op)
+            },
+
+            Expression::Delete(ref mut d) => {
+                d.inner.visit_mut(op)
+            },
+
+            Expression::ArrayToSlice(ref mut ats) => {
+                ats.inner.visit_mut(op)
+            },
+
+            Expression::Return(ref mut r) => {
+                r.expression.visit_mut(op)
+            },
+
+            Expression::If(ref mut i) => {
+                i.condition.visit_mut(op)?;
+                i.on_true.visit_mut(op)?;
+                if let Some(ref mut e) = i.on_false {
+                    e.visit_mut(op)?;
+                }
+                Ok(())
+            }
+
+            Expression::StructInitializer(ref mut si) => {
+                for e in &mut si.member_initializers {
+                    e.visit_mut(op)?;
+                }
+                Ok(())
+            }
+
+            Expression::AddressOf(ref mut a) => {
+                a.inner.visit_mut(op)
+            }
+
+            Expression::Dereference(ref mut d) => {
+                d.inner.visit_mut(op)
+            }
+
+            Expression::While(ref mut w) => {
+                w.cond.visit_mut(op)?;
+                w.body.visit_mut(op)
+            }
+
+            Expression::Assign(ref mut a) => {
+                match a.left {
+                    AssignTarget::Dereference(ref mut d) => d.inner.visit_mut(op)?,
+                    AssignTarget::IndexOperation(ref mut iop) => {
+                        iop.target.visit_mut(op)?;
+                        iop.index_expr.visit_mut(op)?;
+                    },
+                    AssignTarget::MemberAccess(ref mut ma) => {
+                        ma.left.visit_mut(op)?;
+                        if let MemberAccessType::Call(ref mut call) = ma.right {
+                            for a in &mut call.args {
+                                a.visit_mut(op)?;
+                            }
+                        }
+                    }
+                    _ => (),
+                }
+                a.right.visit_mut(op)
+            }
+
+            Expression::For(ref mut f) => {
+                f.iterable.visit_mut(op)?;
+                f.body.visit_mut(op)
+            }
+
+            Expression::OptionalToBool(ref mut o) => {
+                o.visit_mut(op)
+            }
+
+            Expression::MemberAccess(ref mut ma) => {
+                ma.left.visit_mut(op)?;
+                if let MemberAccessType::Call(ref mut call) = ma.right {
+                    for a in &mut call.args {
+                        a.visit_mut(op)?;
+                    }
+                }
+                Ok(())
+            }
+
+            Expression::ToOptional(ref mut t) => {
+                t.inner.visit_mut(op)
+            }
+
+            Expression::Cast(ref mut c) => {
+                c.inner.visit_mut(op)
+            }
+
+            Expression::IndexOperation(ref mut iop) => {
+                iop.target.visit_mut(op)?;
+                iop.index_expr.visit_mut(op)
+            }
+
+            Expression::Literal(_) |
+            Expression::Void |
+            Expression::CompilerCall(_) |
+            Expression::Nil(_) |
+            Expression::NameRef(_) => Ok(())
+        }
+    }
+
+    pub fn visit<E, Op>(&self, op: &mut Op) -> Result<(), E>
+        where E: Error,
+              Op: FnMut(&Expression) -> Result<(), E>
+    {
+        op(self)?;
+        match *self
+        {
+            Expression::UnaryOp(ref uop) => {
+                uop.expression.visit(op)
+            },
+
+            Expression::BinaryOp(ref bop) => {
+                bop.left.visit(op)?;
+                bop.right.visit(op)
+            },
+
+            Expression::Literal(Literal::Array(ref a)) => {
+                for el in &a.elements {
+                    el.visit(op)?;
+                }
+                Ok(())
+            },
+
+            Expression::Call(ref call) => {
+                for a in &call.args {
+                    a.visit(op)?;
+                }
+                Ok(())
+            },
+
+            Expression::Lambda(ref l) => {
+                l.expr.visit(op)
+            },
+
+            Expression::Match(ref m) => {
+                m.target.visit(op)?;
+                for c in &m.cases
+                    {
+                        if let Pattern::Literal(Literal::Array(ref al)) = c.pattern {
+                            for el in &al.elements {
+                                el.visit(op)?;
+                            }
+                        }
+                        c.to_execute.visit(op)?;
+                    }
+                Ok(())
+            },
+
+            Expression::Bindings(ref l) => {
+                for b in &l.bindings {
+                    b.init.visit(op)?
+                }
+                Ok(())
+            },
+
+            Expression::Block(ref b) => {
+                for e in &b.expressions {
+                    e.visit(op)?;
+                }
+                Ok(())
+            },
+
+            Expression::New(ref n) => {
+                n.inner.visit(op)
+            },
+
+            Expression::Delete(ref d) => {
+                d.inner.visit(op)
+            },
+
+            Expression::ArrayToSlice(ref ats) => {
+                ats.inner.visit(op)
+            },
+
+            Expression::Return(ref r) => {
+                r.expression.visit(op)
+            },
+
+            Expression::If(ref i) => {
+                i.condition.visit(op)?;
+                i.on_true.visit(op)?;
+                if let Some(ref e) = i.on_false {
+                    e.visit(op)?;
+                }
+                Ok(())
+            }
+
+            Expression::StructInitializer(ref si) => {
+                for e in &si.member_initializers {
+                    e.visit(op)?;
+                }
+                Ok(())
+            }
+
+            Expression::AddressOf(ref a) => {
+                a.inner.visit(op)
+            }
+
+            Expression::Dereference(ref d) => {
+                d.inner.visit(op)
+            }
+
+            Expression::While(ref w) => {
+                w.cond.visit(op)?;
+                w.body.visit(op)
+            }
+
+            Expression::Assign(ref a) => {
+                match a.left {
+                    AssignTarget::Dereference(ref d) => d.inner.visit(op)?,
+                    AssignTarget::IndexOperation(ref iop) => {
+                        iop.target.visit(op)?;
+                        iop.index_expr.visit(op)?;
+                    },
+                    AssignTarget::MemberAccess(ref ma) => {
+                        ma.left.visit(op)?;
+                        if let MemberAccessType::Call(ref call) = ma.right {
+                            for a in &call.args {
+                                a.visit(op)?;
+                            }
+                        }
+                    },
+                    _ => (),
+                }
+                a.right.visit(op)
+            }
+
+            Expression::For(ref f) => {
+                f.iterable.visit(op)?;
+                f.body.visit(op)
+            }
+
+            Expression::OptionalToBool(ref o) => {
+                o.visit(op)
+            }
+
+            Expression::MemberAccess(ref ma) => {
+                ma.left.visit(op)?;
+                if let MemberAccessType::Call(ref call) = ma.right {
+                    for a in &call.args {
+                        a.visit(op)?;
+                    }
+                }
+                Ok(())
+            }
+
+            Expression::ToOptional(ref t) => {
+                t.inner.visit(op)
+            }
+
+            Expression::Cast(ref c) => {
+                c.inner.visit(op)
+            }
+
+            Expression::IndexOperation(ref iop) => {
+                iop.target.visit(op)?;
+                iop.index_expr.visit(op)
+            }
+
+            Expression::Literal(_) |
+            Expression::Void |
+            Expression::CompilerCall(_) |
+            Expression::Nil(_) |
+            Expression::NameRef(_) => Ok(())
         }
     }
 }
@@ -240,7 +572,6 @@ impl TreePrinter for Expression
             Expression::NameRef(ref nr) => nr.print(level),
             Expression::Match(ref m) => m.print(level),
             Expression::Lambda(ref l) => l.print(level),
-            Expression::Binding(ref l) => l.print(level),
             Expression::Bindings(ref l) => l.print(level),
             Expression::If(ref i) => i.print(level),
             Expression::StructInitializer(ref si) => si.print(level),

@@ -275,7 +275,16 @@ fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> Type
         ctx.add(&arg.name, arg.typ.clone(), arg.mutable, &arg.span)?;
     }
 
-    let et = type_check_expression(ctx, &mut fun.expression, &None)?;
+    let et = match type_check_expression(ctx, &mut fun.expression, &None)
+    {
+        Err(CompileError::UnknownType(ref name, ref expected_type)) => {
+            update_binding_type(ctx, &mut fun.expression, name, expected_type)?;
+            type_check_expression(ctx, &mut fun.expression, &None)?
+        },
+        Err(e) => return Err(e),
+        Ok(typ) => typ,
+    };
+
     ctx.pop_stack();
     if et != fun.sig.return_type {
         if let Some(expression) = fun.sig.return_type.convert(&et, &fun.expression) {
@@ -620,47 +629,26 @@ fn type_check_binding(ctx: &mut TypeCheckerContext, b: &mut Binding) -> TypeChec
     valid(b.typ.clone())
 }
 
-fn update_binding_type(ctx: &mut TypeCheckerContext, l: &mut BindingExpression, name: &str, expected_type: &Type) -> CompileResult<()>
+fn update_binding_type(ctx: &mut TypeCheckerContext, e: &mut Expression, name: &str, expected_type: &Type) -> CompileResult<()>
 {
-    for b in &mut l.bindings
-    {
-        if let BindingType::Name(ref b_name) = b.binding_type
-        {
-            if *b_name == *name {
-                // It's one we know, so lets try again with a proper type hint
-                b.typ = type_check_expression(ctx, &mut b.init, &Some(expected_type.clone()))?;
-                ctx.update(b_name, b.typ.clone(), b.mutable);
-                l.typ = type_check_expression(ctx, &mut l.expression, &None)?;
-                return Ok(())
+    let mut update_binding = |e: &mut Expression| {
+        if let Expression::Bindings(ref mut bl) = *e {
+            for b in &mut bl.bindings {
+                if let BindingType::Name(ref b_name) = b.binding_type
+                    {
+                        if *b_name == *name {
+                            // It's one we know, so lets try again with a proper type hint
+                            b.typ = type_check_expression(ctx, &mut b.init, &Some(expected_type.clone()))?;
+                            ctx.update(b_name, b.typ.clone(), b.mutable);
+                            return Ok(())
+                        }
+                    }
             }
         }
-    }
-
-    type_error_result(&l.span, format!("Cannot update the type of binding {}", name))
+        Ok(())
+    };
+    e.visit_mut(&mut update_binding)
 }
-
-fn type_check_binding_expression(ctx: &mut TypeCheckerContext, l: &mut BindingExpression) -> TypeCheckResult
-{
-    ctx.push_stack(None);
-    for b in &mut l.bindings {
-        type_check_binding(ctx, b)?;
-    }
-
-    match type_check_expression(ctx, &mut l.expression, &None)
-    {
-        Err(CompileError::UnknownType(ref name, ref expected_type)) => {
-            update_binding_type(ctx, l, name, expected_type)?;
-        },
-        Err(e) => return Err(e),
-        Ok(typ) => {
-            l.typ = typ;
-        }
-    }
-
-    ctx.pop_stack();
-    valid(l.typ.clone())
-}
-
 
 fn type_check_if(ctx: &mut TypeCheckerContext, i: &mut IfExpression) -> TypeCheckResult
 {
@@ -1189,7 +1177,6 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::NameRef(ref mut nr) => type_check_name(ctx, nr, type_hint),
         Expression::Match(ref mut m) => type_check_match(ctx, m),
         Expression::Lambda(ref mut l) => type_check_lambda(ctx, l, type_hint),
-        Expression::Binding(ref mut l) => type_check_binding_expression(ctx, l),
         Expression::Bindings(ref mut l) => {
             for b in &mut l.bindings {
                 type_check_binding(ctx, b)?;

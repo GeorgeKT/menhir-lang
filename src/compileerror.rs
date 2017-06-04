@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::convert::From;
 use std::iter::repeat;
 use std::fs::File;
@@ -61,6 +62,10 @@ impl CompileError
     }
 }
 
+impl Error for CompileError
+{
+    fn description(&self) -> &str {"CompileError"}
+}
 
 impl fmt::Display for CompileError
 {

@@ -3,4 +3,5 @@ fn make_pair(a: int, b: int) -> {int, int}:
     {a, b}
 
 fn main() -> int:
-    let {left, right} = make_pair(4, 5) in left + right
+    let {left, right} = make_pair(4, 5)
+    left + right

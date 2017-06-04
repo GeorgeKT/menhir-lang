@@ -86,30 +86,6 @@ pub fn bindings(bindings: Vec<Binding>, span: Span) -> Expression
     }))
 }
 
-pub fn binding_expression(bindings: Vec<Binding>, e: Expression, span: Span) -> Expression
-{
-    Expression::Binding(Box::new(BindingExpression{
-        bindings: bindings,
-        expression: e,
-        typ: Type::Unknown,
-        span: span,
-    }))
-}
-
-
-impl TreePrinter for BindingExpression
-{
-    fn print(&self, level: usize)
-    {
-        let p = prefix(level);
-        println!("{}let ({})", p, self.span);
-        for c in &self.bindings {
-            c.print(level + 1);
-        }
-        self.expression.print(level + 1);
-    }
-}
-
 impl TreePrinter for Binding
 {
     fn print(&self, level: usize)

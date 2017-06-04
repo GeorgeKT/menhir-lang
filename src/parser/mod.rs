@@ -633,21 +633,7 @@ fn parse_bindings(tq: &mut TokenQueue, mutable: bool, indent_level: usize, targe
 fn parse_binding(tq: &mut TokenQueue, mutable: bool, span: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression>
 {
     let b = parse_bindings(tq, mutable, indent_level, target)?;
-    if tq.is_next(&TokenKind::Indent(indent_level)) && tq.is_next_at(1, &TokenKind::In) {
-        tq.pop_indent()?;
-    }
-
-    if tq.is_next(&TokenKind::In)
-    {
-        tq.expect(&TokenKind::In)?;
-        let e = parse_block(tq, &span.file, indent_level, target)?;
-        Ok(binding_expression(b, e, span.expanded(tq.pos())))
-    }
-    else
-    {
-        Ok(bindings(b, span.expanded(tq.pos())))
-    }
-
+    Ok(bindings(b, span.expanded(tq.pos())))
 }
 
 fn parse_if(tq: &mut TokenQueue, span: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression>
