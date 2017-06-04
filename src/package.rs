@@ -162,7 +162,7 @@ impl PackageTarget
         }
 
         if let Ok(import_paths) = env::var("MENHIR_IMPORT_DIRS") {
-            for path in import_paths.split(":") {
+            for path in import_paths.split(':') {
                 if self.find_dependency_in_path(dep, path, &build_options.target_machine.target.triplet, deps)? {
                     return Ok(())
                 }
@@ -203,11 +203,7 @@ impl PackageTarget
         };
 
         let pkg_deps = self.find_dependencies(build_options)?;
-        let mut pkg = if path.exists() && path.is_file() {
-            parse_files(&path, &self.name, &build_options.target_machine.target, &pkg_deps.imports)?
-        } else {
-            parse_files(&path, &self.name, &build_options.target_machine.target, &pkg_deps.imports)?
-        };
+        let mut pkg = parse_files(path, &self.name, &build_options.target_machine.target, &pkg_deps.imports)?;
 
         type_check_package(&mut pkg, &build_options.target_machine.target)?;
         if build_options.dump_flags.contains("ast") || build_options.dump_flags.contains("all") {

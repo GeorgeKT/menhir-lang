@@ -81,7 +81,7 @@ fn build_package_command(matches: &ArgMatches, dump_flags: &str) -> CompileResul
 
 fn exports_command(matches: &ArgMatches) -> CompileResult<i32>
 {
-    let exports_file_path = matches.value_of("EXPORTS_FILE").ok_or(format!("No exports file given"))?;
+    let exports_file_path = matches.value_of("EXPORTS_FILE").ok_or_else(|| "No exports file given".to_owned())?;
     let exports_file = File::open(&exports_file_path)?;
     let lib = ExportLibrary::load(exports_file)?;
     println!("{}", lib);

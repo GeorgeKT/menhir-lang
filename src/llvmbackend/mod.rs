@@ -115,7 +115,7 @@ pub fn llvm_shutdown()
 
 unsafe fn gen_global(ctx: &mut Context, glob_name: &str, glob_value: &Constant)
 {
-    let v = ValueRef::from_const(&ctx, glob_value);
+    let v = ValueRef::from_const(ctx, glob_value);
     let name = CString::new(glob_name.as_bytes()).expect("Invalid string");
     let glob = LLVMAddGlobal(ctx.module, ctx.resolve_type(&v.typ), name.as_ptr());
     LLVMSetLinkage(glob, LLVMLinkage::LLVMExternalLinkage);

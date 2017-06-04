@@ -115,8 +115,8 @@ unsafe fn get_function_arg(ctx: &mut Context, operand: &Operand) -> LLVMValueRef
             } else if v.typ == src.typ {
                 src.value
             } else {
-                let dst = ctx.stack_alloc("argcopy", &inner_type);
-                copy(ctx, dst, src.value, ctx.resolve_type(&inner_type));
+                let dst = ctx.stack_alloc("argcopy", inner_type);
+                copy(ctx, dst, src.value, ctx.resolve_type(inner_type));
                 dst
             }
         },

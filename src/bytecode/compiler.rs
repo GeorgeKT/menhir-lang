@@ -18,8 +18,7 @@ fn stack_alloc(func: &mut ByteCodeFunction, typ: &Type, name: Option<&str>) -> V
             var
         },
         None => {
-            let var = func.new_var(typ.clone());
-            var
+            func.new_var(typ.clone())
         }
     }
 }

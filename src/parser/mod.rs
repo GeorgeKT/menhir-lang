@@ -690,7 +690,7 @@ fn parse_sum_type(tq: &mut TokenQueue, namespace: &str, span: &Span, indent_leve
 
 fn namespaced(namespace: &str, name: &str) -> String
 {
-    if namespace.len() == 0 {
+    if namespace.is_empty() {
         name.into()
     } else {
         format!("{}::{}", namespace, name)

@@ -16,18 +16,9 @@ pub enum OptimizationLevel
     Normal,
 }
 
-pub fn optimize_function(func: &mut ByteCodeFunction, lvl: OptimizationLevel)
+pub fn optimize_function(func: &mut ByteCodeFunction, _lvl: OptimizationLevel)
 {
-    match lvl
-    {
-        OptimizationLevel::Minimal => {
-            remove_empty_blocks(func);
-        },
-
-        OptimizationLevel::Normal => {
-            remove_empty_blocks(func);
-        }
-    }
+    remove_empty_blocks(func);
 }
 
 pub fn optimize_module(module: &mut ByteCodeModule, lvl: OptimizationLevel)
