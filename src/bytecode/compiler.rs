@@ -841,6 +841,12 @@ fn assign_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, assign
             let var = to_bc(bc_mod, func, &d.inner, target);
             func.add(store_instr(&var, &r));
         },
+
+        AssignTarget::IndexOperation(ref iop) => {
+            let tgt = to_bc(bc_mod, func, &iop.target, target);
+            let idx = to_bc(bc_mod, func, &iop.index_expr, target);
+            func.add(store_member_with_var_instr(tgt, idx, r));
+        }
     }
 
     func.pop_destination();
@@ -1056,6 +1062,14 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
         Expression::CompilerCall(CompilerCall::SizeOf(ref typ, _)) => {
             let dst = get_dst(func, &target.native_uint_type);
             func.add(store_operand_instr(&dst, Operand::SizeOf(typ.clone())));
+            Some(dst)
+        }
+
+        Expression::IndexOperation(ref iop) => {
+            let tgt = to_bc(bc_mod, func, &iop.target, target);
+            let idx = to_bc(bc_mod, func, &iop.index_expr, target);
+            let dst = get_dst(func, &iop.typ);
+            func.add(load_member_instr_with_var(&dst, &tgt, &idx));
             Some(dst)
         }
     }

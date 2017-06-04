@@ -1,4 +1,4 @@
-use ast::{Expression, NameRef, DereferenceExpression, MemberAccess, Type, TreePrinter, prefix};
+use ast::{Expression, NameRef, DereferenceExpression, MemberAccess, IndexOperation, Type, TreePrinter, prefix};
 use span::{Span};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -6,7 +6,8 @@ pub enum AssignTarget
 {
     Var(NameRef),
     MemberAccess(MemberAccess),
-    Dereference(DereferenceExpression)
+    Dereference(DereferenceExpression),
+    IndexOperation(IndexOperation)
 }
 
 impl TreePrinter for AssignTarget
@@ -17,6 +18,7 @@ impl TreePrinter for AssignTarget
             AssignTarget::Var(ref nr) => nr.print(level),
             AssignTarget::MemberAccess(ref ma) => ma.print(level),
             AssignTarget::Dereference(ref d) => d.print(level),
+            AssignTarget::IndexOperation(ref iop) => iop.print(level),
         }
     }
 }

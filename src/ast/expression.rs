@@ -54,6 +54,7 @@ pub enum Expression
     ToOptional(Box<ToOptional>),
     Cast(Box<TypeCast>),
     CompilerCall(CompilerCall),
+    IndexOperation(Box<IndexOperation>),
     Void,
 }
 
@@ -156,6 +157,7 @@ impl Expression
             Expression::ToOptional(ref t) => t.inner.span(),
             Expression::Cast(ref t) => t.span.clone(),
             Expression::CompilerCall(CompilerCall::SizeOf(_, ref span)) => span.clone(),
+            Expression::IndexOperation(ref iop) => iop.span.clone(),
             Expression::Void => Span::default(),
         }
     }
@@ -187,6 +189,7 @@ impl Expression
             Expression::ToOptional(ref t) => optional_type(t.inner.get_type(int_size)),
             Expression::Cast(ref t) => t.destination_type.clone(),
             Expression::CompilerCall(ref cc) => cc.get_type(int_size),
+            Expression::IndexOperation(ref iop) => iop.typ.clone(),
             Expression::Void |
             Expression::While(_) |
             Expression::Delete(_) |
@@ -253,6 +256,7 @@ impl TreePrinter for Expression
                 t.inner.print(level + 1)
             },
             Expression::CompilerCall(ref cc) => cc.print(level),
+            Expression::IndexOperation(ref iop) => iop.print(level),
             Expression::Void => println!("{}void", p),
         }
     }

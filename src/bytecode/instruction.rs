@@ -250,6 +250,15 @@ pub fn store_member_instr(obj: &Var, member_index: usize, src: Var, int_size: In
     }
 }
 
+pub fn store_member_with_var_instr(obj: Var, member_index: Var, src: Var) -> Instruction
+{
+    Instruction::StoreMember{
+        obj: obj,
+        member_index: Operand::Var(member_index),
+        src: Operand::Var(src),
+    }
+}
+
 pub fn address_of_instr(dst: &Var, obj: &Var) -> Instruction
 {
     Instruction::AddressOf{

@@ -205,22 +205,7 @@ fn parse_binary_op_rhs(tq: &mut TokenQueue, mut lhs: Expression, indent_level: u
 
         let next_tok = tq.pop()?;
         let rhs = parse_expression_start(tq, next_tok, indent_level, target)?;
-
-        /*
-        let prec = op.precedence();
-        println!("operator {} prec {}", op, prec);
-        println!("rhs: {}", rhs.precedence());
-        rhs.print(0);
-        println!("lhs: {}", lhs.precedence());
-        lhs.print(0);
-        */
         lhs = combine_binary_op(op, lhs, rhs);
-
-        /*
-        println!("new lhs: {}", lhs.precedence());
-        lhs.print(0);
-        println!("----------------------");
-        */
     }
 }
 
@@ -827,6 +812,7 @@ fn parse_block(tq: &mut TokenQueue, current_file: &str, indent_level: usize, tar
                 Expression::NameRef(nr) => assign(AssignTarget::Var(nr), rhs, span),
                 Expression::MemberAccess(ma) => assign(AssignTarget::MemberAccess(*ma), rhs, span),
                 Expression::Dereference(d) => assign(AssignTarget::Dereference(*d), rhs, span),
+                Expression::IndexOperation(iop) => assign(AssignTarget::IndexOperation(*iop), rhs, span),
                 _ => return parse_error_result(&e.span(), "Expression not allowed on the left hand side of an assignment")
             };
             expressions.push(assign_expr);
@@ -897,166 +883,166 @@ fn parse_compiler_call(tq: &mut TokenQueue, start: &Span, indent_level: usize, t
 
 fn parse_expression_start(tq: &mut TokenQueue, tok: Token, indent_level: usize, target: &Target) -> CompileResult<Expression>
 {
-    match tok.kind
+    let mut lhs = match tok.kind
     {
         TokenKind::Nil => {
-            Ok(nil_expr(tok.span))
+            nil_expr(tok.span)
         },
 
         TokenKind::True => {
-            Ok(Expression::Literal(Literal::Bool(tok.span, true)))
+            Expression::Literal(Literal::Bool(tok.span, true))
         },
 
         TokenKind::False => {
-            Ok(Expression::Literal(Literal::Bool(tok.span, false)))
+            Expression::Literal(Literal::Bool(tok.span, false))
         },
 
         TokenKind::CharLiteral(c) => {
-            Ok(Expression::Literal(Literal::Char(tok.span, c)))
+            Expression::Literal(Literal::Char(tok.span, c))
         },
 
         TokenKind::Func => {
-            parse_lambda(tq, &tok.span, indent_level, target)
+            parse_lambda(tq, &tok.span, indent_level, target)?
         },
 
         TokenKind::Match => {
-            parse_match(tq, &tok.span, indent_level, target)
+            parse_match(tq, &tok.span, indent_level, target)?
         },
 
         TokenKind::Let => {
-            parse_binding(tq, false, &tok.span, indent_level, target)
+            parse_binding(tq, false, &tok.span, indent_level, target)?
         },
 
         TokenKind::Var => {
-            parse_binding(tq, true, &tok.span, indent_level, target)
+            parse_binding(tq, true, &tok.span, indent_level, target)?
         },
 
         TokenKind::If => {
-            parse_if(tq, &tok.span, indent_level, target)
+            parse_if(tq, &tok.span, indent_level, target)?
         },
 
         TokenKind::While => {
-            parse_while(tq, &tok.span, indent_level, target)
+            parse_while(tq, &tok.span, indent_level, target)?
         },
 
         TokenKind::For => {
-            parse_for(tq, &tok.span, indent_level, target)
+            parse_for(tq, &tok.span, indent_level, target)?
         },
 
         TokenKind::OpenBracket => {
-            parse_array_literal(tq, &tok.span, indent_level, target).map(Expression::Literal)
+            parse_array_literal(tq, &tok.span, indent_level, target).map(Expression::Literal)?
         },
 
         TokenKind::OpenParen => {
             let inner = parse_block(tq, &tok.span.file, indent_level, target)?;
             tq.expect(&TokenKind::CloseParen)?;
-            Ok(inner)
+            inner
         },
 
         TokenKind::OpenCurly => {
             tq.push_front(tok.clone());
-            parse_struct_initializer(tq, &NameRef::new("".into(), tok.span), indent_level, target)
+            parse_struct_initializer(tq, &NameRef::new("".into(), tok.span), indent_level, target)?
         },
 
         TokenKind::Identifier(id) => {
             let nr = parse_name(tq, id, &tok.span)?;
             if tq.is_next(&TokenKind::BinaryOperator(BinaryOperator::Dot))
             {
-                parse_member_access(tq, Expression::NameRef(nr), indent_level, target)
+                parse_member_access(tq, Expression::NameRef(nr), indent_level, target)?
             }
             else if tq.is_next(&TokenKind::OpenParen)
             {
-                let call = Expression::Call(Box::new(parse_function_call(tq, nr, indent_level, target)?));
-                if tq.is_next(&TokenKind::BinaryOperator(BinaryOperator::Dot)) {
-                    parse_member_access(tq, call, indent_level, target)
-                } else {
-                    Ok(call)
-                }
+                Expression::Call(Box::new(parse_function_call(tq, nr, indent_level, target)?))
             }
             else if tq.is_next(&TokenKind::OpenCurly)
             {
-                parse_struct_initializer(tq, &nr, indent_level, target)
+                parse_struct_initializer(tq, &nr, indent_level, target)?
             }
             else
             {
-                Ok(Expression::NameRef(nr))
+                Expression::NameRef(nr)
             }
         },
 
         TokenKind::StringLiteral(s) => {
-            Ok(Expression::Literal(Literal::String(tok.span, s)))
+            Expression::Literal(Literal::String(tok.span, s))
         },
 
         TokenKind::Number(n) => {
-            parse_number(tq, &n, &tok.span, target).map(Expression::Literal)
+            parse_number(tq, &n, &tok.span, target).map(Expression::Literal)?
         },
 
         TokenKind::New => {
             let inner = parse_expression(tq, indent_level, target)?;
-            Ok(new(inner, tok.span.expanded(tq.pos())))
+            new(inner, tok.span.expanded(tq.pos()))
         },
 
         TokenKind::Delete => {
             let inner = parse_expression(tq, indent_level, target)?;
-            Ok(delete(inner, tok.span.expanded(tq.pos())))
+            delete(inner, tok.span.expanded(tq.pos()))
         },
 
-        TokenKind::UnaryOperator(op) =>
-            parse_unary_expression(tq, op, &tok.span, indent_level, target),
+        TokenKind::UnaryOperator(op) => {
+            parse_unary_expression(tq, op, &tok.span, indent_level, target)?
+        },
 
-        TokenKind::BinaryOperator(BinaryOperator::Sub) =>
-            parse_unary_expression(tq, UnaryOperator::Sub, &tok.span, indent_level, target),
+        TokenKind::BinaryOperator(BinaryOperator::Sub) => {
+            parse_unary_expression(tq, UnaryOperator::Sub, &tok.span, indent_level, target)?
+        },
 
         TokenKind::Ampersand => {
             let inner = parse_expression(tq, indent_level, target)?;
-            Ok(address_of(inner, tok.span.expanded(tq.pos())))
+            address_of(inner, tok.span.expanded(tq.pos()))
         }
 
         TokenKind::BinaryOperator(BinaryOperator::Mul) => {
             let next_tok = tq.pop()?;
             let inner = parse_expression_start(tq, next_tok, indent_level, target)?;
-            Ok(dereference(inner, tok.span.expanded(tq.pos())))
+            dereference(inner, tok.span.expanded(tq.pos()))
         }
 
         TokenKind::At => {
-            parse_compiler_call(tq, &tok.span, indent_level, target)
+            parse_compiler_call(tq, &tok.span, indent_level, target)?
         }
 
-        _ => parse_error_result(&tok.span, format!("Unexpected token '{}'", tok)),
+        _ => return parse_error_result(&tok.span, format!("Unexpected token '{}'", tok)),
+    };
+
+    while !is_end_of_expression(tq.peek().expect("Unexpected EOF")) {
+        let next = tq.pop()?;
+        match next.kind
+        {
+            TokenKind::OpenBracket => {
+                let index_expr = parse_expression(tq, indent_level, target)?;
+                tq.expect(&TokenKind::CloseBracket)?;
+                let span = lhs.span().expanded(tq.pos());
+                lhs = index_op(lhs, index_expr, span);
+            },
+
+            TokenKind::BinaryOperator(BinaryOperator::Dot) => {
+                tq.push_front(next);
+                lhs = parse_member_access(tq, lhs, indent_level, target)?;
+            },
+
+            _ => {
+                tq.push_front(next);
+                break
+            },
+        }
     }
-}
 
-fn parse_expression_continued(tq: &mut TokenQueue, lhs: Expression, indent_level: usize, target: &Target) -> CompileResult<Expression>
-{
-    if is_end_of_expression(tq.peek().expect("Unexpected EOF")) {
-        return Ok(lhs);
-    }
-
-    let next = tq.pop()?;
-    match next.kind
-    {
-        TokenKind::BinaryOperator(BinaryOperator::Dot) => {
-            tq.push_front(next);
-            parse_member_access(tq, lhs, indent_level, target)
-        },
-
-        TokenKind::BinaryOperator(_) => {
-            tq.push_front(next);
-            parse_binary_op_rhs(tq, lhs, indent_level, target)
-        },
-
-        _ => {
-            tq.push_front(next);
-            Ok(lhs)
-        },
-    }
+    Ok(lhs)
 }
 
 pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<Expression>
 {
     let tok = tq.pop()?;
     let e_start = parse_expression_start(tq, tok, indent_level, target)?;
-    parse_expression_continued(tq, e_start, indent_level, target)
+    if tq.is_next_binary_operator() {
+        parse_binary_op_rhs(tq, e_start, indent_level, target)
+    } else {
+        Ok(e_start)
+    }
 }
 
 fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool, indent_level: usize, namespace: &str, target: &Target) -> CompileResult<()>

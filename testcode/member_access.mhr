@@ -1,0 +1,8 @@
+#ret:77
+
+struct Foo{x: int, y: int}
+
+fn main() -> int:
+    let a = Foo{8, 9}
+    let b = Foo{3, 6}
+    a.x * b.y + a.y * b.x + 2

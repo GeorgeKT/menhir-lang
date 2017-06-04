@@ -420,6 +420,17 @@ fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &
                         typ: d.typ.clone(),
                         span: d.span.clone()
                     })
+                },
+
+                AssignTarget::IndexOperation(ref iop) => {
+                    let target = substitute_expr(ctx, generic_args, &iop.target)?;
+                    let index_expr = substitute_expr(ctx, generic_args, &iop.index_expr)?;
+                    AssignTarget::IndexOperation(IndexOperation{
+                        target,
+                        index_expr,
+                        span: iop.span.clone(),
+                        typ: iop.typ.clone(),
+                    })
                 }
             };
             let r = substitute_expr(ctx, generic_args, &a.right)?;
@@ -461,6 +472,12 @@ fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &
         Expression::CompilerCall(CompilerCall::SizeOf(ref t, ref span)) => {
             let new_t = make_concrete(ctx, generic_args, t, span)?;
             Ok(Expression::CompilerCall(CompilerCall::SizeOf(new_t, span.clone())))
+        }
+
+        Expression::IndexOperation(ref iop) => {
+            let target = substitute_expr(ctx, generic_args, &iop.target)?;
+            let index_expr = substitute_expr(ctx, generic_args, &iop.index_expr)?;
+            Ok(index_op(target, index_expr, iop.span.clone()))
         }
     }
 }
@@ -645,6 +662,11 @@ fn resolve_generics(ctx: &TypeCheckerContext, new_functions: &mut FunctionMap, m
         Expression::OptionalToBool(ref inner) => {
             resolve_generics(ctx, new_functions, module, inner)
         },
+
+        Expression::IndexOperation(ref iop) => {
+            resolve_generics(ctx, new_functions, module, &iop.target)?;
+            resolve_generics(ctx, new_functions, module, &iop.index_expr)
+        }
 
         Expression::CompilerCall(CompilerCall::SizeOf(_, _)) |
         Expression::Nil(_) |

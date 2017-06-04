@@ -1058,6 +1058,25 @@ fn type_check_dereference(ctx: &mut TypeCheckerContext, a: &mut DereferenceExpre
     }
 }
 
+fn type_check_index_operation(ctx: &mut TypeCheckerContext, iop: &mut IndexOperation) -> CompileResult<Type>
+{
+    let target_type = type_check_expression(ctx, &mut iop.target, &None)?;
+    let index_type = type_check_expression(ctx, &mut iop.index_expr, &None)?;
+    match index_type {
+        Type::Int(_) | Type::UInt(_) => (),
+        _ => return type_error_result(&iop.span, format!("An expression of type {}, cannot be used to index something. Only integers are supported.", index_type))
+    }
+
+    let typ = match target_type {
+        Type::Pointer(ref inner) => inner.deref().clone(),
+        Type::Slice(ref st) => st.element_type.clone(),
+        Type::Array(ref at) => at.element_type.clone(),
+        _ => return type_error_result(&iop.span, format!("Cannot an index an expression of type {}", target_type)),
+    };
+
+    iop.typ = typ.clone();
+    Ok(typ)
+}
 
 fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign) -> TypeCheckResult
 {
@@ -1084,6 +1103,10 @@ fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign) -> TypeCheckR
                 return type_error_result(&d.span, "Attempting to modify non mutable expression");
             }
             d.typ.clone()
+        }
+
+        AssignTarget::IndexOperation(ref mut iop) => {
+            type_check_index_operation(ctx, iop)?
         }
     };
 
@@ -1208,6 +1231,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         },
         Expression::Cast(ref mut t) => type_check_cast(ctx, t),
         Expression::CompilerCall(ref mut cc) => type_check_compiler_call(ctx, cc),
+        Expression::IndexOperation(ref mut iop) => valid(type_check_index_operation(ctx, iop)?),
     };
 
     match type_check_result
