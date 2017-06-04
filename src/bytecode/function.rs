@@ -119,6 +119,16 @@ impl BasicBlock
             instructions: Vec::new(),
         }
     }
+
+    pub fn add(&mut self, inst: Instruction)
+    {
+        if inst.is_terminator() && self.instructions.last().map(|i| i.is_terminator()).unwrap_or(false) {
+            // Already a terminator drop this, this only happens with an early return
+            return;
+        }
+
+        self.instructions.push(inst);
+    }
 }
 
 
@@ -163,26 +173,10 @@ impl ByteCodeFunction
         f
     }
 
-    fn add_instruction(&mut self, inst: Instruction)
-    {
-        let idx = self.current_bb;
-        self.blocks.get_mut(&idx).map(|bb| bb.instructions.push(inst));
-    }
-
     pub fn add(&mut self, inst: Instruction)
     {
-        match inst
-        {
-            Instruction::Return(_) | Instruction::ReturnVoid => {
-                // Pop final scope before returning
-                self.pop_scope();
-                self.add_instruction(inst);
-            },
-
-            _ => {
-                self.add_instruction(inst);
-            },
-        }
+        let idx = self.current_bb;
+        self.blocks.get_mut(&idx).map(|bb| bb.add(inst));
     }
 
     pub fn create_basic_block(&mut self) -> BasicBlockRef

@@ -479,6 +479,11 @@ fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &
             let index_expr = substitute_expr(ctx, generic_args, &iop.index_expr)?;
             Ok(index_op(target, index_expr, iop.span.clone()))
         }
+
+        Expression::Return(ref r) => {
+            let e = substitute_expr(ctx, generic_args, &r.expression)?;
+            Ok(return_expr(e, r.span.clone()))
+        }
     }
 }
 
@@ -666,6 +671,10 @@ fn resolve_generics(ctx: &TypeCheckerContext, new_functions: &mut FunctionMap, m
         Expression::IndexOperation(ref iop) => {
             resolve_generics(ctx, new_functions, module, &iop.target)?;
             resolve_generics(ctx, new_functions, module, &iop.index_expr)
+        },
+
+        Expression::Return(ref r) => {
+            resolve_generics(ctx, new_functions, module, &r.expression)
         }
 
         Expression::CompilerCall(CompilerCall::SizeOf(_, _)) |
@@ -771,7 +780,76 @@ fn replace_generic_calls(new_functions: &FunctionMap, e: &mut Expression) -> Com
             replace_generic_calls(new_functions, &mut ats.inner)?;
             Ok(())
         },
-        _ => Ok(()),
+
+        Expression::Return(ref mut r) => {
+            replace_generic_calls(new_functions, &mut r.expression)
+        },
+
+        Expression::If(ref mut i) => {
+            replace_generic_calls(new_functions, &mut i.condition)?;
+            replace_generic_calls(new_functions, &mut i.on_true)?;
+            if let Some(ref mut e) = i.on_false {
+                replace_generic_calls(new_functions, e)?;
+            }
+
+            Ok(())
+        }
+
+        Expression::StructInitializer(ref mut si) => {
+            for e in &mut si.member_initializers {
+                replace_generic_calls(new_functions, e)?;
+            }
+            Ok(())
+        }
+
+        Expression::AddressOf(ref mut a) => {
+            replace_generic_calls(new_functions, &mut a.inner)
+        }
+
+        Expression::Dereference(ref mut d) => {
+            replace_generic_calls(new_functions, &mut d.inner)
+        }
+
+        Expression::While(ref mut w) => {
+            replace_generic_calls(new_functions, &mut w.cond)?;
+            replace_generic_calls(new_functions, &mut w.body)
+        }
+
+        Expression::Assign(ref mut a) => {
+            replace_generic_calls(new_functions, &mut a.right)
+        }
+
+        Expression::For(ref mut f) => {
+            replace_generic_calls(new_functions, &mut f.iterable)?;
+            replace_generic_calls(new_functions, &mut f.body)
+        }
+
+        Expression::OptionalToBool(ref mut o) => {
+            replace_generic_calls(new_functions, o)
+        }
+
+        Expression::MemberAccess(ref mut ma) => {
+            replace_generic_calls(new_functions, &mut ma.left)
+        }
+
+        Expression::ToOptional(ref mut t) => {
+            replace_generic_calls(new_functions, &mut t.inner)
+        }
+
+        Expression::Cast(ref mut c) => {
+            replace_generic_calls(new_functions, &mut c.inner)
+        }
+
+        Expression::IndexOperation(ref mut iop) => {
+            replace_generic_calls(new_functions, &mut iop.target)?;
+            replace_generic_calls(new_functions, &mut iop.index_expr)
+        }
+
+        Expression::Literal(_) |
+        Expression::Void |
+        Expression::CompilerCall(_) |
+        Expression::Nil(_) |
+        Expression::NameRef(_) => Ok(())
     }
 }
 

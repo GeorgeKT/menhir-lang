@@ -1232,6 +1232,10 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::Cast(ref mut t) => type_check_cast(ctx, t),
         Expression::CompilerCall(ref mut cc) => type_check_compiler_call(ctx, cc),
         Expression::IndexOperation(ref mut iop) => valid(type_check_index_operation(ctx, iop)?),
+        Expression::Return(ref mut r) => {
+            type_check_expression(ctx, &mut r.expression, &None)?;
+            valid(Type::Void)
+        },
     };
 
     match type_check_result

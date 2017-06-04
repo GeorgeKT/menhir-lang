@@ -1072,6 +1072,17 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
             func.add(load_member_instr_with_var(&dst, &tgt, &idx));
             Some(dst)
         }
+
+        Expression::Return(ref r) => {
+            func.push_destination(None);
+            if let Some(var) = expr_to_bc(bc_mod, func, &r.expression, target) {
+                func.add(Instruction::Return(Operand::Var(var)));
+            } else {
+                func.add(Instruction::ReturnVoid)
+            }
+            func.pop_destination();
+            None
+        }
     }
 }
 
@@ -1081,10 +1092,13 @@ fn func_to_bc(sig: &FunctionSignature, bc_mod: &mut ByteCodeModule, expression: 
     match expr_to_bc(bc_mod, &mut llfunc, expression, target)
     {
         Some(ref var) if var.typ != Type::Void => {
+            // Pop final scope before returning
+            llfunc.pop_scope();
             llfunc.add(ret_instr(var));
         },
 
         _ => {
+            llfunc.pop_scope();
             llfunc.add(Instruction::ReturnVoid);
         }
     }

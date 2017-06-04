@@ -209,12 +209,12 @@ impl PackageTarget
             parse_files(&path, &self.name, &build_options.target_machine.target, &pkg_deps.imports)?
         };
 
+        type_check_package(&mut pkg, &build_options.target_machine.target)?;
         if build_options.dump_flags.contains("ast") || build_options.dump_flags.contains("all") {
             println!("AST: {}", pkg.name);
             pkg.print(0);
         }
 
-        type_check_package(&mut pkg, &build_options.target_machine.target)?;
         let mut bc_mod = compile_to_byte_code(&pkg, &build_options.target_machine.target)?;
 
         if build_options.dump_flags.contains("bytecode") || build_options.dump_flags.contains("all") {

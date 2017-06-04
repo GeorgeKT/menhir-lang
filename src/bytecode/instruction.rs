@@ -191,6 +191,20 @@ pub enum Instruction
     Delete(Var),
 }
 
+impl Instruction
+{
+    pub fn is_terminator(&self) -> bool
+    {
+        match *self {
+            Instruction::Branch(_) |
+            Instruction::BranchIf{..} |
+            Instruction::ReturnVoid |
+            Instruction::Return(_) => true,
+            _ => false
+        }
+    }
+}
+
 pub fn store_instr(dst: &Var, src: &Var) -> Instruction
 {
     Instruction::Store{

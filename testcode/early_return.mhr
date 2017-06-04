@@ -1,0 +1,7 @@
+#ret:42
+
+fn main() -> int:
+    let x = 77
+    if x > 42:
+        return 42
+    x

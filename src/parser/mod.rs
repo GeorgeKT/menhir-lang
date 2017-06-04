@@ -886,6 +886,16 @@ fn parse_compiler_call(tq: &mut TokenQueue, start: &Span, indent_level: usize, t
     }
 }
 
+fn parse_return(tq: &mut TokenQueue, start: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression>
+{
+    if tq.peek().map(|tok| is_end_of_expression(tok)).unwrap_or(true) {
+        Ok(return_expr(Expression::Void, start.clone()))
+    } else {
+        let expr = parse_expression(tq, indent_level, target)?;
+        Ok(return_expr(expr, start.expanded(tq.pos())))
+    }
+}
+
 fn parse_expression_start(tq: &mut TokenQueue, tok: Token, indent_level: usize, target: &Target) -> CompileResult<Expression>
 {
     let mut lhs = match tok.kind
@@ -1008,6 +1018,10 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token, indent_level: usize, 
 
         TokenKind::At => {
             parse_compiler_call(tq, &tok.span, indent_level, target)?
+        }
+
+        TokenKind::Return => {
+            parse_return(tq, &tok.span, indent_level, target)?
         }
 
         _ => return parse_error_result(&tok.span, format!("Unexpected token '{}'", tok)),

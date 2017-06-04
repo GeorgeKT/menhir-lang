@@ -147,6 +147,7 @@ impl Lexer
             "as" => TokenKind::BinaryOperator(BinaryOperator::As),
             "interface" => TokenKind::Interface,
             "fn" => TokenKind::Func,
+            "return" => TokenKind::Return,
             _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
         };
 

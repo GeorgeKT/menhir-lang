@@ -51,6 +51,7 @@ pub enum TokenKind
     Indent(usize),
     Ampersand,
     At,
+    Return,
     EOF,
 }
 
@@ -106,6 +107,7 @@ impl Display for TokenKind
             TokenKind::Indent(lvl) => write!(fmt, "indent {}", lvl),
             TokenKind::Ampersand => write!(fmt, "&"),
             TokenKind::At => write!(fmt, "@"),
+            TokenKind::Return => write!(fmt, "return"),
             TokenKind::EOF => write!(fmt, "EOF"),
         }
     }

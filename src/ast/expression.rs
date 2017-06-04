@@ -24,6 +24,12 @@ pub struct Nil
     pub span: Span,
 }
 
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct Return
+{
+    pub expression: Expression,
+    pub span: Span,
+}
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Expression
@@ -55,6 +61,7 @@ pub enum Expression
     Cast(Box<TypeCast>),
     CompilerCall(CompilerCall),
     IndexOperation(Box<IndexOperation>),
+    Return(Box<Return>),
     Void,
 }
 
@@ -81,6 +88,11 @@ pub fn nil_expr(span: Span) -> Expression
         typ: optional_type(Type::Unknown),
         span: span,
     })
+}
+
+pub fn return_expr(expression: Expression, span: Span) -> Expression
+{
+    Expression::Return(Box::new(Return{expression, span}))
 }
 
 pub fn nil_expr_with_type(span: Span, optional_inner_type: Type) -> Expression
@@ -158,6 +170,7 @@ impl Expression
             Expression::Cast(ref t) => t.span.clone(),
             Expression::CompilerCall(CompilerCall::SizeOf(_, ref span)) => span.clone(),
             Expression::IndexOperation(ref iop) => iop.span.clone(),
+            Expression::Return(ref r) => r.span.clone(),
             Expression::Void => Span::default(),
         }
     }
@@ -190,6 +203,7 @@ impl Expression
             Expression::Cast(ref t) => t.destination_type.clone(),
             Expression::CompilerCall(ref cc) => cc.get_type(int_size),
             Expression::IndexOperation(ref iop) => iop.typ.clone(),
+            Expression::Return(ref r) => r.expression.get_type(int_size),
             Expression::Void |
             Expression::While(_) |
             Expression::Delete(_) |
@@ -258,6 +272,10 @@ impl TreePrinter for Expression
             Expression::CompilerCall(ref cc) => cc.print(level),
             Expression::IndexOperation(ref iop) => iop.print(level),
             Expression::Void => println!("{}void", p),
+            Expression::Return(ref r) => {
+                println!("{}return", p);
+                r.expression.print(level + 1)
+            }
         }
     }
 }
