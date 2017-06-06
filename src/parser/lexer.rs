@@ -3,7 +3,7 @@ use std::mem;
 use compileerror::{CompileResult, parse_error_result};
 use super::tokenqueue::TokenQueue;
 use super::tokens::{TokenKind, Token};
-use ast::{BinaryOperator, UnaryOperator};
+use ast::{BinaryOperator, UnaryOperator, AssignOperator};
 use span::{Span, Pos};
 
 
@@ -212,7 +212,13 @@ impl Lexer
             ">=" => Ok(TokenKind::BinaryOperator(BinaryOperator::GreaterThanEquals)),
             "<" => Ok(TokenKind::BinaryOperator(BinaryOperator::LessThan)),
             "<=" => Ok(TokenKind::BinaryOperator(BinaryOperator::LessThanEquals)),
-            "=" => Ok(TokenKind::Assign),
+            "=" => Ok(TokenKind::Assign(AssignOperator::Assign)),
+            "+=" => Ok(TokenKind::Assign(AssignOperator::Add)),
+            "-=" => Ok(TokenKind::Assign(AssignOperator::Sub)),
+            "*=" => Ok(TokenKind::Assign(AssignOperator::Mul)),
+            "/=" => Ok(TokenKind::Assign(AssignOperator::Div)),
+            "&&=" => Ok(TokenKind::Assign(AssignOperator::And)),
+            "||=" => Ok(TokenKind::Assign(AssignOperator::Or)),
             "==" => Ok(TokenKind::BinaryOperator(BinaryOperator::Equals)),
             "!" => Ok(TokenKind::UnaryOperator(UnaryOperator::Not)),
             "!=" => Ok(TokenKind::BinaryOperator(BinaryOperator::NotEquals)),
@@ -382,7 +388,7 @@ impl Lexer
 mod tests
 {
     use std::io::Cursor;
-    use ast::{BinaryOperator, UnaryOperator};
+    use ast::{BinaryOperator, UnaryOperator, AssignOperator};
     use parser::lexer::Lexer;
     use parser::tokens::*;
     use span::*;
@@ -449,7 +455,7 @@ mod tests
             tok(TokenKind::BinaryOperator(BinaryOperator::GreaterThan), 1, 16, 1, 16),
             tok(TokenKind::BinaryOperator(BinaryOperator::GreaterThanEquals), 1, 18, 1, 19),
             tok(TokenKind::BinaryOperator(BinaryOperator::Equals), 1, 21, 1, 22),
-            tok(TokenKind::Assign, 1, 24, 1, 24),
+            tok(TokenKind::Assign(AssignOperator::Assign), 1, 24, 1, 24),
             tok(TokenKind::BinaryOperator(BinaryOperator::NotEquals), 1, 26, 1, 27),
             tok(TokenKind::UnaryOperator(UnaryOperator::Not), 1, 29, 1, 29),
             tok(TokenKind::BinaryOperator(BinaryOperator::Or), 1, 31, 1, 32),

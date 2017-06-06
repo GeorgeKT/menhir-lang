@@ -33,7 +33,7 @@ fn is_end_of_expression(tok: &Token) -> bool
         TokenKind::Number(_) |
         TokenKind::Identifier(_) |
         TokenKind::StringLiteral(_) |
-        TokenKind::Assign |
+        TokenKind::Assign(_) |
         TokenKind::OpenParen |
         TokenKind::OpenBracket |
         TokenKind::OpenCurly => false,
@@ -621,7 +621,7 @@ fn parse_bindings(tq: &mut TokenQueue, mutable: bool, indent_level: usize, targe
             (BindingType::Name(name), span)
         };
 
-        tq.expect(&TokenKind::Assign)?;
+        tq.expect(&TokenKind::Assign(AssignOperator::Assign))?;
         let init = parse_expression(tq, indent_level, target)?;
         bindings.push(binding(binding_type, init, mutable, span.expanded(tq.pos())));
         eat_comma(tq)?;
@@ -775,6 +775,7 @@ fn is_end_of_block(tq: &mut TokenQueue) -> bool
     }).unwrap_or(true)
 }
 
+
 fn parse_block(tq: &mut TokenQueue, current_file: &str, indent_level: usize, target: &Target) -> CompileResult<Expression>
 {
     let mut ends_with_semicolon = false;
@@ -793,17 +794,17 @@ fn parse_block(tq: &mut TokenQueue, current_file: &str, indent_level: usize, tar
         }
 
         let e = parse_expression(tq, block_indent_level, target)?;
-        if tq.is_next(&TokenKind::Assign) {
+        if let Some(op) = tq.is_next_assign_operator() {
             tq.pop()?;
 
             let rhs = parse_expression(tq, block_indent_level, target)?;
             let span = e.span().expanded(tq.pos());
 
             let assign_expr = match e {
-                Expression::NameRef(nr) => assign(AssignTarget::Var(nr), rhs, span),
-                Expression::MemberAccess(ma) => assign(AssignTarget::MemberAccess(*ma), rhs, span),
-                Expression::Dereference(d) => assign(AssignTarget::Dereference(*d), rhs, span),
-                Expression::IndexOperation(iop) => assign(AssignTarget::IndexOperation(*iop), rhs, span),
+                Expression::NameRef(nr) => assign(op, AssignTarget::Var(nr), rhs, span),
+                Expression::MemberAccess(ma) => assign(op, AssignTarget::MemberAccess(*ma), rhs, span),
+                Expression::Dereference(d) => assign(op, AssignTarget::Dereference(*d), rhs, span),
+                Expression::IndexOperation(iop) => assign(op, AssignTarget::IndexOperation(*iop), rhs, span),
                 _ => return parse_error_result(&e.span(), "Expression not allowed on the left hand side of an assignment")
             };
             expressions.push(assign_expr);
@@ -1055,7 +1056,7 @@ fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool
     while !is_end_of_bindings(tq, indent_level)
     {
         let (name, span) = tq.expect_identifier()?;
-        tq.expect(&TokenKind::Assign)?;
+        tq.expect(&TokenKind::Assign(AssignOperator::Assign))?;
         let init = parse_expression(tq, indent_level, target)?;
 
         if module.globals.contains_key(&name) {

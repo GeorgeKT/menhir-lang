@@ -1,5 +1,35 @@
-use ast::{Expression, NameRef, DereferenceExpression, MemberAccess, IndexOperation, Type, TreePrinter, prefix};
+use std::fmt;
+use ast::{Expression, NameRef, DereferenceExpression, MemberAccess, IndexOperation, TreePrinter, prefix};
 use span::{Span};
+
+
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+pub enum AssignOperator
+{
+    Assign,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    And,
+    Or
+}
+
+impl fmt::Display for AssignOperator
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result
+    {
+        match *self {
+            AssignOperator::Assign => write!(f, "="),
+            AssignOperator::Add => write!(f, "+="),
+            AssignOperator::Sub => write!(f, "-="),
+            AssignOperator::Mul => write!(f, "*="),
+            AssignOperator::Div => write!(f, "/="),
+            AssignOperator::And => write!(f, "&&="),
+            AssignOperator::Or => write!(f, "||="),
+        }
+    }
+}
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum AssignTarget
@@ -26,19 +56,19 @@ impl TreePrinter for AssignTarget
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Assign
 {
+    pub operator: AssignOperator,
     pub left: AssignTarget,
     pub right: Expression,
-    pub typ: Type,
     pub span: Span,
 }
 
-pub fn assign(left: AssignTarget, right: Expression, span: Span) -> Expression
+pub fn assign(operator: AssignOperator, left: AssignTarget, right: Expression, span: Span) -> Expression
 {
     Expression::Assign(Box::new(Assign{
-        left: left,
-        right: right,
-        typ: Type::Unknown,
-        span: span,
+        operator,
+        left,
+        right,
+        span,
     }))
 }
 
@@ -48,7 +78,7 @@ impl TreePrinter for Assign
     fn print(&self, level: usize)
     {
         let p = prefix(level);
-        println!("{}assign (span: {}; type: {})", p, self.span, self.typ);
+        println!("{}assign {} (span: {})", p, self.operator, self.span);
         self.left.print(level + 1);
         self.right.print(level + 1);
     }

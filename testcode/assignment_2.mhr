@@ -1,0 +1,8 @@
+#ret:24
+fn main() -> int:
+    var x = 7;
+    x += 10
+    x -= 5
+    x *= 4
+    x /= 2
+    x

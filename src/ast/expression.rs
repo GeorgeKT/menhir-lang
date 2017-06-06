@@ -194,7 +194,7 @@ impl Expression
             Expression::ArrayToSlice(ref a) => a.slice_type.clone(),
             Expression::AddressOf(ref a) => ptr_type(a.inner.get_type(int_size)),
             Expression::Dereference(ref d) => d.typ.clone(),
-            Expression::Assign(ref a) => a.typ.clone(),
+            Expression::Assign(_) => Type::Void,
             Expression::Nil(ref nt) => nt.typ.clone(),
             Expression::OptionalToBool(_) => Type::Bool,
             Expression::ToOptional(ref t) => optional_type(t.inner.get_type(int_size)),

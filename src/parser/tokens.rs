@@ -1,6 +1,6 @@
 use std::fmt::{Formatter, Display, Error};
 use span::{Span};
-use ast::{BinaryOperator, UnaryOperator};
+use ast::{BinaryOperator, UnaryOperator, AssignOperator};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum TokenKind
@@ -23,7 +23,7 @@ pub enum TokenKind
     CloseBracket,
     Arrow,
     FatArrow,
-    Assign,
+    Assign(AssignOperator),
     Match,
     Let,
     In,
@@ -87,7 +87,7 @@ impl Display for TokenKind
             TokenKind::Else => write!(fmt, "else"),
             TokenKind::While => write!(fmt, "while"),
             TokenKind::Extern => write!(fmt, "extern"),
-            TokenKind::Assign => write!(fmt, "="),
+            TokenKind::Assign(op) => write!(fmt, "{}", op),
             TokenKind::Dollar => write!(fmt, "$"),
             TokenKind::Pipe => write!(fmt, "|"),
             TokenKind::True => write!(fmt, "true"),

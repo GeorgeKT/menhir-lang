@@ -807,6 +807,9 @@ fn if_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, if_expr: &
 
 fn assign_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, assign: &Assign, target: &Target)
 {
+    // During type checking, other assigns, will be converted in a regular assign
+    assert!(assign.operator == AssignOperator::Assign);
+
     func.push_destination(None);
     let r = to_bc(bc_mod, func, &assign.right, target);
     match assign.left {

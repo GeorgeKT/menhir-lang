@@ -1,0 +1,9 @@
+#ret:24
+fn main() -> int:
+    var x = false;
+    x &&= true
+    x ||= true
+    if x:
+        24
+    else
+        4

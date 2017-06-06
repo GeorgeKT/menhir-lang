@@ -428,7 +428,7 @@ fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &
                 }
             };
             let r = substitute_expr(ctx, generic_args, &a.right)?;
-            Ok(assign(l, r, a.span.clone()))
+            Ok(assign(a.operator, l, r, a.span.clone()))
         },
 
         Expression::While(ref w) => {

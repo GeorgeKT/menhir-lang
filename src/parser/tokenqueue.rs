@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use compileerror::{CompileError, CompileResult, ErrorData, parse_error_result};
 use super::tokens::{Token, TokenKind};
-use ast::{BinaryOperator};
+use ast::{BinaryOperator, AssignOperator};
 use span::{Pos, Span};
 
 
@@ -141,6 +141,18 @@ impl TokenQueue
         {
             Some(tok) => if let TokenKind::BinaryOperator(_) = tok.kind {true} else {false},
             None => false,
+        }
+    }
+
+    pub fn is_next_assign_operator(&self) -> Option<AssignOperator>
+    {
+        match self.tokens.front() {
+            Some(ref tok) => if let TokenKind::Assign(op) = tok.kind {
+                Some(op)
+            } else {
+                None
+            },
+            _ => None,
         }
     }
 

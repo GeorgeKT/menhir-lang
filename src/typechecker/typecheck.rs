@@ -1066,6 +1066,33 @@ fn type_check_index_operation(ctx: &mut TypeCheckerContext, iop: &mut IndexOpera
     Ok(typ)
 }
 
+
+fn to_regular_assign(a: &mut Assign, int_size: IntSize)
+{
+    let op = match a.operator {
+        AssignOperator::Assign => return,
+        AssignOperator::Add => BinaryOperator::Add,
+        AssignOperator::Sub => BinaryOperator::Sub,
+        AssignOperator::Mul => BinaryOperator::Mul,
+        AssignOperator::Div => BinaryOperator::Div,
+        AssignOperator::And => BinaryOperator::And,
+        AssignOperator::Or => BinaryOperator::Or,
+    };
+
+    let left = match a.left {
+        AssignTarget::Var(ref nr) => Expression::NameRef(nr.clone()),
+        AssignTarget::MemberAccess(ref ma) => Expression::MemberAccess(Box::new(ma.clone())),
+        AssignTarget::Dereference(ref d) => Expression::Dereference(Box::new(d.clone())),
+        AssignTarget::IndexOperation(ref i) => Expression::IndexOperation(Box::new(i.clone())),
+    };
+
+    let right = bin_op_with_type(op, left, a.right.clone(), a.right.span(), a.right.get_type(int_size));
+
+    a.operator = AssignOperator::Assign;
+    a.right = right;
+}
+
+
 fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign) -> TypeCheckResult
 {
     let dst_type = match a.left {
@@ -1099,7 +1126,25 @@ fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign) -> TypeCheckR
     };
 
     type_check_with_conversion(ctx, &mut a.right, &dst_type)?;
-    a.typ = Type::Void;
+    match a.operator {
+        AssignOperator::Assign => (),
+        AssignOperator::Add |
+        AssignOperator::Sub |
+        AssignOperator::Mul |
+        AssignOperator::Div => {
+            if !dst_type.is_numeric() {
+                return type_error_result(&a.span, format!("Operator {} is only supported on numeric types", a.operator));
+            }
+        }
+
+        AssignOperator::And |
+        AssignOperator::Or => {
+            if dst_type != Type::Bool {
+                return type_error_result(&a.span, format!("Operator {} is only supported on booleans", a.operator))
+            }
+        }
+    }
+    to_regular_assign(a, ctx.target.int_size); // Convert to a regular assign, for code generation
     valid(Type::Void)
 }
 
