@@ -867,6 +867,22 @@ fn parse_compiler_call(tq: &mut TokenQueue, start: &Span, indent_level: usize, t
             tq.expect(&TokenKind::CloseParen)?;
 
             Ok(Expression::CompilerCall(CompilerCall::SizeOf(typ, start.expanded(tq.pos()))))
+        },
+
+        "slice" => {
+            tq.expect(&TokenKind::OpenParen)?;
+            let arguments = parse_comma_separated_list(tq, &TokenKind::CloseParen, parse_expression, indent_level, target)?;
+            let span = start.expanded(tq.pos());
+            if arguments.len() != 2 {
+                return parse_error_result(&span, "@slice expects two arguments");
+            }
+
+            Ok(Expression::CompilerCall(CompilerCall::Slice{
+                data: Box::new(arguments[0].clone()),
+                len: Box::new(arguments[1].clone()),
+                typ: Type::Unknown,
+                span
+            }))
         }
 
         _ => parse_error_result(&name_span, format!("Unknown compiler call {}", name))

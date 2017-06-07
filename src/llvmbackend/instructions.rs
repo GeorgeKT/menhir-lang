@@ -241,6 +241,9 @@ unsafe fn gen_cast(ctx: &mut Context, dst: &Var, src: &Operand)
         (&Type::Pointer(_), &Type::Pointer(_)) =>
             LLVMBuildBitCast(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("ptr_cast")),
 
+        (&Type::Pointer(_), &Type::Array(_)) =>
+            LLVMBuildBitCast(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("ptr_cast")),
+
         _ => panic!("Cast from type {} to type {} is not allowed", src_type, dst.typ),
     };
 
@@ -324,7 +327,14 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         Instruction::Slice{ref dst, ref src, ref start, ref len} => {
             let dst_var = ctx.get_variable(&dst.name, &dst.typ);
             let src_var = ctx.get_variable(&src.name, &dst.typ);
-            dst_var.create_slice(ctx, &src_var, start, len);
+            dst_var.create_slice_from_array(ctx, &src_var, start, len);
+        }
+
+        Instruction::MakeSlice{ref dst, ref data, ref len} => {
+            let dst_var = ctx.get_variable(&dst.name, &dst.typ);
+            let data_var = ctx.get_variable(&data.name, &data.typ);
+            let len_var = ctx.get_variable(&len.name, &len.typ);
+            dst_var.create_slice(ctx, &data_var, &len_var);
         }
 
         Instruction::LoadOptionalFlag{ref dst, ref obj} => {

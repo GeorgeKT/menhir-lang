@@ -1192,6 +1192,7 @@ fn type_check_cast(ctx: &mut TypeCheckerContext, c: &mut TypeCast) -> TypeCheckR
         (Type::Pointer(_), &Type::Pointer(ref to)) if *to.deref() == Type::Void => valid(c.destination_type.clone()),
         (Type::Pointer(ref from), &Type::Pointer(_)) if *from.deref() == Type::Void => valid(c.destination_type.clone()),
         (Type::Pointer(_), &Type::Bool) => valid(Type::Bool),
+        (Type::Array(ref at), &Type::Pointer(ref to)) if at.element_type == *to.deref() => valid(c.destination_type.clone()),
         (inner_type, _) => type_error_result(&c.span, format!("Cast from type {} to type {} is not allowed", inner_type, c.destination_type))
     }
 }
@@ -1204,6 +1205,17 @@ fn type_check_compiler_call(ctx: &mut TypeCheckerContext, cc: &mut CompilerCall)
                 type_error_result(span, format!("Unable to resolve type {}", typ))
             } else {
                 valid(ctx.target.native_uint_type.clone())
+            }
+        }
+
+        CompilerCall::Slice{ref mut data, ref mut len, ref mut typ, ref span} => {
+            let data_type = type_check_expression(ctx, data, &None)?;
+            type_check_with_conversion(ctx, len, &ctx.target.native_uint_type)?;
+            if let Type::Pointer(ref inner) = data_type {
+                *typ = slice_type(inner.deref().clone());
+                valid(typ.clone())
+            } else {
+                type_error_result(span, format!("The first argument of @slice, must be a pointer, not a {}", data_type))
             }
         }
     }

@@ -1046,6 +1046,16 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
             Some(dst)
         }
 
+        Expression::CompilerCall(CompilerCall::Slice{ref data, ref len, ref typ, ..}) => {
+            func.push_destination(None);
+            let data_ptr = to_bc(bc_mod, func, data, target);
+            let slice_len = to_bc(bc_mod, func, len, target);
+            func.pop_destination();
+            let dst = get_dst(func, typ);
+            func.add(make_slice_instr(&dst, data_ptr, slice_len));
+            Some(dst)
+        }
+
         Expression::IndexOperation(ref iop) => {
             let tgt = to_bc(bc_mod, func, &iop.target, target);
             let idx = to_bc(bc_mod, func, &iop.index_expr, target);

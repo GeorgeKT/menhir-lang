@@ -168,6 +168,7 @@ impl Expression
             Expression::ToOptional(ref t) => t.inner.span(),
             Expression::Cast(ref t) => t.span.clone(),
             Expression::CompilerCall(CompilerCall::SizeOf(_, ref span)) => span.clone(),
+            Expression::CompilerCall(CompilerCall::Slice{ref span, ..}) => span.clone(),
             Expression::IndexOperation(ref iop) => iop.span.clone(),
             Expression::Return(ref r) => r.span.clone(),
             Expression::Void => Span::default(),
@@ -368,6 +369,11 @@ impl Expression
                 iop.index_expr.visit_mut(op)
             }
 
+            Expression::CompilerCall(CompilerCall::Slice{ref mut data, ref mut len, ..}) => {
+                data.visit_mut(op)?;
+                len.visit_mut(op)
+            }
+
             Expression::Literal(_) |
             Expression::Void |
             Expression::CompilerCall(_) |
@@ -533,6 +539,11 @@ impl Expression
             Expression::IndexOperation(ref iop) => {
                 iop.target.visit(op)?;
                 iop.index_expr.visit(op)
+            }
+
+            Expression::CompilerCall(CompilerCall::Slice{ref data, ref len, ..}) => {
+                data.visit(op)?;
+                len.visit(op)
             }
 
             Expression::Literal(_) |

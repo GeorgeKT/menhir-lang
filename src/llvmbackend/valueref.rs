@@ -374,7 +374,7 @@ impl ValueRef
         LLVMBuildStructGEP(ctx.builder, self.value, 1, cstr!("slice_len_ptr"))
     }
 
-    pub unsafe fn create_slice(&self, ctx: &mut Context, array: &ValueRef, start: &Operand, len: &Operand)
+    pub unsafe fn create_slice_from_array(&self, ctx: &mut Context, array: &ValueRef, start: &Operand, len: &Operand)
     {
         let inner_type = array.typ.get_pointer_element_type()
             .unwrap_or_else(|| panic!("Expecting an array or slice not a {}", array.typ));
@@ -391,5 +391,13 @@ impl ValueRef
 
             _ =>  panic!("Expecting an array type, not a {}", self.typ),
         }
+    }
+
+    pub unsafe fn create_slice(&self, ctx: &Context, data: &ValueRef, len: &ValueRef)
+    {
+        let data_ptr = self.slice_data_ptr(ctx);
+        let len_ptr = self.slice_len_ptr(ctx);
+        LLVMBuildStore(ctx.builder, data.value, data_ptr);
+        LLVMBuildStore(ctx.builder, len.load(ctx), len_ptr);
     }
 }

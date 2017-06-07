@@ -468,6 +468,18 @@ fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &
             Ok(Expression::CompilerCall(CompilerCall::SizeOf(new_t, span.clone())))
         }
 
+        Expression::CompilerCall(CompilerCall::Slice{ref data, ref len, ref typ, ref span}) => {
+            let new_data = substitute_expr(ctx, generic_args, data)?;
+            let new_len = substitute_expr(ctx, generic_args, len)?;
+            let new_type = make_concrete(ctx, generic_args, typ, span)?;
+            Ok(Expression::CompilerCall(CompilerCall::Slice{
+                data: Box::new(new_data),
+                len: Box::new(new_len),
+                typ: new_type,
+                span: span.clone(),
+            }))
+        },
+
         Expression::IndexOperation(ref iop) => {
             let target = substitute_expr(ctx, generic_args, &iop.target)?;
             let index_expr = substitute_expr(ctx, generic_args, &iop.index_expr)?;

@@ -177,6 +177,7 @@ pub enum Instruction
     BinaryOp{dst: Var, op: BinaryOperator, left: Operand, right: Operand},
     Call{dst: Option<Var>, func: String, args: Vec<Operand>},
     Slice{dst: Var, src: Var, start: Operand, len: Operand},
+    MakeSlice{dst: Var, data: Var, len: Var},
     Cast{dst: Var, src: Operand},
     LoadOptionalFlag{dst: Var, obj: Var},
     StoreNil(Var),
@@ -370,6 +371,15 @@ pub fn slice_instr(dst: &Var, src: &Var, start: Operand, len: Operand) -> Instru
     }
 }
 
+pub fn make_slice_instr(dst: &Var, data: Var, len: Var) -> Instruction
+{
+    Instruction::MakeSlice{
+        dst: dst.clone(),
+        data,
+        len
+    }
+}
+
 pub fn cast_instr(dst: &Var, src: &Var) -> Instruction
 {
     Instruction::Cast{
@@ -482,6 +492,10 @@ impl fmt::Display for Instruction
             Instruction::Slice{ref dst, ref src, ref start, ref len} => {
                 writeln!(f, "  slice {} {} {} {}", dst, src, start, len)
             },
+
+            Instruction::MakeSlice{ref dst, ref data, ref len} => {
+                writeln!(f, "  mkslice {} {} {}", dst, data, len)
+            }
 
             Instruction::LoadOptionalFlag{ref dst, ref obj} => {
                 writeln!(f, "  loadoptf {} {}", dst, obj)
