@@ -42,6 +42,66 @@ impl Literal
             Literal::Array(ref a) => a.span.clone(),
         }
     }
+
+    pub fn try_convert(&self, typ: &Type) -> Option<Literal>
+    {
+        match (self, typ) {
+            (&Literal::Int(ref span, value, _), &Type::Int(int_size)) => {
+                let target_bit_size = int_size.size_in_bits();
+                let target_min = -2i64.pow(target_bit_size - 1);
+                let target_max = (2u64.pow(target_bit_size - 1) - 1) as i64;
+                if value >= target_min && value <= target_max {
+                    Some(Literal::Int(span.clone(), value, int_size))
+                } else {
+                    None
+                }
+            }
+
+            (&Literal::Int(ref span, value, _), &Type::UInt(int_size)) => {
+                let target_bit_size = int_size.size_in_bits();
+                if value >= 0 && (value as u64) < 2u64.pow(target_bit_size - 1) - 1 {
+                    Some(Literal::UInt(span.clone(), value as u64, int_size))
+                } else {
+                    None
+                }
+            }
+
+            (&Literal::UInt(ref span, value, _), &Type::Int(int_size)) => {
+                let target_bit_size = int_size.size_in_bits();
+                if value < 2u64.pow(target_bit_size) {
+                    Some(Literal::Int(span.clone(), value as i64, int_size))
+                } else {
+                    None
+                }
+            }
+
+            (&Literal::UInt(ref span, value, _), &Type::UInt(int_size)) => {
+                let target_bit_size = int_size.size_in_bits();
+                if value < 2u64.pow(target_bit_size) {
+                    Some(Literal::UInt(span.clone(), value, int_size))
+                } else {
+                    None
+                }
+            }
+
+            (&Literal::Float(ref span, ref value, FloatSize::F64), &Type::Float(FloatSize::F32)) => {
+                use std::f32;
+                // Number was already verified during parsing
+                let v = value.parse::<f64>().expect("Invalid floating point number");
+                if v >= (f32::MIN as f64) && v <= (f32::MAX as f64) {
+                    Some(Literal::Float(span.clone(), value.clone(), FloatSize::F32))
+                } else {
+                    None
+                }
+            }
+
+            (&Literal::Float(ref span, ref value, FloatSize::F32), &Type::Float(FloatSize::F64)) => {
+                Some(Literal::Float(span.clone(), value.clone(), FloatSize::F64))
+            }
+
+            _ => None,
+        }
+    }
 }
 
 impl TreePrinter for Literal

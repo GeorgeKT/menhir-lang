@@ -11,7 +11,7 @@ fn type_check(expr: &str) -> CompileResult<Type>
     let target = Target::new(IntSize::I32, "");
 	let mut ctx = TypeCheckerContext::new(&target);
 	let mut e = th_expr(expr, &target);
-	let r = type_check_expression(&mut ctx, &mut e, &None);
+	let r = type_check_expression(&mut ctx, &mut e, None);
 	println!("result: {:?}", r);
 	r
 }

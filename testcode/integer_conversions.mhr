@@ -1,0 +1,11 @@
+#ret:77
+
+struct Foo:
+    x: uint
+
+fn main() -> int:
+    var f = Foo{66}
+    f.x += 11
+    if f.x > 99:
+        f.x = 99
+    f.x as int

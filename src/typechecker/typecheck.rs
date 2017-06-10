@@ -48,9 +48,21 @@ fn convert_type(ctx: &mut TypeCheckerContext, dst_type: &Type, src_type: &Type, 
         return Ok(());
     }
 
-    if let Some(nex_expression) = dst_type.convert(src_type, expr) {
-        *expr = nex_expression;
-        assert_eq!(type_check_expression(ctx, expr, &None)?, *dst_type);
+    let mut converted = false;
+    if let Some(new_expression) = dst_type.convert(src_type, expr) {
+        *expr = new_expression;
+        converted = true;
+    }
+
+    if let Expression::Literal(ref mut lit) = *expr {
+        if let Some(new_lit) = lit.try_convert(dst_type) {
+            *lit = new_lit;
+            converted = true;
+        }
+    }
+    
+    if converted {
+        assert_eq!(type_check_expression(ctx, expr, None)?, *dst_type);
         Ok(())
     } else {
         type_error_result(
@@ -62,7 +74,7 @@ fn convert_type(ctx: &mut TypeCheckerContext, dst_type: &Type, src_type: &Type, 
 
 fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> TypeCheckResult
 {
-    let e_type = type_check_expression(ctx, &mut u.expression, &None)?;
+    let e_type = type_check_expression(ctx, &mut u.expression, None)?;
     if e_type.is_generic() {
         u.typ = e_type.clone();
         return valid(e_type)
@@ -91,29 +103,37 @@ fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp) -> TypeChe
 
 fn type_check_with_conversion(ctx: &mut TypeCheckerContext, e: &mut Expression, expected_type: &Type) -> CompileResult<()>
 {
-    let typ = type_check_expression(ctx, e, &None)?;
+    let typ = type_check_expression(ctx, e, None)?;
     convert_type(ctx, expected_type, &typ, e)
+}
+
+fn basic_bin_op_checks(ctx: &mut TypeCheckerContext, b: &mut BinaryOp, left_type: Type, right_type: Type) -> CompileResult<()>
+{
+    if left_type != right_type {
+        let result = type_check_with_conversion(ctx, &mut b.right, &left_type)
+            .or(type_check_with_conversion(ctx, &mut b.left, &right_type));
+
+        if !result.is_ok() {
+            return type_error_result(
+                &b.span,
+                format!("Operator {} expects operands of the same type (left type: {}, right type: {})", b.operator, left_type, right_type))
+        }
+    }
+
+    let new_left_type = b.left.get_type(ctx.target.int_size);
+    if !new_left_type.is_binary_operator_supported(b.operator) {
+        type_error_result(&b.span, format!("Operator {} is not supported on {}", b.operator, new_left_type))
+    } else {
+        Ok(())
+    }
 }
 
 fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeCheckResult
 {
-    let left_type = type_check_expression(ctx, &mut b.left, &None)?;
-    let right_type = type_check_expression(ctx, &mut b.right, &None)?;
+    let left_type = type_check_expression(ctx, &mut b.left, None)?;
+    let right_type = type_check_expression(ctx, &mut b.right, None)?;
     if left_type.is_generic() || right_type.is_generic() {
         return valid(left_type);
-    }
-
-    fn basic_bin_op_checks(span: &Span, operator: BinaryOperator, left_type: &Type, right_type: &Type) -> CompileResult<()>
-    {
-        if left_type != right_type {
-            return type_error_result(span, format!("Operator {} expects operands of the same type (left type: {}, right type: {})", operator, left_type, right_type));
-        }
-
-        if !left_type.is_binary_operator_supported(operator) {
-            return type_error_result(span, format!("Operator {} is not supported on {}", operator, left_type));
-        }
-
-        Ok(())
     }
 
     match b.operator
@@ -123,16 +143,16 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
         BinaryOperator::Mul |
         BinaryOperator::Div |
         BinaryOperator::Mod => {
-            basic_bin_op_checks(&b.span, b.operator, &left_type, &right_type)?;
-            b.typ = right_type;
-            valid(left_type)
+            basic_bin_op_checks(ctx, b, left_type, right_type)?;
+            b.typ = b.left.get_type(ctx.target.int_size);
+            valid(b.typ.clone())
         },
 
         BinaryOperator::LessThan |
         BinaryOperator::GreaterThan |
         BinaryOperator::LessThanEquals |
         BinaryOperator::GreaterThanEquals => {
-            basic_bin_op_checks(&b.span, b.operator, &left_type, &right_type)?;
+            basic_bin_op_checks(ctx, b, left_type, right_type)?;
             b.typ = Type::Bool;
             valid(Type::Bool)
         },
@@ -168,7 +188,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp) -> TypeC
             } else if right_type.is_optional() && left_type.is_optional_of(&Type::Unknown) {
                 type_check_with_conversion(ctx, &mut b.left, &right_type)?;
             } else {
-                basic_bin_op_checks(&b.span, b.operator, &left_type, &right_type)?;
+                basic_bin_op_checks(ctx, b, left_type, right_type)?;
             }
             b.typ = Type::Bool;
             valid(Type::Bool)
@@ -186,7 +206,7 @@ fn type_check_array_literal(ctx: &mut TypeCheckerContext, a: &mut ArrayLiteral) 
 
     let mut array_element_type = Type::Unknown;
     for e in &mut a.elements {
-        let t = type_check_expression(ctx, e, &None)?;
+        let t = type_check_expression(ctx, e, None)?;
         if array_element_type == Type::Unknown {
             array_element_type = t;
         } else if array_element_type != t {
@@ -214,7 +234,7 @@ fn resolve_generic_args_in_call(ctx: &mut TypeCheckerContext, ft: &FuncType, c: 
         for (arg, expected_arg_type) in c.args.iter_mut().zip(ft.args.iter())
         {
             let expected_arg_type = make_concrete(ctx, &c.generic_args, expected_arg_type, &arg.span())?;
-            let arg_type = type_check_expression(ctx, arg, &Some(expected_arg_type.clone()))?;
+            let arg_type = type_check_expression(ctx, arg, Some(&expected_arg_type))?;
             let arg_type = make_concrete(ctx, &c.generic_args, &arg_type, &arg.span())?;
 
             if expected_arg_type.is_generic() {
@@ -275,11 +295,11 @@ fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> Type
         ctx.add(&arg.name, arg.typ.clone(), arg.mutable, &arg.span)?;
     }
 
-    let et = match type_check_expression(ctx, &mut fun.expression, &None)
+    let et = match type_check_expression(ctx, &mut fun.expression, None)
     {
         Err(CompileError::UnknownType(ref name, ref expected_type)) => {
             update_binding_type(ctx, &mut fun.expression, name, expected_type)?;
-            type_check_expression(ctx, &mut fun.expression, &None)?
+            type_check_expression(ctx, &mut fun.expression, None)?
         },
         Err(e) => return Err(e),
         Ok(typ) => typ,
@@ -317,14 +337,14 @@ fn is_result_mutable(ctx: &TypeCheckerContext, e: &Expression) -> bool
 
 fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> TypeCheckResult
 {
-    let target_type = type_check_expression(ctx, &mut m.target, &None)?;
+    let target_type = type_check_expression(ctx, &mut m.target, None)?;
     let target_is_mutable = is_result_mutable(ctx, &m.target);
     let mut return_type = Type::Unknown;
 
     for c in &mut m.cases
     {
         let infer_case_type = |ctx: &mut TypeCheckerContext, e: &mut Expression, return_type: &Type| {
-            let tt = type_check_expression(ctx, e, &None)?;
+            let tt = type_check_expression(ctx, e, None)?;
             if *return_type != Type::Unknown && *return_type != tt {
                 type_error_result(&e.span(), "Expressions in match statements must return the same type")
             } else {
@@ -358,7 +378,7 @@ fn type_check_match(ctx: &mut TypeCheckerContext, m: &mut MatchExpression) -> Ty
             },
 
             Pattern::Name(ref mut nr) => {
-                type_check_name(ctx, nr, &Some(target_type.clone()))?;
+                type_check_name(ctx, nr, Some(&target_type))?;
                 if nr.typ != target_type {
                     return type_error_result(&match_span,
                         format!("Cannot pattern match an expression of type {} with an expression of type {}",
@@ -466,17 +486,17 @@ fn type_check_lambda_body(ctx: &mut TypeCheckerContext, m: &mut Lambda) -> TypeC
         ctx.add(&arg.name, arg.typ.clone(), false, &arg.span)?;
     }
 
-    let return_type = type_check_expression(ctx, &mut m.expr, &None)?;
+    let return_type = type_check_expression(ctx, &mut m.expr, None)?;
     ctx.pop_stack();
     m.set_return_type(return_type);
     valid(m.sig.typ.clone())
 }
 
-fn type_check_lambda(ctx: &mut TypeCheckerContext, m: &mut Lambda, type_hint: &Option<Type>) -> TypeCheckResult
+fn type_check_lambda(ctx: &mut TypeCheckerContext, m: &mut Lambda, type_hint: Option<&Type>) -> TypeCheckResult
 {
-    match *type_hint
+    match type_hint
     {
-        Some(ref typ) => {
+        Some(typ) => {
             use uuid::{Uuid};
             m.sig.name = format!("lambda-{}", Uuid::new_v4()); // Add a uuid, so we don't get name clashes
             m.apply_type(typ)?;
@@ -527,7 +547,7 @@ fn is_instantiation_of(concrete_type: &Type, generic_type: &Type) -> bool
     }
 }
 
-fn type_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint: &Option<Type>) -> TypeCheckResult
+fn type_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint: Option<&Type>) -> TypeCheckResult
 {
     if nr.name == "_" {
         return valid(Type::Unknown);
@@ -541,7 +561,7 @@ fn type_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint: &O
         .ok_or_else(|| unknown_name(&nr.span, format!("Unknown name {}", nr.name)))?;
     nr.name = resolved.full_name;
 
-    if let Some(ref typ) = *type_hint {
+    if let Some(typ) = type_hint {
         if resolved.typ == Type::Unknown {
             return unknown_type_result(&nr.name, typ);
         }
@@ -598,7 +618,7 @@ fn add_struct_bindings(ctx: &mut TypeCheckerContext, b: &mut StructPattern, stru
 
 fn type_check_binding(ctx: &mut TypeCheckerContext, b: &mut Binding) -> TypeCheckResult
 {
-    b.typ = type_check_expression(ctx, &mut b.init, &None)?;
+    b.typ = type_check_expression(ctx, &mut b.init, None)?;
 
     match b.binding_type
     {
@@ -638,7 +658,7 @@ fn update_binding_type(ctx: &mut TypeCheckerContext, e: &mut Expression, name: &
                     {
                         if *b_name == *name {
                             // It's one we know, so lets try again with a proper type hint
-                            b.typ = type_check_expression(ctx, &mut b.init, &Some(expected_type.clone()))?;
+                            b.typ = type_check_expression(ctx, &mut b.init, Some(&expected_type))?;
                             ctx.update(b_name, b.typ.clone(), b.mutable);
                             return Ok(())
                         }
@@ -654,9 +674,9 @@ fn type_check_if(ctx: &mut TypeCheckerContext, i: &mut IfExpression) -> TypeChec
 {
     type_check_with_conversion(ctx, &mut i.condition, &Type::Bool)?;
 
-    let on_true_type = type_check_expression(ctx, &mut i.on_true, &None)?;
+    let on_true_type = type_check_expression(ctx, &mut i.on_true, None)?;
     let on_false_type = if let Some(ref mut expr) = i.on_false {
-        type_check_expression(ctx, expr, &None)?
+        type_check_expression(ctx, expr, None)?
     } else {
         Type::Void
     };
@@ -712,7 +732,7 @@ fn type_check_struct_members_in_initializer(ctx: &mut TypeCheckerContext, st: &S
 
     for (idx, (member, mi)) in st.members.iter().zip(si.member_initializers.iter_mut()).enumerate()
     {
-        let t = type_check_expression(ctx, mi, &Some(member.typ.clone()))?;
+        let t = type_check_expression(ctx, mi, Some(&member.typ))?;
         let expected_type = if member.typ.is_generic() {
             fill_in_generics(ctx, &t, &member.typ, &mut si.generic_args, &mi.span())?
         } else {
@@ -743,7 +763,7 @@ fn type_check_anonymous_struct_initializer(ctx: &mut TypeCheckerContext, si: &mu
     let mut new_members = Vec::with_capacity(si.member_initializers.len());
     for mi in &mut si.member_initializers
     {
-        let t = type_check_expression(ctx, mi, &None)?;
+        let t = type_check_expression(ctx, mi, None)?;
         new_members.push(struct_member("", t));
     }
     si.typ = struct_type("", new_members);
@@ -871,7 +891,7 @@ fn type_check_generic_member_call(ctx: &mut TypeCheckerContext, call: &mut Call,
 
 fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess) -> TypeCheckResult
 {
-    let left_type = type_check_expression(ctx, &mut sma.left, &None)?;
+    let left_type = type_check_expression(ctx, &mut sma.left, None)?;
     // member access through pointer is the same as a normal member access
     let left_type_ref = if let Type::Pointer(ref inner) = left_type {
         use std::ops::Deref;
@@ -982,7 +1002,7 @@ fn type_check_struct_pattern(ctx: &mut TypeCheckerContext, p: &mut StructPattern
     }
 }
 
-fn type_check_block(ctx: &mut TypeCheckerContext, b: &mut Block, type_hint: &Option<Type>) -> TypeCheckResult
+fn type_check_block(ctx: &mut TypeCheckerContext, b: &mut Block, type_hint: Option<&Type>) -> TypeCheckResult
 {
     ctx.push_stack(None);
     let num = b.expressions.len();
@@ -998,14 +1018,14 @@ fn type_check_block(ctx: &mut TypeCheckerContext, b: &mut Block, type_hint: &Opt
     valid(b.typ.clone())
 }
 
-fn type_check_new(ctx: &mut TypeCheckerContext, n: &mut NewExpression, type_hint: &Option<Type>) -> TypeCheckResult
+fn type_check_new(ctx: &mut TypeCheckerContext, n: &mut NewExpression, type_hint: Option<&Type>) -> TypeCheckResult
 {
     let typ = type_check_expression(ctx, &mut n.inner, type_hint)?;
     n.typ = ptr_type(typ);
     valid(n.typ.clone())
 }
 
-fn type_check_delete(ctx: &mut TypeCheckerContext, d: &mut DeleteExpression, type_hint: &Option<Type>) -> TypeCheckResult
+fn type_check_delete(ctx: &mut TypeCheckerContext, d: &mut DeleteExpression, type_hint: Option<&Type>) -> TypeCheckResult
 {
     let typ = type_check_expression(ctx, &mut d.inner, type_hint)?;
     match typ
@@ -1015,7 +1035,7 @@ fn type_check_delete(ctx: &mut TypeCheckerContext, d: &mut DeleteExpression, typ
     }
 }
 
-fn type_check_array_to_slice(ctx: &mut TypeCheckerContext, ats: &mut ArrayToSlice, type_hint: &Option<Type>) -> TypeCheckResult
+fn type_check_array_to_slice(ctx: &mut TypeCheckerContext, ats: &mut ArrayToSlice, type_hint: Option<&Type>) -> TypeCheckResult
 {
     let t = type_check_expression(ctx, &mut ats.inner, type_hint)?;
     match t
@@ -1030,14 +1050,14 @@ fn type_check_array_to_slice(ctx: &mut TypeCheckerContext, ats: &mut ArrayToSlic
 
 fn type_check_address_of(ctx: &mut TypeCheckerContext, a: &mut AddressOfExpression) -> TypeCheckResult
 {
-    let t = type_check_expression(ctx, &mut a.inner, &None)?;
+    let t = type_check_expression(ctx, &mut a.inner, None)?;
     a.typ = ptr_type(t);
     valid(a.typ.clone())
 }
 
 fn type_check_dereference(ctx: &mut TypeCheckerContext, a: &mut DereferenceExpression) -> TypeCheckResult
 {
-    let t = type_check_expression(ctx, &mut a.inner, &None)?;
+    let t = type_check_expression(ctx, &mut a.inner, None)?;
     if let Type::Pointer(inner) = t {
         a.typ = inner.deref().clone();
         valid(a.typ.clone())
@@ -1048,8 +1068,8 @@ fn type_check_dereference(ctx: &mut TypeCheckerContext, a: &mut DereferenceExpre
 
 fn type_check_index_operation(ctx: &mut TypeCheckerContext, iop: &mut IndexOperation) -> CompileResult<Type>
 {
-    let target_type = type_check_expression(ctx, &mut iop.target, &None)?;
-    let index_type = type_check_expression(ctx, &mut iop.index_expr, &None)?;
+    let target_type = type_check_expression(ctx, &mut iop.target, None)?;
+    let index_type = type_check_expression(ctx, &mut iop.index_expr, None)?;
     match index_type {
         Type::Int(_) | Type::UInt(_) => (),
         _ => return type_error_result(&iop.span, format!("An expression of type {}, cannot be used to index something. Only integers are supported.", index_type))
@@ -1097,7 +1117,7 @@ fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign) -> TypeCheckR
 {
     let dst_type = match a.left {
         AssignTarget::Var(ref mut nr) => {
-            type_check_name(ctx, nr, &None)?;
+            type_check_name(ctx, nr, None)?;
             if !ctx.resolve(&nr.name).map(|rn| rn.mutable).unwrap_or(false) {
                 return type_error_result(&nr.span, format!("Attempting to modify non mutable variable {}", nr.name));
             }
@@ -1151,13 +1171,13 @@ fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign) -> TypeCheckR
 fn type_check_while(ctx: &mut TypeCheckerContext, w: &mut WhileLoop) -> TypeCheckResult
 {
     type_check_with_conversion(ctx, &mut w.cond, &Type::Bool)?;
-    type_check_expression(ctx, &mut w.body, &None)?;
+    type_check_expression(ctx, &mut w.body, None)?;
     valid(Type::Void)
 }
 
 fn type_check_for(ctx: &mut TypeCheckerContext, f: &mut ForLoop) -> TypeCheckResult
 {
-    let typ = type_check_expression(ctx, &mut f.iterable, &None)?;
+    let typ = type_check_expression(ctx, &mut f.iterable, None)?;
     match typ
     {
         // Iterable
@@ -1171,7 +1191,7 @@ fn type_check_for(ctx: &mut TypeCheckerContext, f: &mut ForLoop) -> TypeCheckRes
 
             f.loop_variable_type = element_type.clone();
             ctx.add(&f.loop_variable, element_type, false, &f.span)?;
-            type_check_expression(ctx, &mut f.body, &None)?;
+            type_check_expression(ctx, &mut f.body, None)?;
             valid(Type::Void)
         },
         _ => type_error_result(&f.span, format!("Cannot iterate over expressions of type {}", typ)),
@@ -1180,7 +1200,7 @@ fn type_check_for(ctx: &mut TypeCheckerContext, f: &mut ForLoop) -> TypeCheckRes
 
 fn type_check_cast(ctx: &mut TypeCheckerContext, c: &mut TypeCast) -> TypeCheckResult
 {
-    let inner_type = type_check_expression(ctx, &mut c.inner, &None)?;
+    let inner_type = type_check_expression(ctx, &mut c.inner, None)?;
     match (inner_type, &c.destination_type)
     {
         (Type::Int(_), &Type::UInt(_)) |
@@ -1209,7 +1229,7 @@ fn type_check_compiler_call(ctx: &mut TypeCheckerContext, cc: &mut CompilerCall)
         }
 
         CompilerCall::Slice{ref mut data, ref mut len, ref mut typ, ref span} => {
-            let data_type = type_check_expression(ctx, data, &None)?;
+            let data_type = type_check_expression(ctx, data, None)?;
             type_check_with_conversion(ctx, len, &ctx.target.native_uint_type)?;
             if let Type::Pointer(ref inner) = data_type {
                 *typ = slice_type(inner.deref().clone());
@@ -1221,15 +1241,34 @@ fn type_check_compiler_call(ctx: &mut TypeCheckerContext, cc: &mut CompilerCall)
     }
 }
 
+fn type_check_literal(ctx: &mut TypeCheckerContext, lit: &mut Literal, type_hint: Option<&Type>) -> TypeCheckResult
+{
+    if let Literal::Array(ref mut a) = *lit {
+        return type_check_array_literal(ctx, a);
+    }
 
-pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: &Option<Type>) -> CompileResult<Type>
+    let typ = lit.get_type();
+    match type_hint {
+        None => valid(typ),
+        Some(expected) if typ == *expected => valid(typ),
+        Some(expected) => {
+            if let Some(new_lit) = lit.try_convert(expected) {
+                replace_by(Expression::Literal(new_lit))
+            } else {
+                valid(typ)
+            }
+        }
+    }
+}
+
+
+pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, type_hint: Option<&Type>) -> CompileResult<Type>
 {
     let type_check_result = match *e
     {
         Expression::UnaryOp(ref mut op) => type_check_unary_op(ctx, op),
         Expression::BinaryOp(ref mut op) => type_check_binary_op(ctx, op),
-        Expression::Literal(Literal::Array(ref mut a)) => type_check_array_literal(ctx, a),
-        Expression::Literal(ref lit) => valid(lit.get_type()),
+        Expression::Literal(ref mut lit) => type_check_literal(ctx, lit, type_hint),
         Expression::Call(ref mut c) => type_check_call(ctx, c),
         Expression::NameRef(ref mut nr) => type_check_name(ctx, nr, type_hint),
         Expression::Match(ref mut m) => type_check_match(ctx, m),
@@ -1254,7 +1293,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
         Expression::For(ref mut f) => type_check_for(ctx, f),
         Expression::Void => valid(Type::Void),
         Expression::Nil(ref mut nt) => {
-            if let Some(ref typ) = *type_hint {
+            if let Some(typ) = type_hint {
                 if let Type::Optional(_) = *typ {
                     nt.typ = typ.clone();
                 }
@@ -1262,7 +1301,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
             valid(nt.typ.clone())
         },
         Expression::OptionalToBool(ref mut inner) => {
-            let inner_type = type_check_expression(ctx, inner, &None)?;
+            let inner_type = type_check_expression(ctx, inner, None)?;
             if !inner_type.is_optional() {
                 type_error_result(&inner.span(), "Expecting optional type")
             } else {
@@ -1270,7 +1309,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
             }
         }
         Expression::ToOptional(ref mut t) => {
-            type_check_expression(ctx, &mut t.inner, &None)?;
+            type_check_expression(ctx, &mut t.inner, None)?;
             valid(t.optional_type.clone())
         },
         Expression::Cast(ref mut t) => type_check_cast(ctx, t),
@@ -1305,7 +1344,7 @@ pub fn type_check_module(module: &mut Module, target: &Target) -> CompileResult<
 
         for global in module.globals.values_mut() {
             if global.typ == Type::Unknown {
-                global.typ = type_check_expression(&mut ctx, &mut global.init, &None)?;
+                global.typ = type_check_expression(&mut ctx, &mut global.init, None)?;
                 ctx.add_global(&global.name, global.typ.clone(), global.mutable, &global.span)?;
             }
         }
