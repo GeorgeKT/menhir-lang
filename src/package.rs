@@ -6,6 +6,7 @@ use std::env;
 use toml;
 
 use ast::{Import, TreePrinter};
+use timer::{time_operation, time_operation_mut};
 use parser::{parse_files};
 use llvmbackend::TargetMachine;
 use bytecode::{compile_to_byte_code, optimize_module, OptimizationLevel};
@@ -90,7 +91,9 @@ impl PackageData
     {
         println!("Compiling for {}", build_options.target_machine.target.triplet);
         for t in &self.target {
-            t.build(build_options)?;
+            time_operation(2, "Total build time", ||{
+                t.build(build_options)
+            })?;
         }
 
         Ok(())
@@ -205,13 +208,18 @@ impl PackageTarget
         let pkg_deps = self.find_dependencies(build_options)?;
         let mut pkg = parse_files(path, &self.name, &build_options.target_machine.target, &pkg_deps.imports)?;
 
-        type_check_package(&mut pkg, &build_options.target_machine.target)?;
+        time_operation_mut(2, "Type checking", ||{
+            type_check_package(&mut pkg, &build_options.target_machine.target)
+        })?;
+
         if build_options.dump_flags.contains("ast") || build_options.dump_flags.contains("all") {
             println!("AST: {}", pkg.name);
             pkg.print(0);
         }
 
-        let mut bc_mod = compile_to_byte_code(&pkg, &build_options.target_machine.target)?;
+        let mut bc_mod = time_operation(2, "Compile to bytecode", ||{
+            compile_to_byte_code(&pkg, &build_options.target_machine.target)
+        })?;
 
         if build_options.dump_flags.contains("bytecode") || build_options.dump_flags.contains("all") {
             println!("bytecode:");
@@ -220,11 +228,13 @@ impl PackageTarget
             println!("------\n");
         }
 
-        if build_options.optimize {
-            optimize_module(&mut bc_mod, OptimizationLevel::Normal);
-        } else {
-            optimize_module(&mut bc_mod, OptimizationLevel::Minimal);
-        }
+        time_operation_mut(2, "Optimization", ||{
+            if build_options.optimize {
+                optimize_module(&mut bc_mod, OptimizationLevel::Normal);
+            } else {
+                optimize_module(&mut bc_mod, OptimizationLevel::Minimal);
+            }
+        });
 
         let opts = CodeGenOptions{
             dump_ir: build_options.dump_flags.contains("ir") ||  build_options.dump_flags.contains("all"),
@@ -236,8 +246,13 @@ impl PackageTarget
 
 
 
-        let ctx = llvm_code_generation(&bc_mod, &build_options.target_machine).map_err(CompileError::Other)?;
-        link(&ctx, &opts, &pkg_deps.linker_flags)?;
+        let ctx = time_operation(2, "Code generation", ||{
+            llvm_code_generation(&bc_mod, &build_options.target_machine).map_err(CompileError::Other)
+        })?;
+
+        time_operation(2, "Linking", ||{
+            link(&ctx, &opts, &pkg_deps.linker_flags)
+        })?;
 
         match opts.output_type
         {

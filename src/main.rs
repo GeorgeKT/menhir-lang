@@ -9,6 +9,7 @@ extern crate toml;
 extern crate serde_derive;
 extern crate serde;
 extern crate rmp_serde;
+extern crate time;
 
 mod ast;
 mod compileerror;
@@ -19,6 +20,7 @@ mod typechecker;
 mod span;
 mod llvmbackend;
 mod target;
+mod timer;
 mod package;
 
 use std::fs::File;

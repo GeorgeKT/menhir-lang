@@ -16,6 +16,7 @@ use std::ffi::OsStr;
 use std::ops::Deref;
 
 use ast::*;
+use timer::time_operation;
 use compileerror::{CompileResult, CompileError, parse_error_result};
 use span::{Span};
 use target::Target;
@@ -1230,11 +1231,13 @@ fn parse_module<Input: Read>(
 
 fn parse_file(file_path: &Path, namespace: &str, target: &Target) -> CompileResult<Module>
 {
-    println!("  Parsing {}", file_path.to_string_lossy());
-    let mut module = Module::new(namespace);
-    let mut file = fs::File::open(file_path)?;
-    parse_module(&mut module, &mut file, namespace, file_path.to_string_lossy().deref(), target)?;
-    Ok(module)
+    let op_name = format!("Parsing {}", file_path.to_string_lossy());
+    time_operation(2, &op_name, ||{
+        let mut module = Module::new(namespace);
+        let mut file = fs::File::open(file_path)?;
+        parse_module(&mut module, &mut file, namespace, file_path.to_string_lossy().deref(), target)?;
+        Ok(module)
+    })
 }
 
 fn parse_file_tree(pkg: &mut Package, dir: &Path, namespace: &str, target: &Target) -> CompileResult<()>
