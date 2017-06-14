@@ -239,7 +239,7 @@ unsafe fn gen_cast(ctx: &mut Context, dst: &Var, src: &Operand)
             LLVMBuildUIToFP(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("cast_to_int")),
 
         (&Type::Pointer(_), &Type::Pointer(_)) =>
-            LLVMBuildBitCast(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("ptr_cast")),
+            LLVMBuildBitCast(ctx.builder, operand.value, ctx.resolve_type(&dst.typ), cstr!("ptr_cast")),
 
         (&Type::Pointer(_), &Type::Array(_)) =>
             LLVMBuildBitCast(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("ptr_cast")),

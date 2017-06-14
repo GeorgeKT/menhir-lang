@@ -37,6 +37,7 @@ impl ValueRef
             Constant::Char(v) => ValueRef::new(const_char(ctx, v), Type::Char),
             Constant::Bool(v) => ValueRef::new(const_bool(ctx, v), Type::Bool),
             Constant::Array(ref elements) => ValueRef::const_array(ctx, elements),
+            Constant::NullPtr(ref typ) => ValueRef::new(LLVMConstNull(ctx.resolve_type(typ)), ptr_type(typ.clone())),
         }
     }
 

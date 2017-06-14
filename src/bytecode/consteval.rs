@@ -19,6 +19,7 @@ fn lit_to_const(lit: &Literal) -> Option<Constant>
         Literal::Bool(_, v) => Some(Constant::Bool(v)),
         Literal::Char(_, v) => Some(Constant::Char(v)),
         Literal::String(_, ref v) => Some(Constant::String(v.clone())),
+        Literal::NullPtr(_, ref inner_type) => Some(Constant::NullPtr(inner_type.clone())),
 
         Literal::Float(_, ref v, float_size) => {
             match v.parse::<f64>() {

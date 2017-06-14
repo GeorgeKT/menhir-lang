@@ -295,11 +295,11 @@ fn type_check_function(ctx: &mut TypeCheckerContext, fun: &mut Function) -> Type
         ctx.add(&arg.name, arg.typ.clone(), arg.mutable, &arg.span)?;
     }
 
-    let et = match type_check_expression(ctx, &mut fun.expression, None)
+    let et = match type_check_expression(ctx, &mut fun.expression, Some(&fun.sig.return_type))
     {
         Err(CompileError::UnknownType(ref name, ref expected_type)) => {
             update_binding_type(ctx, &mut fun.expression, name, expected_type)?;
-            type_check_expression(ctx, &mut fun.expression, None)?
+            type_check_expression(ctx, &mut fun.expression, Some(&fun.sig.return_type))?
         },
         Err(e) => return Err(e),
         Ok(typ) => typ,
@@ -670,13 +670,13 @@ fn update_binding_type(ctx: &mut TypeCheckerContext, e: &mut Expression, name: &
     e.visit_mut(&mut update_binding)
 }
 
-fn type_check_if(ctx: &mut TypeCheckerContext, i: &mut IfExpression) -> TypeCheckResult
+fn type_check_if(ctx: &mut TypeCheckerContext, i: &mut IfExpression, type_hint: Option<&Type>) -> TypeCheckResult
 {
     type_check_with_conversion(ctx, &mut i.condition, &Type::Bool)?;
 
-    let on_true_type = type_check_expression(ctx, &mut i.on_true, None)?;
+    let on_true_type = type_check_expression(ctx, &mut i.on_true, type_hint.clone())?;
     let on_false_type = if let Some(ref mut expr) = i.on_false {
-        type_check_expression(ctx, expr, None)?
+        type_check_expression(ctx, expr, type_hint.clone())?
     } else {
         Type::Void
     };
@@ -1217,7 +1217,7 @@ fn type_check_cast(ctx: &mut TypeCheckerContext, c: &mut TypeCast) -> TypeCheckR
     }
 }
 
-fn type_check_compiler_call(ctx: &mut TypeCheckerContext, cc: &mut CompilerCall) -> TypeCheckResult
+fn type_check_compiler_call(ctx: &mut TypeCheckerContext, cc: &mut CompilerCall, type_hint: Option<&Type>) -> TypeCheckResult
 {
     match *cc {
         CompilerCall::SizeOf(ref mut typ, ref span) => {
@@ -1229,7 +1229,13 @@ fn type_check_compiler_call(ctx: &mut TypeCheckerContext, cc: &mut CompilerCall)
         }
 
         CompilerCall::Slice{ref mut data, ref mut len, ref mut typ, ref span} => {
-            let data_type = type_check_expression(ctx, data, None)?;
+            let data_type = if let Some(&Type::Slice(ref st)) = type_hint {
+                let data_ptr_type = ptr_type(st.element_type.clone());
+                type_check_expression(ctx, data, Some(&data_ptr_type))?
+            } else {
+                type_check_expression(ctx, data, None)?
+            };
+
             type_check_with_conversion(ctx, len, &ctx.target.native_uint_type)?;
             if let Type::Pointer(ref inner) = data_type {
                 *typ = slice_type(inner.deref().clone());
@@ -1243,19 +1249,32 @@ fn type_check_compiler_call(ctx: &mut TypeCheckerContext, cc: &mut CompilerCall)
 
 fn type_check_literal(ctx: &mut TypeCheckerContext, lit: &mut Literal, type_hint: Option<&Type>) -> TypeCheckResult
 {
-    if let Literal::Array(ref mut a) = *lit {
-        return type_check_array_literal(ctx, a);
-    }
+    match *lit {
+        Literal::Array(ref mut a) => type_check_array_literal(ctx, a),
 
-    let typ = lit.get_type();
-    match type_hint {
-        None => valid(typ),
-        Some(expected) if typ == *expected => valid(typ),
-        Some(expected) => {
-            if let Some(new_lit) = lit.try_convert(expected) {
-                replace_by(Expression::Literal(new_lit))
+        Literal::NullPtr(ref span, ref mut typ) => {
+            if let Some(&Type::Pointer(ref inner_type)) = type_hint {
+                *typ = inner_type.deref().clone();
+                valid(ptr_type(typ.clone()))
+            } else if *typ != Type::Unknown {
+                type_error_result(span, "Unable to determine type of null expression")
             } else {
-                valid(typ)
+                valid(ptr_type(typ.clone()))
+            }
+        }
+
+        _ => {
+            let typ = lit.get_type();
+            match type_hint {
+                None => valid(typ),
+                Some(expected) if typ == *expected => valid(typ),
+                Some(expected) => {
+                    if let Some(new_lit) = lit.try_convert(expected) {
+                        replace_by(Expression::Literal(new_lit))
+                    } else {
+                        valid(typ)
+                    }
+                }
             }
         }
     }
@@ -1279,7 +1298,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
             }
             valid(Type::Void)
         },
-        Expression::If(ref mut i) => type_check_if(ctx, i),
+        Expression::If(ref mut i) => type_check_if(ctx, i, type_hint),
         Expression::Block(ref mut b) => type_check_block(ctx, b, type_hint),
         Expression::StructInitializer(ref mut si) => type_check_struct_initializer(ctx, si),
         Expression::MemberAccess(ref mut sma) => type_check_member_access(ctx, sma),
@@ -1313,7 +1332,7 @@ pub fn type_check_expression(ctx: &mut TypeCheckerContext, e: &mut Expression, t
             valid(t.optional_type.clone())
         },
         Expression::Cast(ref mut t) => type_check_cast(ctx, t),
-        Expression::CompilerCall(ref mut cc) => type_check_compiler_call(ctx, cc),
+        Expression::CompilerCall(ref mut cc) => type_check_compiler_call(ctx, cc, type_hint),
         Expression::IndexOperation(ref mut iop) => valid(type_check_index_operation(ctx, iop)?),
         Expression::Return(ref mut r) => {
             if let Some(return_type) = ctx.get_function_return_type() {

@@ -143,6 +143,7 @@ impl Lexer
             "while" => TokenKind::While,
             "for" => TokenKind::For,
             "nil" => TokenKind::Nil,
+            "null" => TokenKind::Null,
             "var" => TokenKind::Var,
             "as" => TokenKind::BinaryOperator(BinaryOperator::As),
             "interface" => TokenKind::Interface,

@@ -1,4 +1,5 @@
-use ast::{Type, ArrayLiteral, TreePrinter, FloatSize, IntSize, prefix};
+use std::ops::Deref;
+use ast::{Type, ArrayLiteral, TreePrinter, FloatSize, IntSize, ptr_type, prefix};
 use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -11,6 +12,7 @@ pub enum Literal
     Float(Span, String, FloatSize), // Keep as string until we generate code, so we can compare it
     String(Span, String),
     Array(ArrayLiteral),
+    NullPtr(Span, Type),
 }
 
 impl Literal
@@ -26,6 +28,7 @@ impl Literal
             Literal::Char(_, _) => Type::Char,
             Literal::String(_, _) => Type::String,
             Literal::Array(ref a) => a.array_type.clone(),
+            Literal::NullPtr(_, ref typ) => ptr_type(typ.clone()),
         }
     }
 
@@ -38,6 +41,7 @@ impl Literal
             Literal::Float(ref span, _, _) |
             Literal::Bool(ref span, _) |
             Literal::Char(ref span, _) |
+            Literal::NullPtr(ref span, _) |
             Literal::String(ref span, _) => span.clone(),
             Literal::Array(ref a) => a.span.clone(),
         }
@@ -99,6 +103,10 @@ impl Literal
                 Some(Literal::Float(span.clone(), value.clone(), FloatSize::F64))
             }
 
+            (&Literal::NullPtr(ref span, _), &Type::Pointer(ref inner_type)) => {
+                Some(Literal::NullPtr(span.clone(), inner_type.deref().clone()))
+            }
+
             _ => None,
         }
     }
@@ -117,6 +125,7 @@ impl TreePrinter for Literal
             Literal::Bool(ref s, v) => println!("{}bool {} ({})", p, v, s),
             Literal::Char(ref s, v) => println!("{}char {} ({})", p, v, s),
             Literal::String(ref s, ref v) => println!("{}string {} ({})", p, v, s),
+            Literal::NullPtr(ref s, _) => println!("{}null ({})", p, s),
             Literal::Array(ref a) => {
                 println!("{}array ({})", p, a.span);
                 for e in &a.elements {

@@ -908,6 +908,10 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token, indent_level: usize, 
             nil_expr(tok.span)
         },
 
+        TokenKind::Null => {
+            Expression::Literal(Literal::NullPtr(tok.span, Type::Unknown))
+        },
+
         TokenKind::True => {
             Expression::Literal(Literal::Bool(tok.span, true))
         },

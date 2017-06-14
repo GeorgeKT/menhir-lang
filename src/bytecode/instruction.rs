@@ -35,6 +35,7 @@ pub enum Constant
     String(String),
     Bool(bool),
     Array(Vec<Constant>),
+    NullPtr(Type),
 }
 
 impl Constant
@@ -49,6 +50,7 @@ impl Constant
             Constant::Char(_) => Type::Char,
             Constant::String(_) => Type::String,
             Constant::Bool(_) => Type::Bool,
+            Constant::NullPtr(ref typ) => ptr_type(typ.clone()),
             Constant::Array(ref members) => {
                 array_type(members[0].get_type(), members.len())
             }
@@ -69,6 +71,7 @@ impl fmt::Display for Constant
             Constant::String(ref v) => write!(f, "(string {})", v),
             Constant::Bool(v) => write!(f, "(bool {})", v),
             Constant::Array(ref m) => write!(f, "[{}]", join(m.iter(), ", ")),
+            Constant::NullPtr(_) => write!(f, "null"),
         }
     }
 }

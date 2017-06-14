@@ -479,6 +479,10 @@ fn match_case_to_bc(
             add_literal_case(bc_mod, func, Operand::const_char(v));
         },
 
+        Pattern::Literal(Literal::NullPtr(_, ref inner_type)) => {
+            add_literal_case(bc_mod, func, Operand::Const(Constant::NullPtr(inner_type.clone())));
+        },
+
         Pattern::Name(ref nr) => {
             name_pattern_match_to_bc(bc_mod, func, mc, target, match_end_bb, match_case_bb, next_bb, nr, target_machine)
         },
@@ -908,6 +912,12 @@ fn expr_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, expr: &E
             Some(dst)
         },
 
+        Expression::Literal(Literal::NullPtr(_, ref inner_type)) => {
+            let dst = get_dst(func, &ptr_type(inner_type.clone()));
+            func.add(store_operand_instr(&dst, Operand::Const(Constant::NullPtr(inner_type.clone()))));
+            Some(dst)
+        }
+
         Expression::Call(ref c) => {
             call_to_bc(bc_mod, func, c, None, target)
         },
@@ -1122,6 +1132,7 @@ pub fn compile_to_byte_code(pkg: &Package, target: &Target) -> CompileResult<Byt
 
         for func in md.functions.values() {
             if !func.is_generic() {
+                println!("Generating function: {}", func.sig.name);
                 let new_func = func_to_bc(&func.sig, &mut ll_mod, &func.expression, target);
                 ll_mod.functions.insert(func.sig.name.clone(), new_func);
             }
@@ -1132,7 +1143,7 @@ pub fn compile_to_byte_code(pkg: &Package, target: &Target) -> CompileResult<Byt
     for import in pkg.imports.values() {
         for symbol in import.symbols.values() {
             if let Some(s) = FunctionSignature::from_type(&symbol.name, &symbol.typ) {
-                if ll_mod.functions.contains_key(&symbol.name) {
+                if ll_mod.functions.contains_key(&symbol.name) || symbol.typ.is_generic() {
                     continue;
                 }
                 ll_mod.imported_functions.push(ByteCodeFunction::new(&s, true));
