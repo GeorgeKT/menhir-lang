@@ -1132,7 +1132,6 @@ pub fn compile_to_byte_code(pkg: &Package, target: &Target) -> CompileResult<Byt
 
         for func in md.functions.values() {
             if !func.is_generic() {
-                println!("Generating function: {}", func.sig.name);
                 let new_func = func_to_bc(&func.sig, &mut ll_mod, &func.expression, target);
                 ll_mod.functions.insert(func.sig.name.clone(), new_func);
             }
