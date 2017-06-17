@@ -4,13 +4,13 @@ use span::Span;
 use ast::{TreePrinter, NameRef, Literal, Type, prefix};
 
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct EmptyArrayPattern
 {
     pub span: Span,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct ArrayPattern
 {
     pub head: String,
@@ -18,14 +18,14 @@ pub struct ArrayPattern
     pub span: Span,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum StructPatternBindingMode
 {
     Value,
     Pointer
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct StructPatternBinding
 {
     pub name: String,
@@ -44,7 +44,7 @@ impl fmt::Display for StructPatternBinding
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct StructPattern
 {
     pub name: String,
@@ -54,7 +54,7 @@ pub struct StructPattern
 }
 
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct OptionalPattern
 {
     pub binding: String,
@@ -62,7 +62,7 @@ pub struct OptionalPattern
     pub inner_type: Type,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Pattern
 {
     Literal(Literal),

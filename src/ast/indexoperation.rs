@@ -1,7 +1,7 @@
 use ast::{Expression, TreePrinter, Type, prefix};
 use span::Span;
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct IndexOperation
 {
     pub target: Expression,

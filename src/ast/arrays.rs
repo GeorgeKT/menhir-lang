@@ -1,7 +1,7 @@
 use ast::{Expression, Literal, Type};
 use span::{Span};
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct ArrayLiteral
 {
     pub elements: Vec<Expression>,
@@ -18,7 +18,7 @@ pub fn array_lit(e: Vec<Expression>, span: Span) -> Literal
     })
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct ArrayToSlice
 {
     pub inner: Expression,

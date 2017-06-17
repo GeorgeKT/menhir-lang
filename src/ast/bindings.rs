@@ -2,14 +2,14 @@ use itertools::free::join;
 use ast::{Expression, Type, TreePrinter, prefix, StructPattern};
 use span::{Span};
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum BindingType
 {
     Name(String),
     Struct(StructPattern),
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Binding
 {
     pub mutable: bool,
@@ -19,7 +19,7 @@ pub struct Binding
     pub span: Span,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct GlobalBinding
 {
     pub mutable: bool,
@@ -29,14 +29,14 @@ pub struct GlobalBinding
     pub span: Span,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct BindingList
 {
     pub bindings: Vec<Binding>,
     pub span: Span,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct BindingExpression
 {
     pub bindings: Vec<Binding>,

@@ -1,7 +1,7 @@
 use ast::{Expression, TreePrinter, Type, prefix};
 use span::{Span};
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct WhileLoop
 {
     pub cond: Expression,
@@ -30,7 +30,7 @@ impl TreePrinter for WhileLoop
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct ForLoop
 {
     pub loop_variable: String,

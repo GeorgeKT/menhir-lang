@@ -2,7 +2,7 @@ use ast::{Type, TreePrinter, prefix};
 use span::{Span};
 
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct NameRef
 {
     pub name: String,

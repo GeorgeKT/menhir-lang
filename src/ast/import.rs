@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fmt;
 use itertools::join;
 use span::Span;
+use ast::Function;
 use super::{Type};
 
 
@@ -34,23 +35,64 @@ impl fmt::Display for ImportName
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct ImportSymbol
+pub enum ImportSymbol
 {
-    pub name: String,
-    pub typ: Type,
-    pub mutable: bool,
-    pub span: Span,
+    Symbol{
+        name: String,
+        typ: Type,
+        mutable: bool,
+        span: Span,
+    },
+
+    GenericFunction(Function)
 }
 
 impl ImportSymbol
 {
     pub fn new(name: &str, typ: &Type, mutable: bool, span: &Span) -> ImportSymbol
     {
-        ImportSymbol{
+        ImportSymbol::Symbol{
             name: name.into(),
             typ: typ.clone(),
             mutable: mutable,
             span: span.clone(),
+        }
+    }
+
+    pub fn from_generic_function(func: &Function) -> ImportSymbol
+    {
+        ImportSymbol::GenericFunction(func.clone())
+    }
+
+    pub fn get_name(&self) -> &str 
+    {
+        match *self {
+            ImportSymbol::Symbol{ref name, ..} => &name,
+            ImportSymbol::GenericFunction(ref func) => &func.sig.name,
+        }
+    }
+
+    pub fn get_type(&self) -> &Type
+    {
+        match *self {
+            ImportSymbol::Symbol{ref typ, ..} => typ,
+            ImportSymbol::GenericFunction(ref func) => &func.sig.typ,
+        }
+    } 
+
+    pub fn is_mutable(&self) -> bool
+    {
+        match *self {
+            ImportSymbol::Symbol{mutable, ..} => mutable,
+            ImportSymbol::GenericFunction(_) => false,
+        }
+    } 
+
+    pub fn get_span(&self) -> &Span 
+    {
+        match *self {
+            ImportSymbol::Symbol{ref span, ..} => span,
+            ImportSymbol::GenericFunction(ref func) => &func.span,
         }
     }
 }
@@ -59,7 +101,7 @@ impl ImportSymbol
 pub struct Import
 {
     pub namespace: String,
-    pub symbols: HashMap<String, ImportSymbol>
+    pub symbols: HashMap<String, ImportSymbol>,
 }
 
 impl Import
@@ -74,7 +116,7 @@ impl Import
 
     pub fn add_symbol(&mut self, sym: ImportSymbol)
     {
-        self.symbols.insert(sym.name.clone(), sym);
+        self.symbols.insert(sym.get_name().into(), sym);
     }
 }
 
@@ -85,7 +127,13 @@ impl fmt::Display for Import
     {
         writeln!(f, "Module {}:", self.namespace)?;
         for symbol in self.symbols.values() {
-            writeln!(f, "  {}: type {}", symbol.name, symbol.typ)?;
+            match *symbol {
+                ImportSymbol::Symbol{ref name, ref typ, ..} =>  
+                    writeln!(f, "  {}: type {}", name, typ)?,
+                ImportSymbol::GenericFunction(ref func) => 
+                    writeln!(f, "  {}: type {}", func.sig.name, func.sig.typ)?,
+            }
+           
         }
 
         Ok(())

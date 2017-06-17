@@ -2,7 +2,7 @@ use std::ops::Deref;
 use ast::{Type, ArrayLiteral, TreePrinter, FloatSize, IntSize, ptr_type, prefix};
 use span::Span;
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Literal
 {
     Int(Span, i64, IntSize),

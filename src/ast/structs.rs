@@ -1,7 +1,7 @@
 use ast::{Expression, TreePrinter, GenericMapping, Type, prefix};
 use span::{Span};
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct StructMemberDeclaration
 {
     pub name: String,
@@ -18,7 +18,7 @@ pub fn struct_member_declaration(name: &str, typ: Type, span: Span) -> StructMem
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct StructDeclaration
 {
     pub name: String,
@@ -37,7 +37,7 @@ pub fn struct_declaration(name: &str, members: Vec<StructMemberDeclaration>, spa
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct StructInitializer
 {
     pub struct_name: String,

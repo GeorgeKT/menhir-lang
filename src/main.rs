@@ -8,7 +8,7 @@ extern crate toml;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde;
-extern crate rmp_serde;
+extern crate bincode;
 extern crate time;
 
 mod ast;
@@ -84,8 +84,8 @@ fn build_package_command(matches: &ArgMatches, dump_flags: &str) -> CompileResul
 fn exports_command(matches: &ArgMatches) -> CompileResult<i32>
 {
     let exports_file_path = matches.value_of("EXPORTS_FILE").ok_or_else(|| "No exports file given".to_owned())?;
-    let exports_file = File::open(&exports_file_path)?;
-    let lib = ExportLibrary::load(exports_file)?;
+    let mut exports_file = File::open(&exports_file_path)?;
+    let lib = ExportLibrary::load(&mut exports_file)?;
     println!("{}", lib);
     Ok(0)
 }

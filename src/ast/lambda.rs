@@ -2,7 +2,7 @@ use ast::{Expression, Argument, TreePrinter, FunctionSignature, Type, prefix, si
 use compileerror::{CompileResult, type_error_result};
 use span::Span;
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Lambda
 {
     pub sig: FunctionSignature,

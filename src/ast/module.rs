@@ -38,7 +38,11 @@ impl Module
         }
 
         for (name, function) in &self.functions {
-            import.add_symbol(ImportSymbol::new(name, &function.sig.typ, false, &function.span));
+            if !function.is_generic() {
+                import.add_symbol(ImportSymbol::new(name, &function.sig.typ, false, &function.span));
+            } else {
+                import.add_symbol(ImportSymbol::from_generic_function(function));
+            }
         }
 
         for (name, function) in &self.externals {

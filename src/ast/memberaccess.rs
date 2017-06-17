@@ -2,7 +2,7 @@ use std::fmt;
 use ast::*;
 use span::Span;
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Property
 {
     Len,
@@ -21,7 +21,7 @@ impl fmt::Display for Property
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Field
 {
     pub name: String,
@@ -36,7 +36,7 @@ pub fn field(name: &str, index: usize) -> Field
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum MemberAccessType
 {
     Call(Box<Call>),
@@ -44,7 +44,7 @@ pub enum MemberAccessType
     Property(Property),
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct MemberAccess
 {
     pub left: Expression,

@@ -3,9 +3,7 @@ use std::io;
 use std::fmt;
 use ast::{Package, Import};
 use llvmbackend::OutputType;
-
-use serde::Serialize;
-use rmp_serde;
+use bincode;
 
 #[derive(Serialize, Deserialize)]
 pub struct ExportLibrary
@@ -26,17 +24,15 @@ impl ExportLibrary
         }
     }
 
-    pub fn load<R: io::Read>(reader: R) -> Result<ExportLibrary, String>
+    pub fn load<R: io::Read>(reader: &mut R) -> Result<ExportLibrary, String>
     {
-        let result = rmp_serde::decode::from_read(reader)
-            .map_err(|e| format!("Deserialization error: {}", e))?;
-        Ok(result)
+        bincode::deserialize_from(reader, bincode::Infinite)
+            .map_err(|e| format!("Deserialization error: {}", e))
     }
 
-    pub fn save<W: io::Write>(&self, writer: W) -> Result<(), String>
+    pub fn save<W: io::Write>(&self, writer: &mut W) -> Result<(), String>
     {
-        let mut s = rmp_serde::Serializer::new(writer);
-        self.serialize(&mut s)
+        bincode::serialize_into(writer, self, bincode::Infinite)
             .map_err(|e| format!("Serialization error: {}", e))
     }
 }

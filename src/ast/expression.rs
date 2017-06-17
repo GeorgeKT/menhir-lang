@@ -3,14 +3,14 @@ use span::Span;
 use ast::*;
 
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct ToOptional
 {
     pub inner: Expression,
     pub optional_type: Type,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct TypeCast
 {
     pub inner: Expression,
@@ -18,21 +18,21 @@ pub struct TypeCast
     pub span: Span,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Nil
 {
     pub typ: Type,
     pub span: Span,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Return
 {
     pub expression: Expression,
     pub span: Span,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Expression
 {
     Literal(Literal),

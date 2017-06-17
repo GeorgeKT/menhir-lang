@@ -1,7 +1,7 @@
 use ast::{Type, Expression, TreePrinter, prefix};
 use span::Span;
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct NewExpression
 {
     pub inner: Expression,
@@ -9,14 +9,14 @@ pub struct NewExpression
     pub span: Span,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct DeleteExpression
 {
     pub inner: Expression,
     pub span: Span,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct AddressOfExpression
 {
     pub inner: Expression,
@@ -24,7 +24,7 @@ pub struct AddressOfExpression
     pub span: Span,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct DereferenceExpression
 {
     pub inner: Expression,

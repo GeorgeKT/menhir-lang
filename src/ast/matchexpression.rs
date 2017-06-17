@@ -1,7 +1,7 @@
 use ast::{Expression, Type, TreePrinter, Pattern, prefix};
 use span::Span;
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct MatchCase
 {
     pub pattern: Pattern,
@@ -18,7 +18,7 @@ pub fn match_case(p: Pattern, to_execute: Expression, span: Span) -> MatchCase
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct MatchExpression
 {
     pub target: Expression,

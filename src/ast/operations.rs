@@ -1,7 +1,7 @@
 use ast::{Expression, Type, UnaryOperator, BinaryOperator};
 use span::{Span};
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct UnaryOp
 {
     pub operator: UnaryOperator,
@@ -10,7 +10,7 @@ pub struct UnaryOp
     pub typ: Type,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct BinaryOp
 {
     pub operator: BinaryOperator,

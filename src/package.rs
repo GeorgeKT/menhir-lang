@@ -122,8 +122,8 @@ impl PackageTarget
     fn find_dependency_in_path(&self, dep: &str, deps_dir: &str, target_triplet: &str, deps: &mut PackageTargetDeps) -> CompileResult<bool>
     {
         let path = format!("{}/{}/{}/{}.mhr.exports", deps_dir, target_triplet, dep, dep);
-        if let Ok(file) = File::open(&path) {
-            let export_library = ExportLibrary::load(file)?;
+        if let Ok(mut file) = File::open(&path) {
+            let export_library = ExportLibrary::load(&mut file)?;
             deps.imports.extend(export_library.imports.iter().cloned());
 
             match export_library.output_type {
@@ -258,10 +258,10 @@ impl PackageTarget
         {
             OutputType::SharedLib | OutputType::StaticLib => {
                 let path = format!("{}/{}.mhr.exports", opts.build_dir, self.name);
-                let file = File::create(&path)?;
+                let mut file = File::create(&path)?;
                 println!("  Generating {}", path);
                 let export_lib = ExportLibrary::new(&pkg, opts.output_type);
-                export_lib.save(file)?;
+                export_lib.save(&mut file)?;
             }
 
             _ => (),

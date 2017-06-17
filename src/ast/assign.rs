@@ -3,7 +3,7 @@ use ast::{Expression, NameRef, DereferenceExpression, MemberAccess, IndexOperati
 use span::{Span};
 
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum AssignOperator
 {
     Assign,
@@ -31,7 +31,7 @@ impl fmt::Display for AssignOperator
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum AssignTarget
 {
     Var(NameRef),
@@ -53,7 +53,7 @@ impl TreePrinter for AssignTarget
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Assign
 {
     pub operator: AssignOperator,
