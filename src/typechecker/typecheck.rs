@@ -888,6 +888,28 @@ fn type_check_generic_member_call(ctx: &mut TypeCheckerContext, call: &mut Call,
     }
 }
 
+fn to_static_function_call(ctx: &mut TypeCheckerContext, sma: &MemberAccess) -> Option<Call> 
+{
+    if let Expression::NameRef(ref nr) = sma.left {
+        if let MemberAccessType::Call(ref call) = sma.right {
+            let call_name = format!("{}.{}", nr.name, call.callee.name);
+            if let Some(rn) = ctx.resolve(&call_name) {
+                if let Type::Func(_) = rn.typ {
+                    let name_span = nr.span.expanded(call.callee.span.end);
+                    let full_span = name_span.expanded(call.span.end);
+                    return Some(
+                        Call::new(
+                            NameRef::new(call_name, name_span), 
+                            call.args.clone(),
+                            full_span,
+                        )
+                    )
+                }
+            }
+        }
+    }
+    None
+}
 
 fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess) -> TypeCheckResult
 {
@@ -899,6 +921,10 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
     } else {
         &left_type
     };
+
+    if let Some(call) = to_static_function_call(ctx, sma) {
+        return replace_by(Expression::Call(Box::new(call)))
+    }
 
     let (typ, new_right) = match (&mut sma.right, left_type_ref)
     {
