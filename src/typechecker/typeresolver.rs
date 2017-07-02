@@ -1,8 +1,9 @@
 use std::collections::HashSet;
 use std::ops::Deref;
 use ast::*;
-use super::typecheckercontext::TypeCheckerContext;
+use target::Target;
 use compileerror::{CompileResult, unknown_name_result};
+use super::typecheckercontext::TypeCheckerContext;
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum TypeResolved
@@ -24,7 +25,7 @@ fn resolve_type_helper(ctx: &TypeCheckerContext, typ: &Type) -> (Option<Type>, T
     {
         Type::Unresolved(ref ut) => {
             if let Some(r) = ctx.resolve(&ut.name) {
-                (Some(r.typ), TypeResolved::Yes)
+                (Some(r.typ.clone()), TypeResolved::Yes)
             } else {
                 (None, TypeResolved::No)
             }
@@ -135,7 +136,7 @@ fn resolve_struct_member_types(ctx: &mut TypeCheckerContext, sd: &mut StructDecl
     Ok(TypeResolved::Yes)
 }
 
-fn resolve_sum_case_types(ctx: &mut TypeCheckerContext, st: &mut SumTypeDeclaration, mode: ResolveMode) -> CompileResult<TypeResolved>
+fn resolve_sum_case_types(ctx: &mut TypeCheckerContext, st: &mut SumTypeDeclaration, mode: ResolveMode, target: &Target) -> CompileResult<TypeResolved>
 {
     if st.typ != Type::Unknown {
         return Ok(TypeResolved::Yes);
@@ -157,11 +158,11 @@ fn resolve_sum_case_types(ctx: &mut TypeCheckerContext, st: &mut SumTypeDeclarat
         }
         else
         {
-            case_types.push(sum_type_case(&c.name, ctx.target.native_uint_type.clone())); // Use integer type for cases without structs
+            case_types.push(sum_type_case(&c.name, target.native_uint_type.clone())); // Use integer type for cases without structs
         }
     }
 
-    if case_types.iter().all(|ct| ct.typ == ctx.target.native_uint_type)
+    if case_types.iter().all(|ct| ct.typ == target.native_uint_type)
     {
         let case_names: Vec<String> = st.cases.iter().map(|c| c.name.clone()).collect();
         st.typ = enum_type(&st.name, case_names);
@@ -205,15 +206,7 @@ fn resolve_interface_types(ctx: &mut TypeCheckerContext, i: &mut Interface, mode
     Ok(TypeResolved::Yes)
 }
 
-fn add_import(ctx: &mut TypeCheckerContext, import: &Import) -> CompileResult<()>
-{
-    for (name, symbol) in &import.symbols {
-        ctx.add_external(name, symbol.get_type().clone(), symbol.is_mutable(), symbol.get_span())?;
-    }
-    Ok(())
-}
-
-fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: ResolveMode) -> CompileResult<usize>
+fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: ResolveMode, target: &Target) -> CompileResult<usize>
 {
     let mut num_resolved = 0;
     for typ in module.types.values_mut()
@@ -223,7 +216,7 @@ fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: Re
             TypeDeclaration::Interface(ref mut i) => {
                 if resolve_interface_types(ctx, i, mode)? == TypeResolved::Yes
                 {
-                    ctx.add(&i.name, i.typ.clone(), false, &i.span)?;
+                    ctx.add(Symbol::new(&i.name, &i.typ, false, &i.span, SymbolType::Normal))?;
                     num_resolved += 1;
                 }
             },
@@ -231,27 +224,27 @@ fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: Re
             TypeDeclaration::Struct(ref mut s) => {
                 if resolve_struct_member_types(ctx, s, mode)? == TypeResolved::Yes
                 {
-                    ctx.add(&s.name, s.typ.clone(), false, &s.span)?;
+                    ctx.add(Symbol::new(&s.name, &s.typ, false, &s.span, SymbolType::Normal))?;
                     num_resolved += 1;
                 }
             },
 
             TypeDeclaration::Sum(ref mut s) => {
-                if resolve_sum_case_types(ctx, s, mode)? == TypeResolved::Yes
+                if resolve_sum_case_types(ctx, s, mode, target)? == TypeResolved::Yes
                 {
-                    ctx.add(&s.name, s.typ.clone(), false, &s.span)?;
+                    ctx.add(Symbol::new(&s.name, &s.typ, false, &s.span, SymbolType::Normal))?;
                     match s.typ
                     {
                         Type::Enum(ref et) => {
                             for c in &et.cases
                             {
-                                ctx.add(c, s.typ.clone(), false, &s.span)?;
+                                ctx.add(Symbol::new(c, &s.typ, false, &s.span, SymbolType::Normal))?;
                             }
                         },
                         Type::Sum(ref st) => {
                             for c in &st.cases
                             {
-                                ctx.add(&c.name, s.typ.clone(), false, &s.span)?;
+                                ctx.add(Symbol::new(&c.name, &s.typ, false, &s.span, SymbolType::Normal))?;
                             }
                         },
                         _ => {},
@@ -270,35 +263,31 @@ fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: Re
     Ok(num_resolved)
 }
 
-pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module) -> CompileResult<()>
+pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module, target: &Target) -> CompileResult<()>
 {
-    for import in module.imports.values() {
-        add_import(ctx, import)?;
-    }
-
     let mut num_resolved = 0;
     loop
     {
         let already_resolved = num_resolved;
-        num_resolved = resolve_all_types(ctx, module, ResolveMode::Lazy)?;
+        num_resolved = resolve_all_types(ctx, module, ResolveMode::Lazy, target)?;
 
         if num_resolved == module.types.len() {
             break;
         } else if already_resolved == num_resolved {
             // We weren't able to resolve any in this pass, so something is missing
-            resolve_all_types(ctx, module, ResolveMode::Forced)?;
+            resolve_all_types(ctx, module, ResolveMode::Forced, target)?;
             break;
         }
     }
 
     for f in module.functions.values_mut() {
         resolve_function_args_and_ret_type(ctx, &mut f.sig, ResolveMode::Forced)?;
-        ctx.add(&f.sig.name, f.sig.typ.clone(), false, &f.sig.span)?;
+        ctx.add(Symbol::new(&f.sig.name, &f.sig.typ, false, &f.sig.span, SymbolType::Normal))?;
     }
 
     for f in module.externals.values_mut() {
         resolve_function_args_and_ret_type(ctx, &mut f.sig, ResolveMode::Forced)?;
-        ctx.add(&f.sig.name, f.sig.typ.clone(), false, &f.sig.span)?;
+        ctx.add(Symbol::new(&f.sig.name, &f.sig.typ, false, &f.sig.span, SymbolType::Normal))?;
     }
 
     Ok(())

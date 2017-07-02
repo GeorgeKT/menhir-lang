@@ -2,7 +2,7 @@ use ast::*;
 use compileerror::{CompileResult, type_error_result};
 use span::Span;
 use super::typecheckercontext::TypeCheckerContext;
-use super::instantiategenerics::make_concrete;
+use super::instantiate::make_concrete;
 
 pub fn add(mapping: &mut GenericMapping, from: &Type, to: &Type, span: &Span) -> CompileResult<()>
 {
@@ -48,6 +48,13 @@ pub fn fill_in_generics(ctx: &TypeCheckerContext, actual: &Type, generic: &Type,
         },
 
         (&Type::Array(ref generic_at), &Type::Array(ref actual_at)) => {
+            add(known_types, &generic_at.element_type, &actual_at.element_type, span)?;
+            let new_el_type = fill_in_generics(ctx, &actual_at.element_type, &generic_at.element_type, known_types, span)?;
+            Ok(array_type(new_el_type, actual_at.len))
+        },
+
+        (&Type::Slice(ref generic_at), &Type::Array(ref actual_at)) => {
+            // We support automatic conversion from array to slice
             add(known_types, &generic_at.element_type, &actual_at.element_type, span)?;
             let new_el_type = fill_in_generics(ctx, &actual_at.element_type, &generic_at.element_type, known_types, span)?;
             Ok(array_type(new_el_type, actual_at.len))

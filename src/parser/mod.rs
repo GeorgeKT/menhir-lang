@@ -12,12 +12,11 @@ use std::path::{Path};
 use std::fs;
 use std::io::{Read};
 use std::rc::Rc;
-use std::ffi::OsStr;
 use std::ops::Deref;
 
 use ast::*;
 use timer::time_operation;
-use compileerror::{CompileResult, CompileError, parse_error_result};
+use compileerror::{CompileResult, parse_error_result};
 use span::{Span};
 use target::Target;
 
@@ -1233,7 +1232,7 @@ fn parse_module<Input: Read>(
     Ok(())
 }
 
-fn parse_file(file_path: &Path, namespace: &str, target: &Target) -> CompileResult<Module>
+pub fn parse_file(file_path: &Path, namespace: &str, target: &Target) -> CompileResult<Module>
 {
     let op_name = format!("Parsing {}", file_path.to_string_lossy());
     time_operation(2, &op_name, ||{
@@ -1244,43 +1243,6 @@ fn parse_file(file_path: &Path, namespace: &str, target: &Target) -> CompileResu
     })
 }
 
-fn parse_file_tree(pkg: &mut Package, dir: &Path, namespace: &str, target: &Target) -> CompileResult<()>
-{
-    for entry in dir.read_dir()? {
-        if let Ok(entry) = entry {
-            let path = entry.path();
-            if path.is_dir() {
-                let sub_ns = format!("{}::{}", namespace, path.file_stem().expect("Path must have a stem").to_string_lossy());
-                parse_file_tree(pkg, &path, &sub_ns, target)?;
-            } else if path.extension() == Some(OsStr::new("mhr")) {
-                let sub_ns = format!("{}::{}", namespace, path.file_stem().expect("Path must have a stem").to_string_lossy());
-                let module = parse_file(&path, &sub_ns, target)?;
-                pkg.modules.insert(sub_ns, module);
-            }
-        }
-    }
-
-    Ok(())
-}
-
-pub fn parse_files(path: &Path, root_namespace: &str, target: &Target, imports: &[Rc<Import>]) -> CompileResult<Package>
-{
-    let mut pkg = Package::new(root_namespace);
-    for import in imports {
-        pkg.imports.insert(import.namespace.clone(), import.clone());
-    }
-
-    if path.exists() && path.is_file() {
-        pkg.modules.insert(root_namespace.into(), parse_file(path, root_namespace, target)?);
-    } else {
-        if !path.exists() || !path.is_dir() {
-            return Err(CompileError::Other(format!("Cannot find {}.mhr or the directory {}", root_namespace, root_namespace)))
-        }
-        parse_file_tree(&mut pkg, path, root_namespace, target)?;
-    }
-
-    Ok(pkg)
-}
 
 #[cfg(test)]
 pub fn parse_str(code: &str, root_namespace: &str, target: &Target) -> CompileResult<Package>

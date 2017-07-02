@@ -1,9 +1,10 @@
 use std::rc::Rc;
 use std::io;
 use std::fmt;
-use ast::{Package, Import};
+use ast::{Import};
 use llvmbackend::OutputType;
 use bincode;
+use package::Package;
 
 #[derive(Serialize, Deserialize)]
 pub struct ExportLibrary
@@ -20,7 +21,7 @@ impl ExportLibrary
         ExportLibrary{
             name: pkg.name.clone(),
             output_type,
-            imports: pkg.imports.values().cloned().collect(),
+            imports: pkg.import_data.imports.values().cloned().collect(),
         }
     }
 
@@ -34,6 +35,17 @@ impl ExportLibrary
     {
         bincode::serialize_into(writer, self, bincode::Infinite)
             .map_err(|e| format!("Serialization error: {}", e))
+    }
+
+    pub fn find_import(&self, import_name: &str) -> Option<Rc<Import>>
+    {
+        for import in &self.imports {
+            if import.namespace == import_name {
+                return Some(import.clone())
+            }
+        }
+
+        None
     }
 }
 

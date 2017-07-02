@@ -3,6 +3,7 @@ use ast::*;
 use target::{Target};
 use bytecode::{ByteCodeModule, ByteCodeFunction};
 use compileerror::{CompileResult, type_error_result};
+use package::Package;
 use super::consteval::expr_to_const;
 use super::function::*;
 use super::instruction::*;
@@ -1139,12 +1140,10 @@ pub fn compile_to_byte_code(pkg: &Package, target: &Target) -> CompileResult<Byt
     }
 
 
-    for import in pkg.imports.values() {
+    for import in pkg.import_data.imports.values() {
         for symbol in import.symbols.values() {
-            let symbol_name = symbol.get_name();
-            let symbol_type = symbol.get_type();
-            if let Some(s) = FunctionSignature::from_type(symbol_name, symbol_type) {
-                if ll_mod.functions.contains_key(symbol_name) || symbol_type.is_generic() {
+            if let Some(s) = FunctionSignature::from_type(&symbol.name, &symbol.typ) {
+                if ll_mod.functions.contains_key(&symbol.name) || symbol.typ.is_generic() {
                     continue;
                 }
                 ll_mod.imported_functions.push(ByteCodeFunction::new(&s, true));

@@ -1,16 +1,6 @@
 use ast::{Expression, Literal, UnaryOperator, UnaryOp, BinaryOperator, BinaryOp, Block, IntSize};
 use bytecode::Constant;
 
-macro_rules! try_opt {
-    ($e:expr) =>(
-        match $e {
-            Some(v) => v,
-            None => return None,
-        }
-    )
-}
-
-
 fn lit_to_const(lit: &Literal) -> Option<Constant>
 {
     match *lit {

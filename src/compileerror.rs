@@ -44,6 +44,7 @@ pub enum CompileError
     Type(ErrorData),
     UnknownName(ErrorData),
     UnknownType(String, Type), // Name and expected type
+    Many(Vec<CompileError>),
 }
 
 impl CompileError
@@ -58,6 +59,11 @@ impl CompileError
             CompileError::Type(ref ed) |
             CompileError::UnknownName(ref ed) => print_message(&ed.msg, &ed.span),
             CompileError::UnknownType(ref name, ref typ) => println!("{} has unknown type, expecting {}", name, typ),
+            CompileError::Many(ref errors) => {
+                for e in errors {
+                    e.print();
+                }
+            }
         }
     }
 }
@@ -79,6 +85,12 @@ impl fmt::Display for CompileError
             CompileError::Type(ref ed) |
             CompileError::UnknownName(ref ed) => ed.fmt(f),
             CompileError::UnknownType(ref name, ref typ) => writeln!(f, "{} has unknown type, expecting {}", name, typ),
+            CompileError::Many(ref errors) => {
+                for err in errors {
+                    err.fmt(f)?;
+                }
+                Ok(())
+            }
         }
     }
 }

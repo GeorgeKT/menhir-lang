@@ -54,8 +54,6 @@ pub use self::sumtype::*;
 pub use self::typedeclaration::*;
 pub use self::types::*;
 
-use std::collections::{HashMap};
-use std::rc::Rc;
 
 pub fn prefix(level: usize) -> String
 {
@@ -71,38 +69,12 @@ pub trait TreePrinter
     fn print(&self, level: usize);
 }
 
+use std::collections::HashMap;
+use itertools::join;
+
 pub type GenericMapping = HashMap<Type, Type>;
 
-
-pub struct Package
+pub fn new_func_name(func_name: &str, generic_args: &GenericMapping) -> String
 {
-    pub name: String,
-    pub modules: HashMap<String, Module>,
-    pub imports: HashMap<String, Rc<Import>>,
-}
-
-impl Package
-{
-    pub fn new(name: &str) -> Package
-    {
-        Package{
-            name: name.into(),
-            modules: HashMap::new(),
-            imports: HashMap::new(),
-        }
-    }
-}
-
-
-impl TreePrinter for Package
-{
-    fn print(&self, level: usize)
-    {
-        let p = prefix(level);
-        for module in self.modules.values() {
-            println!("{}module: {}", p, module.name);
-            module.print(level + 1);
-            println!("{}--------------------\n", p);
-        }
-    }
+    format!("{}<{}>", func_name, join(generic_args.values(), ","))
 }

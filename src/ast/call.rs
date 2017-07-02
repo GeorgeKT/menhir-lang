@@ -1,4 +1,4 @@
-use ast::{GenericMapping, Expression, Type, NameRef, TreePrinter, prefix};
+use ast::{GenericMapping, Expression, Type, NameRef, TreePrinter, IntSize, func_type, prefix};
 use span::{Span};
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
@@ -22,6 +22,12 @@ impl Call
             generic_args: GenericMapping::new(),
             return_type: Type::Unknown,
         }
+    }
+
+    pub fn callee_type(&self, int_size: IntSize) -> Type
+    {
+        let arg_types = self.args.iter().map(|e| e.get_type(int_size)).collect();
+        func_type(arg_types, self.return_type.clone())
     }
 }
 

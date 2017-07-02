@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 use std::fmt;
+use std::rc::Rc;
 use itertools::join;
 use span::Span;
 use ast::Function;
 use super::{Type};
 
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Hash, Clone, Serialize, Deserialize)]
 pub struct ImportName
 {
     namespace: Vec<String>,
@@ -34,65 +35,35 @@ impl fmt::Display for ImportName
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub enum ImportSymbol
+#[derive(Serialize, Deserialize, Clone, Copy)]
+pub enum SymbolType
 {
-    Symbol{
-        name: String,
-        typ: Type,
-        mutable: bool,
-        span: Span,
-    },
-
-    GenericFunction(Function)
+    Normal,
+    Global,
+    External
 }
 
-impl ImportSymbol
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Symbol
 {
-    pub fn new(name: &str, typ: &Type, mutable: bool, span: &Span) -> ImportSymbol
+    pub name: String,
+    pub typ: Type,
+    pub mutable: bool,
+    pub span: Span,
+    pub symbol_type: SymbolType,
+}
+
+impl Symbol
+{
+    pub fn new(name: &str, typ: &Type, mutable: bool, span: &Span, symbol_type: SymbolType) -> Symbol
     {
-        ImportSymbol::Symbol{
+        Symbol{
             name: name.into(),
             typ: typ.clone(),
             mutable: mutable,
             span: span.clone(),
-        }
-    }
-
-    pub fn from_generic_function(func: &Function) -> ImportSymbol
-    {
-        ImportSymbol::GenericFunction(func.clone())
-    }
-
-    pub fn get_name(&self) -> &str 
-    {
-        match *self {
-            ImportSymbol::Symbol{ref name, ..} => &name,
-            ImportSymbol::GenericFunction(ref func) => &func.sig.name,
-        }
-    }
-
-    pub fn get_type(&self) -> &Type
-    {
-        match *self {
-            ImportSymbol::Symbol{ref typ, ..} => typ,
-            ImportSymbol::GenericFunction(ref func) => &func.sig.typ,
-        }
-    } 
-
-    pub fn is_mutable(&self) -> bool
-    {
-        match *self {
-            ImportSymbol::Symbol{mutable, ..} => mutable,
-            ImportSymbol::GenericFunction(_) => false,
-        }
-    } 
-
-    pub fn get_span(&self) -> &Span 
-    {
-        match *self {
-            ImportSymbol::Symbol{ref span, ..} => span,
-            ImportSymbol::GenericFunction(ref func) => &func.span,
+            symbol_type: symbol_type
         }
     }
 }
@@ -101,7 +72,10 @@ impl ImportSymbol
 pub struct Import
 {
     pub namespace: String,
-    pub symbols: HashMap<String, ImportSymbol>,
+    pub symbols: HashMap<String, Symbol>,
+    pub generics: HashMap<String, Function>,
+    pub imported_symbols: HashMap<String, Symbol>
+
 }
 
 impl Import
@@ -111,12 +85,32 @@ impl Import
         Import{
             namespace,
             symbols: HashMap::new(),
+            generics: HashMap::new(),
+            imported_symbols: HashMap::new(),
         }
     }
 
-    pub fn add_symbol(&mut self, sym: ImportSymbol)
+    pub fn resolve(&self, name: &str, allow_imported_symbols: bool) -> Option<Symbol>
     {
-        self.symbols.insert(sym.get_name().into(), sym);
+        let resolve = |symbols: &HashMap<String, Symbol>| {
+            if let Some(s) = symbols.get(name) {
+                return Some(s.clone())
+            }
+
+            let namespaced = format!("{}::{}", self.namespace, name);
+            if let Some(s) = symbols.get(&namespaced) {
+                return Some(s.clone())
+            }
+            None
+        };
+
+        resolve(&self.symbols).or_else(|| {
+            if allow_imported_symbols {
+                resolve(&self.imported_symbols)
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -127,15 +121,20 @@ impl fmt::Display for Import
     {
         writeln!(f, "Module {}:", self.namespace)?;
         for symbol in self.symbols.values() {
-            match *symbol {
-                ImportSymbol::Symbol{ref name, ref typ, ..} =>  
-                    writeln!(f, "  {}: type {}", name, typ)?,
-                ImportSymbol::GenericFunction(ref func) => 
-                    writeln!(f, "  {}: type {}", func.sig.name, func.sig.typ)?,
-            }
-           
+            writeln!(f, " S {}: {}", symbol.name, symbol.typ)?;
+        }
+
+        for function in self.generics.values() {
+            writeln!(f, " G {}: {}", function.sig.name, function.sig.typ)?;
+        }
+
+        for symbol in self.imported_symbols.values() {
+            writeln!(f, " U {}: {}", symbol.name, symbol.typ)?;
         }
 
         Ok(())
     }
 }
+
+
+pub type ImportMap = HashMap<String, Rc<Import>>;

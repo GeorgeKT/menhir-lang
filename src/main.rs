@@ -10,6 +10,17 @@ extern crate serde_derive;
 extern crate serde;
 extern crate bincode;
 extern crate time;
+extern crate either;
+
+macro_rules! try_opt {
+    ($e:expr) =>(
+        match $e {
+            Some(v) => v,
+            None => return None,
+        }
+    )
+}
+
 
 mod ast;
 mod compileerror;
@@ -22,6 +33,7 @@ mod llvmbackend;
 mod target;
 mod timer;
 mod package;
+mod packagebuild;
 
 use std::fs::File;
 use std::process::exit;
@@ -30,7 +42,7 @@ use clap::ArgMatches;
 
 use compileerror::{CompileResult};
 use llvmbackend::{OutputType, llvm_init, llvm_shutdown};
-use package::{PackageData, BuildOptions};
+use packagebuild::{PackageData, BuildOptions};
 use exportlibrary::ExportLibrary;
 
 

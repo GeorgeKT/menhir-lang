@@ -1,114 +1,129 @@
 use std::collections::hash_map::{HashMap, Entry};
 use ast::*;
 use compileerror::*;
-use span::Span;
-use target::Target;
 
-
-#[derive(Debug)]
-pub struct StackFrame
+struct Scope
 {
-    symbols: HashMap<String, (Type, bool)>,
+    symbols: HashMap<String, Symbol>,
     function_return_type: Option<Type>,
 }
 
-pub struct ResolvedName
-{
-    pub full_name: String,
-    pub typ: Type,
-    pub mutable: bool,
-}
 
-impl ResolvedName
+impl Scope
 {
-    pub fn new(full_name: &str, typ: Type, mutable: bool) -> ResolvedName
+    pub fn new(function_return_type: Option<Type>) -> Scope
     {
-        ResolvedName{
-            full_name: full_name.into(),
-            typ: typ,
-            mutable: mutable,
-        }
-    }
-}
-
-impl StackFrame
-{
-    pub fn new(function_return_type: Option<Type>) -> StackFrame
-    {
-        StackFrame{
+        Scope {
             symbols: HashMap::new(),
             function_return_type,
         }
     }
 
-    pub fn resolve(&self, name: &str) -> Option<ResolvedName>
+    pub fn update(&mut self, symbol: Symbol)
+    {
+        self.symbols.insert(symbol.name.clone(), symbol);
+    }
+
+    fn resolve(&self, name: &str) -> Option<Symbol>
     {
         let name_with_double_colons = format!("::{}", name);
-        for (symbol_name, &(ref typ, ref mutable)) in &self.symbols {
+        for (symbol_name, symbol) in &self.symbols {
             if symbol_name == name || symbol_name.ends_with(&name_with_double_colons) {
-                return Some(ResolvedName::new(symbol_name, typ.clone(), *mutable));
+                return Some(symbol.clone());
             }
         }
 
         None
     }
 
-    pub fn add(&mut self, name: &str, t: Type, mutable: bool, span: &Span) -> CompileResult<()>
+    fn add(&mut self, symbol: Symbol) -> CompileResult<()>
     {
-        match self.symbols.entry(name.into()) {
+        match self.symbols.entry(symbol.name.clone()) {
             Entry::Occupied(e) => {
                 let value = e.get();
-                if value.0 != t {
-                    type_error_result(span, format!("Symbol {} has already been defined with type {}", name, value.0))
+                if value.typ != symbol.typ {
+                    type_error_result(&symbol.span, format!("Symbol {} has already been defined with type {}", symbol.name, value.typ))
                 } else {
                     Ok(())
                 }
             }
 
             Entry::Vacant(v) => {
-                v.insert((t, mutable));
+                v.insert(symbol);
                 Ok(())
             }
         }
     }
+}
 
-    pub fn update(&mut self, name: &str, t: Type, mutable: bool)
+pub enum ImportSymbolResolver<'a>
+{
+    ImportMap(&'a ImportMap),
+    ExternalImport(&'a Import)
+}
+
+impl<'a> ImportSymbolResolver<'a>
+{
+    pub fn resolve(&self, name: &str) -> Option<Symbol>
     {
-        self.symbols.insert(name.into(), (t, mutable));
+        match *self {
+            ImportSymbolResolver::ImportMap(ref imports) => {
+                for import in imports.values() {
+                    if let Some(s) = import.resolve(name, false) {
+                        return Some(s)
+                    }
+                }
+
+                None
+            }
+
+            ImportSymbolResolver::ExternalImport(ref import) => {
+                import.resolve(name, true)
+            }
+        }
     }
 }
 
-#[derive(Debug)]
 pub struct TypeCheckerContext<'a>
 {
-    stack: Vec<StackFrame>,
-    globals: StackFrame,
-    externals: StackFrame,
-    pub target: &'a Target
+    stack: Vec<Scope>,
+    globals: Scope,
+    externals: Scope,
+    import_resolver: ImportSymbolResolver<'a>,
 }
 
 impl<'a> TypeCheckerContext<'a>
 {
-    pub fn new(target: &'a Target) -> TypeCheckerContext<'a>
+    pub fn new(isr: ImportSymbolResolver<'a>) -> TypeCheckerContext<'a>
     {
-        TypeCheckerContext{
-            stack: vec![],
-            globals: StackFrame::new(None),
-            externals: StackFrame::new(None),
-            target: target,
+        TypeCheckerContext {
+            stack: Vec::new(),
+            globals: Scope::new(None),
+            externals: Scope::new(None),
+            import_resolver: isr
         }
     }
 
-    pub fn resolve(&self, name: &str) -> Option<ResolvedName>
+    pub fn update(&mut self, symbol: Symbol)
     {
-        if name == "string" {
-            return Some(ResolvedName::new("string", Type::String, false))
-        }
+        self.stack.last_mut().expect("Empty stack").update(symbol)
+    }
 
+    pub fn enter_scope(&mut self, function_return_type: Option<Type>)
+    {
+        self.stack.push(Scope::new(function_return_type));
+    }
+
+    pub fn exit_scope(&mut self)
+    {
+        self.stack.pop();
+    }
+
+    pub fn resolve(&self, name: &str) -> Option<Symbol>
+    {
         for sf in self.stack.iter().rev() {
-            let t = sf.resolve(name);
-            if t.is_some() {
-                return t;
+            if let Some(s) = sf.resolve(name) {
+                return Some(s);
             }
 
             if sf.function_return_type.is_some() {
@@ -116,46 +131,36 @@ impl<'a> TypeCheckerContext<'a>
             }
         }
 
-        let symbol = self.globals.resolve(name);
-        if symbol.is_some() {
-            return symbol;
+        if let Some(s) = self.globals.resolve(name) {
+            return Some(s);
         }
 
-        self.externals.resolve(name)
-    }
-
-    pub fn add(&mut self, name: &str, t: Type, mutable: bool, span: &Span) -> CompileResult<()>
-    {
-        if let Some(ref mut sf) = self.stack.last_mut() {
-            sf.add(name, t, mutable, span)
-        } else {
-            self.globals.add(name, t, mutable, span)
+        if let Some(s) = self.externals.resolve(name) {
+            return Some(s)
         }
+
+        self.import_resolver.resolve(name)
     }
 
-    pub fn add_external(&mut self, name: &str, t: Type, mutable: bool, span: &Span) -> CompileResult<()>
+    pub fn add(&mut self, symbol: Symbol) -> CompileResult<()>
     {
-        self.externals.add(name, t, mutable, span)
-    }
+        match symbol.symbol_type {
+            SymbolType::Normal => {
+                if let Some(ref mut sf) = self.stack.last_mut() {
+                    sf.add(symbol)
+                } else {
+                    self.globals.add(symbol)
+                }
+            },
 
-    pub fn add_global(&mut self, name: &str, t: Type, mutable: bool, span: &Span) -> CompileResult<()>
-    {
-        self.globals.add(name, t, mutable, span)
-    }
+            SymbolType::Global => {
+                self.globals.add(symbol)
+            },
 
-    pub fn update(&mut self, name: &str, t: Type, mutable: bool)
-    {
-        self.stack.last_mut().expect("Empty stack").update(name, t, mutable)
-    }
-
-    pub fn push_stack(&mut self, function_return_type: Option<Type>)
-    {
-        self.stack.push(StackFrame::new(function_return_type));
-    }
-
-    pub fn pop_stack(&mut self)
-    {
-        self.stack.pop();
+            SymbolType::External => {
+                self.externals.add(symbol)
+            }
+        }
     }
 
     pub fn get_function_return_type(&self) -> Option<Type>
