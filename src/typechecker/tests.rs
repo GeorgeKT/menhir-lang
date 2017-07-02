@@ -1,7 +1,7 @@
 use parser::{th_expr, th_mod};
 use super::typecheck::{type_check_expression, type_check_module};
-use super::typecheckercontext::TypeCheckerContext;
-use ast::{IntSize, Type};
+use super::typecheckercontext::{TypeCheckerContext, ImportSymbolResolver};
+use ast::{IntSize, Type, ImportMap};
 use compileerror::{CompileResult};
 use target::Target;
 
@@ -9,9 +9,10 @@ use target::Target;
 fn type_check(expr: &str) -> CompileResult<Type>
 {
     let target = Target::new(IntSize::I32, "");
-	let mut ctx = TypeCheckerContext::new(&target);
+	let imports = ImportMap::new();
+	let mut ctx = TypeCheckerContext::new(ImportSymbolResolver::ImportMap(&imports));
 	let mut e = th_expr(expr, &target);
-	let r = type_check_expression(&mut ctx, &mut e, None);
+	let r = type_check_expression(&mut ctx, &mut e, None, &target);
 	println!("result: {:?}", r);
 	r
 }
@@ -21,7 +22,8 @@ fn type_check_mod(expr: &str) -> CompileResult<()>
 {
     let target = Target::new(IntSize::I32, "");
 	let mut md = th_mod(expr, &target);
-	let r = type_check_module(&mut md, &target);
+	let imports = ImportMap::new();
+	let r = type_check_module(&mut md, &target, &imports);
 	println!("result: {:?}", r);
 	r
 }

@@ -1245,6 +1245,9 @@ pub fn parse_file(file_path: &Path, namespace: &str, target: &Target) -> Compile
 
 
 #[cfg(test)]
+use package::Package;
+
+#[cfg(test)]
 pub fn parse_str(code: &str, root_namespace: &str, target: &Target) -> CompileResult<Package>
 {
     use std::io::Cursor;

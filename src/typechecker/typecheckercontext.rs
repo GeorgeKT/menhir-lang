@@ -59,7 +59,7 @@ impl Scope
 pub enum ImportSymbolResolver<'a>
 {
     ImportMap(&'a ImportMap),
-    ExternalImport(&'a Import)
+    ExternalImport(&'a Import),
 }
 
 impl<'a> ImportSymbolResolver<'a>

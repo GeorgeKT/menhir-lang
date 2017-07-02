@@ -58,7 +58,6 @@ pub mod test
     use compileerror::CompileResult;
     use parser::{parse_str};
     use bytecode::{ByteCodeModule, compile_to_byte_code};
-    use typechecker::type_check_package;
     use ast::{TreePrinter, IntSize};
     use target::Target;
 
@@ -73,7 +72,7 @@ pub mod test
             println!("-----------------");
         }
 
-        type_check_package(&mut pkg, &target)?;
+        pkg.type_check(&target)?;
 
         if dump {
             println!("After type check");
