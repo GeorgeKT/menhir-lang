@@ -1,7 +1,7 @@
 use super::typecheckercontext::TypeCheckerContext;
-use ast::*;
-use compileerror::{type_error, CompileResult};
-use span::Span;
+use crate::ast::*;
+use crate::compileerror::{type_error, CompileResult};
+use crate::span::Span;
 use std::ops::Deref;
 
 fn matches_function_signature(

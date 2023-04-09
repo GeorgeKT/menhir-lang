@@ -1,5 +1,5 @@
-use ast::{prefix, Expression, Pattern, TreePrinter, Type};
-use span::Span;
+use crate::ast::{prefix, Expression, Pattern, TreePrinter, Type};
+use crate::span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct MatchCase {

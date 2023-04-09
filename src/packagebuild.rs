@@ -4,18 +4,19 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use toml;
 
-use ast::TreePrinter;
-use bytecode::{compile_to_byte_code, optimize_module, OptimizationLevel};
-use compileerror::{CompileError, CompileResult};
-use exportlibrary::ExportLibrary;
-use llvmbackend::TargetMachine;
-use llvmbackend::{link, llvm_code_generation, CodeGenOptions, OutputType};
-use package::Package;
-use timer::{time_operation, time_operation_mut};
+use crate::ast::TreePrinter;
+use crate::bytecode::{compile_to_byte_code, optimize_module, OptimizationLevel};
+use crate::compileerror::{CompileError, CompileResult};
+use crate::exportlibrary::ExportLibrary;
+use crate::llvmbackend::TargetMachine;
+use crate::llvmbackend::{link, llvm_code_generation, CodeGenOptions, OutputType};
+use crate::package::Package;
+use crate::timer::{time_operation, time_operation_mut};
+use crate::cli::Dump;
 
 pub struct BuildOptions {
     pub optimize: bool,
-    pub dump_flags: String,
+    pub dump_flags: Option<Dump>,
     pub target_machine: TargetMachine,
     pub sources_directory: String,
     pub import_directories: Vec<PathBuf>,
@@ -178,20 +179,26 @@ impl PackageTarget {
             pkg.type_check(&build_options.target_machine.target)
         })?;
 
-        if build_options.dump_flags.contains("ast") || build_options.dump_flags.contains("all") {
-            println!("AST: {}", pkg.name);
-            pkg.print(0);
+        match build_options.dump_flags {
+            Some(Dump::AST) | Some(Dump::All) => {
+                println!("AST: {}", pkg.name);
+                pkg.print(0);
+            }
+            _ => ()
         }
 
         let mut bc_mod = time_operation(2, "Compile to bytecode", || {
             compile_to_byte_code(&pkg, &build_options.target_machine.target)
         })?;
 
-        if build_options.dump_flags.contains("bytecode") || build_options.dump_flags.contains("all") {
-            println!("bytecode:");
-            println!("------\n");
-            println!("{}", bc_mod);
-            println!("------\n");
+        match &build_options.dump_flags {
+            Some(Dump::All) | Some(Dump::ByteCode) => {
+                println!("bytecode:");
+                println!("------\n");
+                println!("{}", bc_mod);
+                println!("------\n");
+            }
+            _ => (),
         }
 
         time_operation_mut(2, "Optimization", || {
@@ -203,7 +210,10 @@ impl PackageTarget {
         });
 
         let opts = CodeGenOptions {
-            dump_ir: build_options.dump_flags.contains("ir") || build_options.dump_flags.contains("all"),
+            dump_ir: match build_options.dump_flags {
+                Some(Dump::IR) | Some(Dump::All) => true,
+                _ => false,
+            },
             build_dir: format!("build/{}/{}", build_options.target_machine.target.triplet, self.name),
             output_file_name: output_file_name(&self.name, self.output_type),
             output_type: self.output_type,

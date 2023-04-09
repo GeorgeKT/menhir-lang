@@ -48,11 +48,11 @@ impl fmt::Display for ByteCodeModule {
 
 #[cfg(test)]
 pub mod test {
-    use ast::{IntSize, TreePrinter};
-    use bytecode::{compile_to_byte_code, ByteCodeModule};
-    use compileerror::CompileResult;
-    use parser::parse_str;
-    use target::Target;
+    use crate::ast::{IntSize, TreePrinter};
+    use crate::bytecode::{compile_to_byte_code, ByteCodeModule};
+    use crate::compileerror::CompileResult;
+    use crate::parser::parse_str;
+    use crate::target::Target;
 
     pub fn generate_byte_code(prog: &str, dump: bool) -> CompileResult<ByteCodeModule> {
         let target = Target::new(IntSize::I32, "");

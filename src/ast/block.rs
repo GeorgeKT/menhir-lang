@@ -1,5 +1,5 @@
-use ast::{Expression, Type};
-use span::Span;
+use crate::ast::{Expression, Type};
+use crate::span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Block {

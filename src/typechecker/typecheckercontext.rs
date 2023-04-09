@@ -1,5 +1,5 @@
-use ast::*;
-use compileerror::*;
+use crate::ast::*;
+use crate::compileerror::*;
 use std::collections::hash_map::{Entry, HashMap};
 
 struct Scope {

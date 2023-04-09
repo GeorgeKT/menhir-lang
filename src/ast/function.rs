@@ -1,5 +1,5 @@
-use ast::{func_type, prefix, Expression, TreePrinter, Type};
-use span::Span;
+use crate::ast::{func_type, prefix, Expression, TreePrinter, Type};
+use crate::span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct Argument {

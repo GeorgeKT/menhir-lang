@@ -1,9 +1,9 @@
 use super::typecheckercontext::TypeCheckerContext;
-use ast::*;
-use compileerror::{unknown_name_result, CompileResult};
+use crate::ast::*;
+use crate::compileerror::{unknown_name_result, CompileResult};
 use std::collections::HashSet;
 use std::ops::Deref;
-use target::Target;
+use crate::target::Target;
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum TypeResolved {

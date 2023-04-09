@@ -1,9 +1,9 @@
 use super::typecheck::{type_check_expression, type_check_module};
 use super::typecheckercontext::{ImportSymbolResolver, TypeCheckerContext};
-use ast::{ImportMap, IntSize, Type};
-use compileerror::CompileResult;
-use parser::{th_expr, th_mod};
-use target::Target;
+use crate::ast::{ImportMap, IntSize, Type};
+use crate::compileerror::CompileResult;
+use crate::parser::{th_expr, th_mod};
+use crate::target::Target;
 
 fn type_check(expr: &str) -> CompileResult<Type> {
     let target = Target::new(IntSize::I32, "");

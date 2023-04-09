@@ -14,11 +14,11 @@ use std::ops::Deref;
 use std::path::Path;
 use std::rc::Rc;
 
-use ast::*;
-use compileerror::{parse_error_result, CompileResult};
-use span::Span;
-use target::Target;
-use timer::time_operation;
+use crate::ast::*;
+use crate::compileerror::{parse_error_result, CompileResult};
+use crate::span::Span;
+use crate::target::Target;
+use crate::timer::time_operation;
 
 use self::lexer::Lexer;
 use self::tokenqueue::TokenQueue;
@@ -1306,7 +1306,7 @@ pub fn parse_file(file_path: &Path, namespace: &str, target: &Target) -> Compile
 }
 
 #[cfg(test)]
-use package::Package;
+use crate::package::Package;
 
 #[cfg(test)]
 pub fn parse_str(code: &str, root_namespace: &str, target: &Target) -> CompileResult<Package> {

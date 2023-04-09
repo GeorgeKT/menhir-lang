@@ -1,12 +1,12 @@
 use super::consteval::expr_to_const;
 use super::function::*;
 use super::instruction::*;
-use ast::*;
-use bytecode::{ByteCodeFunction, ByteCodeModule};
-use compileerror::{type_error_result, CompileResult};
-use package::Package;
+use crate::ast::*;
+use crate::bytecode::{ByteCodeFunction, ByteCodeModule};
+use crate::compileerror::{type_error_result, CompileResult};
+use crate::package::Package;
 use std::collections::HashMap;
-use target::Target;
+use crate::target::Target;
 
 fn stack_alloc(func: &mut ByteCodeFunction, typ: &Type, name: Option<&str>) -> Var {
     match name {

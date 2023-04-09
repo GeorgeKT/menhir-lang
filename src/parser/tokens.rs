@@ -1,5 +1,5 @@
-use ast::{AssignOperator, BinaryOperator, UnaryOperator};
-use span::Span;
+use crate::ast::{AssignOperator, BinaryOperator, UnaryOperator};
+use crate::span::Span;
 use std::fmt::{Display, Error, Formatter};
 
 #[derive(Debug, Clone, Eq, PartialEq)]

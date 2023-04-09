@@ -1,5 +1,5 @@
-use ast::{prefix, StructDeclaration, TreePrinter, Type};
-use span::Span;
+use crate::ast::{prefix, StructDeclaration, TreePrinter, Type};
+use crate::span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct SumTypeCaseDeclaration {

@@ -1,5 +1,5 @@
-use ast::Type;
-use span::Span;
+use crate::ast::Type;
+use crate::span::Span;
 use std::convert::From;
 use std::error::Error;
 use std::fmt;

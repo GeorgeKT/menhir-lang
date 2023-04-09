@@ -1,4 +1,4 @@
-use ast::prefix;
+use crate::ast::prefix;
 use std::time::Instant;
 
 pub fn time_operation<Op, R>(level: usize, op_name: &str, op: Op) -> R

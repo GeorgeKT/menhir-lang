@@ -2,9 +2,9 @@ use super::{
     prefix, Call, Expression, ExternalFunction, Function, GlobalBinding, Import, ImportName, Symbol, SymbolType,
     TreePrinter, TypeDeclaration,
 };
-use compileerror::CompileResult;
+use crate::compileerror::CompileResult;
 use std::collections::{HashMap, HashSet};
-use target::Target;
+use crate::target::Target;
 
 pub struct Module {
     pub name: String,

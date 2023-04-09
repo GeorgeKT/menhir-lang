@@ -11,7 +11,7 @@ if [ $? != 0 ]; then
 	exit 1
 fi
 
-triplet=$(cargo run ${mode} -- --triplet 2> /dev/null)
+triplet=$(cargo run ${mode} -- info --triplet 2> /dev/null)
 if [ -z "${triplet}" ]; then
     echo "Failed to determine the target triplet"
     exit 1

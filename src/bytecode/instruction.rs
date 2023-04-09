@@ -1,5 +1,5 @@
-use ast::{array_type, ptr_type, BinaryOperator, FloatSize, IntSize, Type, UnaryOperator};
-use bytecode::function::{BasicBlockRef, Var};
+use crate::ast::{array_type, ptr_type, BinaryOperator, FloatSize, IntSize, Type, UnaryOperator};
+use crate::bytecode::function::{BasicBlockRef, Var};
 use itertools::free::join;
 use std::fmt;
 

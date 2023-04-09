@@ -1,5 +1,5 @@
-use ast::{Literal, MatchExpression, Pattern, SumTypeCaseIndexOf, Type};
-use compileerror::*;
+use crate::ast::{Literal, MatchExpression, Pattern, SumTypeCaseIndexOf, Type};
+use crate::compileerror::*;
 use std::collections::HashSet;
 use std::ops::Deref;
 

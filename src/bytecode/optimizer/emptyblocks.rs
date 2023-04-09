@@ -1,5 +1,5 @@
-use bytecode::function::{BasicBlock, BasicBlockRef, ByteCodeFunction};
-use bytecode::instruction::Instruction;
+use crate::bytecode::function::{BasicBlock, BasicBlockRef, ByteCodeFunction};
+use crate::bytecode::instruction::Instruction;
 
 // If the block only has a branch instruction to another block, it is considered empty
 fn empty_block(bb: &BasicBlock) -> Option<BasicBlockRef> {

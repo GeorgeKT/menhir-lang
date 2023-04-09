@@ -5,14 +5,14 @@ use std::io::Read;
 use std::path::Path;
 use std::rc::Rc;
 
-use ast::{prefix, Import, ImportMap, Module, TreePrinter};
-use compileerror::{type_error, CompileError, CompileResult};
-use exportlibrary::ExportLibrary;
-use llvmbackend::{LinkerFlags, OutputType};
-use parser::parse_file;
-use span::Span;
-use target::Target;
-use typechecker::type_check_module;
+use crate::ast::{prefix, Import, ImportMap, Module, TreePrinter};
+use crate::compileerror::{type_error, CompileError, CompileResult};
+use crate::exportlibrary::ExportLibrary;
+use crate::llvmbackend::{LinkerFlags, OutputType};
+use crate::parser::parse_file;
+use crate::span::Span;
+use crate::target::Target;
+use crate::typechecker::type_check_module;
 
 type MissingImportsMap = HashMap<String, Span>;
 

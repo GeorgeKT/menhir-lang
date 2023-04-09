@@ -1,5 +1,5 @@
-use ast::{Expression, Literal, Type};
-use span::Span;
+use crate::ast::{Expression, Literal, Type};
+use crate::span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct ArrayLiteral {

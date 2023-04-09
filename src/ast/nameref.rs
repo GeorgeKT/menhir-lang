@@ -1,5 +1,5 @@
-use ast::{prefix, TreePrinter, Type};
-use span::Span;
+use crate::ast::{prefix, TreePrinter, Type};
+use crate::span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct NameRef {

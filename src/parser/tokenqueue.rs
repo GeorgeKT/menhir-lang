@@ -1,7 +1,7 @@
 use super::tokens::{Token, TokenKind};
-use ast::{AssignOperator, BinaryOperator};
-use compileerror::{parse_error_result, CompileError, CompileResult, ErrorData};
-use span::{Pos, Span};
+use crate::ast::{AssignOperator, BinaryOperator};
+use crate::compileerror::{parse_error_result, CompileError, CompileResult, ErrorData};
+use crate::span::{Pos, Span};
 use std::collections::VecDeque;
 
 pub struct TokenQueue {

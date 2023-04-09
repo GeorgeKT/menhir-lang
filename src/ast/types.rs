@@ -1,10 +1,10 @@
-use ast::*;
+use crate::ast::*;
 use itertools::free::join;
-use span::Span;
+use crate::span::Span;
 use std::fmt;
 use std::ops::Deref;
 use std::rc::Rc;
-use target::Target;
+use crate::target::Target;
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct SumTypeCase {

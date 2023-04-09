@@ -9,9 +9,9 @@ use super::context::Context;
 use super::instructions::*;
 use super::symboltable::FunctionInstance;
 use super::valueref::ValueRef;
-use ast::*;
-use bytecode::*;
-use span::Span;
+use crate::ast::*;
+use crate::bytecode::*;
+use crate::span::Span;
 
 pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, name_override: Option<&str>) {
     let ret_type = ctx.resolve_type(&sig.return_type);

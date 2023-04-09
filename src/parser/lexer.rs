@@ -1,8 +1,8 @@
 use super::tokenqueue::TokenQueue;
 use super::tokens::{Token, TokenKind};
-use ast::{AssignOperator, BinaryOperator, UnaryOperator};
-use compileerror::{parse_error_result, CompileResult};
-use span::{Pos, Span};
+use crate::ast::{AssignOperator, BinaryOperator, UnaryOperator};
+use crate::compileerror::{parse_error_result, CompileResult};
+use crate::span::{Pos, Span};
 use std::io::{BufRead, BufReader, Read};
 use std::mem;
 
@@ -400,10 +400,10 @@ impl Lexer {
 
 #[cfg(test)]
 mod tests {
-    use ast::{AssignOperator, BinaryOperator, UnaryOperator};
-    use parser::lexer::Lexer;
-    use parser::tokens::*;
-    use span::*;
+    use crate::ast::{AssignOperator, BinaryOperator, UnaryOperator};
+    use crate::parser::lexer::Lexer;
+    use crate::parser::tokens::*;
+    use crate::span::*;
     use std::io::Cursor;
 
     fn tok(kind: TokenKind, sline: usize, soffset: usize, eline: usize, eoffset: usize) -> Token {

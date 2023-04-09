@@ -5,8 +5,8 @@ use llvm::LLVMLinkage;
 
 use super::context::Context;
 use super::instructions::{const_bool, const_char, const_float, const_int, const_uint, copy, get_operand};
-use ast::*;
-use bytecode::{ByteCodeProperty, Constant, Operand};
+use crate::ast::*;
+use crate::bytecode::{ByteCodeProperty, Constant, Operand};
 
 #[derive(Clone)]
 pub struct ValueRef {

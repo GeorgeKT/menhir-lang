@@ -1,5 +1,5 @@
-use ast::{FunctionSignature, Type};
-use bytecode::instruction::Instruction;
+use crate::ast::{FunctionSignature, Type};
+use crate::bytecode::instruction::Instruction;
 use itertools::free::join;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;

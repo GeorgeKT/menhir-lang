@@ -1,10 +1,10 @@
 use super::instantiate::instantiate;
 use super::typecheck::type_check_function;
 use super::typecheckercontext::{ImportSymbolResolver, TypeCheckerContext};
-use ast::*;
-use compileerror::{unknown_name_result, CompileResult};
+use crate::ast::*;
+use crate::compileerror::{unknown_name_result, CompileResult};
 use std::collections::HashMap;
-use target::Target;
+use crate::target::Target;
 
 type FunctionMap = HashMap<String, Function>;
 

@@ -1,7 +1,7 @@
-use bytecode::function::ByteCodeFunction;
-use bytecode::instruction::{Instruction, Operand};
-use bytecode::ByteCodeModule;
-use compileerror::print_message;
+use crate::bytecode::function::ByteCodeFunction;
+use crate::bytecode::instruction::{Instruction, Operand};
+use crate::bytecode::ByteCodeModule;
+use crate::compileerror::print_message;
 use std::collections::HashSet;
 
 // Find all calls recursively, and remove them from the unused_calls HashSet

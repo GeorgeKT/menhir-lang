@@ -1,5 +1,5 @@
 use super::{Interface, StructDeclaration, SumTypeDeclaration, TreePrinter, Type};
-use span::Span;
+use crate::span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum TypeDeclaration {

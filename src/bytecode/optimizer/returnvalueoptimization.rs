@@ -1,6 +1,6 @@
-use ast::{ptr_type, Argument, Type};
-use bytecode::{store_operand_instr, void_call_instr, ByteCodeFunction, ByteCodeModule, Instruction, Operand, Var};
-use span::Span;
+use crate::ast::{ptr_type, Argument, Type};
+use crate::bytecode::{store_operand_instr, void_call_instr, ByteCodeFunction, ByteCodeModule, Instruction, Operand, Var};
+use crate::span::Span;
 use std::mem;
 
 fn rvo_needed(func: &ByteCodeFunction) -> bool {

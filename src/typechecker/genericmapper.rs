@@ -1,8 +1,8 @@
 use super::instantiate::make_concrete;
 use super::typecheckercontext::TypeCheckerContext;
-use ast::*;
-use compileerror::{type_error_result, CompileResult};
-use span::Span;
+use crate::ast::*;
+use crate::compileerror::{type_error_result, CompileResult};
+use crate::span::Span;
 
 pub fn add(mapping: &mut GenericMapping, from: &Type, to: &Type, span: &Span) -> CompileResult<()> {
     if let Some(prev_arg_type) = mapping.insert(from.clone(), to.clone()) {
@@ -156,10 +156,10 @@ pub fn fill_in_generics(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ast::{array_type, func_type, generic_type, ptr_type, slice_type, string_type, GenericMapping, IntSize, Type};
-    use span::Span;
-    use typechecker::instantiate::make_concrete;
-    use typechecker::typecheckercontext::ImportSymbolResolver;
+    use crate::ast::{array_type, func_type, generic_type, ptr_type, slice_type, string_type, GenericMapping, IntSize, Type};
+    use crate::span::Span;
+    use crate::typechecker::instantiate::make_concrete;
+    use crate::typechecker::typecheckercontext::ImportSymbolResolver;
 
     #[test]
     fn test_simple() {

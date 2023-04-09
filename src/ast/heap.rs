@@ -1,5 +1,5 @@
-use ast::{prefix, Expression, TreePrinter, Type};
-use span::Span;
+use crate::ast::{prefix, Expression, TreePrinter, Type};
+use crate::span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct NewExpression {

@@ -1,9 +1,9 @@
 use super::lexer::Lexer;
-use ast::*;
-use parser::*;
-use span::{Pos, Span};
+use crate::ast::*;
+use crate::parser::*;
+use crate::span::{Pos, Span};
 use std::io::Cursor;
-use target::Target;
+use crate::target::Target;
 
 fn span(sl: usize, so: usize, el: usize, eo: usize) -> Span {
     Span::new("", Pos::new(sl, so), Pos::new(el, eo))

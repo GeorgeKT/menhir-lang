@@ -32,7 +32,7 @@ use self::context::Context;
 use self::function::{add_libc_functions, gen_function, gen_function_sig};
 pub use self::target::TargetMachine;
 use self::valueref::ValueRef;
-use bytecode::{ByteCodeModule, Constant};
+use crate::bytecode::{ByteCodeModule, Constant};
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum OutputType {

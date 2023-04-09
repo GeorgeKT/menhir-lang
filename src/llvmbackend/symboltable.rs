@@ -2,8 +2,8 @@ use llvm::prelude::*;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use ast::Type;
-use llvmbackend::valueref::ValueRef;
+use crate::ast::Type;
+use crate::llvmbackend::valueref::ValueRef;
 
 pub struct FunctionInstance {
     pub function: LLVMValueRef,

@@ -1,4 +1,4 @@
-use ast::{IntSize, Type};
+use crate::ast::{IntSize, Type};
 
 #[derive(Debug)]
 pub struct Target {

@@ -1,5 +1,5 @@
-use ast::{BinaryOp, BinaryOperator, Block, Expression, IntSize, Literal, UnaryOp, UnaryOperator};
-use bytecode::Constant;
+use crate::ast::{BinaryOp, BinaryOperator, Block, Expression, IntSize, Literal, UnaryOp, UnaryOperator};
+use crate::bytecode::Constant;
 
 fn lit_to_const(lit: &Literal) -> Option<Constant> {
     match *lit {

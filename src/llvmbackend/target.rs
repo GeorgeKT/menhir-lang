@@ -2,12 +2,12 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::ptr;
 
-use ast::IntSize;
+use crate::ast::IntSize;
 use llvm::core::*;
 use llvm::prelude::*;
 use llvm::target::*;
 use llvm::target_machine::*;
-use target::Target;
+use crate::target::Target;
 
 unsafe fn create_target_machine() -> Result<(String, LLVMTargetMachineRef), String> {
     let target_triple = LLVMGetDefaultTargetTriple();

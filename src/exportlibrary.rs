@@ -1,7 +1,7 @@
-use ast::Import;
+use crate::ast::Import;
 use bincode;
-use llvmbackend::OutputType;
-use package::Package;
+use crate::llvmbackend::OutputType;
+use crate::package::Package;
 use std::fmt;
 use std::io;
 use std::rc::Rc;

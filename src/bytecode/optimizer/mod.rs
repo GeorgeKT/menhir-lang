@@ -1,5 +1,5 @@
-use bytecode::function::ByteCodeFunction;
-use bytecode::ByteCodeModule;
+use crate::bytecode::function::ByteCodeFunction;
+use crate::bytecode::ByteCodeModule;
 
 mod emptyblocks;
 mod returnvalueoptimization;
@@ -32,11 +32,11 @@ pub fn optimize_module(module: &mut ByteCodeModule, lvl: OptimizationLevel) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ast::{sig, Type};
-    use bytecode::function::ByteCodeFunction;
-    use bytecode::instruction::Instruction;
-    use bytecode::test::generate_byte_code;
-    use span::Span;
+    use crate::ast::{sig, Type};
+    use crate::bytecode::function::ByteCodeFunction;
+    use crate::bytecode::instruction::Instruction;
+    use crate::bytecode::test::generate_byte_code;
+    use crate::span::Span;
 
     #[test]
     fn test_block_elimination() {

@@ -2,7 +2,7 @@ use super::symboltable::{FunctionInstance, SymbolTable, VariableInstance};
 use super::target::TargetMachine;
 use super::valueref::ValueRef;
 use super::CodeGenOptions;
-use ast::{ptr_type, Type};
+use crate::ast::{ptr_type, Type};
 use llvm::core::*;
 use llvm::prelude::*;
 use std::ffi::CString;
@@ -147,7 +147,7 @@ impl<'a> Context<'a> {
 
     pub fn resolve_type(&self, typ: &Type) -> LLVMTypeRef {
         unsafe {
-            use llvmbackend::types::to_llvm_type;
+            use crate::llvmbackend::types::to_llvm_type;
             to_llvm_type(self.context, self.target_machine, typ)
         }
     }

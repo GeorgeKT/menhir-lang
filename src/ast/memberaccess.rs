@@ -1,5 +1,5 @@
-use ast::*;
-use span::Span;
+use crate::ast::*;
+use crate::span::Span;
 use std::fmt;
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]

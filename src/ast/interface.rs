@@ -1,5 +1,5 @@
-use ast::*;
-use span::Span;
+use crate::ast::*;
+use crate::span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Interface {

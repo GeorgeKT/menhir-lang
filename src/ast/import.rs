@@ -1,7 +1,7 @@
 use super::Type;
-use ast::Function;
+use crate::ast::Function;
 use itertools::join;
-use span::Span;
+use crate::span::Span;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;

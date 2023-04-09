@@ -4,11 +4,11 @@ use super::instantiategenerics::instantiate_generics;
 use super::matchchecker::check_match_is_exhaustive;
 use super::typecheckercontext::{ImportSymbolResolver, TypeCheckerContext};
 use super::typeresolver::{resolve_type, resolve_types, TypeResolved};
-use ast::*;
-use compileerror::{type_error, type_error_result, unknown_name, unknown_type_result, CompileError, CompileResult};
-use span::Span;
+use crate::ast::*;
+use crate::compileerror::{type_error, type_error_result, unknown_name, unknown_type_result, CompileError, CompileResult};
+use crate::span::Span;
 use std::ops::Deref;
-use target::Target;
+use crate::target::Target;
 
 #[derive(Debug)]
 enum TypeCheckAction {

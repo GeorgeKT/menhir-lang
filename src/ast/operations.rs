@@ -1,5 +1,5 @@
-use ast::{BinaryOperator, Expression, Type, UnaryOperator};
-use span::Span;
+use crate::ast::{BinaryOperator, Expression, Type, UnaryOperator};
+use crate::span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct UnaryOp {

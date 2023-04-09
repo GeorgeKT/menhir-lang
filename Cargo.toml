@@ -2,12 +2,13 @@
 name = "menhir"
 version = "0.1.0"
 authors = ["Joris Guisson <joris.guisson@gmail.com>"]
+edition = "2021"
 
 [profile.release]
 debug = true
 
 [dependencies]
-clap = "2.*"
+clap = { version = "4.2", features = ["derive"]}
 itertools = "0.10.5"
 uuid = { version = "0.2", features = ["v4"] }
 llvm-sys = "140"
