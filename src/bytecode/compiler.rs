@@ -16,6 +16,7 @@ fn stack_alloc(func: &mut ByteCodeFunction, typ: &Type, name: Option<&str>) -> V
         Some(n) => {
             let var = Var::named(n, typ.clone());
             func.add_named_var(var.clone());
+            func.add(Instruction::StackAlloc(var.clone()));
             var
         },
         None => {
@@ -1108,6 +1109,18 @@ fn func_to_bc(sig: &FunctionSignature, bc_mod: &mut ByteCodeModule, expression: 
     llfunc
 }
 
+fn add_imported_functions(bc_mod: &mut ByteCodeModule, import: &Import)
+{
+    for symbol in import.symbols.values() {
+        if let Some(s) = FunctionSignature::from_type(&symbol.name, &symbol.typ) {
+            if bc_mod.functions.contains_key(&symbol.name) || symbol.typ.is_generic() {
+                continue;
+            }
+            bc_mod.imported_functions.push(ByteCodeFunction::new(&s, true));
+        }
+    }
+}
+
 pub fn compile_to_byte_code(pkg: &Package, target: &Target) -> CompileResult<ByteCodeModule>
 {
     let mut ll_mod = ByteCodeModule{
@@ -1141,16 +1154,14 @@ pub fn compile_to_byte_code(pkg: &Package, target: &Target) -> CompileResult<Byt
 
 
     for import in pkg.import_data.imports.values() {
-        for symbol in import.symbols.values() {
-            if let Some(s) = FunctionSignature::from_type(&symbol.name, &symbol.typ) {
-                if ll_mod.functions.contains_key(&symbol.name) || symbol.typ.is_generic() {
-                    continue;
-                }
-                ll_mod.imported_functions.push(ByteCodeFunction::new(&s, true));
-            }
-        }
+        add_imported_functions(&mut ll_mod, import);
     }
 
+    for library in &pkg.import_data.libraries {
+        for import in &library.imports {
+            add_imported_functions(&mut ll_mod, import);
+        }
+    }
 
     Ok(ll_mod)
 }

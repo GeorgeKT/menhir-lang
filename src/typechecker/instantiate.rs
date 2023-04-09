@@ -334,12 +334,18 @@ fn substitute_expr(ctx: &TypeCheckerContext, generic_args: &GenericMapping, e: &
         },
 
         Expression::If(ref i) => {
-            Ok(if_expression(
-                substitute_expr(ctx, generic_args, &i.condition)?,
-                substitute_expr(ctx, generic_args, &i.on_true)?,
-                substitute_expr(ctx, generic_args, &i.on_true)?,
-                i.span.clone(),
-            ))
+            let cond = substitute_expr(ctx, generic_args, &i.condition)?;
+            let then = substitute_expr(ctx, generic_args, &i.on_true)?;
+            if let Some(ref else_block) = i.on_false {
+                Ok(if_expression(
+                    cond,
+                    then,
+                    substitute_expr(ctx, generic_args, else_block)?,
+                    i.span.clone(),
+                ))
+            } else {
+                Ok(single_if_expression(cond, then, i.span.clone()))
+            }
         },
 
         Expression::Block(ref b) => {

@@ -158,7 +158,7 @@ impl<'a> Context<'a>
             }
         }
 
-        panic!("Internal Compiler Error: No current function on stack, we should have caught this !");
+        panic!("Internal Compiler Error: No current function on stack");
     }
 
     pub fn resolve_type(&self, typ: &Type) -> LLVMTypeRef

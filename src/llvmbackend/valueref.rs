@@ -267,33 +267,33 @@ impl ValueRef
                 )
             },
 
+            /*
             Type::Pointer(_) => {
                 ValueRef::new(
                     self.load(ctx),
                     element_type.clone()
                 ).get_member_ptr(ctx, index)
             }
+            */
 
-
-            _ => panic!("Load member not allowed on type {}", self.typ),
+            _ => unsafe {
+                let index = get_operand(ctx, index).load(ctx);
+                let mut indices = vec![index];
+                ValueRef::new(
+                    LLVMBuildGEP(ctx.builder, self.value, indices.as_mut_ptr(), 1, cstr!("member")),
+                    ptr_type(element_type.clone())
+                )
+            },
         }
 
     }
 
     pub fn store_member(&self, ctx: &mut Context, index: &Operand, value: &ValueRef)
     {
-        let element_type = self.typ.get_pointer_element_type()
-            .unwrap_or_else(|| panic!("Store member not allowed on type {}", self.typ));
-        match *element_type
-        {
-            Type::Array(_) | Type::Struct(_) | Type::Slice(_) | Type::Pointer(_)  => unsafe {
-                let member_ptr = self.get_member_ptr(ctx, index);
-                member_ptr.store(ctx, value);
-            },
-
-            _ => panic!("Store member not allowed on type {}", self.typ),
+        unsafe{
+            let member_ptr = self.get_member_ptr(ctx, index);
+            member_ptr.store(ctx, value);
         }
-
     }
 
 

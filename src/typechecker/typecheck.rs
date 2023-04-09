@@ -73,15 +73,15 @@ fn convert_type(ctx: &mut TypeCheckerContext, dst_type: &Type, src_type: &Type, 
 
 fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp, target: &Target) -> TypeCheckResult
 {
-    let e_type = type_check_expression(ctx, &mut u.expression, None, target)?;
-    if e_type.is_generic() {
-        u.typ = e_type.clone();
-        return valid(e_type)
-    }
-
     match u.operator
     {
         UnaryOperator::Sub => {
+            let e_type = type_check_expression(ctx, &mut u.expression, None, target)?;
+            if e_type.is_generic() {
+                u.typ = e_type.clone();
+                return valid(e_type);
+            }
+
             if !e_type.is_numeric() {
                 type_error_result(&u.span, format!("Unary operator {} expects a numeric expression", u.operator))
             } else {
@@ -91,9 +91,7 @@ fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp, target: &T
         },
 
         UnaryOperator::Not => {
-            if e_type != Type::Bool {
-                type_check_with_conversion(ctx, &mut u.expression, &Type::Bool, target)?;
-            }
+            type_check_with_conversion(ctx, &mut u.expression, &Type::Bool, target)?;
             u.typ = Type::Bool;
             valid(Type::Bool)
         }
@@ -915,7 +913,6 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
     let left_type = type_check_expression(ctx, &mut sma.left, None, target)?;
     // member access through pointer is the same as a normal member access
     let left_type_ref = if let Type::Pointer(ref inner) = left_type {
-        use std::ops::Deref;
         inner.deref()
     } else {
         &left_type
@@ -1410,3 +1407,17 @@ pub fn type_check_module(module: &mut Module, target: &Target, imports: &ImportM
     module.type_checked = true;
     Ok(())
 }
+
+/*
+pub fn type_check_module(module: &mut Module, target: &Target, imports: &ImportMap) -> CompileResult<()>
+{
+    match type_check_module2(module, target, imports) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            println!("Dumping AST:");
+            module.print(0);
+            Err(e)
+        }
+    }
+}
+*/

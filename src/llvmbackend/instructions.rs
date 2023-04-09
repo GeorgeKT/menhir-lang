@@ -96,7 +96,7 @@ pub unsafe fn copy(ctx: &Context, dst: LLVMValueRef, src: LLVMValueRef, typ: LLV
         LLVMBuildBitCast(ctx.builder, src, void_ptr_type, cstr!("src_cast")),
         const_uint(ctx, ctx.target_machine.size_of_type(typ) as u64)
     ];
-    LLVMBuildCall(ctx.builder, func.function, args.as_mut_ptr(), args.len() as c_uint, cstr!("ac"));
+    LLVMBuildCall2(ctx.builder, LLVMTypeOf(func.function), func.function, args.as_mut_ptr(), args.len() as c_uint, cstr!("ac"));
 }
 
 unsafe fn get_function_arg(ctx: &mut Context, operand: &Operand) -> LLVMValueRef
@@ -244,6 +244,9 @@ unsafe fn gen_cast(ctx: &mut Context, dst: &Var, src: &Operand)
         (&Type::Pointer(_), &Type::Array(_)) =>
             LLVMBuildBitCast(ctx.builder, operand.load(ctx), ctx.resolve_type(&dst.typ), cstr!("ptr_cast")),
 
+        (&Type::Bool, &Type::Pointer(_)) =>
+            LLVMBuildIsNull(ctx.builder, operand.value, cstr!("isnt_null")),
+
         _ => panic!("Cast from type {} to type {} is not allowed", src_type, dst.typ),
     };
 
@@ -252,7 +255,7 @@ unsafe fn gen_cast(ctx: &mut Context, dst: &Var, src: &Operand)
 
 pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &HashMap<BasicBlockRef, LLVMBasicBlockRef>)
 {
-    //print!(">> {}", instr);
+    print!(">> {}", instr);
     match *instr
     {
         Instruction::Store{ref dst, ref src} => {
@@ -271,7 +274,7 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         }
 
         Instruction::LoadMember{ref dst, ref obj, ref member_index} |
-        Instruction::AddressOfMember{ref dst, ref obj, ref member_index} => { ;
+        Instruction::AddressOfMember{ref dst, ref obj, ref member_index} => {
             let obj_var = ctx.get_variable(&obj.name, &obj.typ);
             let member_ptr = obj_var.get_member_ptr(ctx, member_index);
             ctx.set_variable(&dst.name, member_ptr);
@@ -308,19 +311,19 @@ pub unsafe fn gen_instruction(ctx: &mut Context, instr: &Instruction, blocks: &H
         }
 
         Instruction::Call{ref dst, ref func, ref args} => {
-            let func = ctx.get_function(func).expect("Unknown function");
+            let func = ctx.get_function(func).unwrap_or_else(|| panic!("Unknown function {}", func));
             let mut func_args = args.iter()
                 .map(|a| get_function_arg(ctx, a))
                 .collect::<Vec<_>>();
 
             if let Some(ref dst) = *dst {
                 let ret = ValueRef::new(
-                    LLVMBuildCall(ctx.builder, func.function, func_args.as_mut_ptr(), args.len() as c_uint, cstr!("call")),
+                    LLVMBuildCall2(ctx.builder, LLVMTypeOf(func.function),func.function, func_args.as_mut_ptr(), args.len() as c_uint, cstr!("call")),
                     func.return_type.clone()
                 );
                 ctx.set_variable(&dst.name, ret);
             } else {
-                LLVMBuildCall(ctx.builder, func.function, func_args.as_mut_ptr(), args.len() as c_uint, cstr!(""));
+                LLVMBuildCall2(ctx.builder, LLVMTypeOf(func.function),func.function, func_args.as_mut_ptr(), args.len() as c_uint, cstr!(""));
             }
         }
 

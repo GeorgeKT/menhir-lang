@@ -6,12 +6,15 @@ use compileerror::print_message;
 
 
 // Find all calls recursively, and remove them from the unused_calls HashSet
-fn find_used_calls(module: &ByteCodeModule, func: &ByteCodeFunction, unused_calls: &mut HashSet<String>)
+fn find_used_calls_rec(module: &ByteCodeModule, func: &ByteCodeFunction, unused_calls: &mut HashSet<String>, visited: &mut HashSet<String>)
 {
-    let mut handle_func = |func: &str| if unused_calls.contains(func) {
+    let mut handle_func = |func: &str| {
         unused_calls.remove(func);
-        module.get_function(func)
-            .map(|callee| find_used_calls(module, callee, unused_calls));
+        if !visited.contains(func) {
+            visited.insert(func.into());
+            module.get_function(func)
+                .map(|callee| find_used_calls_rec(module, callee, unused_calls, visited));
+        }
     };
 
     func.for_each_instruction(|instr: &Instruction| {
@@ -33,8 +36,15 @@ fn find_used_calls(module: &ByteCodeModule, func: &ByteCodeFunction, unused_call
     })
 }
 
+fn find_used_calls(module: &ByteCodeModule, func: &ByteCodeFunction, unused_calls: &mut HashSet<String>)
+{
+    let mut visited_calls = HashSet::new();
+    find_used_calls_rec(module, func, unused_calls, &mut visited_calls)
+}
+
 pub fn eliminate_unused_functions(module: &mut ByteCodeModule)
 {
+
     let mut unused_calls: HashSet<String> = module.functions.keys().cloned().collect();
     let mut unused_imported: HashSet<String> = module.imported_functions.iter().map(|func| func.sig.name.clone()).collect();
     if let Some(main) = module.get_function(&module.main_function_name()) {
