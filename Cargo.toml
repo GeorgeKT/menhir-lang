@@ -8,7 +8,7 @@ debug = true
 
 [dependencies]
 clap = "2.*"
-itertools = "0.5"
+itertools = "0.10.5"
 uuid = { version = "0.2", features = ["v4"] }
 llvm-sys = "140"
 libc = "*"
