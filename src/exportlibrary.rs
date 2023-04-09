@@ -23,11 +23,11 @@ impl ExportLibrary {
     }
 
     pub fn load<R: io::Read>(reader: &mut R) -> Result<ExportLibrary, String> {
-        bincode::deserialize_from(reader, bincode::Infinite).map_err(|e| format!("Deserialization error: {}", e))
+        bincode::deserialize_from(reader).map_err(|e| format!("Deserialization error: {}", e))
     }
 
     pub fn save<W: io::Write>(&self, writer: &mut W) -> Result<(), String> {
-        bincode::serialize_into(writer, self, bincode::Infinite).map_err(|e| format!("Serialization error: {}", e))
+        bincode::serialize_into(writer, self).map_err(|e| format!("Serialization error: {}", e))
     }
 
     pub fn find_import(&self, import_name: &str) -> Option<Rc<Import>> {
