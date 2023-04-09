@@ -1,21 +1,21 @@
 use ast::prefix;
-use time::SteadyTime;
+use std::time::Instant;
 
 pub fn time_operation<Op, R>(level: usize, op_name: &str, op: Op) -> R
 where
     Op: Fn() -> R,
     R: Sized,
 {
-    let start_time = SteadyTime::now();
+    let start_time = Instant::now();
     let r = op();
 
-    let duration = SteadyTime::now() - start_time;
-    let us = duration.num_microseconds().unwrap_or(0) % 1000;
+    let duration = Instant::now() - start_time;
+    let us = duration.as_micros() % 1000;
     println!(
         "{}{}: {}.{:03} ms",
         prefix(level),
         op_name,
-        duration.num_milliseconds(),
+        duration.as_millis(),
         us
     );
     r
@@ -26,16 +26,16 @@ where
     Op: FnMut() -> R,
     R: Sized,
 {
-    let start_time = SteadyTime::now();
+    let start_time = Instant::now();
     let r = op();
 
-    let duration = SteadyTime::now() - start_time;
-    let us = duration.num_microseconds().unwrap_or(0) % 1000;
+    let duration = Instant::now() - start_time;
+    let us = duration.as_micros() % 1000;
     println!(
         "{}{}: {}.{:03} ms",
         prefix(level),
         op_name,
-        duration.num_milliseconds(),
+        duration.as_millis(),
         us
     );
     r

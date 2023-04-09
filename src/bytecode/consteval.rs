@@ -31,7 +31,7 @@ fn lit_to_const(lit: &Literal) -> Option<Constant> {
 }
 
 fn unary_op_to_const(uop: &UnaryOp) -> Option<Constant> {
-    let cst = try_opt!(expr_to_const(&uop.expression));
+    let cst = expr_to_const(&uop.expression)?;
 
     match (uop.operator, cst) {
         (UnaryOperator::Not, Constant::Bool(v)) => Some(Constant::Bool(!v)),
@@ -48,8 +48,8 @@ fn unary_op_to_const(uop: &UnaryOp) -> Option<Constant> {
 
 #[cfg_attr(feature = "cargo-clippy", allow(float_cmp))]
 fn binary_op_to_const(bop: &BinaryOp) -> Option<Constant> {
-    let left = try_opt!(expr_to_const(&bop.left));
-    let right = try_opt!(expr_to_const(&bop.right));
+    let left = expr_to_const(&bop.left)?;
+    let right = expr_to_const(&bop.right)?;
 
     match (bop.operator, left, right) {
         (BinaryOperator::Add, Constant::Int(l, ls), Constant::Int(r, _)) => Some(Constant::Int(l + r, ls)),
@@ -117,7 +117,7 @@ fn binary_op_to_const(bop: &BinaryOp) -> Option<Constant> {
 fn block_to_const(block: &Block) -> Option<Constant> {
     let mut ret = Constant::Int(0, IntSize::I64);
     for e in &block.expressions {
-        ret = try_opt!(expr_to_const(e));
+        ret = expr_to_const(e)?;
     }
 
     Some(ret)

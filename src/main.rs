@@ -10,16 +10,6 @@ extern crate serde_derive;
 extern crate bincode;
 extern crate either;
 extern crate serde;
-extern crate time;
-
-macro_rules! try_opt {
-    ($e:expr) => {
-        match $e {
-            Some(v) => v,
-            None => return None,
-        }
-    };
-}
 
 mod ast;
 mod bytecode;
