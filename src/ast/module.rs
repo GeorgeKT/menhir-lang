@@ -1,10 +1,12 @@
-use std::collections::{HashMap, HashSet};
-use super::{Expression, Call, TreePrinter, TypeDeclaration, Import, ImportName, Symbol, SymbolType, GlobalBinding, Function, ExternalFunction, prefix};
-use target::Target;
+use super::{
+    prefix, Call, Expression, ExternalFunction, Function, GlobalBinding, Import, ImportName, Symbol, SymbolType,
+    TreePrinter, TypeDeclaration,
+};
 use compileerror::CompileResult;
+use std::collections::{HashMap, HashSet};
+use target::Target;
 
-pub struct Module
-{
+pub struct Module {
     pub name: String,
     pub globals: HashMap<String, GlobalBinding>,
     pub functions: HashMap<String, Function>,
@@ -14,11 +16,9 @@ pub struct Module
     pub type_checked: bool,
 }
 
-impl Module
-{
-    pub fn new(name: &str) -> Module
-    {
-        Module{
+impl Module {
+    pub fn new(name: &str) -> Module {
+        Module {
             name: name.into(),
             globals: HashMap::new(),
             functions: HashMap::new(),
@@ -30,12 +30,10 @@ impl Module
     }
 
     fn is_imported_call(&self, call: &Call) -> bool {
-        !self.functions.contains_key(&call.callee.name) &&
-        !self.externals.contains_key(&call.callee.name)
+        !self.functions.contains_key(&call.callee.name) && !self.externals.contains_key(&call.callee.name)
     }
 
-    fn get_imported_symbols(&self, target: &Target) -> HashMap<String, Symbol>
-    {
+    fn get_imported_symbols(&self, target: &Target) -> HashMap<String, Symbol> {
         let mut symbols = HashMap::new();
         for func in self.functions.values() {
             let mut find_imported_calls = |e: &Expression| -> CompileResult<()> {
@@ -56,38 +54,52 @@ impl Module
         symbols
     }
 
-    pub fn get_exported_symbols(&self, target: &Target) -> Import
-    {
+    pub fn get_exported_symbols(&self, target: &Target) -> Import {
         let mut import = Import::new(self.name.clone());
         for (name, binding) in &self.globals {
-            import.symbols.insert(name.clone(), Symbol::new(name, &binding.typ, binding.mutable, &binding.span, SymbolType::Global));
+            import.symbols.insert(
+                name.clone(),
+                Symbol::new(name, &binding.typ, binding.mutable, &binding.span, SymbolType::Global),
+            );
         }
 
         for (name, function) in &self.functions {
-            import.symbols.insert(name.clone(), Symbol::new(name, &function.sig.typ, false, &function.span, SymbolType::Normal));
+            import.symbols.insert(
+                name.clone(),
+                Symbol::new(name, &function.sig.typ, false, &function.span, SymbolType::Normal),
+            );
             if function.is_generic() {
                 import.generics.insert(name.clone(), function.clone());
             }
         }
 
         for (name, function) in &self.externals {
-            import.symbols.insert(name.clone(), Symbol::new(name, &function.sig.typ, false, &function.span, SymbolType::External));
+            import.symbols.insert(
+                name.clone(),
+                Symbol::new(name, &function.sig.typ, false, &function.span, SymbolType::External),
+            );
         }
 
         for (name, type_decl) in &self.types {
-            import.symbols.insert(name.clone(), Symbol::new(name, &type_decl.get_type(), false, &type_decl.span(), SymbolType::Normal));
+            import.symbols.insert(
+                name.clone(),
+                Symbol::new(
+                    name,
+                    &type_decl.get_type(),
+                    false,
+                    &type_decl.span(),
+                    SymbolType::Normal,
+                ),
+            );
         }
-
 
         import.imported_symbols = self.get_imported_symbols(target);
         import
     }
 }
 
-impl TreePrinter for Module
-{
-    fn print(&self, level: usize)
-    {
+impl TreePrinter for Module {
+    fn print(&self, level: usize) {
         let p = prefix(level);
         println!("{}Module: {}", p, self.name);
         for i in &self.import_names {

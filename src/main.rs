@@ -1,60 +1,58 @@
-extern crate llvm_sys as llvm;
-extern crate libc;
 extern crate itertools;
+extern crate libc;
+extern crate llvm_sys as llvm;
 #[macro_use]
 extern crate clap;
-extern crate uuid;
 extern crate toml;
+extern crate uuid;
 #[macro_use]
 extern crate serde_derive;
-extern crate serde;
 extern crate bincode;
-extern crate time;
 extern crate either;
+extern crate serde;
+extern crate time;
 
 macro_rules! try_opt {
-    ($e:expr) =>(
+    ($e:expr) => {
         match $e {
             Some(v) => v,
             None => return None,
         }
-    )
+    };
 }
 
-
 mod ast;
-mod compileerror;
 mod bytecode;
+mod compileerror;
 mod exportlibrary;
-mod parser;
-mod typechecker;
-mod span;
 mod llvmbackend;
-mod target;
-mod timer;
 mod package;
 mod packagebuild;
+mod parser;
+mod span;
+mod target;
+mod timer;
+mod typechecker;
 
-use std::fs::File;
-use std::process::exit;
-use std::path::PathBuf;
 use clap::ArgMatches;
+use std::fs::File;
+use std::path::PathBuf;
+use std::process::exit;
 
-use compileerror::{CompileResult};
-use llvmbackend::{OutputType, llvm_init, llvm_shutdown};
-use packagebuild::{PackageData, BuildOptions};
+use compileerror::CompileResult;
 use exportlibrary::ExportLibrary;
+use llvmbackend::{llvm_init, llvm_shutdown, OutputType};
+use packagebuild::{BuildOptions, PackageData};
 
-
-fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
-{
+fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32> {
     let input_file = matches.value_of("INPUT_FILE").expect("No input file given");
-    let build_options = BuildOptions{
+    let build_options = BuildOptions {
         optimize: matches.is_present("OPTIMIZE"),
         dump_flags: dump_flags.into(),
         target_machine: llvm_init()?,
         sources_directory: String::new(),
-        import_directories: matches.value_of("IMPORTS")
+        import_directories: matches
+            .value_of("IMPORTS")
             .map(|dirs| dirs.split(',').map(PathBuf::from).collect())
             .unwrap_or_else(Vec::new),
     };
@@ -70,9 +68,7 @@ fn build_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
     Ok(0)
 }
 
-
-fn build_package_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32>
-{
+fn build_package_command(matches: &ArgMatches, dump_flags: &str) -> CompileResult<i32> {
     let package_toml = if let Some(toml) = matches.value_of("PACKAGE_TOML") {
         toml
     } else {
@@ -80,12 +76,13 @@ fn build_package_command(matches: &ArgMatches, dump_flags: &str) -> CompileResul
     };
 
     let pkg = PackageData::load(package_toml)?;
-    let build_options = BuildOptions{
+    let build_options = BuildOptions {
         optimize: matches.is_present("OPTIMIZE"),
         dump_flags: dump_flags.into(),
         target_machine: llvm_init()?,
         sources_directory: "src".into(),
-        import_directories: matches.value_of("IMPORTS")
+        import_directories: matches
+            .value_of("IMPORTS")
             .map(|dirs| dirs.split(',').map(PathBuf::from).collect())
             .unwrap_or_else(Vec::new),
     };
@@ -93,17 +90,17 @@ fn build_package_command(matches: &ArgMatches, dump_flags: &str) -> CompileResul
     Ok(0)
 }
 
-fn exports_command(matches: &ArgMatches) -> CompileResult<i32>
-{
-    let exports_file_path = matches.value_of("EXPORTS_FILE").ok_or_else(|| "No exports file given".to_owned())?;
+fn exports_command(matches: &ArgMatches) -> CompileResult<i32> {
+    let exports_file_path = matches
+        .value_of("EXPORTS_FILE")
+        .ok_or_else(|| "No exports file given".to_owned())?;
     let mut exports_file = File::open(&exports_file_path)?;
     let lib = ExportLibrary::load(&mut exports_file)?;
     println!("{}", lib);
     Ok(0)
 }
 
-fn run() -> CompileResult<i32>
-{
+fn run() -> CompileResult<i32> {
     let app = clap_app!(cobrac =>
         (version: "0.1")
         (author: "Joris Guisson <joris.guisson@gmail.com>")
@@ -147,21 +144,18 @@ fn run() -> CompileResult<i32>
         println!("{}", matches.usage());
         Ok(1)
     }
-
 }
 
-fn main()
-{
-    match run()
-    {
+fn main() {
+    match run() {
         Ok(ret) => {
             llvm_shutdown();
             exit(ret)
-        },
+        }
         Err(e) => {
             e.print();
             llvm_shutdown();
             exit(-1);
-        },
+        }
     }
 }

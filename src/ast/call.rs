@@ -1,9 +1,8 @@
-use ast::{GenericMapping, Expression, Type, NameRef, TreePrinter, IntSize, func_type, prefix};
-use span::{Span};
+use ast::{func_type, prefix, Expression, GenericMapping, IntSize, NameRef, TreePrinter, Type};
+use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
-pub struct Call
-{
+pub struct Call {
     pub callee: NameRef,
     pub args: Vec<Expression>,
     pub span: Span,
@@ -11,11 +10,9 @@ pub struct Call
     pub return_type: Type,
 }
 
-impl Call
-{
-    pub fn new(callee: NameRef, args: Vec<Expression>, span: Span) -> Call
-    {
-        Call{
+impl Call {
+    pub fn new(callee: NameRef, args: Vec<Expression>, span: Span) -> Call {
+        Call {
             callee: callee,
             args: args,
             span: span,
@@ -24,17 +21,14 @@ impl Call
         }
     }
 
-    pub fn callee_type(&self, int_size: IntSize) -> Type
-    {
+    pub fn callee_type(&self, int_size: IntSize) -> Type {
         let arg_types = self.args.iter().map(|e| e.get_type(int_size)).collect();
         func_type(arg_types, self.return_type.clone())
     }
 }
 
-impl TreePrinter for Call
-{
-    fn print(&self, level: usize)
-    {
+impl TreePrinter for Call {
+    fn print(&self, level: usize) {
         let p = prefix(level);
         println!("{}call {} {}", p, self.callee.name, self.span);
         for a in &self.args {

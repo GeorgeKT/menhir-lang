@@ -1,10 +1,9 @@
-use std::fmt::{Formatter, Display, Error};
-use span::{Span};
-use ast::{BinaryOperator, UnaryOperator, AssignOperator};
+use ast::{AssignOperator, BinaryOperator, UnaryOperator};
+use span::Span;
+use std::fmt::{Display, Error, Formatter};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum TokenKind
-{
+pub enum TokenKind {
     Identifier(String),
     Number(String),
     StringLiteral(String),
@@ -56,12 +55,9 @@ pub enum TokenKind
     EOF,
 }
 
-impl Display for TokenKind
-{
-    fn fmt(&self, fmt: &mut Formatter) -> Result<(), Error>
-    {
-        match *self
-        {
+impl Display for TokenKind {
+    fn fmt(&self, fmt: &mut Formatter) -> Result<(), Error> {
+        match *self {
             TokenKind::Identifier(ref s) => write!(fmt, "identifier '{}'", s),
             TokenKind::Number(ref n) => write!(fmt, "number '{}'", n),
             TokenKind::StringLiteral(ref s) => write!(fmt, "string litteral '{}'", s),
@@ -116,28 +112,19 @@ impl Display for TokenKind
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Token
-{
+pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
 }
 
-impl Token
-{
-    pub fn new(kind: TokenKind, span: Span) -> Token
-    {
-        Token{
-            kind: kind,
-            span: span,
-        }
+impl Token {
+    pub fn new(kind: TokenKind, span: Span) -> Token {
+        Token { kind: kind, span: span }
     }
 }
 
-
-impl Display for Token
-{
-    fn fmt(&self, fmt: &mut Formatter) -> Result<(), Error>
-    {
+impl Display for Token {
+    fn fmt(&self, fmt: &mut Formatter) -> Result<(), Error> {
         write!(fmt, "{}", self.kind)
     }
 }

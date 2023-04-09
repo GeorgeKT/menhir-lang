@@ -54,9 +54,7 @@ pub use self::sumtype::*;
 pub use self::typedeclaration::*;
 pub use self::types::*;
 
-
-pub fn prefix(level: usize) -> String
-{
+pub fn prefix(level: usize) -> String {
     let mut s = String::with_capacity(level);
     for _ in 0..level {
         s.push(' ')
@@ -64,17 +62,15 @@ pub fn prefix(level: usize) -> String
     s
 }
 
-pub trait TreePrinter
-{
+pub trait TreePrinter {
     fn print(&self, level: usize);
 }
 
-use std::collections::HashMap;
 use itertools::join;
+use std::collections::HashMap;
 
 pub type GenericMapping = HashMap<Type, Type>;
 
-pub fn new_func_name(func_name: &str, generic_args: &GenericMapping) -> String
-{
+pub fn new_func_name(func_name: &str, generic_args: &GenericMapping) -> String {
     format!("{}<{}>", func_name, join(generic_args.values(), ","))
 }

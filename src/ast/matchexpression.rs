@@ -1,17 +1,15 @@
-use ast::{Expression, Type, TreePrinter, Pattern, prefix};
+use ast::{prefix, Expression, Pattern, TreePrinter, Type};
 use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
-pub struct MatchCase
-{
+pub struct MatchCase {
     pub pattern: Pattern,
     pub to_execute: Expression,
     pub span: Span,
 }
 
-pub fn match_case(p: Pattern, to_execute: Expression, span: Span) -> MatchCase
-{
-    MatchCase{
+pub fn match_case(p: Pattern, to_execute: Expression, span: Span) -> MatchCase {
+    MatchCase {
         pattern: p,
         to_execute: to_execute,
         span: span,
@@ -19,17 +17,15 @@ pub fn match_case(p: Pattern, to_execute: Expression, span: Span) -> MatchCase
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
-pub struct MatchExpression
-{
+pub struct MatchExpression {
     pub target: Expression,
     pub cases: Vec<MatchCase>,
     pub typ: Type,
     pub span: Span,
 }
 
-pub fn match_expression(target: Expression, cases: Vec<MatchCase>, span: Span) -> Expression
-{
-    Expression::Match(Box::new(MatchExpression{
+pub fn match_expression(target: Expression, cases: Vec<MatchCase>, span: Span) -> Expression {
+    Expression::Match(Box::new(MatchExpression {
         target: target,
         cases: cases,
         typ: Type::Unknown,
@@ -37,10 +33,8 @@ pub fn match_expression(target: Expression, cases: Vec<MatchCase>, span: Span) -
     }))
 }
 
-impl TreePrinter for MatchExpression
-{
-    fn print(&self, level: usize)
-    {
+impl TreePrinter for MatchExpression {
+    fn print(&self, level: usize) {
         let p = prefix(level);
         println!("{}match ({}) (type {})", p, self.span, self.typ);
         self.target.print(level + 1);

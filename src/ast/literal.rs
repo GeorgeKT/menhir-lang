@@ -1,10 +1,9 @@
-use std::ops::Deref;
-use ast::{Type, ArrayLiteral, TreePrinter, FloatSize, IntSize, ptr_type, prefix};
+use ast::{prefix, ptr_type, ArrayLiteral, FloatSize, IntSize, TreePrinter, Type};
 use span::Span;
+use std::ops::Deref;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
-pub enum Literal
-{
+pub enum Literal {
     Int(Span, i64, IntSize),
     UInt(Span, u64, IntSize),
     Bool(Span, bool),
@@ -15,12 +14,9 @@ pub enum Literal
     NullPtr(Span, Type),
 }
 
-impl Literal
-{
-    pub fn get_type(&self) -> Type
-    {
-        match *self
-        {
+impl Literal {
+    pub fn get_type(&self) -> Type {
+        match *self {
             Literal::Int(_, _, int_size) => Type::Int(int_size),
             Literal::UInt(_, _, int_size) => Type::UInt(int_size),
             Literal::Float(_, _, float_size) => Type::Float(float_size),
@@ -32,23 +28,20 @@ impl Literal
         }
     }
 
-    pub fn span(&self) -> Span
-    {
-        match *self
-        {
-            Literal::Int(ref span, _, _) |
-            Literal::UInt(ref span, _, _) |
-            Literal::Float(ref span, _, _) |
-            Literal::Bool(ref span, _) |
-            Literal::Char(ref span, _) |
-            Literal::NullPtr(ref span, _) |
-            Literal::String(ref span, _) => span.clone(),
+    pub fn span(&self) -> Span {
+        match *self {
+            Literal::Int(ref span, _, _)
+            | Literal::UInt(ref span, _, _)
+            | Literal::Float(ref span, _, _)
+            | Literal::Bool(ref span, _)
+            | Literal::Char(ref span, _)
+            | Literal::NullPtr(ref span, _)
+            | Literal::String(ref span, _) => span.clone(),
             Literal::Array(ref a) => a.span.clone(),
         }
     }
 
-    pub fn try_convert(&self, typ: &Type) -> Option<Literal>
-    {
+    pub fn try_convert(&self, typ: &Type) -> Option<Literal> {
         match (self, typ) {
             (&Literal::Int(ref span, value, _), &Type::Int(int_size)) => {
                 let target_bit_size = int_size.size_in_bits();
@@ -112,13 +105,10 @@ impl Literal
     }
 }
 
-impl TreePrinter for Literal
-{
-    fn print(&self, level: usize)
-    {
+impl TreePrinter for Literal {
+    fn print(&self, level: usize) {
         let p = prefix(level);
-        match *self
-        {
+        match *self {
             Literal::Int(ref s, v, int_size) => println!("{}int{} {} ({})", p, int_size, v, s),
             Literal::UInt(ref s, v, int_size) => println!("{}uint{} {} ({})", p, int_size, v, s),
             Literal::Float(ref s, ref v, float_size) => println!("{}float{} {} ({})", p, float_size, v, s),
@@ -131,7 +121,7 @@ impl TreePrinter for Literal
                 for e in &a.elements {
                     e.print(level + 1);
                 }
-            },
+            }
         }
     }
 }

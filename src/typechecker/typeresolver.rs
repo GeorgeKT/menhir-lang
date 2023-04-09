@@ -1,35 +1,31 @@
+use super::typecheckercontext::TypeCheckerContext;
+use ast::*;
+use compileerror::{unknown_name_result, CompileResult};
 use std::collections::HashSet;
 use std::ops::Deref;
-use ast::*;
 use target::Target;
-use compileerror::{CompileResult, unknown_name_result};
-use super::typecheckercontext::TypeCheckerContext;
 
 #[derive(Eq, PartialEq, Debug)]
-pub enum TypeResolved
-{
+pub enum TypeResolved {
     Yes,
     No,
 }
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
-enum ResolveMode
-{
+enum ResolveMode {
     Lazy,
     Forced,
 }
 
-fn resolve_type_helper(ctx: &TypeCheckerContext, typ: &Type) -> (Option<Type>, TypeResolved)
-{
-    match *typ
-    {
+fn resolve_type_helper(ctx: &TypeCheckerContext, typ: &Type) -> (Option<Type>, TypeResolved) {
+    match *typ {
         Type::Unresolved(ref ut) => {
             if let Some(r) = ctx.resolve(&ut.name) {
                 (Some(r.typ.clone()), TypeResolved::Yes)
             } else {
                 (None, TypeResolved::No)
             }
-        },
+        }
 
         Type::Pointer(ref inner) => {
             let r = resolve_type_helper(ctx, inner);
@@ -38,34 +34,32 @@ fn resolve_type_helper(ctx: &TypeCheckerContext, typ: &Type) -> (Option<Type>, T
             } else {
                 r
             }
-        },
+        }
 
-        Type::Generic(ref gt) => {
-            match *gt.deref()
-            {
-                GenericType::Any(ref name) => {
-                    ctx.resolve(name).map(|r| {
-                        if let Type::Interface(_) = r.typ {
-                            (Some(generic_type_with_constraints(vec![r.typ])), TypeResolved::Yes)
-                        } else {
-                            (None, TypeResolved::Yes)
-                        }
-                    }).unwrap_or((None, TypeResolved::Yes))
-                },
-
-                GenericType::Restricted(ref interfaces) => {
-                    let mut new_interfaces = Vec::new();
-                    for interface in interfaces {
-                        let r = resolve_type_helper(ctx, interface);
-                        if let (Some(typ), TypeResolved::Yes) = r {
-                            new_interfaces.push(typ);
-                        } else {
-                            return (None, TypeResolved::No)
-                        }
+        Type::Generic(ref gt) => match *gt.deref() {
+            GenericType::Any(ref name) => ctx
+                .resolve(name)
+                .map(|r| {
+                    if let Type::Interface(_) = r.typ {
+                        (Some(generic_type_with_constraints(vec![r.typ])), TypeResolved::Yes)
+                    } else {
+                        (None, TypeResolved::Yes)
                     }
+                })
+                .unwrap_or((None, TypeResolved::Yes)),
 
-                    (Some(generic_type_with_constraints(new_interfaces)), TypeResolved::Yes)
-                },
+            GenericType::Restricted(ref interfaces) => {
+                let mut new_interfaces = Vec::new();
+                for interface in interfaces {
+                    let r = resolve_type_helper(ctx, interface);
+                    if let (Some(typ), TypeResolved::Yes) = r {
+                        new_interfaces.push(typ);
+                    } else {
+                        return (None, TypeResolved::No);
+                    }
+                }
+
+                (Some(generic_type_with_constraints(new_interfaces)), TypeResolved::Yes)
             }
         },
 
@@ -73,20 +67,21 @@ fn resolve_type_helper(ctx: &TypeCheckerContext, typ: &Type) -> (Option<Type>, T
     }
 }
 
-pub fn resolve_type(ctx: &TypeCheckerContext, typ: &mut Type) -> TypeResolved
-{
-    match resolve_type_helper(ctx, typ)
-    {
+pub fn resolve_type(ctx: &TypeCheckerContext, typ: &mut Type) -> TypeResolved {
+    match resolve_type_helper(ctx, typ) {
         (Some(resolved_typ), TypeResolved::Yes) => {
             *typ = resolved_typ;
             TypeResolved::Yes
-        },
+        }
         (_, result) => result,
     }
 }
 
-fn resolve_function_args_and_ret_type(ctx: &mut TypeCheckerContext, sig: &mut FunctionSignature, mode: ResolveMode) -> CompileResult<TypeResolved>
-{
+fn resolve_function_args_and_ret_type(
+    ctx: &mut TypeCheckerContext,
+    sig: &mut FunctionSignature,
+    mode: ResolveMode,
+) -> CompileResult<TypeResolved> {
     if sig.typ != Type::Unknown {
         return Ok(TypeResolved::Yes);
     }
@@ -112,15 +107,17 @@ fn resolve_function_args_and_ret_type(ctx: &mut TypeCheckerContext, sig: &mut Fu
     Ok(TypeResolved::Yes)
 }
 
-fn resolve_struct_member_types(ctx: &mut TypeCheckerContext, sd: &mut StructDeclaration, mode: ResolveMode) -> CompileResult<TypeResolved>
-{
+fn resolve_struct_member_types(
+    ctx: &mut TypeCheckerContext,
+    sd: &mut StructDeclaration,
+    mode: ResolveMode,
+) -> CompileResult<TypeResolved> {
     if sd.typ != Type::Unknown {
         return Ok(TypeResolved::Yes);
     }
 
     let mut member_types = Vec::with_capacity(sd.members.len());
-    for m in &mut sd.members
-    {
+    for m in &mut sd.members {
         if resolve_type(ctx, &mut m.typ) == TypeResolved::No {
             if mode == ResolveMode::Lazy {
                 return Ok(TypeResolved::No);
@@ -136,55 +133,55 @@ fn resolve_struct_member_types(ctx: &mut TypeCheckerContext, sd: &mut StructDecl
     Ok(TypeResolved::Yes)
 }
 
-fn resolve_sum_case_types(ctx: &mut TypeCheckerContext, st: &mut SumTypeDeclaration, mode: ResolveMode, target: &Target) -> CompileResult<TypeResolved>
-{
+fn resolve_sum_case_types(
+    ctx: &mut TypeCheckerContext,
+    st: &mut SumTypeDeclaration,
+    mode: ResolveMode,
+    target: &Target,
+) -> CompileResult<TypeResolved> {
     if st.typ != Type::Unknown {
         return Ok(TypeResolved::Yes);
     }
 
     let mut case_types = Vec::with_capacity(st.cases.len());
-    for c in &mut st.cases
-    {
-        if let Some(ref mut sd) = c.data
-        {
-            if resolve_struct_member_types(ctx, sd, mode)? == TypeResolved::No
-            {
+    for c in &mut st.cases {
+        if let Some(ref mut sd) = c.data {
+            if resolve_struct_member_types(ctx, sd, mode)? == TypeResolved::No {
                 return Ok(TypeResolved::No);
-            }
-            else
-            {
+            } else {
                 case_types.push(sum_type_case(&c.name, sd.typ.clone()));
             }
-        }
-        else
-        {
-            case_types.push(sum_type_case(&c.name, target.native_uint_type.clone())); // Use integer type for cases without structs
+        } else {
+            case_types.push(sum_type_case(&c.name, target.native_uint_type.clone()));
+            // Use integer type for cases without structs
         }
     }
 
-    if case_types.iter().all(|ct| ct.typ == target.native_uint_type)
+    if case_types
+        .iter()
+        .all(|ct| ct.typ == target.native_uint_type)
     {
         let case_names: Vec<String> = st.cases.iter().map(|c| c.name.clone()).collect();
         st.typ = enum_type(&st.name, case_names);
-    }
-    else
-    {
+    } else {
         st.typ = sum_type(&st.name, case_types);
     }
 
     Ok(TypeResolved::Yes)
 }
 
-fn resolve_interface_types(ctx: &mut TypeCheckerContext, i: &mut Interface, mode: ResolveMode) -> CompileResult<TypeResolved>
-{
+fn resolve_interface_types(
+    ctx: &mut TypeCheckerContext,
+    i: &mut Interface,
+    mode: ResolveMode,
+) -> CompileResult<TypeResolved> {
     if i.typ != Type::Unknown {
         return Ok(TypeResolved::Yes);
     }
 
     let mut generic_args = HashSet::new();
     let mut functions = Vec::new();
-    for func in &mut i.functions
-    {
+    for func in &mut i.functions {
         if resolve_function_args_and_ret_type(ctx, func, mode)? == TypeResolved::No {
             return Ok(TypeResolved::No);
         }
@@ -206,54 +203,49 @@ fn resolve_interface_types(ctx: &mut TypeCheckerContext, i: &mut Interface, mode
     Ok(TypeResolved::Yes)
 }
 
-fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: ResolveMode, target: &Target) -> CompileResult<usize>
-{
+fn resolve_all_types(
+    ctx: &mut TypeCheckerContext,
+    module: &mut Module,
+    mode: ResolveMode,
+    target: &Target,
+) -> CompileResult<usize> {
     let mut num_resolved = 0;
-    for typ in module.types.values_mut()
-    {
-        match *typ
-        {
+    for typ in module.types.values_mut() {
+        match *typ {
             TypeDeclaration::Interface(ref mut i) => {
-                if resolve_interface_types(ctx, i, mode)? == TypeResolved::Yes
-                {
+                if resolve_interface_types(ctx, i, mode)? == TypeResolved::Yes {
                     ctx.add(Symbol::new(&i.name, &i.typ, false, &i.span, SymbolType::Normal))?;
                     num_resolved += 1;
                 }
-            },
+            }
 
             TypeDeclaration::Struct(ref mut s) => {
-                if resolve_struct_member_types(ctx, s, mode)? == TypeResolved::Yes
-                {
+                if resolve_struct_member_types(ctx, s, mode)? == TypeResolved::Yes {
                     ctx.add(Symbol::new(&s.name, &s.typ, false, &s.span, SymbolType::Normal))?;
                     num_resolved += 1;
                 }
-            },
+            }
 
             TypeDeclaration::Sum(ref mut s) => {
-                if resolve_sum_case_types(ctx, s, mode, target)? == TypeResolved::Yes
-                {
+                if resolve_sum_case_types(ctx, s, mode, target)? == TypeResolved::Yes {
                     ctx.add(Symbol::new(&s.name, &s.typ, false, &s.span, SymbolType::Normal))?;
-                    match s.typ
-                    {
+                    match s.typ {
                         Type::Enum(ref et) => {
-                            for c in &et.cases
-                            {
+                            for c in &et.cases {
                                 ctx.add(Symbol::new(c, &s.typ, false, &s.span, SymbolType::Normal))?;
                             }
-                        },
+                        }
                         Type::Sum(ref st) => {
-                            for c in &st.cases
-                            {
+                            for c in &st.cases {
                                 ctx.add(Symbol::new(&c.name, &s.typ, false, &s.span, SymbolType::Normal))?;
                             }
-                        },
-                        _ => {},
+                        }
+                        _ => {}
                     }
 
                     num_resolved += 1;
                 }
-            },
-
+            }
             /*TypeDeclaration::Alias(ref mut _a) => {
                 panic!("NYI");
             }*/
@@ -263,11 +255,9 @@ fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: Re
     Ok(num_resolved)
 }
 
-pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module, target: &Target) -> CompileResult<()>
-{
+pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module, target: &Target) -> CompileResult<()> {
     let mut num_resolved = 0;
-    loop
-    {
+    loop {
         let already_resolved = num_resolved;
         num_resolved = resolve_all_types(ctx, module, ResolveMode::Lazy, target)?;
 
@@ -282,12 +272,24 @@ pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module, target: 
 
     for f in module.functions.values_mut() {
         resolve_function_args_and_ret_type(ctx, &mut f.sig, ResolveMode::Forced)?;
-        ctx.add(Symbol::new(&f.sig.name, &f.sig.typ, false, &f.sig.span, SymbolType::Normal))?;
+        ctx.add(Symbol::new(
+            &f.sig.name,
+            &f.sig.typ,
+            false,
+            &f.sig.span,
+            SymbolType::Normal,
+        ))?;
     }
 
     for f in module.externals.values_mut() {
         resolve_function_args_and_ret_type(ctx, &mut f.sig, ResolveMode::Forced)?;
-        ctx.add(Symbol::new(&f.sig.name, &f.sig.typ, false, &f.sig.span, SymbolType::Normal))?;
+        ctx.add(Symbol::new(
+            &f.sig.name,
+            &f.sig.typ,
+            false,
+            &f.sig.span,
+            SymbolType::Normal,
+        ))?;
     }
 
     Ok(())

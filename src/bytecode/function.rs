@@ -1,57 +1,48 @@
-use std::fmt;
-use std::collections::{BTreeMap, HashMap};
-use itertools::free::join;
-use ast::{Type, FunctionSignature};
+use ast::{FunctionSignature, Type};
 use bytecode::instruction::Instruction;
+use itertools::free::join;
+use std::collections::{BTreeMap, HashMap};
+use std::fmt;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct Var
-{
+pub struct Var {
     pub name: String,
     pub typ: Type,
 }
 
-impl Var
-{
-    pub fn new(idx: usize, typ: Type) -> Var
-    {
-        Var{
+impl Var {
+    pub fn new(idx: usize, typ: Type) -> Var {
+        Var {
             name: format!("$var{}", idx),
             typ: typ,
         }
     }
 
-    pub fn named(name: &str, typ: Type) -> Var
-    {
-        Var{
+    pub fn named(name: &str, typ: Type) -> Var {
+        Var {
             name: name.into(),
             typ: typ,
         }
     }
 }
 
-impl fmt::Display for Var
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
-    {
+impl fmt::Display for Var {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(f, "({}: {})", self.name, self.typ)
     }
 }
 
 #[derive(Debug)]
-pub struct Scope
-{
+pub struct Scope {
     named_vars: HashMap<String, Var>,
     to_cleanup: Vec<Var>,
     insert_block: BasicBlockRef,
     insert_position: usize,
 }
 
-impl Scope
-{
-    pub fn new(insert_block: BasicBlockRef, insert_position: usize) -> Scope
-    {
-        Scope{
+impl Scope {
+    pub fn new(insert_block: BasicBlockRef, insert_position: usize) -> Scope {
+        Scope {
             named_vars: HashMap::new(),
             to_cleanup: Vec::new(),
             insert_block: insert_block,
@@ -59,31 +50,29 @@ impl Scope
         }
     }
 
-    pub fn add_named_var(&mut self, var: Var)
-    {
+    pub fn add_named_var(&mut self, var: Var) {
         self.named_vars.insert(var.name.clone(), var);
     }
 
-/*
-    pub fn add_cleanup_target(&mut self, v: &Var) -> bool
-    {
-        if self.named_vars.get(&v.name).is_none() {
-            false
-        } else {
-            self.to_cleanup.push(v.clone());
-            true
+    /*
+        pub fn add_cleanup_target(&mut self, v: &Var) -> bool
+        {
+            if self.named_vars.get(&v.name).is_none() {
+                false
+            } else {
+                self.to_cleanup.push(v.clone());
+                true
+            }
         }
-    }
 
-    pub fn remove_cleanup_target(&mut self, v: &Var) -> bool
-    {
-        let len = self.to_cleanup.len();
-        self.to_cleanup.retain(|e| e != v);
-        self.to_cleanup.len() < len
-    }
-*/
-    pub fn cleanup(&self, _func: &mut ByteCodeFunction)
-    {
+        pub fn remove_cleanup_target(&mut self, v: &Var) -> bool
+        {
+            let len = self.to_cleanup.len();
+            self.to_cleanup.retain(|e| e != v);
+            self.to_cleanup.len() < len
+        }
+    */
+    pub fn cleanup(&self, _func: &mut ByteCodeFunction) {
         // Cleanup in reverse construction order
         for _v in self.to_cleanup.iter().rev() {
             panic!("TODO: add destructor calls");
@@ -91,11 +80,9 @@ impl Scope
     }
 }
 
-
 pub type BasicBlockRef = usize;
 
-pub fn bb_name(bb: BasicBlockRef) -> String
-{
+pub fn bb_name(bb: BasicBlockRef) -> String {
     if bb == 0 {
         "entry".into()
     } else {
@@ -104,25 +91,27 @@ pub fn bb_name(bb: BasicBlockRef) -> String
 }
 
 #[derive(Debug)]
-pub struct BasicBlock
-{
+pub struct BasicBlock {
     pub name: String,
-    pub instructions: Vec<Instruction>
+    pub instructions: Vec<Instruction>,
 }
 
-impl BasicBlock
-{
-    pub fn new(name: String) -> BasicBlock
-    {
-        BasicBlock{
+impl BasicBlock {
+    pub fn new(name: String) -> BasicBlock {
+        BasicBlock {
             name: name,
             instructions: Vec::new(),
         }
     }
 
-    pub fn add(&mut self, inst: Instruction)
-    {
-        if inst.is_terminator() && self.instructions.last().map(|i| i.is_terminator()).unwrap_or(false) {
+    pub fn add(&mut self, inst: Instruction) {
+        if inst.is_terminator()
+            && self
+                .instructions
+                .last()
+                .map(|i| i.is_terminator())
+                .unwrap_or(false)
+        {
             // Already a terminator drop this, this only happens with an early return
             return;
         }
@@ -131,11 +120,8 @@ impl BasicBlock
     }
 }
 
-
-
 #[derive(Debug)]
-pub struct ByteCodeFunction
-{
+pub struct ByteCodeFunction {
     pub sig: FunctionSignature,
     pub blocks: BTreeMap<BasicBlockRef, BasicBlock>,
     pub external: bool,
@@ -146,12 +132,9 @@ pub struct ByteCodeFunction
     destinations: Vec<Option<Var>>,
 }
 
-
-impl ByteCodeFunction
-{
-    pub fn new(sig: &FunctionSignature, external: bool) -> ByteCodeFunction
-    {
-        let mut f = ByteCodeFunction{
+impl ByteCodeFunction {
+    pub fn new(sig: &FunctionSignature, external: bool) -> ByteCodeFunction {
+        let mut f = ByteCodeFunction {
             sig: sig.clone(),
             blocks: BTreeMap::new(),
             external: external,
@@ -173,14 +156,12 @@ impl ByteCodeFunction
         f
     }
 
-    pub fn add(&mut self, inst: Instruction)
-    {
+    pub fn add(&mut self, inst: Instruction) {
         let idx = self.current_bb;
         self.blocks.get_mut(&idx).map(|bb| bb.add(inst));
     }
 
-    pub fn create_basic_block(&mut self) -> BasicBlockRef
-    {
+    pub fn create_basic_block(&mut self) -> BasicBlockRef {
         let bb_ref = self.bb_counter;
         self.bb_counter += 1;
         let name = bb_name(bb_ref);
@@ -188,14 +169,12 @@ impl ByteCodeFunction
         bb_ref
     }
 
-    pub fn set_current_bb(&mut self, bb_ref: BasicBlockRef)
-    {
+    pub fn set_current_bb(&mut self, bb_ref: BasicBlockRef) {
         assert!(bb_ref < self.blocks.len());
         self.current_bb = bb_ref;
     }
 
-    pub fn new_var(&mut self, typ: Type) -> Var
-    {
+    pub fn new_var(&mut self, typ: Type) -> Var {
         let idx = self.var_counter;
         self.var_counter += 1;
         let v = Var::new(idx, typ);
@@ -203,18 +182,19 @@ impl ByteCodeFunction
         v
     }
 
-    pub fn push_scope(&mut self)
-    {
+    pub fn push_scope(&mut self) {
         let idx = self.current_bb;
-        let insert_position = self.blocks.get_mut(&idx)
+        let insert_position = self
+            .blocks
+            .get_mut(&idx)
             .map(|bb| bb.instructions.len() + 1)
             .expect("Unknown block");
-        self.scopes.push(Scope::new(self.current_bb, insert_position));
+        self.scopes
+            .push(Scope::new(self.current_bb, insert_position));
         self.add(Instruction::StartScope);
     }
 
-    pub fn pop_scope(&mut self)
-    {
+    pub fn pop_scope(&mut self) {
         let s = self.scopes.pop().expect("Empty Scope Stack");
         s.cleanup(self);
         if !self.scopes.is_empty() {
@@ -223,32 +203,27 @@ impl ByteCodeFunction
         }
     }
 
-    pub fn push_destination(&mut self, var: Option<Var>)
-    {
+    pub fn push_destination(&mut self, var: Option<Var>) {
         self.destinations.push(var);
     }
 
-    pub fn pop_destination(&mut self)
-    {
+    pub fn pop_destination(&mut self) {
         let _ = self.destinations.pop();
     }
 
-    pub fn get_destination(&self) -> Option<Var>
-    {
+    pub fn get_destination(&self) -> Option<Var> {
         match self.destinations.last() {
             Some(&Some(ref var)) => Some(var.clone()),
-            _ => None
+            _ => None,
         }
     }
 
-    pub fn add_named_var(&mut self, var: Var)
-    {
+    pub fn add_named_var(&mut self, var: Var) {
         let scope = self.scopes.last_mut().expect("Empty Scope Stack");
         scope.add_named_var(var);
     }
 
-    pub fn for_each_instruction<Func: FnMut(&Instruction) -> bool>(&self, mut f: Func)
-    {
+    pub fn for_each_instruction<Func: FnMut(&Instruction) -> bool>(&self, mut f: Func) {
         for block in self.blocks.values() {
             for instr in &block.instructions {
                 if !f(instr) {
@@ -258,8 +233,7 @@ impl ByteCodeFunction
         }
     }
 
-    pub fn for_each_instruction_mut<Func: Fn(&mut Instruction) -> bool>(&mut self, f: Func)
-    {
+    pub fn for_each_instruction_mut<Func: Fn(&mut Instruction) -> bool>(&mut self, f: Func) {
         for block in self.blocks.values_mut() {
             for instr in &mut block.instructions {
                 if !f(instr) {
@@ -270,7 +244,8 @@ impl ByteCodeFunction
     }
 
     pub fn replace_instruction<Func>(&mut self, f: Func)
-        where Func: Fn(&Instruction) -> Vec<Instruction>
+    where
+        Func: Fn(&Instruction) -> Vec<Instruction>,
     {
         for block in self.blocks.values_mut() {
             let mut idx = 0;
@@ -289,33 +264,39 @@ impl ByteCodeFunction
         }
     }
 
-
     /*
-        pub fn remove_instruction<Pred: Fn(&Instruction) -> bool>(&mut self, pred: Pred) {
-            for block in self.blocks.values_mut() {
-                block.instructions.retain(|instr| !pred(instr));
-            }
+    pub fn remove_instruction<Pred: Fn(&Instruction) -> bool>(&mut self, pred: Pred) {
+        for block in self.blocks.values_mut() {
+            block.instructions.retain(|instr| !pred(instr));
         }
+    }
 
-        pub fn add_cleanup_target(&mut self, v: &Var)
-        {
-            for scope in self.scopes.iter_mut().rev() {
-                if scope.add_cleanup_target(v) {
-                    break;
-                }
+    pub fn add_cleanup_target(&mut self, v: &Var)
+    {
+        for scope in self.scopes.iter_mut().rev() {
+            if scope.add_cleanup_target(v) {
+                break;
             }
         }
-        */
+    }
+    */
 }
 
-impl fmt::Display for ByteCodeFunction
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error>
-    {
-        writeln!(f, "{}({}) -> {}:",
+impl fmt::Display for ByteCodeFunction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        writeln!(
+            f,
+            "{}({}) -> {}:",
             self.sig.name,
-            join(self.sig.args.iter().map(|arg| format!("{}: {}", arg.name, arg.typ)), ", "),
-            self.sig.return_type)?;
+            join(
+                self.sig
+                    .args
+                    .iter()
+                    .map(|arg| format!("{}: {}", arg.name, arg.typ)),
+                ", "
+            ),
+            self.sig.return_type
+        )?;
         for bb in self.blocks.values() {
             writeln!(f, " {}:", bb.name)?;
             for inst in &bb.instructions {

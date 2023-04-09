@@ -1,6 +1,6 @@
 mod lexer;
-mod tokens;
 mod tokenqueue;
+mod tokens;
 
 #[cfg(test)]
 mod tests;
@@ -8,49 +8,50 @@ mod tests;
 #[cfg(test)]
 pub use self::tests::{th_expr, th_mod};
 
-use std::path::{Path};
 use std::fs;
-use std::io::{Read};
-use std::rc::Rc;
+use std::io::Read;
 use std::ops::Deref;
+use std::path::Path;
+use std::rc::Rc;
 
 use ast::*;
-use timer::time_operation;
-use compileerror::{CompileResult, parse_error_result};
-use span::{Span};
+use compileerror::{parse_error_result, CompileResult};
+use span::Span;
 use target::Target;
+use timer::time_operation;
 
-use self::tokenqueue::{TokenQueue};
-use self::lexer::{Lexer};
+use self::lexer::Lexer;
+use self::tokenqueue::TokenQueue;
 use self::tokens::{Token, TokenKind};
 
-fn is_end_of_expression(tok: &Token) -> bool
-{
-    match tok.kind
-    {
-        TokenKind::UnaryOperator(_) |
-        TokenKind::BinaryOperator(_) |
-        TokenKind::Number(_) |
-        TokenKind::Identifier(_) |
-        TokenKind::StringLiteral(_) |
-        TokenKind::Assign(_) |
-        TokenKind::OpenParen |
-        TokenKind::OpenBracket |
-        TokenKind::OpenCurly => false,
+fn is_end_of_expression(tok: &Token) -> bool {
+    match tok.kind {
+        TokenKind::UnaryOperator(_)
+        | TokenKind::BinaryOperator(_)
+        | TokenKind::Number(_)
+        | TokenKind::Identifier(_)
+        | TokenKind::StringLiteral(_)
+        | TokenKind::Assign(_)
+        | TokenKind::OpenParen
+        | TokenKind::OpenBracket
+        | TokenKind::OpenCurly => false,
         _ => true,
     }
 }
 
-fn eat_comma(tq: &mut TokenQueue) -> CompileResult<()>
-{
+fn eat_comma(tq: &mut TokenQueue) -> CompileResult<()> {
     if tq.is_next(&TokenKind::Comma) {
         tq.pop()?;
     }
     Ok(())
 }
 
-fn number_to_literal(number: u64, force_unsigned: bool, span: &Span, native_int_size: IntSize) -> CompileResult<Literal>
-{
+fn number_to_literal(
+    number: u64,
+    force_unsigned: bool,
+    span: &Span,
+    native_int_size: IntSize,
+) -> CompileResult<Literal> {
     let int_sizes = [IntSize::I8, IntSize::I16, IntSize::I32, IntSize::I64];
     let mut selected_int_size = IntSize::I8;
     for int_size in &int_sizes {
@@ -81,12 +82,11 @@ fn number_to_literal(number: u64, force_unsigned: bool, span: &Span, native_int_
     }
 }
 
-fn parse_number(tq: &mut TokenQueue, num: &str, span: &Span, target: &Target) -> CompileResult<Literal>
-{
+fn parse_number(tq: &mut TokenQueue, num: &str, span: &Span, target: &Target) -> CompileResult<Literal> {
     if num.find('.').is_some() || num.find('e').is_some() {
         match num.parse::<f64>() {
             Ok(_) => Ok(Literal::Float(span.clone(), num.into(), FloatSize::F64)),
-            Err(_) => parse_error_result(span, format!("{} is not a valid floating point number", num))
+            Err(_) => parse_error_result(span, format!("{} is not a valid floating point number", num)),
         }
     } else {
         let force_unsigned = if tq.is_next_identifier("u") {
@@ -99,27 +99,27 @@ fn parse_number(tq: &mut TokenQueue, num: &str, span: &Span, target: &Target) ->
         // Should be an integer
         match num.parse::<u64>() {
             Ok(i) => number_to_literal(i, force_unsigned, span, target.int_size),
-            Err(_) => parse_error_result(span, format!("{} is not a valid integer", num))
+            Err(_) => parse_error_result(span, format!("{} is not a valid integer", num)),
         }
     }
 }
 
-fn parse_array_literal(tq: &mut TokenQueue, span: &Span, indent_level: usize, target: &Target) -> CompileResult<Literal>
-{
+fn parse_array_literal(
+    tq: &mut TokenQueue,
+    span: &Span,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Literal> {
     let mut expressions = Vec::new();
-    while !tq.is_next(&TokenKind::CloseBracket)
-    {
+    while !tq.is_next(&TokenKind::CloseBracket) {
         let e = parse_expression(tq, indent_level, target)?;
-        if expressions.is_empty() && tq.is_next(&TokenKind::SemiColon)
-        {
+        if expressions.is_empty() && tq.is_next(&TokenKind::SemiColon) {
             // [x ; 4]
             tq.pop()?;
             let (times, _) = tq.expect_int()?;
             tq.expect(&TokenKind::CloseBracket)?;
             return Ok(array_lit(vec![e; times as usize], span.expanded(tq.pos())));
-        }
-        else
-        {
+        } else {
             expressions.push(e);
             eat_comma(tq)?;
         }
@@ -129,11 +129,9 @@ fn parse_array_literal(tq: &mut TokenQueue, span: &Span, indent_level: usize, ta
     Ok(array_lit(expressions, span.expanded(tq.pos())))
 }
 
-fn parse_name(tq: &mut TokenQueue, id: String, span: &Span) -> CompileResult<NameRef>
-{
+fn parse_name(tq: &mut TokenQueue, id: String, span: &Span) -> CompileResult<NameRef> {
     let mut name = id;
-    while tq.is_next(&TokenKind::DoubleColon)
-    {
+    while tq.is_next(&TokenKind::DoubleColon) {
         tq.pop()?;
         let (next, _) = tq.expect_identifier()?;
         name.push_str("::");
@@ -143,50 +141,54 @@ fn parse_name(tq: &mut TokenQueue, id: String, span: &Span) -> CompileResult<Nam
     Ok(NameRef::new(name, span.expanded(tq.pos())))
 }
 
-fn parse_unary_expression(tq: &mut TokenQueue, op: UnaryOperator, op_span: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression>
-{
+fn parse_unary_expression(
+    tq: &mut TokenQueue,
+    op: UnaryOperator,
+    op_span: &Span,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Expression> {
     let se = parse_expression(tq, indent_level, target)?;
     Ok(unary_op(op, se, op_span.expanded(tq.pos())))
 }
 
-fn combine_binary_op(op: BinaryOperator, lhs: Expression, rhs: Expression) -> Expression
-{
-    if lhs.is_binary_op() && lhs.precedence() < op.precedence()
-    {
+fn combine_binary_op(op: BinaryOperator, lhs: Expression, rhs: Expression) -> Expression {
+    if lhs.is_binary_op() && lhs.precedence() < op.precedence() {
         let bop = lhs.extract_binary_op().expect("Not a binary op");
         let nrhs = combine_binary_op(op, bop.right.clone(), rhs);
         let span = Span::merge(&bop.left.span(), &nrhs.span());
         bin_op(bop.operator, bop.left.clone(), nrhs, span)
-    }
-    else
-    {
+    } else {
         let span = Span::merge(&lhs.span(), &rhs.span());
         bin_op(op, lhs, rhs, span)
     }
 }
 
-fn combine_type_cast(lhs: Expression, destination_type: Type, span: Span) -> Expression
-{
-    if lhs.is_binary_op()
-    {
+fn combine_type_cast(lhs: Expression, destination_type: Type, span: Span) -> Expression {
+    if lhs.is_binary_op() {
         let bop = lhs.extract_binary_op().expect("Not a binary op");
         let nrhs = combine_type_cast(bop.right.clone(), destination_type, span);
         let span = Span::merge(&bop.left.span(), &nrhs.span());
         bin_op(bop.operator, bop.left, nrhs, span)
-    }
-    else
-    {
+    } else {
         type_cast(lhs, destination_type, span)
     }
 }
 
-fn parse_binary_op_rhs(tq: &mut TokenQueue, mut lhs: Expression, indent_level: usize, target: &Target) -> CompileResult<Expression>
-{
+fn parse_binary_op_rhs(
+    tq: &mut TokenQueue,
+    mut lhs: Expression,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Expression> {
     //use ast::TreePrinter;
 
-    loop
-    {
-        if tq.peek().map(|tok| is_end_of_expression(tok)).unwrap_or(false) {
+    loop {
+        if tq
+            .peek()
+            .map(|tok| is_end_of_expression(tok))
+            .unwrap_or(false)
+        {
             return Ok(lhs);
         }
 
@@ -202,19 +204,25 @@ fn parse_binary_op_rhs(tq: &mut TokenQueue, mut lhs: Expression, indent_level: u
             continue;
         }
 
-
         let next_tok = tq.pop()?;
         let rhs = parse_expression_start(tq, next_tok, indent_level, target)?;
         lhs = combine_binary_op(op, lhs, rhs);
     }
 }
 
-fn parse_list<T, P>(tq: &mut TokenQueue, separator: &TokenKind, end_token: &TokenKind, parse_element: P, indent_level: usize, target: &Target) -> CompileResult<Vec<T>>
-    where P: Fn(&mut TokenQueue, usize, &Target) -> CompileResult<T>
+fn parse_list<T, P>(
+    tq: &mut TokenQueue,
+    separator: &TokenKind,
+    end_token: &TokenKind,
+    parse_element: P,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Vec<T>>
+where
+    P: Fn(&mut TokenQueue, usize, &Target) -> CompileResult<T>,
 {
     let mut elements = Vec::new();
-    while !tq.is_next(end_token)
-    {
+    while !tq.is_next(end_token) {
         if !tq.is_in_same_block(indent_level + 1) {
             break;
         } else {
@@ -234,34 +242,48 @@ fn parse_list<T, P>(tq: &mut TokenQueue, separator: &TokenKind, end_token: &Toke
     Ok(elements)
 }
 
-fn parse_comma_separated_list<T, P>(tq: &mut TokenQueue, end_token: &TokenKind, parse_element: P, indent_level: usize, target: &Target) -> CompileResult<Vec<T>>
-    where P: Fn(&mut TokenQueue, usize, &Target) -> CompileResult<T>
+fn parse_comma_separated_list<T, P>(
+    tq: &mut TokenQueue,
+    end_token: &TokenKind,
+    parse_element: P,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Vec<T>>
+where
+    P: Fn(&mut TokenQueue, usize, &Target) -> CompileResult<T>,
 {
     parse_list(tq, &TokenKind::Comma, end_token, parse_element, indent_level, target)
 }
 
-fn parse_function_call(tq: &mut TokenQueue, name: NameRef, indent_level: usize, target: &Target) -> CompileResult<Call>
-{
+fn parse_function_call(
+    tq: &mut TokenQueue,
+    name: NameRef,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Call> {
     tq.expect(&TokenKind::OpenParen)?;
     let args = parse_comma_separated_list(tq, &TokenKind::CloseParen, parse_expression, indent_level, target)?;
     let span = name.span.expanded(tq.pos());
     Ok(Call::new(name, args, span))
 }
 
-fn parse_generic_arg_list(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<Vec<Type>>
-{
+fn parse_generic_arg_list(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<Vec<Type>> {
     if !tq.is_next(&TokenKind::BinaryOperator(BinaryOperator::LessThan)) {
         return Ok(Vec::new());
     }
     tq.pop()?;
-    let args = parse_comma_separated_list(tq, &TokenKind::BinaryOperator(BinaryOperator::GreaterThan), parse_type, indent_level, target)?;
+    let args = parse_comma_separated_list(
+        tq,
+        &TokenKind::BinaryOperator(BinaryOperator::GreaterThan),
+        parse_type,
+        indent_level,
+        target,
+    )?;
     Ok(args)
 }
 
-fn to_primitive(name: &str, target: &Target) -> Option<Type>
-{
-    match name
-    {
+fn to_primitive(name: &str, target: &Target) -> Option<Type> {
+    match name {
         "int8" => Some(Type::Int(IntSize::I8)),
         "int16" => Some(Type::Int(IntSize::I16)),
         "int32" => Some(Type::Int(IntSize::I32)),
@@ -283,44 +305,33 @@ fn to_primitive(name: &str, target: &Target) -> Option<Type>
     }
 }
 
-
-fn parse_start_of_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<Type>
-{
-    if tq.is_next(&TokenKind::BinaryOperator(BinaryOperator::Mul))
-    {
+fn parse_start_of_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<Type> {
+    if tq.is_next(&TokenKind::BinaryOperator(BinaryOperator::Mul)) {
         tq.pop()?;
         let inner = parse_type(tq, indent_level, target)?;
         Ok(Type::Pointer(Rc::new(inner)))
-    }
-    else if tq.is_next(&TokenKind::Dollar)
-    {
+    } else if tq.is_next(&TokenKind::Dollar) {
         tq.pop()?;
-        if tq.is_next(&TokenKind::OpenParen)
-        {
+        if tq.is_next(&TokenKind::OpenParen) {
             tq.pop()?;
             let constraints = parse_list(
                 tq,
                 &TokenKind::BinaryOperator(BinaryOperator::Add),
                 &TokenKind::CloseParen,
-                parse_type, indent_level,
-                target
+                parse_type,
+                indent_level,
+                target,
             )?;
             Ok(generic_type_with_constraints(constraints))
-        }
-        else
-        {
+        } else {
             let (name, _span) = tq.expect_identifier()?;
             Ok(generic_type(&name))
         }
-    }
-    else if tq.is_next(&TokenKind::QuestionMark)
-    {
+    } else if tq.is_next(&TokenKind::QuestionMark) {
         tq.pop()?;
         let inner = parse_type(tq, indent_level, target)?;
         Ok(Type::Optional(Rc::new(inner)))
-    }
-    else if tq.is_next(&TokenKind::Func)
-    {
+    } else if tq.is_next(&TokenKind::Func) {
         // Function signature: fn(a, b) -> c
         tq.pop()?;
         tq.expect(&TokenKind::OpenParen)?;
@@ -328,9 +339,7 @@ fn parse_start_of_type(tq: &mut TokenQueue, indent_level: usize, target: &Target
         tq.expect(&TokenKind::Arrow)?;
         let ret = parse_type(tq, indent_level, target)?;
         Ok(func_type(args, ret))
-    }
-    else if tq.is_next(&TokenKind::OpenCurly)
-    {
+    } else if tq.is_next(&TokenKind::OpenCurly) {
         tq.pop()?;
         let member_types = parse_comma_separated_list(tq, &TokenKind::CloseCurly, parse_type, indent_level, target)?;
         Ok(struct_type(
@@ -338,28 +347,23 @@ fn parse_start_of_type(tq: &mut TokenQueue, indent_level: usize, target: &Target
             member_types
                 .into_iter()
                 .map(|member_type| struct_member("", member_type))
-                .collect()
+                .collect(),
         ))
-    }
-    else
-    {
+    } else {
         let (name, _pos) = tq.expect_identifier()?;
-        match to_primitive(&name, target)
-        {
+        match to_primitive(&name, target) {
             Some(t) => Ok(t),
             None => {
                 let generic_args = parse_generic_arg_list(tq, indent_level, target)?;
                 Ok(unresolved_type(&name, generic_args))
-            },
+            }
         }
     }
 }
 
-fn parse_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<Type>
-{
+fn parse_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<Type> {
     let mut typ = parse_start_of_type(tq, indent_level, target)?;
-    while tq.is_next(&TokenKind::OpenBracket)
-    {
+    while tq.is_next(&TokenKind::OpenBracket) {
         tq.pop()?;
         if tq.is_next(&TokenKind::CloseBracket) {
             tq.pop()?;
@@ -374,8 +378,12 @@ fn parse_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> Comp
     Ok(typ)
 }
 
-fn parse_function_argument(tq: &mut TokenQueue, self_type: &Type, indent_level: usize, target: &Target) -> CompileResult<Argument>
-{
+fn parse_function_argument(
+    tq: &mut TokenQueue,
+    self_type: &Type,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Argument> {
     let mutable = if tq.is_next(&TokenKind::Var) {
         tq.pop()?;
         true
@@ -400,8 +408,12 @@ fn parse_function_argument(tq: &mut TokenQueue, self_type: &Type, indent_level: 
     Ok(Argument::new(name, typ, mutable, span.expanded(tq.pos())))
 }
 
-fn parse_function_arguments(tq: &mut TokenQueue, self_type: &Type, indent_level: usize, target: &Target) -> CompileResult<Vec<Argument>>
-{
+fn parse_function_arguments(
+    tq: &mut TokenQueue,
+    self_type: &Type,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Vec<Argument>> {
     tq.expect(&TokenKind::OpenParen)?;
     let parse_arg = |tq: &mut TokenQueue, indent_level: usize, target: &Target| {
         parse_function_argument(tq, self_type, indent_level, target)
@@ -410,8 +422,12 @@ fn parse_function_arguments(tq: &mut TokenQueue, self_type: &Type, indent_level:
     Ok(args)
 }
 
-fn parse_function_signature(tq: &mut TokenQueue, self_type: &Type, indent_level: usize, target: &Target) -> CompileResult<FunctionSignature>
-{
+fn parse_function_signature(
+    tq: &mut TokenQueue,
+    self_type: &Type,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<FunctionSignature> {
     let (name, name_span) = tq.expect_identifier()?;
     let args = parse_function_arguments(tq, self_type, indent_level, target)?;
     let ret_type = if tq.is_next(&TokenKind::Arrow) {
@@ -425,8 +441,12 @@ fn parse_function_signature(tq: &mut TokenQueue, self_type: &Type, indent_level:
     Ok(sig(&name, ret_type, args, name_span.expanded(sig_span_end)))
 }
 
-fn parse_external_function(tq: &mut TokenQueue, span: &Span, indent_level: usize, target: &Target) -> CompileResult<ExternalFunction>
-{
+fn parse_external_function(
+    tq: &mut TokenQueue,
+    span: &Span,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<ExternalFunction> {
     tq.expect(&TokenKind::Func)?;
     Ok(ExternalFunction::new(
         parse_function_signature(tq, &Type::Unknown, indent_level, target)?,
@@ -434,8 +454,13 @@ fn parse_external_function(tq: &mut TokenQueue, span: &Span, indent_level: usize
     ))
 }
 
-fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, span: &Span, indent_level: usize, target: &Target) -> CompileResult<Function>
-{
+fn parse_function_declaration(
+    tq: &mut TokenQueue,
+    namespace: &str,
+    span: &Span,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Function> {
     let name = if tq.is_next(&TokenKind::Tilde) {
         tq.pop()?;
         let (name, _) = tq.expect_identifier()?;
@@ -445,22 +470,24 @@ fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, span: &Span,
         name
     };
 
-    let (full_name, self_type) = match &name[..]
-    {
+    let (full_name, self_type) = match &name[..] {
         _ if name.starts_with('~') => {
             let self_type = ptr_type(unresolved_type(&name[1..], Vec::new()));
             (namespaced(namespace, &name), self_type)
-        },
+        }
         _ => {
             if tq.is_next(&TokenKind::BinaryOperator(BinaryOperator::Dot)) {
                 tq.pop()?;
                 let (member_function_name, _) = tq.expect_identifier()?;
                 let self_type = ptr_type(unresolved_type(&name, Vec::new()));
-                (namespaced(namespace, &format!("{}.{}", name, member_function_name)), self_type)
+                (
+                    namespaced(namespace, &format!("{}.{}", name, member_function_name)),
+                    self_type,
+                )
             } else {
                 (namespaced(namespace, &name), Type::Unknown)
             }
-        },
+        }
     };
 
     let args = parse_function_arguments(tq, &self_type, indent_level, target)?;
@@ -479,8 +506,13 @@ fn parse_function_declaration(tq: &mut TokenQueue, namespace: &str, span: &Span,
     Ok(Function::new(signature, true, expr, func_span))
 }
 
-fn parse_struct_pattern(tq: &mut TokenQueue, name: &str, span: &Span, indent_level: usize, target: &Target) -> CompileResult<StructPattern>
-{
+fn parse_struct_pattern(
+    tq: &mut TokenQueue,
+    name: &str,
+    span: &Span,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<StructPattern> {
     tq.expect(&TokenKind::OpenCurly)?;
     let parse_binding = |tq: &mut TokenQueue, _indent_level: usize, _target: &Target| {
         let mode = if tq.is_next(&TokenKind::BinaryOperator(BinaryOperator::Mul)) {
@@ -491,17 +523,19 @@ fn parse_struct_pattern(tq: &mut TokenQueue, name: &str, span: &Span, indent_lev
         };
 
         let (name, _) = tq.expect_identifier()?;
-        Ok(StructPatternBinding{name, typ: Type::Unknown, mode})
+        Ok(StructPatternBinding {
+            name,
+            typ: Type::Unknown,
+            mode,
+        })
     };
     let bindings = parse_comma_separated_list(tq, &TokenKind::CloseCurly, parse_binding, indent_level, target)?;
     Ok(struct_pattern(name, bindings, Type::Unknown, span.expanded(tq.pos())))
 }
 
-pub fn parse_pattern(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<Pattern>
-{
+pub fn parse_pattern(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<Pattern> {
     let tok = tq.pop()?;
-    match tok.kind
-    {
+    match tok.kind {
         TokenKind::Number(ref num) => parse_number(tq, num, &tok.span, target).map(Pattern::Literal),
         TokenKind::True => Ok(Pattern::Literal(Literal::Bool(tok.span, true))),
         TokenKind::False => Ok(Pattern::Literal(Literal::Bool(tok.span, false))),
@@ -509,21 +543,16 @@ pub fn parse_pattern(tq: &mut TokenQueue, indent_level: usize, target: &Target) 
         TokenKind::StringLiteral(s) => Ok(Pattern::Literal(Literal::String(tok.span, s))),
 
         TokenKind::OpenBracket => {
-            if tq.is_next(&TokenKind::CloseBracket)
-            {
+            if tq.is_next(&TokenKind::CloseBracket) {
                 tq.pop()?;
                 Ok(empty_array_pattern(tok.span.expanded(tq.pos())))
-            }
-            else if tq.is_next_at(1, &TokenKind::Pipe)
-            {
+            } else if tq.is_next_at(1, &TokenKind::Pipe) {
                 let (head, _head_span) = tq.expect_identifier()?;
                 tq.expect(&TokenKind::Pipe)?;
                 let (tail, _) = tq.expect_identifier()?;
                 tq.expect(&TokenKind::CloseBracket)?;
                 Ok(array_pattern(&head, &tail, tok.span.expanded(tq.pos())))
-            }
-            else
-            {
+            } else {
                 let al = parse_array_literal(tq, &tok.span, indent_level, target)?;
                 Ok(Pattern::Literal(al))
             }
@@ -545,21 +574,24 @@ pub fn parse_pattern(tq: &mut TokenQueue, indent_level: usize, target: &Target) 
             Ok(optional_pattern(name, tok.span.expanded(name_span.end)))
         }
 
-        TokenKind::Nil => {
-            Ok(Pattern::Nil(tok.span))
-        }
+        TokenKind::Nil => Ok(Pattern::Nil(tok.span)),
 
         _ => parse_error_result(&tok.span, format!("Unexpected token '{}'", tok)),
     }
 }
 
-fn parse_indented_block<T, P>(tq: &mut TokenQueue, indent_level: usize, parse_element: P, target: &Target) -> CompileResult<Vec<T>>
-    where P: Fn(&mut TokenQueue, usize, &Target) -> CompileResult<T>
+fn parse_indented_block<T, P>(
+    tq: &mut TokenQueue,
+    indent_level: usize,
+    parse_element: P,
+    target: &Target,
+) -> CompileResult<Vec<T>>
+where
+    P: Fn(&mut TokenQueue, usize, &Target) -> CompileResult<T>,
 {
     let block_indent_level = check_indent_level(tq, indent_level)?;
     let mut elements = Vec::new();
-    while tq.is_in_same_block(block_indent_level)
-    {
+    while tq.is_in_same_block(block_indent_level) {
         tq.pop_indent()?;
         let element = parse_element(tq, block_indent_level, target)?;
         elements.push(element);
@@ -568,8 +600,7 @@ fn parse_indented_block<T, P>(tq: &mut TokenQueue, indent_level: usize, parse_el
     Ok(elements)
 }
 
-fn parse_match(tq: &mut TokenQueue, span: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression>
-{
+fn parse_match(tq: &mut TokenQueue, span: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression> {
     let target_expr = parse_expression(tq, indent_level, target)?;
     tq.expect(&TokenKind::Colon)?;
 
@@ -586,29 +617,30 @@ fn parse_match(tq: &mut TokenQueue, span: &Span, indent_level: usize, target: &T
     Ok(match_expression(target_expr, cases, span.expanded(tq.pos())))
 }
 
-fn parse_lambda(tq: &mut TokenQueue, span: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression>
-{
+fn parse_lambda(tq: &mut TokenQueue, span: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression> {
     let args = parse_function_arguments(tq, &Type::Unknown, indent_level, target)?;
     tq.expect(&TokenKind::Arrow)?;
     let expr = parse_expression(tq, indent_level, target)?;
     Ok(lambda(args, expr, span.expanded(tq.pos())))
 }
 
-fn is_end_of_bindings(tq: &mut TokenQueue, indent_level: usize) -> bool
-{
-    tq.is_next(&TokenKind::In) ||
-    tq.is_next(&TokenKind::SemiColon) ||
-    tq.is_next(&TokenKind::CloseParen) ||
-    tq.is_next(&TokenKind::CloseCurly) ||
-    tq.is_next(&TokenKind::CloseBracket) ||
-    !tq.is_in_same_block(indent_level + 1)
+fn is_end_of_bindings(tq: &mut TokenQueue, indent_level: usize) -> bool {
+    tq.is_next(&TokenKind::In)
+        || tq.is_next(&TokenKind::SemiColon)
+        || tq.is_next(&TokenKind::CloseParen)
+        || tq.is_next(&TokenKind::CloseCurly)
+        || tq.is_next(&TokenKind::CloseBracket)
+        || !tq.is_in_same_block(indent_level + 1)
 }
 
-fn parse_bindings(tq: &mut TokenQueue, mutable: bool, indent_level: usize, target: &Target) -> CompileResult<Vec<Binding>>
-{
+fn parse_bindings(
+    tq: &mut TokenQueue,
+    mutable: bool,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Vec<Binding>> {
     let mut bindings = Vec::new();
-    while !is_end_of_bindings(tq, indent_level)
-    {
+    while !is_end_of_bindings(tq, indent_level) {
         tq.pop_indent()?;
 
         let (binding_type, span) = if tq.is_next(&TokenKind::OpenCurly) {
@@ -630,14 +662,18 @@ fn parse_bindings(tq: &mut TokenQueue, mutable: bool, indent_level: usize, targe
     Ok(bindings)
 }
 
-fn parse_binding(tq: &mut TokenQueue, mutable: bool, span: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression>
-{
+fn parse_binding(
+    tq: &mut TokenQueue,
+    mutable: bool,
+    span: &Span,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Expression> {
     let b = parse_bindings(tq, mutable, indent_level, target)?;
     Ok(bindings(b, span.expanded(tq.pos())))
 }
 
-fn parse_if(tq: &mut TokenQueue, span: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression>
-{
+fn parse_if(tq: &mut TokenQueue, span: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression> {
     let cond = parse_expression(tq, indent_level, target)?;
     tq.expect(&TokenKind::Colon)?;
     let on_true = parse_block(tq, &span.file, indent_level, target)?;
@@ -645,8 +681,7 @@ fn parse_if(tq: &mut TokenQueue, span: &Span, indent_level: usize, target: &Targ
         tq.pop_indent()?;
     }
 
-    if tq.is_next(&TokenKind::Else)
-    {
+    if tq.is_next(&TokenKind::Else) {
         tq.expect(&TokenKind::Else)?;
         let on_false = if tq.is_next(&TokenKind::If) {
             let tok = tq.expect(&TokenKind::If)?;
@@ -656,28 +691,28 @@ fn parse_if(tq: &mut TokenQueue, span: &Span, indent_level: usize, target: &Targ
         };
 
         Ok(if_expression(cond, on_true, on_false, span.expanded(tq.pos())))
-    }
-    else
-    {
+    } else {
         Ok(single_if_expression(cond, on_true, span.expanded(tq.pos())))
     }
 }
 
-fn parse_sum_type(tq: &mut TokenQueue, namespace: &str, span: &Span, indent_level: usize, target: &Target) -> CompileResult<SumTypeDeclaration>
-{
+fn parse_sum_type(
+    tq: &mut TokenQueue,
+    namespace: &str,
+    span: &Span,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<SumTypeDeclaration> {
     let (sum_type_name, _) = tq.expect_identifier()?;
     tq.expect(&TokenKind::Colon)?;
 
     let parse_sum_type_case = |tq: &mut TokenQueue, indent_level: usize, target: &Target| {
-        if tq.is_next_at(1, &TokenKind::OpenCurly)
-        {
+        if tq.is_next_at(1, &TokenKind::OpenCurly) {
             let sd = parse_struct_type(tq, &sum_type_name, indent_level, target)?;
             let span = sd.span.clone();
             let name = namespaced(namespace, &sd.name);
             Ok(sum_type_case_decl(&name, Some(sd), span))
-        }
-        else
-        {
+        } else {
             let (case_name, case_name_span) = tq.expect_identifier()?;
             let name = format!("{}::{}::{}", namespace, sum_type_name, case_name);
             Ok(sum_type_case_decl(&name, None, case_name_span))
@@ -685,11 +720,14 @@ fn parse_sum_type(tq: &mut TokenQueue, namespace: &str, span: &Span, indent_leve
     };
     let cases = parse_indented_block(tq, indent_level, parse_sum_type_case, target)?;
 
-    Ok(sum_type_decl(&namespaced(namespace, &sum_type_name), cases, span.expanded(tq.pos())))
+    Ok(sum_type_decl(
+        &namespaced(namespace, &sum_type_name),
+        cases,
+        span.expanded(tq.pos()),
+    ))
 }
 
-fn namespaced(namespace: &str, name: &str) -> String
-{
+fn namespaced(namespace: &str, name: &str) -> String {
     if namespace.is_empty() {
         name.into()
     } else {
@@ -697,15 +735,23 @@ fn namespaced(namespace: &str, name: &str) -> String
     }
 }
 
-fn parse_struct_type(tq: &mut TokenQueue, namespace: &str, indent_level: usize, target: &Target) -> CompileResult<StructDeclaration>
-{
+fn parse_struct_type(
+    tq: &mut TokenQueue,
+    namespace: &str,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<StructDeclaration> {
     let (name, span) = tq.expect_identifier()?;
 
     let parse_struct_member = |tq: &mut TokenQueue, indent_level: usize, target: &Target| {
         let (member_name, member_name_span) = tq.expect_identifier()?;
         tq.expect(&TokenKind::Colon)?;
         let typ = parse_type(tq, indent_level, target)?;
-        Ok(struct_member_declaration(&member_name, typ, member_name_span.expanded(tq.pos())))
+        Ok(struct_member_declaration(
+            &member_name,
+            typ,
+            member_name_span.expanded(tq.pos()),
+        ))
     };
 
     let members = if tq.is_next(&TokenKind::OpenCurly) {
@@ -716,29 +762,46 @@ fn parse_struct_type(tq: &mut TokenQueue, namespace: &str, indent_level: usize, 
         parse_indented_block(tq, indent_level, parse_struct_member, target)?
     };
 
-    Ok(struct_declaration(&namespaced(namespace, &name), members, span.expanded(tq.pos())))
-}
-
-fn parse_struct_initializer(tq: &mut TokenQueue, name: &NameRef, indent_level: usize, target: &Target) -> CompileResult<Expression>
-{
-    tq.expect(&TokenKind::OpenCurly)?;
-    let expressions = parse_comma_separated_list(tq, &TokenKind::CloseCurly, parse_expression, indent_level, target)?;
-    Ok(Expression::StructInitializer(
-        struct_initializer(&name.name, expressions, name.span.expanded(tq.pos()))
+    Ok(struct_declaration(
+        &namespaced(namespace, &name),
+        members,
+        span.expanded(tq.pos()),
     ))
 }
 
+fn parse_struct_initializer(
+    tq: &mut TokenQueue,
+    name: &NameRef,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Expression> {
+    tq.expect(&TokenKind::OpenCurly)?;
+    let expressions = parse_comma_separated_list(tq, &TokenKind::CloseCurly, parse_expression, indent_level, target)?;
+    Ok(Expression::StructInitializer(struct_initializer(
+        &name.name,
+        expressions,
+        name.span.expanded(tq.pos()),
+    )))
+}
 
-fn parse_member_access(tq: &mut TokenQueue, left_expr: Expression, indent_level: usize, target: &Target) -> CompileResult<Expression>
-{
+fn parse_member_access(
+    tq: &mut TokenQueue,
+    left_expr: Expression,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Expression> {
     let mut left = left_expr;
-    while tq.is_next(&TokenKind::BinaryOperator(BinaryOperator::Dot))
-    {
+    while tq.is_next(&TokenKind::BinaryOperator(BinaryOperator::Dot)) {
         tq.pop()?;
         let (name, name_span) = tq.expect_identifier()?;
 
         if tq.is_next(&TokenKind::OpenParen) {
-            let call = Box::new(parse_function_call(tq, NameRef::new(name, name_span), indent_level, target)?);
+            let call = Box::new(parse_function_call(
+                tq,
+                NameRef::new(name, name_span),
+                indent_level,
+                target,
+            )?);
             let span = left.span().expanded(call.span.end);
             left = member_access(left, MemberAccessType::Call(call), span);
         } else {
@@ -751,9 +814,8 @@ fn parse_member_access(tq: &mut TokenQueue, left_expr: Expression, indent_level:
     Ok(left)
 }
 
-fn check_indent_level(tq: &mut TokenQueue, indent_level: usize) -> CompileResult<usize>
-{
-     if let Some((level, indent_span)) = tq.pop_indent()? {
+fn check_indent_level(tq: &mut TokenQueue, indent_level: usize) -> CompileResult<usize> {
+    if let Some((level, indent_span)) = tq.pop_indent()? {
         if level <= indent_level {
             return parse_error_result(&indent_span, "Expecting an indented block");
         }
@@ -764,26 +826,26 @@ fn check_indent_level(tq: &mut TokenQueue, indent_level: usize) -> CompileResult
     }
 }
 
-fn is_end_of_block(tq: &mut TokenQueue) -> bool
-{
-    tq.peek().map(|tok| match tok.kind {
-        TokenKind::CloseParen |
-        TokenKind::CloseBracket |
-        TokenKind::Else |
-        TokenKind::EOF => true,
-        _ => false,
-    }).unwrap_or(true)
+fn is_end_of_block(tq: &mut TokenQueue) -> bool {
+    tq.peek()
+        .map(|tok| match tok.kind {
+            TokenKind::CloseParen | TokenKind::CloseBracket | TokenKind::Else | TokenKind::EOF => true,
+            _ => false,
+        })
+        .unwrap_or(true)
 }
 
-
-fn parse_block(tq: &mut TokenQueue, current_file: &str, indent_level: usize, target: &Target) -> CompileResult<Expression>
-{
+fn parse_block(
+    tq: &mut TokenQueue,
+    current_file: &str,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Expression> {
     let mut ends_with_semicolon = false;
     let mut expressions = Vec::new();
     let block_indent_level = check_indent_level(tq, indent_level)?;
 
-    while tq.is_in_same_block(block_indent_level)
-    {
+    while tq.is_in_same_block(block_indent_level) {
         tq.pop_indent()?;
         if is_end_of_block(tq) {
             break;
@@ -805,7 +867,12 @@ fn parse_block(tq: &mut TokenQueue, current_file: &str, indent_level: usize, tar
                 Expression::MemberAccess(ma) => assign(op, AssignTarget::MemberAccess(*ma), rhs, span),
                 Expression::Dereference(d) => assign(op, AssignTarget::Dereference(*d), rhs, span),
                 Expression::IndexOperation(iop) => assign(op, AssignTarget::IndexOperation(*iop), rhs, span),
-                _ => return parse_error_result(&e.span(), "Expression not allowed on the left hand side of an assignment")
+                _ => {
+                    return parse_error_result(
+                        &e.span(),
+                        "Expression not allowed on the left hand side of an assignment",
+                    )
+                }
             };
             expressions.push(assign_expr);
         } else {
@@ -829,24 +896,22 @@ fn parse_block(tq: &mut TokenQueue, current_file: &str, indent_level: usize, tar
         e.set_precedence(TOP_PRECEDENCE);
         Ok(e)
     } else {
-        let start = expressions.get(0)
+        let start = expressions
+            .get(0)
             .map(|e| e.span())
             .unwrap_or_else(|| Span::single(current_file, tq.pos()));
         Ok(block(expressions, start.expanded(tq.pos())))
     }
 }
 
-fn parse_while(tq: &mut TokenQueue, start: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression>
-{
+fn parse_while(tq: &mut TokenQueue, start: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression> {
     let cond = parse_expression(tq, indent_level, target)?;
     tq.expect(&TokenKind::Colon)?;
     let body = parse_block(tq, &start.file, indent_level, target)?;
     Ok(while_loop(cond, body, start.expanded(tq.pos())))
 }
 
-
-fn parse_for(tq: &mut TokenQueue, start: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression>
-{
+fn parse_for(tq: &mut TokenQueue, start: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression> {
     let (loop_variable, _) = tq.expect_identifier()?;
     tq.expect(&TokenKind::In)?;
 
@@ -857,8 +922,12 @@ fn parse_for(tq: &mut TokenQueue, start: &Span, indent_level: usize, target: &Ta
     Ok(for_loop(&loop_variable, iterable, body, start.expanded(tq.pos())))
 }
 
-fn parse_compiler_call(tq: &mut TokenQueue, start: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression>
-{
+fn parse_compiler_call(
+    tq: &mut TokenQueue,
+    start: &Span,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Expression> {
     let (name, name_span) = tq.expect_identifier()?;
     match &name[..] {
         "size" => {
@@ -866,32 +935,39 @@ fn parse_compiler_call(tq: &mut TokenQueue, start: &Span, indent_level: usize, t
             let typ = parse_type(tq, indent_level, target)?;
             tq.expect(&TokenKind::CloseParen)?;
 
-            Ok(Expression::CompilerCall(CompilerCall::SizeOf(typ, start.expanded(tq.pos()))))
-        },
+            Ok(Expression::CompilerCall(CompilerCall::SizeOf(
+                typ,
+                start.expanded(tq.pos()),
+            )))
+        }
 
         "slice" => {
             tq.expect(&TokenKind::OpenParen)?;
-            let arguments = parse_comma_separated_list(tq, &TokenKind::CloseParen, parse_expression, indent_level, target)?;
+            let arguments =
+                parse_comma_separated_list(tq, &TokenKind::CloseParen, parse_expression, indent_level, target)?;
             let span = start.expanded(tq.pos());
             if arguments.len() != 2 {
                 return parse_error_result(&span, "@slice expects two arguments");
             }
 
-            Ok(Expression::CompilerCall(CompilerCall::Slice{
+            Ok(Expression::CompilerCall(CompilerCall::Slice {
                 data: Box::new(arguments[0].clone()),
                 len: Box::new(arguments[1].clone()),
                 typ: Type::Unknown,
-                span
+                span,
             }))
         }
 
-        _ => parse_error_result(&name_span, format!("Unknown compiler call {}", name))
+        _ => parse_error_result(&name_span, format!("Unknown compiler call {}", name)),
     }
 }
 
-fn parse_return(tq: &mut TokenQueue, start: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression>
-{
-    if tq.peek().map(|tok| is_end_of_expression(tok)).unwrap_or(true) {
+fn parse_return(tq: &mut TokenQueue, start: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression> {
+    if tq
+        .peek()
+        .map(|tok| is_end_of_expression(tok))
+        .unwrap_or(true)
+    {
         Ok(return_expr(Expression::Void, start.clone()))
     } else {
         let expr = parse_expression(tq, indent_level, target)?;
@@ -899,118 +975,82 @@ fn parse_return(tq: &mut TokenQueue, start: &Span, indent_level: usize, target: 
     }
 }
 
-fn parse_expression_start(tq: &mut TokenQueue, tok: Token, indent_level: usize, target: &Target) -> CompileResult<Expression>
-{
-    let mut lhs = match tok.kind
-    {
-        TokenKind::Nil => {
-            nil_expr(tok.span)
-        },
+fn parse_expression_start(
+    tq: &mut TokenQueue,
+    tok: Token,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Expression> {
+    let mut lhs = match tok.kind {
+        TokenKind::Nil => nil_expr(tok.span),
 
-        TokenKind::Null => {
-            Expression::Literal(Literal::NullPtr(tok.span, Type::Unknown))
-        },
+        TokenKind::Null => Expression::Literal(Literal::NullPtr(tok.span, Type::Unknown)),
 
-        TokenKind::True => {
-            Expression::Literal(Literal::Bool(tok.span, true))
-        },
+        TokenKind::True => Expression::Literal(Literal::Bool(tok.span, true)),
 
-        TokenKind::False => {
-            Expression::Literal(Literal::Bool(tok.span, false))
-        },
+        TokenKind::False => Expression::Literal(Literal::Bool(tok.span, false)),
 
-        TokenKind::CharLiteral(c) => {
-            Expression::Literal(Literal::Char(tok.span, c))
-        },
+        TokenKind::CharLiteral(c) => Expression::Literal(Literal::Char(tok.span, c)),
 
-        TokenKind::Func => {
-            parse_lambda(tq, &tok.span, indent_level, target)?
-        },
+        TokenKind::Func => parse_lambda(tq, &tok.span, indent_level, target)?,
 
-        TokenKind::Match => {
-            parse_match(tq, &tok.span, indent_level, target)?
-        },
+        TokenKind::Match => parse_match(tq, &tok.span, indent_level, target)?,
 
-        TokenKind::Let => {
-            parse_binding(tq, false, &tok.span, indent_level, target)?
-        },
+        TokenKind::Let => parse_binding(tq, false, &tok.span, indent_level, target)?,
 
-        TokenKind::Var => {
-            parse_binding(tq, true, &tok.span, indent_level, target)?
-        },
+        TokenKind::Var => parse_binding(tq, true, &tok.span, indent_level, target)?,
 
-        TokenKind::If => {
-            parse_if(tq, &tok.span, indent_level, target)?
-        },
+        TokenKind::If => parse_if(tq, &tok.span, indent_level, target)?,
 
-        TokenKind::While => {
-            parse_while(tq, &tok.span, indent_level, target)?
-        },
+        TokenKind::While => parse_while(tq, &tok.span, indent_level, target)?,
 
-        TokenKind::For => {
-            parse_for(tq, &tok.span, indent_level, target)?
-        },
+        TokenKind::For => parse_for(tq, &tok.span, indent_level, target)?,
 
-        TokenKind::OpenBracket => {
-            parse_array_literal(tq, &tok.span, indent_level, target).map(Expression::Literal)?
-        },
+        TokenKind::OpenBracket => parse_array_literal(tq, &tok.span, indent_level, target).map(Expression::Literal)?,
 
         TokenKind::OpenParen => {
             let inner = parse_block(tq, &tok.span.file, indent_level, target)?;
             tq.expect(&TokenKind::CloseParen)?;
             inner
-        },
+        }
 
         TokenKind::OpenCurly => {
             tq.push_front(tok.clone());
             parse_struct_initializer(tq, &NameRef::new("".into(), tok.span), indent_level, target)?
-        },
+        }
 
         TokenKind::Identifier(id) => {
             let nr = parse_name(tq, id, &tok.span)?;
-            if tq.is_next(&TokenKind::BinaryOperator(BinaryOperator::Dot))
-            {
+            if tq.is_next(&TokenKind::BinaryOperator(BinaryOperator::Dot)) {
                 parse_member_access(tq, Expression::NameRef(nr), indent_level, target)?
-            }
-            else if tq.is_next(&TokenKind::OpenParen)
-            {
+            } else if tq.is_next(&TokenKind::OpenParen) {
                 Expression::Call(Box::new(parse_function_call(tq, nr, indent_level, target)?))
-            }
-            else if tq.is_next(&TokenKind::OpenCurly)
-            {
+            } else if tq.is_next(&TokenKind::OpenCurly) {
                 parse_struct_initializer(tq, &nr, indent_level, target)?
-            }
-            else
-            {
+            } else {
                 Expression::NameRef(nr)
             }
-        },
+        }
 
-        TokenKind::StringLiteral(s) => {
-            Expression::Literal(Literal::String(tok.span, s))
-        },
+        TokenKind::StringLiteral(s) => Expression::Literal(Literal::String(tok.span, s)),
 
-        TokenKind::Number(n) => {
-            parse_number(tq, &n, &tok.span, target).map(Expression::Literal)?
-        },
+        TokenKind::Number(n) => parse_number(tq, &n, &tok.span, target).map(Expression::Literal)?,
 
         TokenKind::New => {
             let inner = parse_expression(tq, indent_level, target)?;
             new(inner, tok.span.expanded(tq.pos()))
-        },
+        }
 
         TokenKind::Delete => {
             let inner = parse_expression(tq, indent_level, target)?;
             delete(inner, tok.span.expanded(tq.pos()))
-        },
+        }
 
-        TokenKind::UnaryOperator(op) => {
-            parse_unary_expression(tq, op, &tok.span, indent_level, target)?
-        },
+        TokenKind::UnaryOperator(op) => parse_unary_expression(tq, op, &tok.span, indent_level, target)?,
 
         TokenKind::BinaryOperator(BinaryOperator::Sub) => {
             parse_unary_expression(tq, UnaryOperator::Sub, &tok.span, indent_level, target)?
-        },
+        }
 
         TokenKind::Ampersand => {
             let inner = parse_expression(tq, indent_level, target)?;
@@ -1023,45 +1063,39 @@ fn parse_expression_start(tq: &mut TokenQueue, tok: Token, indent_level: usize, 
             dereference(inner, tok.span.expanded(tq.pos()))
         }
 
-        TokenKind::At => {
-            parse_compiler_call(tq, &tok.span, indent_level, target)?
-        }
+        TokenKind::At => parse_compiler_call(tq, &tok.span, indent_level, target)?,
 
-        TokenKind::Return => {
-            parse_return(tq, &tok.span, indent_level, target)?
-        }
+        TokenKind::Return => parse_return(tq, &tok.span, indent_level, target)?,
 
         _ => return parse_error_result(&tok.span, format!("Unexpected token '{}'", tok)),
     };
 
     while !is_end_of_expression(tq.peek().expect("Unexpected EOF")) {
         let next = tq.pop()?;
-        match next.kind
-        {
+        match next.kind {
             TokenKind::OpenBracket => {
                 let index_expr = parse_expression(tq, indent_level, target)?;
                 tq.expect(&TokenKind::CloseBracket)?;
                 let span = lhs.span().expanded(tq.pos());
                 lhs = index_op(lhs, index_expr, span);
-            },
+            }
 
             TokenKind::BinaryOperator(BinaryOperator::Dot) => {
                 tq.push_front(next);
                 lhs = parse_member_access(tq, lhs, indent_level, target)?;
-            },
+            }
 
             _ => {
                 tq.push_front(next);
-                break
-            },
+                break;
+            }
         }
     }
 
     Ok(lhs)
 }
 
-pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<Expression>
-{
+pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<Expression> {
     let tok = tq.pop()?;
     let e_start = parse_expression_start(tq, tok, indent_level, target)?;
     if tq.is_next_binary_operator() {
@@ -1071,10 +1105,15 @@ pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize, target: &Targe
     }
 }
 
-fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool, indent_level: usize, namespace: &str, target: &Target) -> CompileResult<()>
-{
-    while !is_end_of_bindings(tq, indent_level)
-    {
+fn parse_global_bindings(
+    module: &mut Module,
+    tq: &mut TokenQueue,
+    mutable: bool,
+    indent_level: usize,
+    namespace: &str,
+    target: &Target,
+) -> CompileResult<()> {
+    while !is_end_of_bindings(tq, indent_level) {
         let (name, span) = tq.expect_identifier()?;
         tq.expect(&TokenKind::Assign(AssignOperator::Assign))?;
         let init = parse_expression(tq, indent_level, target)?;
@@ -1084,15 +1123,24 @@ fn parse_global_bindings(module: &mut Module, tq: &mut TokenQueue, mutable: bool
         }
 
         let full_name = namespaced(namespace, &name);
-        module.globals.insert(full_name.clone(), global_binding(full_name, init, mutable, span.expanded(tq.pos())));
+        module.globals.insert(
+            full_name.clone(),
+            global_binding(full_name, init, mutable, span.expanded(tq.pos())),
+        );
         eat_comma(tq)?;
     }
 
     Ok(())
 }
 
-fn parse_interface(module: &mut Module, tq: &mut TokenQueue, namespace: &str, span: &Span, indent_level: usize, target: &Target) -> CompileResult<()>
-{
+fn parse_interface(
+    module: &mut Module,
+    tq: &mut TokenQueue,
+    namespace: &str,
+    span: &Span,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<()> {
     let (name, _) = tq.expect_identifier()?;
     if module.types.contains_key(&name) {
         return parse_error_result(span, format!("Type {} already defined in this module", name));
@@ -1109,12 +1157,14 @@ fn parse_interface(module: &mut Module, tq: &mut TokenQueue, namespace: &str, sp
     let functions = parse_indented_block(tq, indent_level, parse_interface_function, target)?;
 
     let name = namespaced(namespace, &name);
-    module.types.insert(name.clone(), TypeDeclaration::Interface(interface(name, functions, span.expanded(tq.pos()))));
+    module.types.insert(
+        name.clone(),
+        TypeDeclaration::Interface(interface(name, functions, span.expanded(tq.pos()))),
+    );
     Ok(())
 }
 
-fn parse_import_name(tq: &mut TokenQueue) -> CompileResult<ImportName>
-{
+fn parse_import_name(tq: &mut TokenQueue) -> CompileResult<ImportName> {
     let mut namespace = Vec::new();
     let mut span = Span::default();
     loop {
@@ -1141,8 +1191,8 @@ fn parse_module<Input: Read>(
     input: &mut Input,
     namespace: &str,
     file_name: &str,
-    target: &Target) -> CompileResult<()>
-{
+    target: &Target,
+) -> CompileResult<()> {
     let mut tq = Lexer::new(file_name).read(input)?;
 
     let add_function = |module: &mut Module, func: Function| -> CompileResult<()> {
@@ -1154,11 +1204,9 @@ fn parse_module<Input: Read>(
     };
 
     let mut indent_level = 0;
-    while !tq.is_next(&TokenKind::EOF)
-    {
+    while !tq.is_next(&TokenKind::EOF) {
         let tok = tq.pop()?;
-        match tok.kind
-        {
+        match tok.kind {
             TokenKind::Indent(level) => {
                 indent_level = level;
             }
@@ -1181,7 +1229,9 @@ fn parse_module<Input: Read>(
                 if module.types.contains_key(&sd.name) {
                     return parse_error_result(&sd.span, format!("Type {} redefined", sd.name));
                 }
-                module.types.insert(sd.name.clone(), TypeDeclaration::Struct(sd));
+                module
+                    .types
+                    .insert(sd.name.clone(), TypeDeclaration::Struct(sd));
             }
 
             TokenKind::Enum => {
@@ -1189,7 +1239,9 @@ fn parse_module<Input: Read>(
                 if module.types.contains_key(&st.name) {
                     return parse_error_result(&st.span, format!("Type {} redefined", st.name));
                 }
-                module.types.insert(st.name.clone(), TypeDeclaration::Sum(st));
+                module
+                    .types
+                    .insert(st.name.clone(), TypeDeclaration::Sum(st));
             }
 
             TokenKind::Type => {
@@ -1199,23 +1251,23 @@ fn parse_module<Input: Read>(
             TokenKind::Extern => {
                 let ext_func = parse_external_function(&mut tq, &tok.span, indent_level, target)?;
                 if module.externals.contains_key(&ext_func.sig.name) {
-                    return parse_error_result(&ext_func.span, format!("External function {} redefined", ext_func.sig.name));
+                    return parse_error_result(
+                        &ext_func.span,
+                        format!("External function {} redefined", ext_func.sig.name),
+                    );
                 }
                 module.externals.insert(ext_func.sig.name.clone(), ext_func);
             }
 
-            TokenKind::Import => {
-                loop
-                {
-                    let import = parse_import_name(&mut tq)?;
-                    module.import_names.insert(import);
-                    if tq.is_next(&TokenKind::Comma) {
-                        tq.pop()?;
-                    } else {
-                        break;
-                    }
+            TokenKind::Import => loop {
+                let import = parse_import_name(&mut tq)?;
+                module.import_names.insert(import);
+                if tq.is_next(&TokenKind::Comma) {
+                    tq.pop()?;
+                } else {
+                    break;
                 }
-            }
+            },
 
             TokenKind::Func => {
                 let func = parse_function_declaration(&mut tq, namespace, &tok.span, indent_level, target)?;
@@ -1223,8 +1275,13 @@ fn parse_module<Input: Read>(
             }
 
             _ => {
-                return parse_error_result(&tok.span,
-                    format!("Expected import, fn, let, var, extern, type, struct, enum or interface found token {}", tok));
+                return parse_error_result(
+                    &tok.span,
+                    format!(
+                        "Expected import, fn, let, var, extern, type, struct, enum or interface found token {}",
+                        tok
+                    ),
+                );
             }
         }
     }
@@ -1232,26 +1289,29 @@ fn parse_module<Input: Read>(
     Ok(())
 }
 
-pub fn parse_file(file_path: &Path, namespace: &str, target: &Target) -> CompileResult<Module>
-{
+pub fn parse_file(file_path: &Path, namespace: &str, target: &Target) -> CompileResult<Module> {
     let op_name = format!("Parsing {}", file_path.to_string_lossy());
-    time_operation(2, &op_name, ||{
+    time_operation(2, &op_name, || {
         let mut module = Module::new(namespace);
         let mut file = fs::File::open(file_path)?;
-        parse_module(&mut module, &mut file, namespace, file_path.to_string_lossy().deref(), target)?;
+        parse_module(
+            &mut module,
+            &mut file,
+            namespace,
+            file_path.to_string_lossy().deref(),
+            target,
+        )?;
         Ok(module)
     })
 }
-
 
 #[cfg(test)]
 use package::Package;
 
 #[cfg(test)]
-pub fn parse_str(code: &str, root_namespace: &str, target: &Target) -> CompileResult<Package>
-{
+pub fn parse_str(code: &str, root_namespace: &str, target: &Target) -> CompileResult<Package> {
     use std::io::Cursor;
-    
+
     let mut pkg = Package::new(root_namespace);
     let mut module = Module::new(root_namespace);
     let mut cursor = Cursor::new(code);
@@ -1259,4 +1319,3 @@ pub fn parse_str(code: &str, root_namespace: &str, target: &Target) -> CompileRe
     pkg.modules.insert(root_namespace.into(), module);
     Ok(pkg)
 }
-

@@ -2,8 +2,7 @@ use ast::*;
 use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
-pub struct IfExpression
-{
+pub struct IfExpression {
     pub condition: Expression,
     pub on_true: Expression,
     pub on_false: Option<Expression>,
@@ -11,9 +10,8 @@ pub struct IfExpression
     pub typ: Type,
 }
 
-pub fn single_if_expression(condition: Expression, on_true: Expression, span: Span) -> Expression
-{
-    Expression::If(Box::new(IfExpression{
+pub fn single_if_expression(condition: Expression, on_true: Expression, span: Span) -> Expression {
+    Expression::If(Box::new(IfExpression {
         condition: condition,
         on_true: on_true,
         on_false: None,
@@ -22,9 +20,8 @@ pub fn single_if_expression(condition: Expression, on_true: Expression, span: Sp
     }))
 }
 
-pub fn if_expression(condition: Expression, on_true: Expression, on_false: Expression, span: Span) -> Expression
-{
-    Expression::If(Box::new(IfExpression{
+pub fn if_expression(condition: Expression, on_true: Expression, on_false: Expression, span: Span) -> Expression {
+    Expression::If(Box::new(IfExpression {
         condition: condition,
         on_true: on_true,
         on_false: Some(on_false),
@@ -33,10 +30,8 @@ pub fn if_expression(condition: Expression, on_true: Expression, on_false: Expre
     }))
 }
 
-impl TreePrinter for IfExpression
-{
-    fn print(&self, level: usize)
-    {
+impl TreePrinter for IfExpression {
+    fn print(&self, level: usize) {
         let p = prefix(level);
         println!("{}if ({}) (type {})", p, self.span, self.typ);
         self.condition.print(level + 1);

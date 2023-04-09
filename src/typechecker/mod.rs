@@ -1,11 +1,11 @@
-mod typecheck;
-mod typecheckercontext;
+mod genericmapper;
 mod instantiate;
 mod instantiategenerics;
-mod genericmapper;
 mod matchchecker;
-mod typeresolver;
 #[cfg(test)]
 mod tests;
+mod typecheck;
+mod typecheckercontext;
+mod typeresolver;
 
-pub use self::typecheck::{type_check_module};
+pub use self::typecheck::type_check_module;

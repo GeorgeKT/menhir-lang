@@ -1,30 +1,32 @@
-use std::ffi::{CString};
-use std::collections::HashMap;
-use std::rc::Rc;
 use libc;
 use llvm::core::*;
 use llvm::prelude::*;
+use std::collections::HashMap;
+use std::ffi::CString;
+use std::rc::Rc;
 
+use super::context::Context;
+use super::instructions::*;
+use super::symboltable::FunctionInstance;
+use super::valueref::ValueRef;
 use ast::*;
 use bytecode::*;
 use span::Span;
-use super::symboltable::FunctionInstance;
-use super::context::Context;
-use super::instructions::*;
-use super::valueref::ValueRef;
 
-
-pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, name_override: Option<&str>)
-{
+pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, name_override: Option<&str>) {
     let ret_type = ctx.resolve_type(&sig.return_type);
-    let mut arg_types: Vec<_> = sig.args.iter().map(|arg|{
-        let llvm_type = ctx.resolve_type(&arg.typ);
-        if arg.typ.pass_by_value() {
-            llvm_type
-        } else {
-            LLVMPointerType(llvm_type, 0)
-        }
-    }).collect();
+    let mut arg_types: Vec<_> = sig
+        .args
+        .iter()
+        .map(|arg| {
+            let llvm_type = ctx.resolve_type(&arg.typ);
+            if arg.typ.pass_by_value() {
+                llvm_type
+            } else {
+                LLVMPointerType(llvm_type, 0)
+            }
+        })
+        .collect();
 
     let function_type = LLVMFunctionType(ret_type, arg_types.as_mut_ptr(), arg_types.len() as libc::c_uint, 0);
     let llvm_name = name_override.unwrap_or(&sig.name);
@@ -35,15 +37,15 @@ pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, name_
     ctx.add_function(Rc::new(fi));
 }
 
-pub unsafe fn gen_function_ptr(ctx: &mut Context, name: &str, func_ptr: LLVMValueRef, return_type: Type, typ: Type)
-{
+pub unsafe fn gen_function_ptr(ctx: &mut Context, name: &str, func_ptr: LLVMValueRef, return_type: Type, typ: Type) {
     let fi = FunctionInstance::new(name, func_ptr, return_type, typ);
     ctx.add_function(Rc::new(fi));
 }
 
-pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction)
-{
-    let fi = ctx.get_function(&func.sig.name).expect("Internal Compiler Error: Unknown function");
+pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction) {
+    let fi = ctx
+        .get_function(&func.sig.name)
+        .expect("Internal Compiler Error: Unknown function");
     let entry_bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, cstr!("entry"));
     LLVMPositionBuilderAtEnd(ctx.builder, entry_bb);
 
@@ -51,12 +53,11 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction)
 
     for (i, arg) in func.sig.args.iter().enumerate() {
         let var = LLVMGetParam(fi.function, i as libc::c_uint);
-        match arg.typ
-        {
+        match arg.typ {
             Type::Func(ref ft) => {
                 gen_function_ptr(ctx, &arg.name, var, ft.return_type.clone(), arg.typ.clone());
                 ctx.set_variable(&arg.name, ValueRef::new(var, arg.typ.clone()));
-            },
+            }
 
             _ => {
                 if arg.typ.pass_by_value() {
@@ -72,7 +73,7 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction)
                 } else {
                     ctx.set_variable(&arg.name, ValueRef::new(var, ptr_type(arg.typ.clone())));
                 }
-            },
+            }
         }
     }
 
@@ -98,8 +99,7 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction)
     ctx.pop_stack();
 }
 
-pub unsafe fn add_libc_functions(ctx: &mut Context)
-{
+pub unsafe fn add_libc_functions(ctx: &mut Context) {
     // memcpy
     let memcpy_sig = sig(
         "memcpy",
@@ -107,9 +107,14 @@ pub unsafe fn add_libc_functions(ctx: &mut Context)
         vec![
             Argument::new("dst", ptr_type(Type::Void), false, Span::default()),
             Argument::new("src", ptr_type(Type::Void), false, Span::default()),
-            Argument::new("size", ctx.target_machine.target.native_uint_type.clone(), false, Span::default())
+            Argument::new(
+                "size",
+                ctx.target_machine.target.native_uint_type.clone(),
+                false,
+                Span::default(),
+            ),
         ],
-        Span::default()
+        Span::default(),
     );
 
     gen_function_sig(ctx, &memcpy_sig, None);

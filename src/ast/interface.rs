@@ -2,17 +2,15 @@ use ast::*;
 use span::Span;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
-pub struct Interface
-{
+pub struct Interface {
     pub name: String,
     pub functions: Vec<FunctionSignature>,
     pub typ: Type,
     pub span: Span,
 }
 
-pub fn interface(name: String, functions: Vec<FunctionSignature>, span: Span) -> Interface
-{
-    Interface{
+pub fn interface(name: String, functions: Vec<FunctionSignature>, span: Span) -> Interface {
+    Interface {
         name: name,
         functions: functions,
         typ: Type::Unknown,
@@ -20,10 +18,8 @@ pub fn interface(name: String, functions: Vec<FunctionSignature>, span: Span) ->
     }
 }
 
-impl TreePrinter for Interface
-{
-    fn print(&self, level: usize)
-    {
+impl TreePrinter for Interface {
+    fn print(&self, level: usize) {
         let p = prefix(level);
         println!("{}interface {} ({})", p, self.name, self.span);
         for func in &self.functions {
