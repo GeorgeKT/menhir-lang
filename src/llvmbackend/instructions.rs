@@ -91,9 +91,10 @@ pub unsafe fn copy(ctx: &Context, dst: LLVMValueRef, src: LLVMValueRef, typ: LLV
         LLVMBuildBitCast(ctx.builder, src, void_ptr_type, cstr!("src_cast")),
         const_uint(ctx, ctx.target_machine.size_of_type(typ) as u64),
     ];
+
     LLVMBuildCall2(
         ctx.builder,
-        LLVMTypeOf(func.function),
+        ctx.resolve_type(&func.typ),
         func.function,
         args.as_mut_ptr(),
         args.len() as c_uint,
@@ -108,12 +109,13 @@ unsafe fn get_function_arg(ctx: &mut Context, operand: &Operand) -> LLVMValueRef
             if !src.typ.is_pointer() {
                 return src.value;
             }
-
             let inner_type = src
                 .typ
                 .get_pointer_element_type()
                 .expect("Expecting pointer type here");
-            if inner_type.pass_by_value() {
+            if let Type::Func(_) = inner_type {
+                src.load(ctx)
+            } else if inner_type.pass_by_value() {
                 src.load(ctx)
             } else if v.typ == src.typ {
                 src.value
@@ -334,11 +336,11 @@ pub unsafe fn gen_instruction(
     instr: &Instruction,
     blocks: &HashMap<BasicBlockRef, LLVMBasicBlockRef>,
 ) {
-    print!(">> {}", instr);
+    //print!(">> {}", instr);
     match *instr {
         Instruction::Store { ref dst, ref src } => {
-            let vr = get_operand(ctx, src);
             let dst_var = ctx.get_variable(&dst.name, &dst.typ);
+            let vr = get_operand(ctx, src);
             dst_var.store(ctx, &vr);
             if let Type::Func(ref ft) = dst.typ {
                 gen_function_ptr(ctx, &dst.name, vr.value, ft.return_type.clone(), dst.typ.clone());
@@ -430,28 +432,22 @@ pub unsafe fn gen_instruction(
                 .map(|a| get_function_arg(ctx, a))
                 .collect::<Vec<_>>();
 
+            let call = LLVMBuildCall2(
+                ctx.builder,
+                ctx.resolve_type(&func.typ),
+                func.function,
+                func_args.as_mut_ptr(),
+                args.len() as c_uint,
+                if func.return_type != Type::Void {
+                    cstr!("call")
+                } else {
+                    cstr!("")
+                },
+            );
+
             if let Some(ref dst) = *dst {
-                let ret = ValueRef::new(
-                    LLVMBuildCall2(
-                        ctx.builder,
-                        LLVMTypeOf(func.function),
-                        func.function,
-                        func_args.as_mut_ptr(),
-                        args.len() as c_uint,
-                        cstr!("call"),
-                    ),
-                    func.return_type.clone(),
-                );
+                let ret = ValueRef::new(call, func.return_type.clone());
                 ctx.set_variable(&dst.name, ret);
-            } else {
-                LLVMBuildCall2(
-                    ctx.builder,
-                    LLVMTypeOf(func.function),
-                    func.function,
-                    func_args.as_mut_ptr(),
-                    args.len() as c_uint,
-                    cstr!(""),
-                );
             }
         }
 

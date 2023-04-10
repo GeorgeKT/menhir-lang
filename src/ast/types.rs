@@ -1,10 +1,10 @@
 use crate::ast::*;
-use itertools::free::join;
 use crate::span::Span;
+use crate::target::Target;
+use itertools::free::join;
 use std::fmt;
 use std::ops::Deref;
 use std::rc::Rc;
-use crate::target::Target;
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct SumTypeCase {
@@ -385,8 +385,7 @@ impl Type {
             | Type::Char
             | Type::Bool
             | Type::Pointer(_)
-            | Type::Enum(_)
-            | Type::Func(_) => true,
+            | Type::Enum(_) => true,
             _ => false,
         }
     }

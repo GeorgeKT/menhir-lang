@@ -3,8 +3,8 @@ use super::{
     TreePrinter, TypeDeclaration,
 };
 use crate::compileerror::CompileResult;
-use std::collections::{HashMap, HashSet};
 use crate::target::Target;
+use std::collections::{HashMap, HashSet};
 
 pub struct Module {
     pub name: String,

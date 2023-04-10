@@ -6,13 +6,13 @@ use toml;
 
 use crate::ast::TreePrinter;
 use crate::bytecode::{compile_to_byte_code, optimize_module, OptimizationLevel};
+use crate::cli::Dump;
 use crate::compileerror::{CompileError, CompileResult};
 use crate::exportlibrary::ExportLibrary;
 use crate::llvmbackend::TargetMachine;
 use crate::llvmbackend::{link, llvm_code_generation, CodeGenOptions, OutputType};
 use crate::package::Package;
 use crate::timer::{time_operation, time_operation_mut};
-use crate::cli::Dump;
 
 pub struct BuildOptions {
     pub optimize: bool,
@@ -30,7 +30,7 @@ pub struct PackageTarget {
     path: Option<PathBuf>,
     depends: Option<Vec<String>>,
 }
-
+/*
 #[derive(Debug, Deserialize, Default)]
 pub struct PackageDescription {
     name: String,
@@ -39,10 +39,10 @@ pub struct PackageDescription {
     license: String,
     version: String,
 }
-
+ */
 #[derive(Debug, Deserialize, Default)]
 pub struct PackageData {
-    package: PackageDescription,
+    //package: PackageDescription,
     target: Vec<PackageTarget>,
 }
 
@@ -184,7 +184,7 @@ impl PackageTarget {
                 println!("AST: {}", pkg.name);
                 pkg.print(0);
             }
-            _ => ()
+            _ => (),
         }
 
         let mut bc_mod = time_operation(2, "Compile to bytecode", || {

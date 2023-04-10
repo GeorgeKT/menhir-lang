@@ -156,7 +156,9 @@ pub fn fill_in_generics(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{array_type, func_type, generic_type, ptr_type, slice_type, string_type, GenericMapping, IntSize, Type};
+    use crate::ast::{
+        array_type, func_type, generic_type, ptr_type, slice_type, string_type, GenericMapping, IntSize, Type,
+    };
     use crate::span::Span;
     use crate::typechecker::instantiate::make_concrete;
     use crate::typechecker::typecheckercontext::ImportSymbolResolver;

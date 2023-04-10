@@ -3,8 +3,8 @@ use super::typecheck::type_check_function;
 use super::typecheckercontext::{ImportSymbolResolver, TypeCheckerContext};
 use crate::ast::*;
 use crate::compileerror::{unknown_name_result, CompileResult};
-use std::collections::HashMap;
 use crate::target::Target;
+use std::collections::HashMap;
 
 type FunctionMap = HashMap<String, Function>;
 

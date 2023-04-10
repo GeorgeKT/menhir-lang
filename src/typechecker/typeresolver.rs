@@ -1,9 +1,9 @@
 use super::typecheckercontext::TypeCheckerContext;
 use crate::ast::*;
 use crate::compileerror::{unknown_name_result, CompileResult};
+use crate::target::Target;
 use std::collections::HashSet;
 use std::ops::Deref;
-use crate::target::Target;
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum TypeResolved {
@@ -245,10 +245,9 @@ fn resolve_all_types(
 
                     num_resolved += 1;
                 }
-            }
-            /*TypeDeclaration::Alias(ref mut _a) => {
-                panic!("NYI");
-            }*/
+            } /*TypeDeclaration::Alias(ref mut _a) => {
+                  panic!("NYI");
+              }*/
         }
     }
 

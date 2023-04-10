@@ -73,7 +73,10 @@ impl<'a> Context<'a> {
 
     pub fn stack_alloc(&mut self, name: &str, typ: &Type) -> LLVMValueRef {
         unsafe {
-            let typ = self.resolve_type(typ);
+            let mut llvm_type = self.resolve_type(typ);
+            if let Type::Func(_) = typ {
+                llvm_type = LLVMPointerType(llvm_type, 0);
+            }
             let func = self.get_current_function();
             let entry_bb = LLVMGetEntryBasicBlock(func);
             let current_bb = LLVMGetInsertBlock(self.builder);
@@ -81,7 +84,7 @@ impl<'a> Context<'a> {
             LLVMPositionBuilder(self.builder, entry_bb, LLVMGetFirstInstruction(entry_bb));
 
             let name = CString::new(name).expect("Invalid string");
-            let alloc = LLVMBuildAlloca(self.builder, typ, name.as_ptr());
+            let alloc = LLVMBuildAlloca(self.builder, llvm_type, name.as_ptr());
             LLVMPositionBuilderAtEnd(self.builder, current_bb); // Position the builder where it was before
             alloc
         }
@@ -152,6 +155,10 @@ impl<'a> Context<'a> {
         }
     }
 
+    pub fn native_uint_type(&self) -> LLVMTypeRef {
+        self.resolve_type(&self.target_machine.target.native_uint_type)
+    }
+
     pub fn dump_module(&self) {
         println!("LLVM IR: {}", self.name);
         // Dump the module as IR to stdout.
@@ -191,11 +198,9 @@ impl<'a> Context<'a> {
 
         let function_passes = LLVMCreateFunctionPassManagerForModule(self.module);
         let module_passes = LLVMCreatePassManager();
-        let lto_passes = LLVMCreatePassManager();
 
         LLVMPassManagerBuilderPopulateFunctionPassManager(pass_builder, function_passes);
         LLVMPassManagerBuilderPopulateModulePassManager(pass_builder, module_passes);
-        LLVMPassManagerBuilderPopulateLTOPassManager(pass_builder, lto_passes, 1, 1);
         LLVMPassManagerBuilderDispose(pass_builder);
 
         LLVMInitializeFunctionPassManager(function_passes);
@@ -207,10 +212,8 @@ impl<'a> Context<'a> {
         }
 
         LLVMRunPassManager(module_passes, self.module);
-        LLVMRunPassManager(lto_passes, self.module);
         LLVMDisposePassManager(function_passes);
         LLVMDisposePassManager(module_passes);
-        LLVMDisposePassManager(lto_passes);
         Ok(())
     }
 

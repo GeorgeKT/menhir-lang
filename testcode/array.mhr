@@ -1,4 +1,4 @@
-#ret:58
+#ret:9
 fn sum(v: int[]) -> int:
     match v:
         [] => 0
@@ -6,7 +6,4 @@ fn sum(v: int[]) -> int:
 
 fn main() -> int:
     let x = [2, 3, 4]
-    let sx = sum(x)
-    let y = [7; 7]
-    let sy = sum(y)
-    sx + sy
+    sum(x)

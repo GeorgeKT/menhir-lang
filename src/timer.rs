@@ -11,13 +11,7 @@ where
 
     let duration = Instant::now() - start_time;
     let us = duration.as_micros() % 1000;
-    println!(
-        "{}{}: {}.{:03} ms",
-        prefix(level),
-        op_name,
-        duration.as_millis(),
-        us
-    );
+    println!("{}{}: {}.{:03} ms", prefix(level), op_name, duration.as_millis(), us);
     r
 }
 
@@ -31,12 +25,6 @@ where
 
     let duration = Instant::now() - start_time;
     let us = duration.as_micros() % 1000;
-    println!(
-        "{}{}: {}.{:03} ms",
-        prefix(level),
-        op_name,
-        duration.as_millis(),
-        us
-    );
+    println!("{}{}: {}.{:03} ms", prefix(level), op_name, duration.as_millis(), us);
     r
 }

@@ -1,6 +1,6 @@
 use crate::ast::{prefix, Literal, NameRef, TreePrinter, Type};
-use itertools::free::join;
 use crate::span::Span;
+use itertools::free::join;
 use std::fmt;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]

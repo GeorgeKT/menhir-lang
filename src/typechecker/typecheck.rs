@@ -5,10 +5,12 @@ use super::matchchecker::check_match_is_exhaustive;
 use super::typecheckercontext::{ImportSymbolResolver, TypeCheckerContext};
 use super::typeresolver::{resolve_type, resolve_types, TypeResolved};
 use crate::ast::*;
-use crate::compileerror::{type_error, type_error_result, unknown_name, unknown_type_result, CompileError, CompileResult};
+use crate::compileerror::{
+    type_error, type_error_result, unknown_name, unknown_type_result, CompileError, CompileResult,
+};
 use crate::span::Span;
-use std::ops::Deref;
 use crate::target::Target;
+use std::ops::Deref;
 
 #[derive(Debug)]
 enum TypeCheckAction {

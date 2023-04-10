@@ -36,17 +36,17 @@ impl fmt::Display for Var {
 pub struct Scope {
     named_vars: HashMap<String, Var>,
     to_cleanup: Vec<Var>,
-    insert_block: BasicBlockRef,
-    insert_position: usize,
+    //insert_block: BasicBlockRef,
+    //insert_position: usize,
 }
 
 impl Scope {
-    pub fn new(insert_block: BasicBlockRef, insert_position: usize) -> Scope {
+    pub fn new(/*insert_block: BasicBlockRef, insert_position: usize*/) -> Scope {
         Scope {
             named_vars: HashMap::new(),
             to_cleanup: Vec::new(),
-            insert_block: insert_block,
-            insert_position: insert_position,
+            //insert_block: insert_block,
+            //insert_position: insert_position,
         }
     }
 
@@ -141,7 +141,7 @@ impl ByteCodeFunction {
             current_bb: 0,
             bb_counter: 0,
             var_counter: 0,
-            scopes: vec![Scope::new(0, 0)],
+            scopes: vec![Scope::new()],
             destinations: Vec::new(),
         };
 
@@ -184,13 +184,12 @@ impl ByteCodeFunction {
 
     pub fn push_scope(&mut self) {
         let idx = self.current_bb;
-        let insert_position = self
+        let _insert_position = self
             .blocks
             .get_mut(&idx)
             .map(|bb| bb.instructions.len() + 1)
             .expect("Unknown block");
-        self.scopes
-            .push(Scope::new(self.current_bb, insert_position));
+        self.scopes.push(Scope::new());
         self.add(Instruction::StartScope);
     }
 

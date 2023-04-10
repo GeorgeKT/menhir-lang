@@ -30,12 +30,11 @@ use std::path::PathBuf;
 use std::process::exit;
 
 use crate::clap::Parser;
-use crate::cli::{CLI, CompilerCommand, BuildCommand, BuildPkgCommand, ExportsCommand, Dump, LibraryType};
+use crate::cli::{BuildCommand, BuildPkgCommand, CompilerCommand, ExportsCommand, LibraryType, CLI};
 use crate::compileerror::CompileResult;
 use crate::exportlibrary::ExportLibrary;
 use crate::llvmbackend::{llvm_init, llvm_shutdown, OutputType};
 use crate::packagebuild::{BuildOptions, PackageData};
-
 
 fn build_command(bc: BuildCommand) -> CompileResult<i32> {
     let build_options = BuildOptions {
@@ -83,25 +82,18 @@ fn exports_command(e: ExportsCommand) -> CompileResult<i32> {
     Ok(0)
 }
 
-
 fn run() -> CompileResult<i32> {
     let cli = CLI::parse();
     match cli.command {
-        CompilerCommand::Build(b) => {
-            build_command(b)
-        },
-        CompilerCommand::BuildPkg(b) => {
-            build_package_command(b)
-        },
-        CompilerCommand::Exports(e) => {
-            exports_command(e)
-        },
+        CompilerCommand::Build(b) => build_command(b),
+        CompilerCommand::BuildPkg(b) => build_package_command(b),
+        CompilerCommand::Exports(e) => exports_command(e),
         CompilerCommand::Info { triplet } => {
             if triplet {
                 let target_machine = llvm_init()?;
                 print!("{}", target_machine.target.triplet);
             }
-        
+
             Ok(0)
         }
     }

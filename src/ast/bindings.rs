@@ -1,6 +1,6 @@
 use crate::ast::{prefix, Expression, StructPattern, TreePrinter, Type};
-use itertools::free::join;
 use crate::span::Span;
+use itertools::free::join;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum BindingType {

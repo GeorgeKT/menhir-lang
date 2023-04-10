@@ -53,16 +53,17 @@ unsafe fn sum_type_to_llvm_type(context: LLVMContextRef, target_machine: &Target
 unsafe fn func_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachine, ft: &FuncType) -> LLVMTypeRef {
     let mut llvm_arg_types = Vec::with_capacity(ft.args.len());
     for arg in &ft.args {
-        llvm_arg_types.push(to_llvm_type(context, target_machine, arg));
+        let mut arg_type = to_llvm_type(context, target_machine, arg);
+        if !arg.pass_by_value() {
+            arg_type = LLVMPointerType(arg_type, 0);
+        }
+        llvm_arg_types.push(arg_type);
     }
 
-    LLVMPointerType(
-        LLVMFunctionType(
-            to_llvm_type(context, target_machine, &ft.return_type),
-            llvm_arg_types.as_mut_ptr(),
-            ft.args.len() as c_uint,
-            0,
-        ),
+    LLVMFunctionType(
+        to_llvm_type(context, target_machine, &ft.return_type),
+        llvm_arg_types.as_mut_ptr(),
+        ft.args.len() as c_uint,
         0,
     )
 }
