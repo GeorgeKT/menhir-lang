@@ -408,94 +408,61 @@ pub fn load_optional_flag_instr(dst: &Var, obj: &Var) -> Instruction {
 
 impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        match *self {
-            Instruction::Store { ref dst, ref src } => {
+        match self {
+            Instruction::Store { dst, src } => {
                 writeln!(f, "  store {} {}", dst, src)
             }
 
-            Instruction::Load { ref dst, ref ptr } => {
+            Instruction::Load { dst, ptr } => {
                 writeln!(f, "  load {} {}", dst, ptr)
             }
 
-            Instruction::LoadMember {
-                ref dst,
-                ref obj,
-                ref member_index,
-            } => {
+            Instruction::LoadMember { dst, obj, member_index } => {
                 writeln!(f, "  loadm {} {}.{}", dst, obj, member_index)
             }
 
-            Instruction::StoreMember {
-                ref obj,
-                ref member_index,
-                ref src,
-            } => {
+            Instruction::StoreMember { obj, member_index, src } => {
                 writeln!(f, "  storem {}.{} {}", obj, member_index, src)
             }
 
-            Instruction::AddressOf { ref dst, ref obj } => {
+            Instruction::AddressOf { dst, obj } => {
                 writeln!(f, "  addr {} {}", dst, obj)
             }
 
-            Instruction::AddressOfMember {
-                ref dst,
-                ref obj,
-                ref member_index,
-            } => {
+            Instruction::AddressOfMember { dst, obj, member_index } => {
                 writeln!(f, "  addrm {} {}.{}", dst, obj, member_index)
             }
 
-            Instruction::GetProperty {
-                ref dst,
-                ref obj,
-                ref prop,
-            } => {
+            Instruction::GetProperty { dst, obj, prop } => {
                 writeln!(f, "  getp {} {}.{}", dst, obj, prop)
             }
 
-            Instruction::SetProperty {
-                ref obj,
-                ref prop,
-                ref val,
-            } => {
+            Instruction::SetProperty { obj, prop, val } => {
                 writeln!(f, "  setp {} {} {}", obj, prop, val)
             }
 
-            Instruction::UnaryOp {
-                ref dst,
-                ref op,
-                ref src,
-            } => {
+            Instruction::UnaryOp { dst, op, src } => {
                 writeln!(f, "  uop {} {} {}", dst, op, src)
             }
 
-            Instruction::BinaryOp {
-                ref dst,
-                ref op,
-                ref left,
-                ref right,
-            } => {
+            Instruction::BinaryOp { dst, op, left, right } => {
                 writeln!(f, "  bop {} {} {} {}", dst, op, left, right)
             }
 
-            Instruction::Call {
-                ref dst,
-                ref func,
-                ref args,
-            } => match *dst {
-                Some(ref dst) => writeln!(f, "  call {} {} {}", dst, func, join(args.iter(), " ")),
+            Instruction::Call { dst, func, args } => match dst {
+                Some(dst) => writeln!(f, "  call {} {} {}", dst, func, join(args.iter(), " ")),
                 None => writeln!(f, "  call {} {}", func, join(args.iter(), " ")),
             },
 
-            Instruction::Cast { ref dst, ref src } => {
+            Instruction::Cast { dst, src } => {
                 writeln!(f, "  cast {} {}", dst, src)
             }
 
-            Instruction::StackAlloc(ref var) => {
+            Instruction::StackAlloc(var) => {
                 writeln!(f, "  salloc {}", var)
             }
 
-            Instruction::HeapAlloc(ref var) => {
+            Instruction::HeapAlloc(var) => {
                 writeln!(f, "  halloc {}", var)
             }
 
@@ -507,7 +474,7 @@ impl fmt::Display for Instruction {
                 writeln!(f, "  scope end")
             }
 
-            Instruction::Return(ref var) => {
+            Instruction::Return(var) => {
                 writeln!(f, "  ret {}", var)
             }
 
@@ -515,44 +482,35 @@ impl fmt::Display for Instruction {
                 writeln!(f, "  ret void")
             }
 
-            Instruction::Branch(ref name) => {
+            Instruction::Branch(name) => {
                 writeln!(f, "  br {}", name)
             }
 
             Instruction::BranchIf {
-                ref cond,
-                ref on_true,
-                ref on_false,
+                cond,
+                on_true,
+                on_false,
             } => {
                 writeln!(f, "  brif {} ? {} : {} ", cond, on_true, on_false)
             }
 
-            Instruction::Delete(ref var) => {
+            Instruction::Delete(var) => {
                 writeln!(f, "  delete {}", var)
             }
 
-            Instruction::Slice {
-                ref dst,
-                ref src,
-                ref start,
-                ref len,
-            } => {
+            Instruction::Slice { dst, src, start, len } => {
                 writeln!(f, "  slice {} {} {} {}", dst, src, start, len)
             }
 
-            Instruction::MakeSlice {
-                ref dst,
-                ref data,
-                ref len,
-            } => {
+            Instruction::MakeSlice { dst, data, len } => {
                 writeln!(f, "  mkslice {} {} {}", dst, data, len)
             }
 
-            Instruction::LoadOptionalFlag { ref dst, ref obj } => {
+            Instruction::LoadOptionalFlag { dst, obj } => {
                 writeln!(f, "  loadoptf {} {}", dst, obj)
             }
 
-            Instruction::StoreNil(ref v) => {
+            Instruction::StoreNil(v) => {
                 writeln!(f, "  storenil {}", v)
             }
         }

@@ -41,7 +41,7 @@ pub unsafe fn const_char(ctx: &Context, c: char) -> LLVMValueRef {
 }
 
 #[allow(unused)]
-unsafe fn type_name(typ: LLVMTypeRef) -> String {
+pub unsafe fn type_name(typ: LLVMTypeRef) -> String {
     use std::ffi::CStr;
     let name = LLVMPrintTypeToString(typ);
     let ret_name = String::from(CStr::from_ptr(name).to_str().expect("Invalid string"));
@@ -50,17 +50,17 @@ unsafe fn type_name(typ: LLVMTypeRef) -> String {
 }
 
 pub unsafe fn get_operand(ctx: &mut Context, operand: &Operand) -> ValueRef {
-    match *operand {
-        Operand::Func(ref func) => {
+    match operand {
+        Operand::Func(func) => {
             let fi = ctx.get_function(func).expect("Unknown function");
             ValueRef::new(fi.function, fi.typ.clone())
         }
 
-        Operand::Var(ref v) => ctx.get_variable(&v.name, &v.typ),
+        Operand::Var(v) => ctx.get_variable(&v.name, &v.typ),
 
-        Operand::AddressOf(ref v) => ctx.get_variable(&v.name, &v.typ).address_of(),
+        Operand::AddressOf(v) => ctx.get_variable(&v.name, &v.typ).address_of(),
 
-        Operand::Dereference(ref v) => {
+        Operand::Dereference(v) => {
             let vr = ctx.get_variable(&v.name, &v.typ);
             ValueRef::new(
                 vr.load(ctx),
@@ -71,9 +71,9 @@ pub unsafe fn get_operand(ctx: &mut Context, operand: &Operand) -> ValueRef {
             )
         }
 
-        Operand::Const(ref c) => ValueRef::from_const(ctx, c),
+        Operand::Const(c) => ValueRef::from_const(ctx, c),
 
-        Operand::SizeOf(ref typ) => {
+        Operand::SizeOf(typ) => {
             let llvm_type = ctx.resolve_type(typ);
             ValueRef::new(
                 LLVMSizeOf(llvm_type),
@@ -103,8 +103,8 @@ pub unsafe fn copy(ctx: &Context, dst: LLVMValueRef, src: LLVMValueRef, typ: LLV
 }
 
 unsafe fn get_function_arg(ctx: &mut Context, operand: &Operand) -> LLVMValueRef {
-    match *operand {
-        Operand::Var(ref v) => {
+    match operand {
+        Operand::Var(v) => {
             let src = ctx.get_variable(&v.name, &v.typ);
             if !src.typ.is_pointer() {
                 return src.value;
@@ -126,7 +126,7 @@ unsafe fn get_function_arg(ctx: &mut Context, operand: &Operand) -> LLVMValueRef
             }
         }
 
-        Operand::AddressOf(ref v) => ctx.get_variable(&v.name, &v.typ).value,
+        Operand::AddressOf(v) => ctx.get_variable(&v.name, &v.typ).value,
 
         _ => get_operand(ctx, operand).load(ctx),
     }
@@ -336,57 +336,57 @@ pub unsafe fn gen_instruction(
     instr: &Instruction,
     blocks: &HashMap<BasicBlockRef, LLVMBasicBlockRef>,
 ) {
-    //print!(">> {}", instr);
-    match *instr {
-        Instruction::Store { ref dst, ref src } => {
+    print!(">> {}", instr);
+    match instr {
+        Instruction::Store { dst, src } => {
             let dst_var = ctx.get_variable(&dst.name, &dst.typ);
             let vr = get_operand(ctx, src);
             dst_var.store(ctx, &vr);
-            if let Type::Func(ref ft) = dst.typ {
+            if let Type::Func(ft) = &dst.typ {
                 gen_function_ptr(ctx, &dst.name, vr.value, ft.return_type.clone(), dst.typ.clone());
             }
         }
 
-        Instruction::Load { ref dst, ref ptr } => {
+        Instruction::Load { dst, ptr } => {
             let src_var = ctx.get_variable(&ptr.name, &ptr.typ);
             let val = src_var.load(ctx);
             ctx.set_variable(&dst.name, ValueRef::new(val, dst.typ.clone()));
         }
 
         Instruction::LoadMember {
-            ref dst,
-            ref obj,
-            ref member_index,
+            dst,
+            obj,
+            member_index,
         }
         | Instruction::AddressOfMember {
-            ref dst,
-            ref obj,
-            ref member_index,
+            dst,
+            obj,
+            member_index,
         } => {
             let obj_var = ctx.get_variable(&obj.name, &obj.typ);
-            let member_ptr = obj_var.get_member_ptr(ctx, member_index);
+            let member_ptr = obj_var.get_member_ptr(ctx, &member_index);
             ctx.set_variable(&dst.name, member_ptr);
         }
 
         Instruction::StoreMember {
-            ref obj,
-            ref member_index,
-            ref src,
+            obj,
+            member_index,
+            src,
         } => {
             let src_val = get_operand(ctx, src);
             let obj_var = ctx.get_variable(&obj.name, &obj.typ);
             obj_var.store_member(ctx, member_index, &src_val);
         }
 
-        Instruction::AddressOf { ref dst, ref obj } => {
+        Instruction::AddressOf { dst, obj } => {
             let v = ctx.get_variable(&obj.name, &obj.typ).address_of();
             ctx.set_variable(&dst.name, v);
         }
 
         Instruction::GetProperty {
-            ref dst,
-            ref obj,
-            ref prop,
+            dst,
+            obj,
+            prop,
         } => {
             let obj_var = ctx.get_variable(&obj.name, &obj.typ);
             let prop = obj_var.get_property(ctx, *prop);
@@ -394,35 +394,35 @@ pub unsafe fn gen_instruction(
         }
 
         Instruction::SetProperty {
-            ref obj,
-            ref prop,
-            ref val,
+            obj,
+            prop,
+            val,
         } => {
             let obj_var = ctx.get_variable(&obj.name, &obj.typ);
             obj_var.set_property(ctx, *prop, *val);
         }
 
         Instruction::UnaryOp {
-            ref dst,
-            ref op,
-            ref src,
+            dst,
+            op,
+            src,
         } => {
             gen_unary_op(ctx, dst, *op, src);
         }
 
         Instruction::BinaryOp {
-            ref dst,
-            ref op,
-            ref left,
-            ref right,
+            dst,
+            op,
+            left,
+            right,
         } => {
             gen_binary_op(ctx, dst, *op, left, right);
         }
 
         Instruction::Call {
-            ref dst,
-            ref func,
-            ref args,
+            dst,
+            func,
+            args,
         } => {
             let func = ctx
                 .get_function(func)
@@ -445,56 +445,57 @@ pub unsafe fn gen_instruction(
                 },
             );
 
-            if let Some(ref dst) = *dst {
+            if let Some(dst) = dst {
                 let ret = ValueRef::new(call, func.return_type.clone());
                 ctx.set_variable(&dst.name, ret);
             }
         }
 
         Instruction::Slice {
-            ref dst,
-            ref src,
-            ref start,
-            ref len,
+            dst,
+            src,
+            start,
+            len,
         } => {
             let dst_var = ctx.get_variable(&dst.name, &dst.typ);
             let src_var = ctx.get_variable(&src.name, &dst.typ);
-            dst_var.create_slice_from_array(ctx, &src_var, start, len);
+            dst_var.create_slice(ctx, &src_var, start, len);
         }
 
         Instruction::MakeSlice {
-            ref dst,
-            ref data,
-            ref len,
+            dst,
+            data,
+            len,
         } => {
             let dst_var = ctx.get_variable(&dst.name, &dst.typ);
             let data_var = ctx.get_variable(&data.name, &data.typ);
-            let len_var = ctx.get_variable(&len.name, &len.typ);
-            dst_var.create_slice(ctx, &data_var, &len_var);
+            let start = Operand::Const(Constant::UInt(0, ctx.target_machine.target.int_size));
+            let len = Operand::Var(len.clone());
+            dst_var.create_slice(ctx, &data_var, &start, &len);
         }
 
-        Instruction::LoadOptionalFlag { ref dst, ref obj } => {
+        Instruction::LoadOptionalFlag { dst, obj } => {
             let obj_var = ctx.get_variable(&obj.name, &obj.typ);
             let opt_flag = obj_var.load_optional_flag(ctx);
             ctx.set_variable(&dst.name, opt_flag);
         }
 
-        Instruction::StoreNil(ref dst) => {
+        Instruction::StoreNil(dst) => {
             let dst_var = ctx.get_variable(&dst.name, &dst.typ);
             dst_var.store_nil(ctx);
         }
 
-        Instruction::Cast { ref dst, ref src } => {
+        Instruction::Cast { dst, src } => {
             gen_cast(ctx, dst, src);
         }
 
-        Instruction::HeapAlloc(ref var) => {
+        Instruction::HeapAlloc(var) => {
             let name = CString::new(&var.name[..]).expect("Invalid string");
             let value = LLVMBuildMalloc(ctx.builder, ctx.resolve_type(&var.typ), name.as_ptr());
             ctx.set_variable(&var.name, ValueRef::new(value, ptr_type(var.typ.clone())))
         }
 
-        Instruction::StackAlloc(ref var) => {
+        Instruction::StackAlloc(var) => {
             let alloc = ctx.stack_alloc(&var.name, &var.typ);
             ctx.set_variable(&var.name, ValueRef::new(alloc, ptr_type(var.typ.clone())));
         }
@@ -507,7 +508,7 @@ pub unsafe fn gen_instruction(
             ctx.pop_stack();
         }
 
-        Instruction::Return(ref operand) => {
+        Instruction::Return(operand) => {
             LLVMBuildRet(ctx.builder, get_operand(ctx, operand).load(ctx));
         }
 
@@ -515,22 +516,22 @@ pub unsafe fn gen_instruction(
             LLVMBuildRetVoid(ctx.builder);
         }
 
-        Instruction::Branch(ref bbref) => {
+        Instruction::Branch(bbref) => {
             let llvm_bb = blocks.get(bbref).expect("Unknown basic block");
             LLVMBuildBr(ctx.builder, *llvm_bb);
         }
 
         Instruction::BranchIf {
-            ref cond,
-            ref on_true,
-            ref on_false,
+            cond,
+            on_true,
+            on_false,
         } => {
             let on_true_bb = blocks.get(on_true).expect("Unknown basic block");
             let on_false_bb = blocks.get(on_false).expect("Unknown basic block");
             LLVMBuildCondBr(ctx.builder, get_operand(ctx, cond).load(ctx), *on_true_bb, *on_false_bb);
         }
 
-        Instruction::Delete(ref var) => {
+        Instruction::Delete(var) => {
             LLVMBuildFree(ctx.builder, ctx.get_variable(&var.name, &var.typ).value);
         }
     }

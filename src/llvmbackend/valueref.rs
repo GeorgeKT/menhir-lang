@@ -7,6 +7,7 @@ use super::context::Context;
 use super::instructions::{const_bool, const_char, const_float, const_int, const_uint, copy, get_operand};
 use crate::ast::*;
 use crate::bytecode::{ByteCodeProperty, Constant, Operand};
+//use crate::llvmbackend::instructions::type_name;
 
 #[derive(Clone)]
 pub struct ValueRef {
@@ -57,11 +58,11 @@ impl ValueRef {
         LLVMBuildStore(
             ctx.builder,
             LLVMBuildBitCast(ctx.builder, glob, LLVMPointerType(char_type, 0), cstr!("str_ptr")),
-            string_data_ptr,
+            string_data_ptr.value,
         );
 
         let string_len_ptr = dst.slice_len_ptr(ctx);
-        LLVMBuildStore(ctx.builder, const_uint(ctx, s.len() as u64), string_len_ptr);
+        LLVMBuildStore(ctx.builder, const_uint(ctx, s.len() as u64), string_len_ptr.value);
         dst
     }
 
@@ -103,25 +104,29 @@ impl ValueRef {
                     LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 0, cstr!("dst_opt_flag_ptr"));
                 let dst_data_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 1, cstr!("dst_data_ptr"));
                 if val.typ.is_pointer_to_optional() {
-                    let val_type = val.typ.get_pointer_element_type().expect("val.typ must be a pointer type");
+                    let val_type = val
+                        .typ
+                        .get_pointer_element_type()
+                        .expect("val.typ must be a pointer type");
                     let val_type = ctx.resolve_type(&val_type);
                     let src_opt_flag_ptr =
                         LLVMBuildStructGEP2(ctx.builder, val_type, val.value, 0, cstr!("src_opt_flag_ptr"));
                     let src_data_ptr = LLVMBuildStructGEP2(ctx.builder, val_type, val.value, 1, cstr!("src_data_ptr"));
+                    let src_is_nil = LLVMBuildLoad2(ctx.builder, LLVMInt1TypeInContext(ctx.context), src_opt_flag_ptr, cstr!("src_is_nil"));
                     LLVMBuildStore(
                         ctx.builder,
-                        LLVMBuildLoad2(
-                            ctx.builder,
-                            ctx.native_uint_type(),
-                            src_opt_flag_ptr,
-                            cstr!("src_is_nil"),
-                        ),
-                        dst_opt_flag_ptr,
-                    );
+                        src_is_nil,
+                        dst_opt_flag_ptr);
                     if inner.pass_by_value() {
+                        let src_data_type = ctx.resolve_type(&inner);
+                        let src_data = LLVMBuildLoad2(
+                            ctx.builder,
+                            src_data_type,
+                            src_data_ptr,
+                            cstr!("src_data"));
                         LLVMBuildStore(
                             ctx.builder,
-                            LLVMBuildLoad2(ctx.builder, val.get_element_type(ctx), src_data_ptr, cstr!("src_data")),
+                            src_data,
                             dst_data_ptr,
                         );
                     } else {
@@ -180,7 +185,12 @@ impl ValueRef {
                 },
 
                 Type::Func(_func_type) => unsafe {
-                    LLVMBuildLoad2(ctx.builder, ctx.resolve_type(&element_type.ptr_of()), self.value, cstr!("func_load"))
+                    LLVMBuildLoad2(
+                        ctx.builder,
+                        ctx.resolve_type(&element_type.ptr_of()),
+                        self.value,
+                        cstr!("func_load"),
+                    )
                 },
                 _ => unsafe {
                     if element_type.pass_by_value() {
@@ -218,7 +228,12 @@ impl ValueRef {
                 let self_type = ctx.resolve_type(typ);
                 let opt_flag_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 0, cstr!("opt_flag_ptr"));
                 ValueRef::new(
-                    LLVMBuildLoad2(ctx.builder, LLVMInt1TypeInContext(ctx.context), opt_flag_ptr, cstr!("is_nil")),
+                    LLVMBuildLoad2(
+                        ctx.builder,
+                        LLVMInt1TypeInContext(ctx.context),
+                        opt_flag_ptr,
+                        cstr!("is_nil"),
+                    ),
                     Type::Bool,
                 )
             },
@@ -244,42 +259,39 @@ impl ValueRef {
     }
 
     pub fn get_member_ptr(&self, ctx: &mut Context, index: &Operand) -> ValueRef {
-        let zero_val = unsafe { const_int(ctx, 0) };
-
         let element_type = self
             .typ
             .get_pointer_element_type()
             .unwrap_or_else(|| panic!("Load member not allowed on type {}", self.typ));
         match element_type {
             Type::Array(at) => unsafe {
-                let index = get_operand(ctx, index).load(ctx);
-                let mut indices = vec![zero_val, index];
+                let mut indices = vec![get_operand(ctx, &index).load(ctx)];
                 ValueRef::new(
-                    LLVMBuildGEP2(
+                    LLVMBuildInBoundsGEP2(
                         ctx.builder,
-                        ctx.resolve_type(&element_type),
+                        ctx.resolve_type(&at.element_type),
                         self.value,
                         indices.as_mut_ptr(),
-                        2,
-                        cstr!("member"),
+                        1,
+                        cstr!("arraymember"),
                     ),
                     ptr_type(at.element_type.clone()),
                 )
             },
 
             Type::Slice(st) => unsafe {
-                let index = get_operand(ctx, index).load(ctx);
                 let data_ptr = self.slice_data_ptr(ctx);
-                let mut indices = vec![index];
+                let mut indices = vec![get_operand(ctx, &index).load(ctx)];
+                let element_ptr = LLVMBuildGEP2(
+                    ctx.builder,
+                    ctx.resolve_type(&st.element_type),
+                    data_ptr.load(ctx),
+                    indices.as_mut_ptr(),
+                    1,
+                    cstr!("slicemember"),
+                );
                 ValueRef::new(
-                    LLVMBuildGEP2(
-                        ctx.builder,
-                        ctx.resolve_type(&element_type),
-                        data_ptr,
-                        indices.as_mut_ptr(),
-                        1,
-                        cstr!("member"),
-                    ),
+                    element_ptr,
                     ptr_type(st.element_type.clone()),
                 )
             },
@@ -293,7 +305,7 @@ impl ValueRef {
 
                 let self_type = ctx.resolve_type(&element_type);
                 ValueRef::new(
-                    LLVMBuildStructGEP2(ctx.builder, self_type, self.value, index as c_uint, cstr!("member")),
+                    LLVMBuildStructGEP2(ctx.builder, self_type, self.value, index as c_uint, cstr!("structmember")),
                     ptr_type(st.members[index].typ.clone()),
                 )
             },
@@ -314,15 +326,6 @@ impl ValueRef {
                     ptr_type(case_type.clone()),
                 )
             },
-
-            /*
-            Type::Pointer(_) => {
-                ValueRef::new(
-                    self.load(ctx),
-                    element_type.clone()
-                ).get_member_ptr(ctx, index)
-            }
-            */
             _ => unsafe {
                 let index = get_operand(ctx, index).load(ctx);
                 let mut indices = vec![index];
@@ -363,7 +366,7 @@ impl ValueRef {
             (&Type::Slice(_), ByteCodeProperty::Len) | (&Type::String, ByteCodeProperty::Len) => unsafe {
                 let len_ptr = self.slice_len_ptr(ctx);
                 ValueRef::new(
-                    LLVMBuildLoad2(ctx.builder, ctx.native_uint_type(), len_ptr, cstr!("len")),
+                    LLVMBuildLoad2(ctx.builder, ctx.native_uint_type(), len_ptr.value, cstr!("len")),
                     native_uint_type,
                 )
             },
@@ -371,7 +374,7 @@ impl ValueRef {
             (&Type::Slice(ref st), ByteCodeProperty::Data) => unsafe {
                 let data_ptr = self.slice_data_ptr(ctx);
                 ValueRef::new(
-                    LLVMBuildLoad2(ctx.builder, ctx.resolve_type(&st.element_type), data_ptr, cstr!("data")),
+                    LLVMBuildLoad2(ctx.builder, ctx.resolve_type(&st.element_type), data_ptr.value, cstr!("data")),
                     st.element_type.ptr_of(),
                 )
             },
@@ -379,7 +382,7 @@ impl ValueRef {
             (&Type::String, ByteCodeProperty::Data) => unsafe {
                 let data_ptr = self.slice_data_ptr(ctx);
                 ValueRef::new(
-                    LLVMBuildLoad2(ctx.builder, self.get_element_type(ctx), data_ptr, cstr!("data")),
+                    LLVMBuildLoad2(ctx.builder, self.get_element_type(ctx), data_ptr.value, cstr!("data")),
                     ptr_type(Type::UInt(IntSize::I8)),
                 )
             },
@@ -414,59 +417,44 @@ impl ValueRef {
         }
     }
 
-    unsafe fn slice_data_ptr(&self, ctx: &Context) -> LLVMValueRef {
+    unsafe fn slice_data_ptr(&self, ctx: &Context) -> ValueRef {
         let inner_type = self
             .typ
             .get_pointer_element_type()
             .unwrap_or_else(|| panic!("Expecting a pointer not a {}", self.typ));
 
-        LLVMBuildStructGEP2(
+        let vr = LLVMBuildStructGEP2(
             ctx.builder,
             ctx.resolve_type(&inner_type),
             self.value,
             0,
             cstr!("slice_data_ptr"),
-        )
+        );
+        ValueRef::new(vr, ptr_type(ptr_type(inner_type.get_element_type().unwrap())))
     }
 
-    unsafe fn slice_len_ptr(&self, ctx: &Context) -> LLVMValueRef {
+    unsafe fn slice_len_ptr(&self, ctx: &Context) -> ValueRef {
         let inner_type = self
             .typ
             .get_pointer_element_type()
             .unwrap_or_else(|| panic!("Expecting a pointer not a {}", self.typ));
 
-        LLVMBuildStructGEP2(
+        let vr = LLVMBuildStructGEP2(
             ctx.builder,
             ctx.resolve_type(&inner_type),
             self.value,
             1,
             cstr!("slice_len_ptr"),
-        )
+        );
+        ValueRef::new(vr, ptr_type(Type::UInt(ctx.target_machine.target.int_size)))
     }
 
-    pub unsafe fn create_slice_from_array(&self, ctx: &mut Context, array: &ValueRef, start: &Operand, len: &Operand) {
-        let inner_type = array
-            .typ
-            .get_pointer_element_type()
-            .unwrap_or_else(|| panic!("Expecting an array or slice not a {}", array.typ));
-
-        match *inner_type {
-            Type::Array(_) | Type::Slice(_) => {
-                let self_data_ptr = self.slice_data_ptr(ctx);
-                let self_len_ptr = self.slice_len_ptr(ctx);
-                let _member_ptr = array.get_member_ptr(ctx, start);
-                LLVMBuildStore(ctx.builder, const_uint(ctx, 0), self_data_ptr);
-                LLVMBuildStore(ctx.builder, get_operand(ctx, len).load(ctx), self_len_ptr);
-            }
-
-            _ => panic!("Expecting an array type, not a {}", self.typ),
-        }
-    }
-
-    pub unsafe fn create_slice(&self, ctx: &Context, data: &ValueRef, len: &ValueRef) {
+    pub unsafe fn create_slice(&self, ctx: &mut Context, data: &ValueRef, offset: &Operand, len: &Operand) {
         let data_ptr = self.slice_data_ptr(ctx);
         let len_ptr = self.slice_len_ptr(ctx);
-        LLVMBuildStore(ctx.builder, data.value, data_ptr);
-        LLVMBuildStore(ctx.builder, len.load(ctx), len_ptr);
+        let len = get_operand(ctx, len);
+        let member_ptr = data.get_member_ptr(ctx, offset);
+        LLVMBuildStore(ctx.builder, member_ptr.value, data_ptr.value);
+        LLVMBuildStore(ctx.builder, len.load(ctx), len_ptr.value);
     }
 }

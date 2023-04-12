@@ -1,0 +1,6 @@
+#ret:99
+fn do_a_thing() -> int:
+    return 99
+
+fn main() -> int:
+    do_a_thing()

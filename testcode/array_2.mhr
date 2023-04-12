@@ -1,0 +1,8 @@
+#ret:6 
+
+fn main() -> int:
+    let v = [1, 2, 3]
+    var sum = 0
+    for i in v:
+        sum += i
+    sum

@@ -177,11 +177,11 @@ impl Type {
     }
 
     pub fn get_element_type(&self) -> Option<Type> {
-        match *self {
-            Type::Array(ref at) => Some(at.element_type.clone()),
-            Type::Slice(ref at) => Some(at.element_type.clone()),
+        match self {
+            Type::Array(at) => Some(at.element_type.clone()),
+            Type::Slice(at) => Some(at.element_type.clone()),
             Type::String => Some(Type::Char),
-            Type::Pointer(ref inner) | Type::Optional(ref inner) => Some(inner.deref().clone()),
+            Type::Pointer(inner) | Type::Optional(inner) => Some(inner.deref().clone()),
             _ => None,
         }
     }

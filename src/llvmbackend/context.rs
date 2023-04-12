@@ -19,7 +19,7 @@ impl StackFrame {
     pub fn new(current_function: LLVMValueRef) -> StackFrame {
         StackFrame {
             symbols: SymbolTable::new(),
-            current_function: current_function,
+            current_function,
         }
     }
 }
@@ -38,6 +38,7 @@ impl<'a> Context<'a> {
         unsafe {
             let context_name = CString::new(module_name).expect("Invalid module name");
             let context = LLVMContextCreate();
+            LLVMContextSetOpaquePointers(context, 0);
             Ok(Context::<'a> {
                 context: context,
                 module: LLVMModuleCreateWithNameInContext(context_name.as_ptr(), context),

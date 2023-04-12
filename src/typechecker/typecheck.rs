@@ -786,6 +786,20 @@ fn update_binding_type(
     e.visit_mut(&mut update_binding)
 }
 
+fn ends_with_early_return(e: &Expression) -> bool {
+    match e {
+        Expression::Return(_) => true,
+        Expression::Block(block) => {
+            if let Some(Expression::Return(_)) = block.expressions.last() {
+                true
+            } else {
+                false
+            }
+        },
+        _ => false
+    }
+}
+
 fn type_check_if(
     ctx: &mut TypeCheckerContext,
     i: &mut IfExpression,
@@ -801,7 +815,7 @@ fn type_check_if(
         Type::Void
     };
 
-    if on_true_type != on_false_type {
+    if on_true_type != on_false_type && !ends_with_early_return(&i.on_true) {
         if i.on_false.is_none() {
             type_error_result(
                 &i.span,
@@ -1576,7 +1590,7 @@ pub fn type_check_expression(
         Expression::Return(ref mut r) => {
             if let Some(return_type) = ctx.get_function_return_type() {
                 type_check_with_conversion(ctx, &mut r.expression, &return_type, target)?;
-                valid(Type::Void)
+                valid(return_type)
             } else {
                 type_error_result(&r.span, "return expression outside of a function")
             }
