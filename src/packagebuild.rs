@@ -221,7 +221,7 @@ impl PackageTarget {
         };
 
         let ctx = time_operation(2, "Code generation", || {
-            llvm_code_generation(&bc_mod, &build_options.target_machine).map_err(CompileError::Other)
+            llvm_code_generation(&bc_mod, &build_options.target_machine)
         })?;
 
         time_operation(2, "Linking", || link(&ctx, &opts, &pkg.linker_flags))?;

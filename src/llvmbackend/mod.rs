@@ -33,6 +33,7 @@ use self::function::{add_libc_functions, gen_function, gen_function_sig};
 pub use self::target::TargetMachine;
 use self::valueref::ValueRef;
 use crate::bytecode::{ByteCodeModule, Constant};
+use crate::compileerror::{code_gen_error, CompileResult};
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum OutputType {
@@ -101,43 +102,43 @@ pub fn llvm_shutdown() {
     }
 }
 
-unsafe fn gen_global(ctx: &mut Context, glob_name: &str, glob_value: &Constant) {
-    let v = ValueRef::from_const(ctx, glob_value);
-    let name = CString::new(glob_name.as_bytes()).expect("Invalid string");
-    let glob = LLVMAddGlobal(ctx.module, ctx.resolve_type(&v.typ), name.as_ptr());
+unsafe fn gen_global(ctx: &mut Context, glob_name: &str, glob_value: &Constant) -> CompileResult<()> {
+    let v = ValueRef::from_const(ctx, glob_value)?;
+    let name = CString::new(glob_name.as_bytes()).map_err(|_| code_gen_error("Invalid string"))?;
+    let glob = LLVMAddGlobal(ctx.module, ctx.resolve_type(&v.typ)?, name.as_ptr());
     LLVMSetLinkage(glob, LLVMLinkage::LLVMExternalLinkage);
     LLVMSetInitializer(glob, v.value);
-    ctx.set_variable(glob_name, v);
+    ctx.set_variable(glob_name, v)
 }
 
 pub fn llvm_code_generation<'a>(
     bc_mod: &ByteCodeModule,
     target_machine: &'a TargetMachine,
-) -> Result<Context<'a>, String> {
+) -> CompileResult<Context<'a>> {
     let mut ctx = Context::new(&bc_mod.name, target_machine)?;
 
     unsafe {
-        add_libc_functions(&mut ctx);
+        add_libc_functions(&mut ctx)?;
 
         for func in &bc_mod.imported_functions {
-            gen_function_sig(&mut ctx, &func.sig, None);
+            gen_function_sig(&mut ctx, &func.sig, None)?;
         }
 
         for (glob_name, glob_val) in &bc_mod.globals {
-            gen_global(&mut ctx, glob_name, glob_val);
+            gen_global(&mut ctx, glob_name, glob_val)?;
         }
 
         for func in bc_mod.functions.values() {
             if func.sig.name == bc_mod.main_function_name() {
-                gen_function_sig(&mut ctx, &func.sig, Some("main"));
+                gen_function_sig(&mut ctx, &func.sig, Some("main"))?;
             } else {
-                gen_function_sig(&mut ctx, &func.sig, None);
+                gen_function_sig(&mut ctx, &func.sig, None)?;
             }
         }
 
         for func in bc_mod.functions.values() {
             if !func.external {
-                gen_function(&mut ctx, func);
+                gen_function(&mut ctx, func)?;
             }
         }
 

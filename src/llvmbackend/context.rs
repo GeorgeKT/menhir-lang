@@ -9,6 +9,7 @@ use std::ffi::CString;
 use std::fs::DirBuilder;
 use std::ptr;
 use std::rc::Rc;
+use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
 
 struct StackFrame {
     pub symbols: SymbolTable,
@@ -50,35 +51,37 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn set_variable(&mut self, name: &str, vr: ValueRef) {
+    pub fn set_variable(&mut self, name: &str, vr: ValueRef) -> CompileResult<()> {
         if let Some(vi) = self.get_variable_instance(name) {
             unsafe {
-                vi.value.store(self, &vr);
+                vi.value.store(self, &vr)?;
             }
+            Ok(())
         } else {
             let var = Rc::new(VariableInstance {
                 value: vr,
                 name: name.into(),
             });
-            self.add_variable_instance(var);
+            self.add_variable_instance(var)
         }
     }
 
-    pub fn add_variable_instance(&mut self, vi: Rc<VariableInstance>) {
+    pub fn add_variable_instance(&mut self, vi: Rc<VariableInstance>) -> CompileResult<()> {
         self.stack
             .last_mut()
-            .expect("Stack is empty")
+            .ok_or_else(|| code_gen_error("Stack is empty"))?
             .symbols
             .add_variable(vi);
+        Ok(())
     }
 
-    pub fn stack_alloc(&mut self, name: &str, typ: &Type) -> LLVMValueRef {
+    pub fn stack_alloc(&mut self, name: &str, typ: &Type) -> CompileResult<LLVMValueRef> {
         unsafe {
-            let mut llvm_type = self.resolve_type(typ);
+            let mut llvm_type = self.resolve_type(typ)?;
             if let Type::Func(_) = typ {
                 llvm_type = LLVMPointerType(llvm_type, 0);
             }
-            let func = self.get_current_function();
+            let func = self.get_current_function()?;
             let entry_bb = LLVMGetEntryBasicBlock(func);
             let current_bb = LLVMGetInsertBlock(self.builder);
             // We allocate in the entry block
@@ -87,7 +90,7 @@ impl<'a> Context<'a> {
             let name = CString::new(name).expect("Invalid string");
             let alloc = LLVMBuildAlloca(self.builder, llvm_type, name.as_ptr());
             LLVMPositionBuilderAtEnd(self.builder, current_bb); // Position the builder where it was before
-            alloc
+            Ok(alloc)
         }
     }
 
@@ -101,23 +104,24 @@ impl<'a> Context<'a> {
         None
     }
 
-    pub fn get_variable(&mut self, name: &str, typ: &Type) -> ValueRef {
+    pub fn get_variable(&mut self, name: &str, typ: &Type) -> CompileResult<ValueRef> {
         if let Some(vi) = self.get_variable_instance(name) {
-            return vi.value.clone();
+            return Ok(vi.value.clone());
         }
 
-        let val = self.stack_alloc(name, typ);
+        let val = self.stack_alloc(name, typ)?;
         let ret = ValueRef::new(val, ptr_type(typ.clone()));
-        self.set_variable(name, ret.clone());
-        ret
+        self.set_variable(name, ret.clone())?;
+        Ok(ret)
     }
 
-    pub fn add_function(&mut self, f: Rc<FunctionInstance>) {
+    pub fn add_function(&mut self, f: Rc<FunctionInstance>) -> CompileResult<()> {
         self.stack
             .last_mut()
-            .expect("Stack is empty")
+            .ok_or_else(|| code_gen_error("Stack is empty"))?
             .symbols
-            .add_function(f)
+            .add_function(f);
+        Ok(())
     }
 
     pub fn get_function(&self, name: &str) -> Option<Rc<FunctionInstance>> {
@@ -139,24 +143,24 @@ impl<'a> Context<'a> {
         self.stack.pop();
     }
 
-    pub fn get_current_function(&self) -> LLVMValueRef {
+    pub fn get_current_function(&self) -> CompileResult<LLVMValueRef> {
         for sf in self.stack.iter().rev() {
             if !sf.current_function.is_null() {
-                return sf.current_function;
+                return Ok(sf.current_function);
             }
         }
 
-        panic!("Internal Compiler Error: No current function on stack");
+        code_gen_result("Internal Compiler Error: No current function on stack")
     }
 
-    pub fn resolve_type(&self, typ: &Type) -> LLVMTypeRef {
+    pub fn resolve_type(&self, typ: &Type) -> CompileResult<LLVMTypeRef> {
         unsafe {
             use crate::llvmbackend::types::to_llvm_type;
             to_llvm_type(self.context, self.target_machine, typ)
         }
     }
 
-    pub fn native_uint_type(&self) -> LLVMTypeRef {
+    pub fn native_uint_type(&self) -> CompileResult<LLVMTypeRef> {
         self.resolve_type(&self.target_machine.target.native_uint_type)
     }
 

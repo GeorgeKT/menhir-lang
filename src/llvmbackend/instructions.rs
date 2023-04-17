@@ -11,6 +11,7 @@ use llvm::*;
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::ptr;
+use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
 
 pub unsafe fn const_int(ctx: &Context, v: i64) -> LLVMValueRef {
     LLVMConstInt(
@@ -49,42 +50,42 @@ pub unsafe fn type_name(typ: LLVMTypeRef) -> String {
     ret_name
 }
 
-pub unsafe fn get_operand(ctx: &mut Context, operand: &Operand) -> ValueRef {
+pub unsafe fn get_operand(ctx: &mut Context, operand: &Operand) -> CompileResult<ValueRef> {
     match operand {
         Operand::Func(func) => {
             let fi = ctx.get_function(func).expect("Unknown function");
-            ValueRef::new(fi.function, fi.typ.clone())
+            Ok(ValueRef::new(fi.function, fi.typ.clone()))
         }
 
         Operand::Var(v) => ctx.get_variable(&v.name, &v.typ),
 
-        Operand::AddressOf(v) => ctx.get_variable(&v.name, &v.typ).address_of(),
+        Operand::AddressOf(v) => ctx.get_variable(&v.name, &v.typ)?.address_of(),
 
         Operand::Dereference(v) => {
-            let vr = ctx.get_variable(&v.name, &v.typ);
-            ValueRef::new(
-                vr.load(ctx),
+            let vr = ctx.get_variable(&v.name, &v.typ)?;
+            Ok(ValueRef::new(
+                vr.load(ctx)?,
                 vr.typ
                     .get_pointer_element_type()
-                    .expect("Cannot dereference a non pointer type")
+                    .ok_or_else(|| code_gen_error("Cannot dereference a non pointer type"))?
                     .clone(),
-            )
+            ))
         }
 
         Operand::Const(c) => ValueRef::from_const(ctx, c),
 
         Operand::SizeOf(typ) => {
-            let llvm_type = ctx.resolve_type(typ);
-            ValueRef::new(
+            let llvm_type = ctx.resolve_type(typ)?;
+            Ok(ValueRef::new(
                 LLVMSizeOf(llvm_type),
                 ctx.target_machine.target.native_uint_type.clone(),
-            )
+            ))
         }
     }
 }
 
-pub unsafe fn copy(ctx: &Context, dst: LLVMValueRef, src: LLVMValueRef, typ: LLVMTypeRef) {
-    let func = ctx.get_function("memcpy").expect("memcpy not found");
+pub unsafe fn copy(ctx: &Context, dst: LLVMValueRef, src: LLVMValueRef, typ: LLVMTypeRef) -> CompileResult<()> {
+    let func = ctx.get_function("memcpy").ok_or_else(|| code_gen_error("memcpy not found"))?;
     let void_ptr_type = LLVMPointerType(LLVMVoidTypeInContext(ctx.context), 0);
     let mut args = vec![
         LLVMBuildBitCast(ctx.builder, dst, void_ptr_type, cstr!("dst_cast")),
@@ -94,62 +95,63 @@ pub unsafe fn copy(ctx: &Context, dst: LLVMValueRef, src: LLVMValueRef, typ: LLV
 
     LLVMBuildCall2(
         ctx.builder,
-        ctx.resolve_type(&func.typ),
+        ctx.resolve_type(&func.typ)?,
         func.function,
         args.as_mut_ptr(),
         args.len() as c_uint,
         cstr!("ac"),
     );
+    Ok(())
 }
 
-unsafe fn get_function_arg(ctx: &mut Context, operand: &Operand) -> LLVMValueRef {
+unsafe fn get_function_arg(ctx: &mut Context, operand: &Operand) -> CompileResult<LLVMValueRef> {
     match operand {
         Operand::Var(v) => {
-            let src = ctx.get_variable(&v.name, &v.typ);
+            let src = ctx.get_variable(&v.name, &v.typ)?;
             if !src.typ.is_pointer() {
-                return src.value;
+                return Ok(src.value);
             }
             let inner_type = src
                 .typ
                 .get_pointer_element_type()
-                .expect("Expecting pointer type here");
+                .ok_or_else(|| code_gen_error("Expecting pointer type here"))?;
             if let Type::Func(_) = inner_type {
                 src.load(ctx)
             } else if inner_type.pass_by_value() {
                 src.load(ctx)
             } else if v.typ == src.typ {
-                src.value
+                Ok(src.value)
             } else {
-                let dst = ctx.stack_alloc("argcopy", inner_type);
-                copy(ctx, dst, src.value, ctx.resolve_type(inner_type));
-                dst
+                let dst = ctx.stack_alloc("argcopy", inner_type)?;
+                copy(ctx, dst, src.value, ctx.resolve_type(inner_type)?)?;
+                Ok(dst)
             }
         }
 
-        Operand::AddressOf(v) => ctx.get_variable(&v.name, &v.typ).value,
+        Operand::AddressOf(v) => Ok(ctx.get_variable(&v.name, &v.typ)?.value),
 
-        _ => get_operand(ctx, operand).load(ctx),
+        _ => get_operand(ctx, operand)?.load(ctx),
     }
 }
 
-unsafe fn gen_unary_op(ctx: &mut Context, dst: &Var, operator: UnaryOperator, src: &Operand) {
-    let src_value = get_operand(ctx, src).load(ctx);
+unsafe fn gen_unary_op(ctx: &mut Context, dst: &Var, operator: UnaryOperator, src: &Operand) -> CompileResult<()> {
+    let src_value = get_operand(ctx, src)?.load(ctx)?;
     let result = match (operator, &dst.typ) {
         (UnaryOperator::Sub, &Type::Int(_)) | (UnaryOperator::Sub, &Type::UInt(_)) => {
             LLVMBuildNeg(ctx.builder, src_value, cstr!("neg"))
         }
         (UnaryOperator::Sub, &Type::Float(_)) => LLVMBuildFNeg(ctx.builder, src_value, cstr!("neg")),
         (UnaryOperator::Not, &Type::Bool) => LLVMBuildNot(ctx.builder, src_value, cstr!("not")),
-        _ => panic!("Unsupported unary operator"),
+        _ => return code_gen_result("Unsupported unary operator"),
     };
 
     ctx.set_variable(&dst.name, ValueRef::new(result, dst.typ.clone()))
 }
 
-unsafe fn gen_binary_op(ctx: &mut Context, dst: &Var, op: BinaryOperator, left: &Operand, right: &Operand) {
+unsafe fn gen_binary_op(ctx: &mut Context, dst: &Var, op: BinaryOperator, left: &Operand, right: &Operand) -> CompileResult<()> {
     let left_type = left.get_type(ctx.target_machine.target.int_size);
-    let left = get_operand(ctx, left).load(ctx);
-    let right = get_operand(ctx, right).load(ctx);
+    let left = get_operand(ctx, left)?.load(ctx)?;
+    let right = get_operand(ctx, right)?.load(ctx)?;
 
     let value = match (op, left_type) {
         (BinaryOperator::Add, Type::Int(_)) => LLVMBuildAdd(ctx.builder, left, right, cstr!("bop")),
@@ -267,90 +269,91 @@ unsafe fn gen_binary_op(ctx: &mut Context, dst: &Var, op: BinaryOperator, left: 
         (_, t) => panic!("Operator {} not supported on type {}", op, t),
     };
 
-    ctx.set_variable(&dst.name, ValueRef::new(value, dst.typ.clone()));
+    ctx.set_variable(&dst.name, ValueRef::new(value, dst.typ.clone()))?;
+    Ok(())
 }
 
-unsafe fn gen_cast(ctx: &mut Context, dst: &Var, src: &Operand) {
-    let operand = get_operand(ctx, src);
+unsafe fn gen_cast(ctx: &mut Context, dst: &Var, src: &Operand) -> CompileResult<()> {
+    let operand = get_operand(ctx, src)?;
     let src_type = src.get_type(ctx.target_machine.target.int_size);
     let casted = match (&dst.typ, &src_type) {
         (&Type::UInt(_), &Type::Int(_)) | (&Type::Int(_), &Type::UInt(_)) => LLVMBuildIntCast(
             ctx.builder,
-            operand.load(ctx),
-            ctx.resolve_type(&dst.typ),
+            operand.load(ctx)?,
+            ctx.resolve_type(&dst.typ)?,
             cstr!("cast_to_int"),
         ),
 
         (&Type::Int(_), &Type::Float(_)) => LLVMBuildFPToSI(
             ctx.builder,
-            operand.load(ctx),
-            ctx.resolve_type(&dst.typ),
+            operand.load(ctx)?,
+            ctx.resolve_type(&dst.typ)?,
             cstr!("cast_to_int"),
         ),
 
         (&Type::UInt(_), &Type::Float(_)) => LLVMBuildFPToUI(
             ctx.builder,
-            operand.load(ctx),
-            ctx.resolve_type(&dst.typ),
+            operand.load(ctx)?,
+            ctx.resolve_type(&dst.typ)?,
             cstr!("cast_to_int"),
         ),
 
         (&Type::Float(_), &Type::Int(_)) => LLVMBuildSIToFP(
             ctx.builder,
-            operand.load(ctx),
-            ctx.resolve_type(&dst.typ),
+            operand.load(ctx)?,
+            ctx.resolve_type(&dst.typ)?,
             cstr!("cast_to_int"),
         ),
 
         (&Type::Float(_), &Type::UInt(_)) => LLVMBuildUIToFP(
             ctx.builder,
-            operand.load(ctx),
-            ctx.resolve_type(&dst.typ),
+            operand.load(ctx)?,
+            ctx.resolve_type(&dst.typ)?,
             cstr!("cast_to_int"),
         ),
 
         (&Type::Pointer(_), &Type::Pointer(_)) => LLVMBuildBitCast(
             ctx.builder,
             operand.value,
-            ctx.resolve_type(&dst.typ),
+            ctx.resolve_type(&dst.typ)?,
             cstr!("ptr_cast"),
         ),
 
         (&Type::Pointer(_), &Type::Array(_)) => LLVMBuildBitCast(
             ctx.builder,
-            operand.load(ctx),
-            ctx.resolve_type(&dst.typ),
+            operand.load(ctx)?,
+            ctx.resolve_type(&dst.typ)?,
             cstr!("ptr_cast"),
         ),
 
         (&Type::Bool, &Type::Pointer(_)) => LLVMBuildIsNull(ctx.builder, operand.value, cstr!("isnt_null")),
 
-        _ => panic!("Cast from type {} to type {} is not allowed", src_type, dst.typ),
+        _ => return code_gen_result(format!("Cast from type {} to type {} is not allowed", src_type, dst.typ)),
     };
 
-    ctx.set_variable(&dst.name, ValueRef::new(casted, dst.typ.clone()));
+    ctx.set_variable(&dst.name, ValueRef::new(casted, dst.typ.clone()))
 }
 
 pub unsafe fn gen_instruction(
     ctx: &mut Context,
     instr: &Instruction,
     blocks: &HashMap<BasicBlockRef, LLVMBasicBlockRef>,
-) {
+) -> CompileResult<()> {
     print!(">> {}", instr);
     match instr {
         Instruction::Store { dst, src } => {
-            let dst_var = ctx.get_variable(&dst.name, &dst.typ);
-            let vr = get_operand(ctx, src);
-            dst_var.store(ctx, &vr);
+            let dst_var = ctx.get_variable(&dst.name, &dst.typ)?;
+            let vr = get_operand(ctx, src)?;
+            dst_var.store(ctx, &vr)?;
             if let Type::Func(ft) = &dst.typ {
-                gen_function_ptr(ctx, &dst.name, vr.value, ft.return_type.clone(), dst.typ.clone());
+                gen_function_ptr(ctx, &dst.name, vr.value, ft.return_type.clone(), dst.typ.clone())?;
             }
         }
 
         Instruction::Load { dst, ptr } => {
-            let src_var = ctx.get_variable(&ptr.name, &ptr.typ);
-            let val = src_var.load(ctx);
-            ctx.set_variable(&dst.name, ValueRef::new(val, dst.typ.clone()));
+            let src_var = ctx.get_variable(&ptr.name, &ptr.typ)?;
+            let val = src_var.load(ctx)?;
+            ctx.set_variable(&dst.name, ValueRef::new(val, dst.typ.clone()))?;
         }
 
         Instruction::LoadMember {
@@ -363,9 +366,9 @@ pub unsafe fn gen_instruction(
             obj,
             member_index,
         } => {
-            let obj_var = ctx.get_variable(&obj.name, &obj.typ);
-            let member_ptr = obj_var.get_member_ptr(ctx, &member_index);
-            ctx.set_variable(&dst.name, member_ptr);
+            let obj_var = ctx.get_variable(&obj.name, &obj.typ)?;
+            let member_ptr = obj_var.get_member_ptr(ctx, &member_index)?;
+            ctx.set_variable(&dst.name, member_ptr)?;
         }
 
         Instruction::StoreMember {
@@ -373,14 +376,14 @@ pub unsafe fn gen_instruction(
             member_index,
             src,
         } => {
-            let src_val = get_operand(ctx, src);
-            let obj_var = ctx.get_variable(&obj.name, &obj.typ);
-            obj_var.store_member(ctx, member_index, &src_val);
+            let src_val = get_operand(ctx, src)?;
+            let obj_var = ctx.get_variable(&obj.name, &obj.typ)?;
+            obj_var.store_member(ctx, member_index, &src_val)?;
         }
 
         Instruction::AddressOf { dst, obj } => {
-            let v = ctx.get_variable(&obj.name, &obj.typ).address_of();
-            ctx.set_variable(&dst.name, v);
+            let v = ctx.get_variable(&obj.name, &obj.typ)?.address_of()?;
+            ctx.set_variable(&dst.name, v)?;
         }
 
         Instruction::GetProperty {
@@ -388,9 +391,9 @@ pub unsafe fn gen_instruction(
             obj,
             prop,
         } => {
-            let obj_var = ctx.get_variable(&obj.name, &obj.typ);
-            let prop = obj_var.get_property(ctx, *prop);
-            ctx.set_variable(&dst.name, prop);
+            let obj_var = ctx.get_variable(&obj.name, &obj.typ)?;
+            let prop = obj_var.get_property(ctx, *prop)?;
+            ctx.set_variable(&dst.name, prop)?;
         }
 
         Instruction::SetProperty {
@@ -398,8 +401,8 @@ pub unsafe fn gen_instruction(
             prop,
             val,
         } => {
-            let obj_var = ctx.get_variable(&obj.name, &obj.typ);
-            obj_var.set_property(ctx, *prop, *val);
+            let obj_var = ctx.get_variable(&obj.name, &obj.typ)?;
+            obj_var.set_property(ctx, *prop, *val)?;
         }
 
         Instruction::UnaryOp {
@@ -407,7 +410,7 @@ pub unsafe fn gen_instruction(
             op,
             src,
         } => {
-            gen_unary_op(ctx, dst, *op, src);
+            gen_unary_op(ctx, dst, *op, src)?;
         }
 
         Instruction::BinaryOp {
@@ -416,7 +419,7 @@ pub unsafe fn gen_instruction(
             left,
             right,
         } => {
-            gen_binary_op(ctx, dst, *op, left, right);
+            gen_binary_op(ctx, dst, *op, left, right)?;
         }
 
         Instruction::Call {
@@ -426,15 +429,15 @@ pub unsafe fn gen_instruction(
         } => {
             let func = ctx
                 .get_function(func)
-                .unwrap_or_else(|| panic!("Unknown function {}", func));
-            let mut func_args = args
-                .iter()
-                .map(|a| get_function_arg(ctx, a))
-                .collect::<Vec<_>>();
+                .ok_or_else(|| code_gen_error(format!("Unknown function {}", func)))?;
+            let mut func_args = Vec::with_capacity(args.len());
+            for arg in args {
+                func_args.push(get_function_arg(ctx, arg)?);
+            }
 
             let call = LLVMBuildCall2(
                 ctx.builder,
-                ctx.resolve_type(&func.typ),
+                ctx.resolve_type(&func.typ)?,
                 func.function,
                 func_args.as_mut_ptr(),
                 args.len() as c_uint,
@@ -447,7 +450,7 @@ pub unsafe fn gen_instruction(
 
             if let Some(dst) = dst {
                 let ret = ValueRef::new(call, func.return_type.clone());
-                ctx.set_variable(&dst.name, ret);
+                ctx.set_variable(&dst.name, ret)?;
             }
         }
 
@@ -457,9 +460,9 @@ pub unsafe fn gen_instruction(
             start,
             len,
         } => {
-            let dst_var = ctx.get_variable(&dst.name, &dst.typ);
-            let src_var = ctx.get_variable(&src.name, &dst.typ);
-            dst_var.create_slice(ctx, &src_var, start, len);
+            let dst_var = ctx.get_variable(&dst.name, &dst.typ)?;
+            let src_var = ctx.get_variable(&src.name, &dst.typ)?;
+            dst_var.create_slice(ctx, &src_var, start, len)?;
         }
 
         Instruction::MakeSlice {
@@ -467,37 +470,37 @@ pub unsafe fn gen_instruction(
             data,
             len,
         } => {
-            let dst_var = ctx.get_variable(&dst.name, &dst.typ);
-            let data_var = ctx.get_variable(&data.name, &data.typ);
+            let dst_var = ctx.get_variable(&dst.name, &dst.typ)?;
+            let data_var = ctx.get_variable(&data.name, &data.typ)?;
             let start = Operand::Const(Constant::UInt(0, ctx.target_machine.target.int_size));
             let len = Operand::Var(len.clone());
-            dst_var.create_slice(ctx, &data_var, &start, &len);
+            dst_var.create_slice(ctx, &data_var, &start, &len)?;
         }
 
         Instruction::LoadOptionalFlag { dst, obj } => {
-            let obj_var = ctx.get_variable(&obj.name, &obj.typ);
-            let opt_flag = obj_var.load_optional_flag(ctx);
-            ctx.set_variable(&dst.name, opt_flag);
+            let obj_var = ctx.get_variable(&obj.name, &obj.typ)?;
+            let opt_flag = obj_var.load_optional_flag(ctx)?;
+            ctx.set_variable(&dst.name, opt_flag)?;
         }
 
         Instruction::StoreNil(dst) => {
-            let dst_var = ctx.get_variable(&dst.name, &dst.typ);
-            dst_var.store_nil(ctx);
+            let dst_var = ctx.get_variable(&dst.name, &dst.typ)?;
+            dst_var.store_nil(ctx)?;
         }
 
         Instruction::Cast { dst, src } => {
-            gen_cast(ctx, dst, src);
+            gen_cast(ctx, dst, src)?;
         }
 
         Instruction::HeapAlloc(var) => {
             let name = CString::new(&var.name[..]).expect("Invalid string");
-            let value = LLVMBuildMalloc(ctx.builder, ctx.resolve_type(&var.typ), name.as_ptr());
-            ctx.set_variable(&var.name, ValueRef::new(value, ptr_type(var.typ.clone())))
+            let value = LLVMBuildMalloc(ctx.builder, ctx.resolve_type(&var.typ)?, name.as_ptr());
+            ctx.set_variable(&var.name, ValueRef::new(value, ptr_type(var.typ.clone())))?;
         }
 
         Instruction::StackAlloc(var) => {
-            let alloc = ctx.stack_alloc(&var.name, &var.typ);
-            ctx.set_variable(&var.name, ValueRef::new(alloc, ptr_type(var.typ.clone())));
+            let alloc = ctx.stack_alloc(&var.name, &var.typ)?;
+            ctx.set_variable(&var.name, ValueRef::new(alloc, ptr_type(var.typ.clone())))?;
         }
 
         Instruction::StartScope => {
@@ -509,7 +512,7 @@ pub unsafe fn gen_instruction(
         }
 
         Instruction::Return(operand) => {
-            LLVMBuildRet(ctx.builder, get_operand(ctx, operand).load(ctx));
+            LLVMBuildRet(ctx.builder, get_operand(ctx, operand)?.load(ctx)?);
         }
 
         Instruction::ReturnVoid => {
@@ -528,11 +531,13 @@ pub unsafe fn gen_instruction(
         } => {
             let on_true_bb = blocks.get(on_true).expect("Unknown basic block");
             let on_false_bb = blocks.get(on_false).expect("Unknown basic block");
-            LLVMBuildCondBr(ctx.builder, get_operand(ctx, cond).load(ctx), *on_true_bb, *on_false_bb);
+            LLVMBuildCondBr(ctx.builder, get_operand(ctx, cond)?.load(ctx)?, *on_true_bb, *on_false_bb);
         }
 
         Instruction::Delete(var) => {
-            LLVMBuildFree(ctx.builder, ctx.get_variable(&var.name, &var.typ).value);
+            LLVMBuildFree(ctx.builder, ctx.get_variable(&var.name, &var.typ)?.value);
         }
     }
+
+    Ok(())
 }

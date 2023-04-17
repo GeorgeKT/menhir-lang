@@ -38,20 +38,24 @@ pub enum CompileError {
     UnknownName(ErrorData),
     UnknownType(String, Type), // Name and expected type
     Many(Vec<CompileError>),
+    CodeGeneration(String),
 }
 
 impl CompileError {
     pub fn print(&self) {
-        match *self {
-            CompileError::Other(ref msg) | CompileError::IO(ref msg) => println!("{}", msg),
-            CompileError::Parse(ref ed) | CompileError::Type(ref ed) | CompileError::UnknownName(ref ed) => {
+        match self {
+            CompileError::Other(msg) | CompileError::IO(msg) => println!("{}", msg),
+            CompileError::Parse(ed) | CompileError::Type(ed) | CompileError::UnknownName(ed) => {
                 print_message(&ed.msg, &ed.span)
             }
-            CompileError::UnknownType(ref name, ref typ) => println!("{} has unknown type, expecting {}", name, typ),
-            CompileError::Many(ref errors) => {
+            CompileError::UnknownType(name, typ) => println!("{} has unknown type, expecting {}", name, typ),
+            CompileError::Many(errors) => {
                 for e in errors {
                     e.print();
                 }
+            }
+            CompileError::CodeGeneration(msg) => {
+                println!("Code generation error: {}", msg);
             }
         }
     }
@@ -65,11 +69,11 @@ impl Error for CompileError {
 
 impl fmt::Display for CompileError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        match *self {
-            CompileError::Other(ref msg) | CompileError::IO(ref msg) => writeln!(f, "{}", msg),
-            CompileError::Parse(ref ed) | CompileError::Type(ref ed) | CompileError::UnknownName(ref ed) => ed.fmt(f),
-            CompileError::UnknownType(ref name, ref typ) => writeln!(f, "{} has unknown type, expecting {}", name, typ),
-            CompileError::Many(ref errors) => {
+        match self {
+            CompileError::Other(msg) | CompileError::IO(msg) | CompileError::CodeGeneration(msg) => writeln!(f, "{}", msg),
+            CompileError::Parse(ed) | CompileError::Type(ed) | CompileError::UnknownName(ed) => ed.fmt(f),
+            CompileError::UnknownType(name, typ) => writeln!(f, "{} has unknown type, expecting {}", name, typ),
+            CompileError::Many(errors) => {
                 for err in errors {
                     err.fmt(f)?;
                 }
@@ -142,6 +146,14 @@ pub fn unknown_name_result<T, Msg: Into<String>>(span: &Span, msg: Msg) -> Compi
 
 pub fn unknown_type_result<T>(name: &str, typ: &Type) -> CompileResult<T> {
     Err(CompileError::UnknownType(name.into(), typ.clone()))
+}
+
+pub fn code_gen_error(msg: impl Into<String>) -> CompileError {
+    CompileError::CodeGeneration(msg.into())
+}
+
+pub fn code_gen_result<T>(msg: impl Into<String>) -> CompileResult<T> {
+    Err(CompileError::CodeGeneration(msg.into()))
 }
 
 impl From<io::Error> for CompileError {
