@@ -12,8 +12,8 @@ pub struct SumTypeCaseDeclaration {
 pub fn sum_type_case_decl(name: &str, data: Option<StructDeclaration>, span: Span) -> SumTypeCaseDeclaration {
     SumTypeCaseDeclaration {
         name: name.into(),
-        data: data,
-        span: span,
+        data,
+        span,
         typ: Type::Unknown,
     }
 }
@@ -29,8 +29,8 @@ pub struct SumTypeDeclaration {
 pub fn sum_type_decl(name: &str, cases: Vec<SumTypeCaseDeclaration>, span: Span) -> SumTypeDeclaration {
     SumTypeDeclaration {
         name: name.into(),
-        cases: cases,
-        span: span,
+        cases,
+        span,
         typ: Type::Unknown,
     }
 }

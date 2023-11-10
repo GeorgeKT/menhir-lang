@@ -46,7 +46,7 @@ fn unary_op_to_const(uop: &UnaryOp) -> Option<Constant> {
     }
 }
 
-#[cfg_attr(feature = "cargo-clippy", allow(float_cmp))]
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::float_cmp))]
 fn binary_op_to_const(bop: &BinaryOp) -> Option<Constant> {
     let left = expr_to_const(&bop.left)?;
     let right = expr_to_const(&bop.right)?;

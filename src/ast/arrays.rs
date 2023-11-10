@@ -12,7 +12,7 @@ pub fn array_lit(e: Vec<Expression>, span: Span) -> Literal {
     Literal::Array(ArrayLiteral {
         elements: e,
         array_type: Type::Unknown,
-        span: span,
+        span,
     })
 }
 
@@ -25,8 +25,8 @@ pub struct ArrayToSlice {
 
 pub fn array_to_slice(inner: Expression, span: Span) -> Expression {
     Expression::ArrayToSlice(Box::new(ArrayToSlice {
-        inner: inner,
+        inner,
         slice_type: Type::Unknown,
-        span: span,
+        span,
     }))
 }

@@ -103,6 +103,6 @@ pub fn instantiate_generics(
         }
     }
 
-    module.functions.extend(new_functions.into_iter());
+    module.functions.extend(new_functions);
     Ok(())
 }

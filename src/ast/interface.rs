@@ -11,10 +11,10 @@ pub struct Interface {
 
 pub fn interface(name: String, functions: Vec<FunctionSignature>, span: Span) -> Interface {
     Interface {
-        name: name,
-        functions: functions,
+        name,
+        functions,
         typ: Type::Unknown,
-        span: span,
+        span,
     }
 }
 

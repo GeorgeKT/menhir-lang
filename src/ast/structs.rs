@@ -11,8 +11,8 @@ pub struct StructMemberDeclaration {
 pub fn struct_member_declaration(name: &str, typ: Type, span: Span) -> StructMemberDeclaration {
     StructMemberDeclaration {
         name: name.into(),
-        typ: typ,
-        span: span,
+        typ,
+        span,
     }
 }
 
@@ -27,8 +27,8 @@ pub struct StructDeclaration {
 pub fn struct_declaration(name: &str, members: Vec<StructMemberDeclaration>, span: Span) -> StructDeclaration {
     StructDeclaration {
         name: name.into(),
-        members: members,
-        span: span,
+        members,
+        span,
         typ: Type::Unknown,
     }
 }
@@ -45,8 +45,8 @@ pub struct StructInitializer {
 pub fn struct_initializer(struct_name: &str, member_initializers: Vec<Expression>, span: Span) -> StructInitializer {
     StructInitializer {
         struct_name: struct_name.into(),
-        member_initializers: member_initializers,
-        span: span,
+        member_initializers,
+        span,
         typ: Type::Unknown,
         generic_args: GenericMapping::new(),
     }

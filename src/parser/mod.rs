@@ -186,7 +186,7 @@ fn parse_binary_op_rhs(
     loop {
         if tq
             .peek()
-            .map(|tok| is_end_of_expression(tok))
+            .map(is_end_of_expression)
             .unwrap_or(false)
         {
             return Ok(lhs);
@@ -965,7 +965,7 @@ fn parse_compiler_call(
 fn parse_return(tq: &mut TokenQueue, start: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression> {
     if tq
         .peek()
-        .map(|tok| is_end_of_expression(tok))
+        .map(is_end_of_expression)
         .unwrap_or(true)
     {
         Ok(return_expr(Expression::Void, start.clone()))

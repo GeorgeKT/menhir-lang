@@ -293,7 +293,7 @@ pub fn store_member_instr(obj: &Var, member_index: usize, src: Var, int_size: In
 
 pub fn store_member_with_var_instr(obj: Var, member_index: Var, src: Var) -> Instruction {
     Instruction::StoreMember {
-        obj: obj,
+        obj,
         member_index: Operand::Var(member_index),
         src: Operand::Var(src),
     }
@@ -321,25 +321,25 @@ pub fn ret_instr(var: &Var) -> Instruction {
 pub fn unary_op_instr(dst: &Var, op: UnaryOperator, src: Operand) -> Instruction {
     Instruction::UnaryOp {
         dst: dst.clone(),
-        op: op,
-        src: src,
+        op,
+        src,
     }
 }
 
 pub fn binary_op_instr(dst: &Var, op: BinaryOperator, left: Operand, right: Operand) -> Instruction {
     Instruction::BinaryOp {
         dst: dst.clone(),
-        op: op,
-        left: left,
-        right: right,
+        op,
+        left,
+        right,
     }
 }
 
 pub fn branch_if_instr(cond: &Var, on_true: BasicBlockRef, on_false: BasicBlockRef) -> Instruction {
     Instruction::BranchIf {
         cond: var_op(cond),
-        on_true: on_true,
-        on_false: on_false,
+        on_true,
+        on_false,
     }
 }
 
@@ -347,7 +347,7 @@ pub fn call_instr(dst: &Var, func: &str, args: Vec<Operand>) -> Instruction {
     Instruction::Call {
         dst: Some(dst.clone()),
         func: func.into(),
-        args: args,
+        args,
     }
 }
 
@@ -355,14 +355,14 @@ pub fn void_call_instr(func: &str, args: Vec<Operand>) -> Instruction {
     Instruction::Call {
         dst: None,
         func: func.into(),
-        args: args,
+        args,
     }
 }
 
 pub fn set_prop_instr(obj: &Var, prop: ByteCodeProperty, value: usize) -> Instruction {
     Instruction::SetProperty {
         obj: obj.clone(),
-        prop: prop,
+        prop,
         val: value,
     }
 }
@@ -371,7 +371,7 @@ pub fn get_prop_instr(dst: &Var, obj: &Var, prop: ByteCodeProperty) -> Instructi
     Instruction::GetProperty {
         dst: dst.clone(),
         obj: obj.clone(),
-        prop: prop,
+        prop,
     }
 }
 
@@ -379,8 +379,8 @@ pub fn slice_instr(dst: &Var, src: &Var, start: Operand, len: Operand) -> Instru
     Instruction::Slice {
         dst: dst.clone(),
         src: src.clone(),
-        start: start,
-        len: len,
+        start,
+        len,
     }
 }
 

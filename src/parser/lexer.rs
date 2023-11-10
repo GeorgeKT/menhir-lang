@@ -187,7 +187,7 @@ impl Lexer {
             "interface" => TokenKind::Interface,
             "fn" => TokenKind::Func,
             "return" => TokenKind::Return,
-            _ => TokenKind::Identifier(mem::replace(&mut self.data, String::new())),
+            _ => TokenKind::Identifier(std::mem::take(&mut self.data)),
         };
 
         self.data.clear();
@@ -226,7 +226,7 @@ impl Lexer {
         } else {
             self.state = LexState::Idle;
             let span = self.current_span();
-            let num = mem::replace(&mut self.data, String::new());
+            let num = std::mem::take(&mut self.data);
             self.add(TokenKind::Number(num), span);
             self.idle(c)
         }
@@ -309,7 +309,7 @@ impl Lexer {
     fn in_string(&mut self, c: char) -> CompileResult<()> {
         self.in_string_or_char_literal(c, '"');
         if c == '"' {
-            let s = mem::replace(&mut self.data, String::new());
+            let s = std::mem::take(&mut self.data);
             let mut span = self.current_span();
             span.end.offset += 1; // Need to include the quote
             self.add(TokenKind::StringLiteral(s), span);

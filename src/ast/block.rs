@@ -12,6 +12,6 @@ pub fn block(e: Vec<Expression>, span: Span) -> Expression {
     Expression::Block(Box::new(Block {
         expressions: e,
         typ: Type::Unknown,
-        span: span,
+        span,
     }))
 }

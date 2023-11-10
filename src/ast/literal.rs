@@ -45,7 +45,7 @@ impl Literal {
         match (self, typ) {
             (&Literal::Int(ref span, value, _), &Type::Int(int_size)) => {
                 let target_bit_size = int_size.size_in_bits();
-                let target_min = -2i64.pow(target_bit_size - 1);
+                let target_min = -(2i64.pow(target_bit_size - 1));
                 let target_max = (2u64.pow(target_bit_size - 1) - 1) as i64;
                 if value >= target_min && value <= target_max {
                     Some(Literal::Int(span.clone(), value, int_size))
@@ -96,7 +96,7 @@ impl Literal {
                 Some(Literal::Float(span.clone(), value.clone(), FloatSize::F64))
             }
 
-            (&Literal::NullPtr(ref span, _), &Type::Pointer(ref inner_type)) => {
+            (Literal::NullPtr(span, _), Type::Pointer(inner_type)) => {
                 Some(Literal::NullPtr(span.clone(), inner_type.deref().clone()))
             }
 

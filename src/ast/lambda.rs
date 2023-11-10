@@ -12,8 +12,8 @@ pub struct Lambda {
 pub fn lambda(args: Vec<Argument>, expr: Expression, span: Span) -> Expression {
     Expression::Lambda(Box::new(Lambda {
         sig: sig("lambda", generic_type("$ret$"), args, span.clone()),
-        expr: expr,
-        span: span,
+        expr,
+        span,
     }))
 }
 

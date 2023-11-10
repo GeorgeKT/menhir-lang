@@ -371,7 +371,7 @@ pub unsafe fn gen_instruction(
         Instruction::LoadMember { dst, obj, member_index }
         | Instruction::AddressOfMember { dst, obj, member_index } => {
             let obj_var = ctx.get_variable(&obj.name, &obj.typ)?;
-            let member_ptr = obj_var.get_member_ptr(ctx, &member_index)?;
+            let member_ptr = obj_var.get_member_ptr(ctx, member_index)?;
             ctx.set_variable(&dst.name, member_ptr)?;
         }
 

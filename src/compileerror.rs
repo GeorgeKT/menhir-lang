@@ -87,7 +87,7 @@ impl fmt::Display for CompileError {
 
 pub fn print_message(msg: &str, span: &Span) {
     fn repeat_string(s: &str, count: usize) -> String {
-        repeat(s).take(count).collect()
+        s.repeat(count)
     }
 
     let prefix = "| ";

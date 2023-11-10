@@ -51,7 +51,7 @@ pub fn fill_in_generics(
             Ok(actual.clone())
         }
 
-        (&Type::Slice(ref generic_st), &Type::Slice(ref actual_st)) => {
+        (Type::Slice(generic_st), Type::Slice(actual_st)) => {
             add(known_types, &generic_st.element_type, &actual_st.element_type, span)?;
             let new_el_type = fill_in_generics(
                 ctx,
@@ -63,7 +63,7 @@ pub fn fill_in_generics(
             Ok(slice_type(new_el_type))
         }
 
-        (&Type::Array(ref generic_at), &Type::Array(ref actual_at)) => {
+        (Type::Array(generic_at), Type::Array(actual_at)) => {
             add(known_types, &generic_at.element_type, &actual_at.element_type, span)?;
             let new_el_type = fill_in_generics(
                 ctx,
@@ -75,7 +75,7 @@ pub fn fill_in_generics(
             Ok(array_type(new_el_type, actual_at.len))
         }
 
-        (&Type::Slice(ref generic_at), &Type::Array(ref actual_at)) => {
+        (Type::Slice(generic_at), Type::Array(actual_at)) => {
             // We support automatic conversion from array to slice
             add(known_types, &generic_at.element_type, &actual_at.element_type, span)?;
             let new_el_type = fill_in_generics(
@@ -88,7 +88,7 @@ pub fn fill_in_generics(
             Ok(array_type(new_el_type, actual_at.len))
         }
 
-        (&Type::Func(ref generic_ft), &Type::Func(ref actual_ft)) => {
+        (Type::Func(generic_ft), Type::Func(actual_ft)) => {
             if generic_ft.args.len() != actual_ft.args.len() {
                 return map_err();
             }
@@ -103,7 +103,7 @@ pub fn fill_in_generics(
             Ok(func_type(new_args, nr))
         }
 
-        (&Type::Struct(ref generic_st), &Type::Struct(ref actual_st)) => {
+        (Type::Struct(generic_st), Type::Struct(actual_st)) => {
             if generic_st.members.len() != actual_st.members.len() {
                 return map_err();
             }
@@ -121,7 +121,7 @@ pub fn fill_in_generics(
             Ok(struct_type(&actual_st.name, new_members))
         }
 
-        (&Type::Sum(ref generic_st), &Type::Sum(ref actual_st)) => {
+        (Type::Sum(generic_st), Type::Sum(actual_st)) => {
             if generic_st.cases.len() != actual_st.cases.len() {
                 return map_err();
             }
@@ -139,12 +139,12 @@ pub fn fill_in_generics(
             Ok(sum_type(&actual_st.name, new_cases))
         }
 
-        (&Type::Pointer(ref generic_inner), &Type::Pointer(ref actual_inner)) => {
+        (Type::Pointer(generic_inner), Type::Pointer(actual_inner)) => {
             let inner = fill_in_generics(ctx, actual_inner, generic_inner, known_types, span)?;
             Ok(ptr_type(inner))
         }
 
-        (&Type::Optional(ref generic_inner), &Type::Optional(ref actual_inner)) => {
+        (Type::Optional(generic_inner), Type::Optional(actual_inner)) => {
             let inner = fill_in_generics(ctx, actual_inner, generic_inner, known_types, span)?;
             Ok(optional_type(inner))
         }

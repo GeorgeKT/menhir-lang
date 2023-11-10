@@ -11,8 +11,8 @@ pub struct MatchCase {
 pub fn match_case(p: Pattern, to_execute: Expression, span: Span) -> MatchCase {
     MatchCase {
         pattern: p,
-        to_execute: to_execute,
-        span: span,
+        to_execute,
+        span,
     }
 }
 
@@ -26,10 +26,10 @@ pub struct MatchExpression {
 
 pub fn match_expression(target: Expression, cases: Vec<MatchCase>, span: Span) -> Expression {
     Expression::Match(Box::new(MatchExpression {
-        target: target,
-        cases: cases,
+        target,
+        cases,
         typ: Type::Unknown,
-        span: span,
+        span,
     }))
 }
 

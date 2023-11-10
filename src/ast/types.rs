@@ -188,9 +188,9 @@ impl Type {
 
     pub fn is_matchable(&self, other: &Type) -> bool {
         match (self, other) {
-            (&Type::Array(ref a), &Type::Array(ref b)) => a.element_type == b.element_type,
-            (&Type::Slice(ref a), &Type::Array(ref b)) => a.element_type == b.element_type,
-            (&Type::Array(ref a), &Type::Slice(ref b)) => a.element_type == b.element_type,
+            (Type::Array(a), Type::Array(b)) => a.element_type == b.element_type,
+            (Type::Slice(a), Type::Array(b)) => a.element_type == b.element_type,
+            (Type::Array(a), Type::Slice(b)) => a.element_type == b.element_type,
             _ => *self == *other,
         }
     }
@@ -198,17 +198,17 @@ impl Type {
     // If possible generate a conversion expression
     pub fn convert(&self, from_type: &Type, expr: &Expression) -> Option<Expression> {
         match (self, from_type) {
-            (&Type::Slice(ref st), &Type::Array(ref at)) if st.element_type == at.element_type => {
+            (Type::Slice(st), Type::Array(at)) if st.element_type == at.element_type => {
                 Some(array_to_slice(expr.clone(), expr.span()))
             }
 
-            (&Type::Optional(ref inner), _) if *inner.deref() == *from_type => {
+            (Type::Optional(inner), _) if *inner.deref() == *from_type => {
                 Some(to_optional(expr.clone(), self.clone()))
             }
 
             (&Type::Bool, &Type::Optional(_)) => Some(Expression::OptionalToBool(Box::new(expr.clone()))),
 
-            (&Type::Optional(ref inner), _) if from_type.is_optional_of(&Type::Unknown) => {
+            (Type::Optional(inner), _) if from_type.is_optional_of(&Type::Unknown) => {
                 Some(nil_expr_with_type(expr.span(), inner.deref().clone()))
             }
 
@@ -218,7 +218,7 @@ impl Type {
                 span: expr.span(),
             }))),
 
-            (&Type::Pointer(ref to), &Type::Pointer(ref from)) => {
+            (Type::Pointer(to), Type::Pointer(from)) => {
                 if *to.deref() == Type::Void {
                     Some(type_cast(expr.clone(), ptr_type(Type::Void), expr.span()))
                 } else if *from.deref() == Type::Void {
@@ -236,8 +236,8 @@ impl Type {
 
     pub fn is_convertible(&self, dst_type: &Type) -> bool {
         match (self, dst_type) {
-            (&Type::Array(ref at), &Type::Slice(ref st)) => at.element_type == st.element_type,
-            (_, &Type::Optional(ref inner)) => *inner.deref() == *dst_type,
+            (Type::Array(at), Type::Slice(st)) => at.element_type == st.element_type,
+            (_, Type::Optional(inner)) => *inner.deref() == *dst_type,
             _ => false,
         }
     }
@@ -313,7 +313,7 @@ impl Type {
                 MemberAccessType::Property(Property::Len),
             )),
 
-            (&Type::Slice(ref st), "data") => Some((
+            (Type::Slice(st), "data") => Some((
                 ptr_type(st.element_type.clone()),
                 MemberAccessType::Property(Property::Data),
             )),
@@ -405,21 +405,21 @@ impl Type {
 
 pub fn func_type(args: Vec<Type>, ret: Type) -> Type {
     Type::Func(Rc::new(FuncType {
-        args: args,
+        args,
         return_type: ret,
     }))
 }
 
 pub fn array_type(element_type: Type, len: usize) -> Type {
     Type::Array(Rc::new(ArrayType {
-        element_type: element_type,
-        len: len,
+        element_type,
+        len,
     }))
 }
 
 pub fn slice_type(element_type: Type) -> Type {
     Type::Slice(Rc::new(SliceType {
-        element_type: element_type,
+        element_type,
     }))
 }
 
@@ -440,28 +440,28 @@ pub fn string_type_representation(native_int_size: IntSize) -> StructType {
 pub fn sum_type_case(name: &str, typ: Type) -> SumTypeCase {
     SumTypeCase {
         name: name.into(),
-        typ: typ,
+        typ,
     }
 }
 
 pub fn sum_type(name: &str, cases: Vec<SumTypeCase>) -> Type {
     Type::Sum(Rc::new(SumType {
         name: name.into(),
-        cases: cases,
+        cases,
     }))
 }
 
 pub fn enum_type(name: &str, cases: Vec<String>) -> Type {
     Type::Enum(Rc::new(EnumType {
         name: name.into(),
-        cases: cases,
+        cases,
     }))
 }
 
 pub fn struct_type(name: &str, members: Vec<StructMember>) -> Type {
     Type::Struct(Rc::new(StructType {
         name: name.into(),
-        members: members,
+        members,
     }))
 }
 
@@ -484,7 +484,7 @@ pub fn generic_type_with_constraints(constraints: Vec<Type>) -> Type {
 pub fn struct_member(name: &str, typ: Type) -> StructMember {
     StructMember {
         name: name.into(),
-        typ: typ,
+        typ,
     }
 }
 
@@ -502,15 +502,15 @@ pub fn type_alias(name: &str, original: Type, span: Span) -> TypeAlias
 pub fn unresolved_type(name: &str, generic_args: Vec<Type>) -> Type {
     Type::Unresolved(Rc::new(UnresolvedType {
         name: name.into(),
-        generic_args: generic_args,
+        generic_args,
     }))
 }
 
 pub fn interface_type(name: &str, generic_args: Vec<Type>, functions: Vec<FunctionSignature>) -> Type {
     Type::Interface(Rc::new(InterfaceType {
         name: name.into(),
-        generic_args: generic_args,
-        functions: functions,
+        generic_args,
+        functions,
     }))
 }
 

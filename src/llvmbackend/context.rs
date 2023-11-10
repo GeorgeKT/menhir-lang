@@ -41,10 +41,10 @@ impl<'a> Context<'a> {
             let context = LLVMContextCreate();
             LLVMContextSetOpaquePointers(context, 0);
             Ok(Context::<'a> {
-                context: context,
+                context,
                 module: LLVMModuleCreateWithNameInContext(context_name.as_ptr(), context),
                 builder: LLVMCreateBuilderInContext(context),
-                target_machine: target_machine,
+                target_machine,
                 name: module_name.into(),
                 stack: vec![StackFrame::new(ptr::null_mut())],
             })

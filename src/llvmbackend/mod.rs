@@ -36,8 +36,10 @@ use crate::bytecode::{ByteCodeModule, Constant};
 use crate::compileerror::{code_gen_error, CompileResult};
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum OutputType {
     #[serde(rename = "binary")]
+    #[default]
     Binary,
     #[serde(rename = "staticlib")]
     StaticLib,
@@ -45,11 +47,7 @@ pub enum OutputType {
     SharedLib,
 }
 
-impl Default for OutputType {
-    fn default() -> Self {
-        OutputType::Binary
-    }
-}
+
 
 impl fmt::Display for OutputType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

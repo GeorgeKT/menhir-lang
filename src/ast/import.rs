@@ -49,9 +49,9 @@ impl Symbol {
         Symbol {
             name: name.into(),
             typ: typ.clone(),
-            mutable: mutable,
+            mutable,
             span: span.clone(),
-            symbol_type: symbol_type,
+            symbol_type,
         }
     }
 }

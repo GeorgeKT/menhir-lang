@@ -102,7 +102,7 @@ impl Package {
             }
 
             OutputType::Binary => {
-                return Err(format!("Cannot add a binary as a library"));
+                return Err("Cannot add a binary as a library".to_string());
             }
         }
 

@@ -15,9 +15,8 @@ fn find_used_calls_rec(
         unused_calls.remove(func);
         if !visited.contains(func) {
             visited.insert(func.into());
-            module
-                .get_function(func)
-                .map(|callee| find_used_calls_rec(module, callee, unused_calls, visited));
+            if let Some(callee) = module
+                .get_function(func) { find_used_calls_rec(module, callee, unused_calls, visited) }
         }
     };
 
@@ -60,10 +59,9 @@ pub fn eliminate_unused_functions(module: &mut ByteCodeModule) {
     }
 
     for call in &unused_calls {
-        module
+        if let Some(func) = module
             .functions
-            .get(call)
-            .map(|func| print_message(&format!("Warning: unused function {}", func.sig.name), &func.sig.span));
+            .get(call) { print_message(&format!("Warning: unused function {}", func.sig.name), &func.sig.span) }
         module.functions.remove(call);
     }
 

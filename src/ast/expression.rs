@@ -70,14 +70,14 @@ pub fn type_cast(e: Expression, dst_type: Type, span: Span) -> Expression {
     Expression::Cast(Box::new(TypeCast {
         inner: e,
         destination_type: dst_type,
-        span: span,
+        span,
     }))
 }
 
 pub fn nil_expr(span: Span) -> Expression {
     Expression::Nil(Nil {
         typ: optional_type(Type::Unknown),
-        span: span,
+        span,
     })
 }
 
@@ -88,7 +88,7 @@ pub fn return_expr(expression: Expression, span: Span) -> Expression {
 pub fn nil_expr_with_type(span: Span, optional_inner_type: Type) -> Expression {
     Expression::Nil(Nil {
         typ: optional_type(optional_inner_type),
-        span: span,
+        span,
     })
 }
 

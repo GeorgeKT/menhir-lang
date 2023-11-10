@@ -10,8 +10,8 @@ pub struct Pos {
 impl Pos {
     pub fn new(line: usize, offset: usize) -> Pos {
         Pos {
-            line: line,
-            offset: offset,
+            line,
+            offset,
         }
     }
 
@@ -60,15 +60,15 @@ impl Span {
     pub fn new(file: &str, start: Pos, end: Pos) -> Span {
         Span {
             file: file.into(),
-            start: start,
-            end: end,
+            start,
+            end,
         }
     }
 
     pub fn single(file: &str, start: Pos) -> Span {
         Span {
             file: file.into(),
-            start: start,
+            start,
             end: start,
         }
     }

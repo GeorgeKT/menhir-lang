@@ -1,4 +1,4 @@
-use libc;
+
 use llvm::core::*;
 use llvm::prelude::*;
 use std::collections::HashMap;

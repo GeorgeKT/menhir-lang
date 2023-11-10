@@ -26,7 +26,7 @@ pub struct Field {
 pub fn field(name: &str, index: usize) -> Field {
     Field {
         name: name.into(),
-        index: index,
+        index,
     }
 }
 

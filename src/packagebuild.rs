@@ -2,7 +2,7 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use toml;
+
 
 use crate::ast::TreePrinter;
 use crate::bytecode::{compile_to_byte_code, optimize_module, OptimizationLevel};
@@ -106,8 +106,8 @@ impl PackageTarget {
         pkg: &mut Package,
     ) -> CompileResult<bool> {
         let path = format!("{}/{}/{}/{}.mhr.exports", deps_dir, target_triplet, dep, dep);
-        if let Ok(mut file) = File::open(&path) {
-            if let Ok(_) = pkg.add_library(&mut file, dep, deps_dir, target_triplet) {
+        if let Ok(mut file) = File::open(path) {
+            if pkg.add_library(&mut file, dep, deps_dir, target_triplet).is_ok() {
                 Ok(true)
             } else {
                 Ok(false)

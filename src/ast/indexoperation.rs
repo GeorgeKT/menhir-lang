@@ -11,9 +11,9 @@ pub struct IndexOperation {
 
 pub fn index_op(target: Expression, index_expr: Expression, span: Span) -> Expression {
     Expression::IndexOperation(Box::new(IndexOperation {
-        target: target,
-        index_expr: index_expr,
-        span: span,
+        target,
+        index_expr,
+        span,
         typ: Type::Unknown,
     }))
 }

@@ -16,10 +16,10 @@ fn matches_function_signature(
             (&Type::Pointer(ref e), &Type::Pointer(ref a)) | (&Type::Optional(ref e), &Type::Optional(ref a)) => {
                 type_matches(e, a, concrete_type, interface)
             }
-            (&Type::Array(ref e), &Type::Array(ref a)) => {
+            (Type::Array(e), Type::Array(a)) => {
                 type_matches(&e.element_type, &a.element_type, concrete_type, interface)
             }
-            (&Type::Slice(ref e), &Type::Slice(ref a)) => {
+            (Type::Slice(e), Type::Slice(a)) => {
                 type_matches(&e.element_type, &a.element_type, concrete_type, interface)
             }
             _ => *expected == *actual || (*expected == Type::SelfType && *actual == *concrete_type),
@@ -27,7 +27,7 @@ fn matches_function_signature(
     }
 
     match (expected, actual) {
-        (&Type::Func(ref e), &Type::Func(ref a)) => {
+        (Type::Func(e), Type::Func(a)) => {
             if e.args.len() != a.args.len() {
                 return Err(format!("Argument count mismatch for method {}", method_name));
             }
@@ -533,7 +533,7 @@ pub fn instantiate(
     let sig = FunctionSignature {
         name: new_func_name(&func.sig.name, generic_args),
         return_type: return_type.clone(),
-        args: args,
+        args,
         span: func.sig.span.clone(),
         typ: func_type(arg_types, return_type),
     };

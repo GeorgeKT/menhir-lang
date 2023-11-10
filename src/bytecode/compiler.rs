@@ -244,7 +244,7 @@ fn member_store_lhs_to_bc(func: &mut ByteCodeFunction, lhs: &Expression, target:
             };
 
             match (inner_ma_typ, &inner_ma.right) {
-                (&Type::Struct(_), &MemberAccessType::Name(ref field)) => {
+                (&Type::Struct(_), MemberAccessType::Name(field)) => {
                     fields.push((field.index, inner_ma.typ.clone()));
                     (var, fields)
                 }
@@ -290,13 +290,13 @@ fn member_access_to_bc(
     func.pop_destination();
 
     let var_typ = if let Type::Pointer(ref inner) = var.typ {
-        &inner
+        inner
     } else {
         &var.typ
     };
 
     match (var_typ, &sma.right) {
-        (&Type::Struct(_), &MemberAccessType::Name(ref field)) => {
+        (&Type::Struct(_), MemberAccessType::Name(field)) => {
             if dst.typ.pass_by_value() {
                 func.add(load_member_instr(dst, &var, field.index, target.int_size));
             } else {
@@ -304,7 +304,7 @@ fn member_access_to_bc(
             }
         }
 
-        (&Type::Array(ref at), &MemberAccessType::Property(Property::Len)) => func.add(store_operand_instr(
+        (Type::Array(at), &MemberAccessType::Property(Property::Len)) => func.add(store_operand_instr(
             dst,
             Operand::const_uint(at.len as u64, target.int_size),
         )),

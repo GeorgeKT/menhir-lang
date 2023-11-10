@@ -82,27 +82,27 @@ pub fn array_pattern(head: &str, tail: &str, span: Span) -> Pattern {
     Pattern::Array(ArrayPattern {
         head: head.into(),
         tail: tail.into(),
-        span: span,
+        span,
     })
 }
 
 pub fn empty_array_pattern(span: Span) -> Pattern {
-    Pattern::EmptyArray(EmptyArrayPattern { span: span })
+    Pattern::EmptyArray(EmptyArrayPattern { span })
 }
 
 pub fn struct_pattern(name: &str, bindings: Vec<StructPatternBinding>, typ: Type, span: Span) -> StructPattern {
     StructPattern {
         name: name.into(),
-        bindings: bindings,
-        typ: typ,
-        span: span,
+        bindings,
+        typ,
+        span,
     }
 }
 
 pub fn optional_pattern(binding: String, span: Span) -> Pattern {
     Pattern::Optional(OptionalPattern {
-        binding: binding.into(),
-        span: span,
+        binding: binding,
+        span,
         inner_type: Type::Unknown,
     })
 }

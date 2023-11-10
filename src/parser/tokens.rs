@@ -70,8 +70,8 @@ impl Display for TokenKind {
             TokenKind::Comma => write!(fmt, ","),
             TokenKind::OpenParen => write!(fmt, "("),
             TokenKind::CloseParen => write!(fmt, ")"),
-            TokenKind::OpenCurly => write!(fmt, "{}", '{'),
-            TokenKind::CloseCurly => write!(fmt, "{}", '}'),
+            TokenKind::OpenCurly => write!(fmt, "{{"),
+            TokenKind::CloseCurly => write!(fmt, "}}"),
             TokenKind::OpenBracket => write!(fmt, "["),
             TokenKind::CloseBracket => write!(fmt, "]"),
             TokenKind::Arrow => write!(fmt, "->"),
@@ -119,7 +119,7 @@ pub struct Token {
 
 impl Token {
     pub fn new(kind: TokenKind, span: Span) -> Token {
-        Token { kind: kind, span: span }
+        Token { kind, span }
     }
 }
 

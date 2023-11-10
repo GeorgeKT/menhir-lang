@@ -13,9 +13,9 @@ pub struct Call {
 impl Call {
     pub fn new(callee: NameRef, args: Vec<Expression>, span: Span) -> Call {
         Call {
-            callee: callee,
-            args: args,
-            span: span,
+            callee,
+            args,
+            span,
             generic_args: GenericMapping::new(),
             return_type: Type::Unknown,
         }

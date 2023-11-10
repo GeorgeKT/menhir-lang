@@ -14,14 +14,14 @@ impl Var {
     pub fn new(idx: usize, typ: Type) -> Var {
         Var {
             name: format!("$var{}", idx),
-            typ: typ,
+            typ,
         }
     }
 
     pub fn named(name: &str, typ: Type) -> Var {
         Var {
             name: name.into(),
-            typ: typ,
+            typ,
         }
     }
 }
@@ -99,7 +99,7 @@ pub struct BasicBlock {
 impl BasicBlock {
     pub fn new(name: String) -> BasicBlock {
         BasicBlock {
-            name: name,
+            name,
             instructions: Vec::new(),
         }
     }
@@ -137,7 +137,7 @@ impl ByteCodeFunction {
         let mut f = ByteCodeFunction {
             sig: sig.clone(),
             blocks: BTreeMap::new(),
-            external: external,
+            external,
             current_bb: 0,
             bb_counter: 0,
             var_counter: 0,
@@ -158,7 +158,7 @@ impl ByteCodeFunction {
 
     pub fn add(&mut self, inst: Instruction) {
         let idx = self.current_bb;
-        self.blocks.get_mut(&idx).map(|bb| bb.add(inst));
+        if let Some(bb) = self.blocks.get_mut(&idx) { bb.add(inst) }
     }
 
     pub fn create_basic_block(&mut self) -> BasicBlockRef {
@@ -212,7 +212,7 @@ impl ByteCodeFunction {
 
     pub fn get_destination(&self) -> Option<Var> {
         match self.destinations.last() {
-            Some(&Some(ref var)) => Some(var.clone()),
+            Some(Some(var)) => Some(var.clone()),
             _ => None,
         }
     }

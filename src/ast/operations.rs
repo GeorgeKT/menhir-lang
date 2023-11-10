@@ -44,19 +44,19 @@ pub fn bin_op_with_precedence(
 pub fn bin_op_with_type(op: BinaryOperator, left: Expression, right: Expression, span: Span, typ: Type) -> Expression {
     Expression::BinaryOp(Box::new(BinaryOp {
         operator: op,
-        left: left,
-        right: right,
-        span: span,
-        typ: typ,
+        left,
+        right,
+        span,
+        typ,
         precedence: op.precedence(),
     }))
 }
 
 pub fn unary_op(operator: UnaryOperator, expression: Expression, span: Span) -> Expression {
     Expression::UnaryOp(Box::new(UnaryOp {
-        operator: operator,
-        expression: expression,
-        span: span,
+        operator,
+        expression,
+        span,
         typ: Type::Unknown,
     }))
 }

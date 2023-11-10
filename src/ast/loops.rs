@@ -10,9 +10,9 @@ pub struct WhileLoop {
 
 pub fn while_loop(cond: Expression, body: Expression, span: Span) -> Expression {
     Expression::While(Box::new(WhileLoop {
-        cond: cond,
-        body: body,
-        span: span,
+        cond,
+        body,
+        span,
     }))
 }
 
@@ -38,9 +38,9 @@ pub fn for_loop(loop_variable: &str, iterable: Expression, body: Expression, spa
     Expression::For(Box::new(ForLoop {
         loop_variable: loop_variable.into(),
         loop_variable_type: Type::Unknown,
-        iterable: iterable,
-        body: body,
-        span: span,
+        iterable,
+        body,
+        span,
     }))
 }
 

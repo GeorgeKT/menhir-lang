@@ -12,20 +12,20 @@ pub struct IfExpression {
 
 pub fn single_if_expression(condition: Expression, on_true: Expression, span: Span) -> Expression {
     Expression::If(Box::new(IfExpression {
-        condition: condition,
-        on_true: on_true,
+        condition,
+        on_true,
         on_false: None,
-        span: span,
+        span,
         typ: Type::Unknown,
     }))
 }
 
 pub fn if_expression(condition: Expression, on_true: Expression, on_false: Expression, span: Span) -> Expression {
     Expression::If(Box::new(IfExpression {
-        condition: condition,
-        on_true: on_true,
+        condition,
+        on_true,
         on_false: Some(on_false),
-        span: span,
+        span,
         typ: Type::Unknown,
     }))
 }

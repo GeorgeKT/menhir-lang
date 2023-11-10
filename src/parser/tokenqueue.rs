@@ -122,7 +122,7 @@ impl TokenQueue {
 
     pub fn is_next_assign_operator(&self) -> Option<AssignOperator> {
         match self.tokens.front() {
-            Some(ref tok) => {
+            Some(tok) => {
                 if let TokenKind::Assign(op) = tok.kind {
                     Some(op)
                 } else {

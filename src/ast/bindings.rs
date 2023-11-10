@@ -42,38 +42,38 @@ pub struct BindingExpression {
 
 pub fn name_binding(name: String, init: Expression, mutable: bool, span: Span) -> Binding {
     Binding {
-        mutable: mutable,
+        mutable,
         binding_type: BindingType::Name(name),
-        init: init,
+        init,
         typ: Type::Unknown,
-        span: span,
+        span,
     }
 }
 
 pub fn binding(bt: BindingType, init: Expression, mutable: bool, span: Span) -> Binding {
     Binding {
-        mutable: mutable,
+        mutable,
         binding_type: bt,
-        init: init,
+        init,
         typ: Type::Unknown,
-        span: span,
+        span,
     }
 }
 
 pub fn global_binding(name: String, init: Expression, mutable: bool, span: Span) -> GlobalBinding {
     GlobalBinding {
-        mutable: mutable,
-        name: name,
-        init: init,
+        mutable,
+        name,
+        init,
         typ: Type::Unknown,
-        span: span,
+        span,
     }
 }
 
 pub fn bindings(bindings: Vec<Binding>, span: Span) -> Expression {
     Expression::Bindings(Box::new(BindingList {
-        bindings: bindings,
-        span: span,
+        bindings,
+        span,
     }))
 }
 

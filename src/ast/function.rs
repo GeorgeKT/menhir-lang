@@ -13,9 +13,9 @@ impl Argument {
     pub fn new<S: Into<String>>(name: S, typ: Type, mutable: bool, span: Span) -> Argument {
         Argument {
             name: name.into(),
-            typ: typ,
-            mutable: mutable,
-            span: span,
+            typ,
+            mutable,
+            span,
         }
     }
 }
@@ -91,10 +91,10 @@ pub struct Function {
 impl Function {
     pub fn new(sig: FunctionSignature, public: bool, expr: Expression, span: Span) -> Function {
         Function {
-            sig: sig,
-            public: public,
+            sig,
+            public,
             expression: expr,
-            span: span,
+            span,
             type_checked: false,
             generics_resolved: false,
         }
@@ -118,8 +118,8 @@ pub fn sig(name: &str, ret: Type, args: Vec<Argument>, span: Span) -> FunctionSi
     FunctionSignature {
         name: name.into(),
         return_type: ret,
-        args: args,
-        span: span,
+        args,
+        span,
         typ: Type::Unknown,
     }
 }
@@ -132,7 +132,7 @@ pub struct ExternalFunction {
 
 impl ExternalFunction {
     pub fn new(sig: FunctionSignature, span: Span) -> ExternalFunction {
-        ExternalFunction { sig: sig, span: span }
+        ExternalFunction { sig, span }
     }
 }
 

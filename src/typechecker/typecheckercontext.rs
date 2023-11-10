@@ -63,7 +63,7 @@ pub enum ImportSymbolResolver<'a> {
 impl<'a> ImportSymbolResolver<'a> {
     pub fn resolve(&self, name: &str) -> Option<Symbol> {
         match *self {
-            ImportSymbolResolver::ImportMap(ref imports) => {
+            ImportSymbolResolver::ImportMap(imports) => {
                 for import in imports.values() {
                     if let Some(s) = import.resolve(name, false) {
                         return Some(s);
@@ -73,7 +73,7 @@ impl<'a> ImportSymbolResolver<'a> {
                 None
             }
 
-            ImportSymbolResolver::ExternalImport(ref import) => import.resolve(name, true),
+            ImportSymbolResolver::ExternalImport(import) => import.resolve(name, true),
         }
     }
 }

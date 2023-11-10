@@ -17,8 +17,8 @@ impl FunctionInstance {
         FunctionInstance {
             name: name.into(),
             function: func,
-            return_type: return_type,
-            typ: typ,
+            return_type,
+            typ,
         }
     }
 }

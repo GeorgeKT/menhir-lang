@@ -11,9 +11,9 @@ pub struct NameRef {
 impl NameRef {
     pub fn new(name: String, span: Span) -> NameRef {
         NameRef {
-            name: name,
+            name,
             typ: Type::Unknown,
-            span: span,
+            span,
         }
     }
 }

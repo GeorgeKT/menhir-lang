@@ -128,7 +128,7 @@ fn basic_bin_op_checks(
             target,
         ));
 
-        if !result.is_ok() {
+        if result.is_err() {
             return type_error_result(
                 &b.span,
                 format!(
@@ -612,23 +612,23 @@ fn is_instantiation_of(concrete_type: &Type, generic_type: &Type) -> bool {
     }
 
     match (concrete_type, generic_type) {
-        (&Type::Array(ref a), &Type::Array(ref b)) => is_instantiation_of(&a.element_type, &b.element_type),
+        (Type::Array(a), Type::Array(b)) => is_instantiation_of(&a.element_type, &b.element_type),
         (_, &Type::Generic(_)) => true,
-        (&Type::Struct(ref a), &Type::Struct(ref b)) => {
+        (Type::Struct(a), Type::Struct(b)) => {
             a.members.len() == b.members.len()
                 && a.members
                     .iter()
                     .zip(b.members.iter())
                     .all(|(ma, mb)| is_instantiation_of(&ma.typ, &mb.typ))
         }
-        (&Type::Func(ref a), &Type::Func(ref b)) => {
+        (Type::Func(a), Type::Func(b)) => {
             is_instantiation_of(&a.return_type, &b.return_type)
                 && a.args
                     .iter()
                     .zip(b.args.iter())
                     .all(|(ma, mb)| is_instantiation_of(ma, mb))
         }
-        (&Type::Sum(ref a), &Type::Sum(ref b)) => a
+        (Type::Sum(a), Type::Sum(b)) => a
             .cases
             .iter()
             .zip(b.cases.iter())
@@ -774,7 +774,7 @@ fn update_binding_type(
                 if let BindingType::Name(ref b_name) = b.binding_type {
                     if *b_name == *name {
                         // It's one we know, so lets try again with a proper type hint
-                        b.typ = type_check_expression(ctx, &mut b.init, Some(&expected_type), target)?;
+                        b.typ = type_check_expression(ctx, &mut b.init, Some(expected_type), target)?;
                         ctx.update(Symbol::new(b_name, &b.typ, b.mutable, &b.span, SymbolType::Normal));
                         return Ok(());
                     }
@@ -808,9 +808,9 @@ fn type_check_if(
 ) -> TypeCheckResult {
     type_check_with_conversion(ctx, &mut i.condition, &Type::Bool, target)?;
 
-    let on_true_type = type_check_expression(ctx, &mut i.on_true, type_hint.clone(), target)?;
+    let on_true_type = type_check_expression(ctx, &mut i.on_true, type_hint, target)?;
     let on_false_type = if let Some(ref mut expr) = i.on_false {
-        type_check_expression(ctx, expr, type_hint.clone(), target)?
+        type_check_expression(ctx, expr, type_hint, target)?
     } else {
         Type::Void
     };
@@ -1077,11 +1077,11 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
 
         (&mut MemberAccessType::Property(Property::Data), &Type::String) => (ptr_type(Type::UInt(IntSize::I8)), None),
 
-        (&mut MemberAccessType::Property(Property::Data), &Type::Slice(ref st)) => {
+        (&mut MemberAccessType::Property(Property::Data), Type::Slice(st)) => {
             (ptr_type(st.element_type.clone()), None)
         }
 
-        (&mut MemberAccessType::Name(ref mut field), &Type::Struct(ref st)) => {
+        (&mut MemberAccessType::Name(ref mut field), Type::Struct(st)) => {
             let (member_idx, member_type) = find_member_type(&st.members, &field.name, &sma.span)?;
             field.index = member_idx;
             (member_type, None)
@@ -1100,19 +1100,19 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
             }
         }
 
-        (&mut MemberAccessType::Call(ref mut call), &Type::Struct(ref st)) => {
+        (&mut MemberAccessType::Call(ref mut call), Type::Struct(st)) => {
             let call_name = format!("{}.{}", st.name, call.callee.name);
             call.callee.name = call_name;
             return replace_by(member_call_to_call(&sma.left, call, target.int_size));
         }
 
-        (&mut MemberAccessType::Call(ref mut call), &Type::Sum(ref st)) => {
+        (&mut MemberAccessType::Call(ref mut call), Type::Sum(st)) => {
             let call_name = format!("{}.{}", st.name, call.callee.name);
             call.callee.name = call_name;
             return replace_by(member_call_to_call(&sma.left, call, target.int_size));
         }
 
-        (&mut MemberAccessType::Call(ref mut call), &Type::Generic(ref gt)) => {
+        (&mut MemberAccessType::Call(ref mut call), Type::Generic(gt)) => {
             (type_check_generic_member_call(ctx, call, gt)?, None)
         }
 
@@ -1434,12 +1434,12 @@ fn type_check_cast(ctx: &mut TypeCheckerContext, c: &mut TypeCast, target: &Targ
         | (Type::UInt(_), &Type::Float(_))
         | (Type::Float(_), &Type::Int(_))
         | (Type::Float(_), &Type::UInt(_)) => valid(c.destination_type.clone()),
-        (Type::Pointer(_), &Type::Pointer(ref to)) if *to.deref() == Type::Void => valid(c.destination_type.clone()),
+        (Type::Pointer(_), Type::Pointer(to)) if *to.deref() == Type::Void => valid(c.destination_type.clone()),
         (Type::Pointer(ref from), &Type::Pointer(_)) if *from.deref() == Type::Void => {
             valid(c.destination_type.clone())
         }
         (Type::Pointer(_), &Type::Bool) => valid(Type::Bool),
-        (Type::Array(ref at), &Type::Pointer(ref to)) if at.element_type == *to.deref() => {
+        (Type::Array(ref at), Type::Pointer(to)) if at.element_type == *to.deref() => {
             valid(c.destination_type.clone())
         }
         (inner_type, _) => type_error_result(
@@ -1473,7 +1473,7 @@ fn type_check_compiler_call(
             ref mut typ,
             ref span,
         } => {
-            let data_type = if let Some(&Type::Slice(ref st)) = type_hint {
+            let data_type = if let Some(Type::Slice(st)) = type_hint {
                 let data_ptr_type = ptr_type(st.element_type.clone());
                 type_check_expression(ctx, data, Some(&data_ptr_type), target)?
             } else {
@@ -1504,7 +1504,7 @@ fn type_check_literal(
         Literal::Array(ref mut a) => type_check_array_literal(ctx, a, target),
 
         Literal::NullPtr(ref span, ref mut typ) => {
-            if let Some(&Type::Pointer(ref inner_type)) = type_hint {
+            if let Some(Type::Pointer(inner_type)) = type_hint {
                 *typ = inner_type.deref().clone();
                 valid(ptr_type(typ.clone()))
             } else if *typ != Type::Unknown {
