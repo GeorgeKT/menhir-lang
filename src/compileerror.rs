@@ -6,7 +6,7 @@ use std::fmt;
 use std::fs::File;
 use std::io;
 use std::io::BufRead;
-use std::iter::repeat;
+
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ErrorData {

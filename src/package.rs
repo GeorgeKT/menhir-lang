@@ -111,29 +111,27 @@ impl Package {
     }
 
     fn parse_file_tree(&mut self, dir: &Path, namespace: &str, target: &Target) -> CompileResult<()> {
-        for entry in dir.read_dir()? {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                if path.is_dir() {
-                    let sub_ns = format!(
-                        "{}::{}",
-                        namespace,
-                        path.file_stem()
-                            .expect("Path must have a stem")
-                            .to_string_lossy()
-                    );
-                    self.parse_file_tree(&path, &sub_ns, target)?;
-                } else if path.extension() == Some(OsStr::new("mhr")) {
-                    let sub_ns = format!(
-                        "{}::{}",
-                        namespace,
-                        path.file_stem()
-                            .expect("Path must have a stem")
-                            .to_string_lossy()
-                    );
-                    let module = parse_file(&path, &sub_ns, target)?;
-                    self.modules.insert(sub_ns, module);
-                }
+        for entry in dir.read_dir()?.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let sub_ns = format!(
+                    "{}::{}",
+                    namespace,
+                    path.file_stem()
+                        .expect("Path must have a stem")
+                        .to_string_lossy()
+                );
+                self.parse_file_tree(&path, &sub_ns, target)?;
+            } else if path.extension() == Some(OsStr::new("mhr")) {
+                let sub_ns = format!(
+                    "{}::{}",
+                    namespace,
+                    path.file_stem()
+                        .expect("Path must have a stem")
+                        .to_string_lossy()
+                );
+                let module = parse_file(&path, &sub_ns, target)?;
+                self.modules.insert(sub_ns, module);
             }
         }
 

@@ -1,7 +1,7 @@
 use libc::{c_char, c_uint};
-use llvm::core::*;
-use llvm::prelude::*;
-use llvm::LLVMLinkage;
+use llvm_sys::core::*;
+use llvm_sys::prelude::*;
+use llvm_sys::LLVMLinkage;
 
 use super::context::Context;
 use super::instructions::{const_bool, const_char, const_float, const_int, const_uint, copy, get_operand};

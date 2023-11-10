@@ -1,6 +1,7 @@
 use crate::ast::{prefix, Expression, StructPattern, TreePrinter, Type};
 use crate::span::Span;
 use itertools::free::join;
+use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum BindingType {
@@ -71,10 +72,7 @@ pub fn global_binding(name: String, init: Expression, mutable: bool, span: Span)
 }
 
 pub fn bindings(bindings: Vec<Binding>, span: Span) -> Expression {
-    Expression::Bindings(Box::new(BindingList {
-        bindings,
-        span,
-    }))
+    Expression::Bindings(Box::new(BindingList { bindings, span }))
 }
 
 impl TreePrinter for Binding {

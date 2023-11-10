@@ -1,5 +1,6 @@
 use crate::ast::{prefix, ptr_type, ArrayLiteral, FloatSize, IntSize, TreePrinter, Type};
 use crate::span::Span;
+use serde_derive::{Deserialize, Serialize};
 use std::ops::Deref;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]

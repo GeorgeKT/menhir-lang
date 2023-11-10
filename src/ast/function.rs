@@ -1,5 +1,6 @@
 use crate::ast::{func_type, prefix, Expression, TreePrinter, Type};
 use crate::span::Span;
+use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct Argument {

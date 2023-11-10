@@ -8,20 +8,15 @@ fn matches_function_signature(
     expected: &Type,
     actual: &Type,
     concrete_type: &Type,
-    interface: &Type,
     method_name: &str,
 ) -> Result<(), String> {
-    fn type_matches(expected: &Type, actual: &Type, concrete_type: &Type, interface: &Type) -> bool {
+    fn type_matches(expected: &Type, actual: &Type, concrete_type: &Type) -> bool {
         match (expected, actual) {
             (&Type::Pointer(ref e), &Type::Pointer(ref a)) | (&Type::Optional(ref e), &Type::Optional(ref a)) => {
-                type_matches(e, a, concrete_type, interface)
+                type_matches(e, a, concrete_type)
             }
-            (Type::Array(e), Type::Array(a)) => {
-                type_matches(&e.element_type, &a.element_type, concrete_type, interface)
-            }
-            (Type::Slice(e), Type::Slice(a)) => {
-                type_matches(&e.element_type, &a.element_type, concrete_type, interface)
-            }
+            (Type::Array(e), Type::Array(a)) => type_matches(&e.element_type, &a.element_type, concrete_type),
+            (Type::Slice(e), Type::Slice(a)) => type_matches(&e.element_type, &a.element_type, concrete_type),
             _ => *expected == *actual || (*expected == Type::SelfType && *actual == *concrete_type),
         }
     }
@@ -32,12 +27,12 @@ fn matches_function_signature(
                 return Err(format!("Argument count mismatch for method {}", method_name));
             }
 
-            if !type_matches(&e.return_type, &a.return_type, concrete_type, interface) {
+            if !type_matches(&e.return_type, &a.return_type, concrete_type) {
                 return Err(format!("Return types do not match on method {}", method_name));
             }
 
             for (idx, (e_arg, a_arg)) in e.args.iter().zip(a.args.iter()).enumerate() {
-                if !type_matches(e_arg, a_arg, concrete_type, interface) {
+                if !type_matches(e_arg, a_arg, concrete_type) {
                     return Err(format!(
                         "The type of argument {} does not match on method {}.",
                         idx, method_name
@@ -68,7 +63,7 @@ fn satisfies_interface(ctx: &TypeCheckerContext, concrete_type: &Type, interface
             .resolve(&format!("{}.{}", concrete_type_name, func.name))
             .ok_or_else(|| format!("No method {} found on type {}", func.name, concrete_type_name))?;
 
-        matches_function_signature(&func.typ, &r.typ, concrete_type, interface, &func.name)?;
+        matches_function_signature(&func.typ, &r.typ, concrete_type, &func.name)?;
     }
 
     Ok(())

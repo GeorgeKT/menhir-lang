@@ -1,6 +1,7 @@
 use crate::ast::{prefix, Literal, NameRef, TreePrinter, Type};
 use crate::span::Span;
 use itertools::free::join;
+use serde_derive::{Deserialize, Serialize};
 use std::fmt;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
@@ -101,7 +102,7 @@ pub fn struct_pattern(name: &str, bindings: Vec<StructPatternBinding>, typ: Type
 
 pub fn optional_pattern(binding: String, span: Span) -> Pattern {
     Pattern::Optional(OptionalPattern {
-        binding: binding,
+        binding,
         span,
         inner_type: Type::Unknown,
     })

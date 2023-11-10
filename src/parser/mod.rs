@@ -25,18 +25,18 @@ use self::tokenqueue::TokenQueue;
 use self::tokens::{Token, TokenKind};
 
 fn is_end_of_expression(tok: &Token) -> bool {
-    match tok.kind {
+    matches!(
+        tok.kind,
         TokenKind::UnaryOperator(_)
-        | TokenKind::BinaryOperator(_)
-        | TokenKind::Number(_)
-        | TokenKind::Identifier(_)
-        | TokenKind::StringLiteral(_)
-        | TokenKind::Assign(_)
-        | TokenKind::OpenParen
-        | TokenKind::OpenBracket
-        | TokenKind::OpenCurly => false,
-        _ => true,
-    }
+            | TokenKind::BinaryOperator(_)
+            | TokenKind::Number(_)
+            | TokenKind::Identifier(_)
+            | TokenKind::StringLiteral(_)
+            | TokenKind::Assign(_)
+            | TokenKind::OpenParen
+            | TokenKind::OpenBracket
+            | TokenKind::OpenCurly
+    )
 }
 
 fn eat_comma(tq: &mut TokenQueue) -> CompileResult<()> {
@@ -184,11 +184,7 @@ fn parse_binary_op_rhs(
     //use ast::TreePrinter;
 
     loop {
-        if tq
-            .peek()
-            .map(is_end_of_expression)
-            .unwrap_or(false)
-        {
+        if tq.peek().map(is_end_of_expression).unwrap_or(false) {
             return Ok(lhs);
         }
 
@@ -828,9 +824,11 @@ fn check_indent_level(tq: &mut TokenQueue, indent_level: usize) -> CompileResult
 
 fn is_end_of_block(tq: &mut TokenQueue) -> bool {
     tq.peek()
-        .map(|tok| match tok.kind {
-            TokenKind::CloseParen | TokenKind::CloseBracket | TokenKind::Else | TokenKind::EOF => true,
-            _ => false,
+        .map(|tok| {
+            matches!(
+                tok.kind,
+                TokenKind::CloseParen | TokenKind::CloseBracket | TokenKind::Else | TokenKind::EOF
+            )
         })
         .unwrap_or(true)
 }
@@ -963,11 +961,7 @@ fn parse_compiler_call(
 }
 
 fn parse_return(tq: &mut TokenQueue, start: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression> {
-    if tq
-        .peek()
-        .map(is_end_of_expression)
-        .unwrap_or(true)
-    {
+    if tq.peek().map(is_end_of_expression).unwrap_or(true) {
         Ok(return_expr(Expression::Void, start.clone()))
     } else {
         let expr = parse_expression(tq, indent_level, target)?;

@@ -1,5 +1,6 @@
 use crate::ast::{BinaryOperator, Expression, Type, UnaryOperator};
 use crate::span::Span;
+use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct UnaryOp {
@@ -33,11 +34,11 @@ pub fn bin_op_with_precedence(
 ) -> Expression {
     Expression::BinaryOp(Box::new(BinaryOp {
         operator: op,
-        left: left,
-        right: right,
-        span: span,
+        left,
+        right,
+        span,
         typ: Type::Unknown,
-        precedence: precedence,
+        precedence,
     }))
 }
 

@@ -1,5 +1,6 @@
 use crate::ast::{prefix, Expression, TreePrinter, Type};
 use crate::span::Span;
+use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct WhileLoop {
@@ -9,11 +10,7 @@ pub struct WhileLoop {
 }
 
 pub fn while_loop(cond: Expression, body: Expression, span: Span) -> Expression {
-    Expression::While(Box::new(WhileLoop {
-        cond,
-        body,
-        span,
-    }))
+    Expression::While(Box::new(WhileLoop { cond, body, span }))
 }
 
 impl TreePrinter for WhileLoop {

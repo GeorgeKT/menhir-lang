@@ -110,11 +110,7 @@ impl TokenQueue {
     pub fn is_next_binary_operator(&self) -> bool {
         match self.tokens.front() {
             Some(tok) => {
-                if let TokenKind::BinaryOperator(_) = tok.kind {
-                    true
-                } else {
-                    false
-                }
+                matches!(tok.kind, TokenKind::BinaryOperator(_))
             }
             None => false,
         }
@@ -136,8 +132,8 @@ impl TokenQueue {
     pub fn is_next_identifier(&self, value: &str) -> bool {
         match self.tokens.front() {
             Some(tok) => {
-                if let TokenKind::Identifier(ref v) = tok.kind {
-                    *v == *value
+                if let TokenKind::Identifier(v) = &tok.kind {
+                    v == value
                 } else {
                     false
                 }

@@ -1,6 +1,7 @@
 use crate::ast::{generic_type, prefix, sig, Argument, Expression, FunctionSignature, TreePrinter, Type};
 use crate::compileerror::{type_error_result, CompileResult};
 use crate::span::Span;
+use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Lambda {

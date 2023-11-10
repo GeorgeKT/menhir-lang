@@ -4,8 +4,8 @@ use super::valueref::ValueRef;
 use super::CodeGenOptions;
 use crate::ast::{ptr_type, Type};
 use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
-use llvm::core::*;
-use llvm::prelude::*;
+use llvm_sys::core::*;
+use llvm_sys::prelude::*;
 use std::ffi::CString;
 use std::fs::DirBuilder;
 use std::ptr;
@@ -195,7 +195,7 @@ impl<'a> Context<'a> {
     }
 
     unsafe fn optimize(&self) -> Result<(), String> {
-        use llvm::transforms::pass_manager_builder::*;
+        use llvm_sys::transforms::pass_manager_builder::*;
 
         let pass_builder = LLVMPassManagerBuilderCreate();
         LLVMPassManagerBuilderSetOptLevel(pass_builder, 3);
@@ -224,7 +224,7 @@ impl<'a> Context<'a> {
 
     pub fn verify(&self) -> Result<(), String> {
         use libc::c_char;
-        use llvm::analysis::*;
+        use llvm_sys::analysis::*;
         use std::ffi::CStr;
         unsafe {
             let mut error_message: *mut c_char = ptr::null_mut();

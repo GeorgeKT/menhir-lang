@@ -229,13 +229,10 @@ pub enum Instruction {
 
 impl Instruction {
     pub fn is_terminator(&self) -> bool {
-        match *self {
-            Instruction::Branch(_)
-            | Instruction::BranchIf { .. }
-            | Instruction::ReturnVoid
-            | Instruction::Return(_) => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Instruction::Branch(_) | Instruction::BranchIf { .. } | Instruction::ReturnVoid | Instruction::Return(_)
+        )
     }
 }
 

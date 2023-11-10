@@ -1,5 +1,6 @@
 use crate::ast::{Expression, Type};
 use crate::span::Span;
+use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Block {

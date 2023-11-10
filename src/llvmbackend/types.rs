@@ -1,6 +1,6 @@
 use libc::*;
-use llvm::core::*;
-use llvm::prelude::*;
+use llvm_sys::core::*;
+use llvm_sys::prelude::*;
 use llvm_sys::LLVMType;
 use std::ptr;
 

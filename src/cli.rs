@@ -1,8 +1,9 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 #[derive(ValueEnum, Debug, Clone, Copy)]
 #[clap(rename_all = "lower")]
+#[allow(clippy::upper_case_acronyms)]
 pub enum Dump {
     All,
     AST,
@@ -19,6 +20,7 @@ pub enum LibraryType {
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
+#[allow(clippy::upper_case_acronyms)]
 pub struct CLI {
     #[command(subcommand)]
     pub command: CompilerCommand,

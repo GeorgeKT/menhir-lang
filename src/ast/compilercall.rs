@@ -1,5 +1,6 @@
 use crate::ast::{prefix, Expression, IntSize, TreePrinter, Type};
 use crate::span::Span;
+use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum CompilerCall {

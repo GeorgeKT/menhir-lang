@@ -3,6 +3,7 @@ use crate::span::Span;
 use std::fmt::{Display, Error, Formatter};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum TokenKind {
     Identifier(String),
     Number(String),

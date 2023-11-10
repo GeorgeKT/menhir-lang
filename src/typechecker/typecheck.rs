@@ -790,11 +790,7 @@ fn ends_with_early_return(e: &Expression) -> bool {
     match e {
         Expression::Return(_) => true,
         Expression::Block(block) => {
-            if let Some(Expression::Return(_)) = block.expressions.last() {
-                true
-            } else {
-                false
-            }
+            matches!(block.expressions.last(), Some(Expression::Return(_)))
         }
         _ => false,
     }
@@ -1077,9 +1073,7 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
 
         (&mut MemberAccessType::Property(Property::Data), &Type::String) => (ptr_type(Type::UInt(IntSize::I8)), None),
 
-        (&mut MemberAccessType::Property(Property::Data), Type::Slice(st)) => {
-            (ptr_type(st.element_type.clone()), None)
-        }
+        (&mut MemberAccessType::Property(Property::Data), Type::Slice(st)) => (ptr_type(st.element_type.clone()), None),
 
         (&mut MemberAccessType::Name(ref mut field), Type::Struct(st)) => {
             let (member_idx, member_type) = find_member_type(&st.members, &field.name, &sma.span)?;
@@ -1439,9 +1433,7 @@ fn type_check_cast(ctx: &mut TypeCheckerContext, c: &mut TypeCast, target: &Targ
             valid(c.destination_type.clone())
         }
         (Type::Pointer(_), &Type::Bool) => valid(Type::Bool),
-        (Type::Array(ref at), Type::Pointer(to)) if at.element_type == *to.deref() => {
-            valid(c.destination_type.clone())
-        }
+        (Type::Array(ref at), Type::Pointer(to)) if at.element_type == *to.deref() => valid(c.destination_type.clone()),
         (inner_type, _) => type_error_result(
             &c.span,
             format!(

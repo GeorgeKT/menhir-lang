@@ -1,16 +1,3 @@
-extern crate itertools;
-extern crate libc;
-extern crate llvm_sys as llvm;
-#[macro_use]
-extern crate clap;
-extern crate toml;
-extern crate uuid;
-#[macro_use]
-extern crate serde_derive;
-extern crate bincode;
-extern crate either;
-extern crate serde;
-
 mod ast;
 mod bytecode;
 mod cli;
@@ -29,7 +16,8 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::process::exit;
 
-use crate::clap::Parser;
+use clap::Parser;
+
 use crate::cli::{BuildCommand, BuildPkgCommand, CompilerCommand, ExportsCommand, LibraryType, CLI};
 use crate::compileerror::CompileResult;
 use crate::exportlibrary::ExportLibrary;

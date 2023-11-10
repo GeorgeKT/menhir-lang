@@ -2,6 +2,7 @@ use super::Type;
 use crate::ast::Function;
 use crate::span::Span;
 use itertools::join;
+use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;

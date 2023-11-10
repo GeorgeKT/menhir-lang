@@ -1,8 +1,8 @@
+use serde_derive::Deserialize;
 use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-
 
 use crate::ast::TreePrinter;
 use crate::bytecode::{compile_to_byte_code, optimize_module, OptimizationLevel};
@@ -65,7 +65,6 @@ impl PackageData {
                 path: Some(p.to_owned()),
                 depends: None,
             }],
-            ..Default::default()
         })
     }
 
@@ -107,7 +106,10 @@ impl PackageTarget {
     ) -> CompileResult<bool> {
         let path = format!("{}/{}/{}/{}.mhr.exports", deps_dir, target_triplet, dep, dep);
         if let Ok(mut file) = File::open(path) {
-            if pkg.add_library(&mut file, dep, deps_dir, target_triplet).is_ok() {
+            if pkg
+                .add_library(&mut file, dep, deps_dir, target_triplet)
+                .is_ok()
+            {
                 Ok(true)
             } else {
                 Ok(false)
@@ -210,10 +212,7 @@ impl PackageTarget {
         });
 
         let opts = CodeGenOptions {
-            dump_ir: match build_options.dump_flags {
-                Some(Dump::IR) | Some(Dump::All) => true,
-                _ => false,
-            },
+            dump_ir: matches!(build_options.dump_flags, Some(Dump::IR) | Some(Dump::All)),
             build_dir: format!("build/{}/{}", build_options.target_machine.target.triplet, self.name),
             output_file_name: output_file_name(&self.name, self.output_type),
             output_type: self.output_type,

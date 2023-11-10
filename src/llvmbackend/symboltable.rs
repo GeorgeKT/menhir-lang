@@ -1,4 +1,4 @@
-use llvm::prelude::*;
+use llvm_sys::prelude::*;
 use std::collections::HashMap;
 use std::rc::Rc;
 

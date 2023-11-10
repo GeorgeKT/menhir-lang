@@ -1,3 +1,4 @@
+use serde_derive::{Deserialize, Serialize};
 use std::cmp;
 use std::fmt;
 
@@ -9,10 +10,7 @@ pub struct Pos {
 
 impl Pos {
     pub fn new(line: usize, offset: usize) -> Pos {
-        Pos {
-            line,
-            offset,
-        }
+        Pos { line, offset }
     }
 
     pub fn zero() -> Pos {

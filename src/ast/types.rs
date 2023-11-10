@@ -2,6 +2,7 @@ use crate::ast::*;
 use crate::span::Span;
 use crate::target::Target;
 use itertools::free::join;
+use serde_derive::{Deserialize, Serialize};
 use std::fmt;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -170,10 +171,7 @@ pub struct TypeAlias {
 
 impl Type {
     pub fn is_sequence(&self) -> bool {
-        match *self {
-            Type::Array(_) | Type::Slice(_) | Type::String => true,
-            _ => false,
-        }
+        matches!(*self, Type::Array(_) | Type::Slice(_) | Type::String)
     }
 
     pub fn get_element_type(&self) -> Option<Type> {
@@ -202,9 +200,7 @@ impl Type {
                 Some(array_to_slice(expr.clone(), expr.span()))
             }
 
-            (Type::Optional(inner), _) if *inner.deref() == *from_type => {
-                Some(to_optional(expr.clone(), self.clone()))
-            }
+            (Type::Optional(inner), _) if *inner.deref() == *from_type => Some(to_optional(expr.clone(), self.clone())),
 
             (&Type::Bool, &Type::Optional(_)) => Some(Expression::OptionalToBool(Box::new(expr.clone()))),
 
@@ -293,17 +289,11 @@ impl Type {
     }
 
     pub fn is_numeric(&self) -> bool {
-        match *self {
-            Type::Int(_) | Type::UInt(_) | Type::Float(_) => true,
-            _ => false,
-        }
+        matches!(*self, Type::Int(_) | Type::UInt(_) | Type::Float(_))
     }
 
     pub fn is_unknown(&self) -> bool {
-        match *self {
-            Type::Unknown => true,
-            _ => false,
-        }
+        matches!(*self, Type::Unknown)
     }
 
     pub fn get_property_type(&self, name: &str, target: &Target) -> Option<(Type, MemberAccessType)> {
@@ -336,19 +326,11 @@ impl Type {
     }
 
     pub fn is_optional(&self) -> bool {
-        if let Type::Optional(_) = *self {
-            true
-        } else {
-            false
-        }
+        matches!(*self, Type::Optional(_))
     }
 
     pub fn is_pointer(&self) -> bool {
-        if let Type::Pointer(_) = *self {
-            true
-        } else {
-            false
-        }
+        matches!(*self, Type::Pointer(_))
     }
 
     pub fn is_pointer_to(&self, t: &Type) -> bool {
@@ -378,16 +360,10 @@ impl Type {
     }
 
     pub fn pass_by_value(&self) -> bool {
-        match *self {
-            Type::Int(_)
-            | Type::UInt(_)
-            | Type::Float(_)
-            | Type::Char
-            | Type::Bool
-            | Type::Pointer(_)
-            | Type::Enum(_) => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Type::Int(_) | Type::UInt(_) | Type::Float(_) | Type::Char | Type::Bool | Type::Pointer(_) | Type::Enum(_)
+        )
     }
 
     pub fn get_pointer_element_type(&self) -> Option<&Type> {
@@ -404,23 +380,15 @@ impl Type {
 }
 
 pub fn func_type(args: Vec<Type>, ret: Type) -> Type {
-    Type::Func(Rc::new(FuncType {
-        args,
-        return_type: ret,
-    }))
+    Type::Func(Rc::new(FuncType { args, return_type: ret }))
 }
 
 pub fn array_type(element_type: Type, len: usize) -> Type {
-    Type::Array(Rc::new(ArrayType {
-        element_type,
-        len,
-    }))
+    Type::Array(Rc::new(ArrayType { element_type, len }))
 }
 
 pub fn slice_type(element_type: Type) -> Type {
-    Type::Slice(Rc::new(SliceType {
-        element_type,
-    }))
+    Type::Slice(Rc::new(SliceType { element_type }))
 }
 
 pub fn string_type() -> Type {
@@ -438,10 +406,7 @@ pub fn string_type_representation(native_int_size: IntSize) -> StructType {
 }
 
 pub fn sum_type_case(name: &str, typ: Type) -> SumTypeCase {
-    SumTypeCase {
-        name: name.into(),
-        typ,
-    }
+    SumTypeCase { name: name.into(), typ }
 }
 
 pub fn sum_type(name: &str, cases: Vec<SumTypeCase>) -> Type {
@@ -482,10 +447,7 @@ pub fn generic_type_with_constraints(constraints: Vec<Type>) -> Type {
 }
 
 pub fn struct_member(name: &str, typ: Type) -> StructMember {
-    StructMember {
-        name: name.into(),
-        typ,
-    }
+    StructMember { name: name.into(), typ }
 }
 
 /*

@@ -1,5 +1,6 @@
 use crate::ast::{prefix, DereferenceExpression, Expression, IndexOperation, MemberAccess, NameRef, TreePrinter};
 use crate::span::Span;
+use serde_derive::{Deserialize, Serialize};
 use std::fmt;
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]

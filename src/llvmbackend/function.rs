@@ -1,6 +1,5 @@
-
-use llvm::core::*;
-use llvm::prelude::*;
+use llvm_sys::core::*;
+use llvm_sys::prelude::*;
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::rc::Rc;

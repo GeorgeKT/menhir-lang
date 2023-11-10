@@ -1,3 +1,4 @@
+use serde_derive::{Deserialize, Serialize};
 use std::fmt;
 
 pub const TOP_PRECEDENCE: usize = 2000;

@@ -22,8 +22,8 @@ mod tests;
 mod jit;
 */
 
-use llvm::core::*;
-use llvm::LLVMLinkage;
+use llvm_sys::core::*;
+use llvm_sys::LLVMLinkage;
 use std::ffi::CString;
 use std::fmt;
 use std::process::{Command, Output};
@@ -34,9 +34,9 @@ pub use self::target::TargetMachine;
 use self::valueref::ValueRef;
 use crate::bytecode::{ByteCodeModule, Constant};
 use crate::compileerror::{code_gen_error, CompileResult};
+use serde_derive::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, Default)]
 pub enum OutputType {
     #[serde(rename = "binary")]
     #[default]
@@ -46,8 +46,6 @@ pub enum OutputType {
     #[serde(rename = "sharedlib")]
     SharedLib,
 }
-
-
 
 impl fmt::Display for OutputType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -69,8 +67,8 @@ pub struct CodeGenOptions {
 
 pub fn llvm_init() -> CompileResult<TargetMachine> {
     unsafe {
-        use llvm::initialization::*;
-        use llvm::target::*;
+        use llvm_sys::initialization::*;
+        use llvm_sys::target::*;
         LLVM_InitializeAllTargetInfos();
         LLVM_InitializeAllTargets();
         LLVM_InitializeAllTargetMCs();

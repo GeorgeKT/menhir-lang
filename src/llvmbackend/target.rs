@@ -5,10 +5,10 @@ use std::ptr;
 use crate::ast::IntSize;
 use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
 use crate::target::Target;
-use llvm::core::*;
-use llvm::prelude::*;
-use llvm::target::*;
-use llvm::target_machine::*;
+use llvm_sys::core::*;
+use llvm_sys::prelude::*;
+use llvm_sys::target::*;
+use llvm_sys::target_machine::*;
 
 unsafe fn create_target_machine() -> CompileResult<(String, LLVMTargetMachineRef)> {
     let target_triple = LLVMGetDefaultTargetTriple();

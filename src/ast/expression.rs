@@ -1,5 +1,6 @@
 use crate::ast::*;
 use crate::span::Span;
+use serde_derive::{Deserialize, Serialize};
 use std::error::Error;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
@@ -107,10 +108,7 @@ impl Expression {
     }
 
     pub fn is_binary_op(&self) -> bool {
-        match *self {
-            Expression::BinaryOp(_) => true,
-            _ => false,
-        }
+        matches!(*self, Expression::BinaryOp(_))
     }
 
     pub fn extract_binary_op(self) -> Option<Box<BinaryOp>> {
