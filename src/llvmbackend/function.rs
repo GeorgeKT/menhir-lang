@@ -14,7 +14,11 @@ use crate::bytecode::*;
 use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
 use crate::span::Span;
 
-pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, name_override: Option<&str>) -> CompileResult<()> {
+pub unsafe fn gen_function_sig(
+    ctx: &mut Context,
+    sig: &FunctionSignature,
+    name_override: Option<&str>,
+) -> CompileResult<()> {
     let ret_type = ctx.resolve_type(&sig.return_type)?;
     let mut arg_types: Vec<_> = Vec::new();
     for arg in &sig.args {
@@ -36,7 +40,13 @@ pub unsafe fn gen_function_sig(ctx: &mut Context, sig: &FunctionSignature, name_
     Ok(())
 }
 
-pub unsafe fn gen_function_ptr(ctx: &mut Context, name: &str, func_ptr: LLVMValueRef, return_type: Type, typ: Type) -> CompileResult<()> {
+pub unsafe fn gen_function_ptr(
+    ctx: &mut Context,
+    name: &str,
+    func_ptr: LLVMValueRef,
+    return_type: Type,
+    typ: Type,
+) -> CompileResult<()> {
     let fi = FunctionInstance::new(name, func_ptr, return_type, typ);
     ctx.add_function(Rc::new(fi))
 }
@@ -89,7 +99,9 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction) -> Compil
     }
 
     for (bb_ref, block) in &func.blocks {
-        let bb = blocks.get(bb_ref).ok_or_else(|| code_gen_error("Unknown basic block"))?;
+        let bb = blocks
+            .get(bb_ref)
+            .ok_or_else(|| code_gen_error("Unknown basic block"))?;
         LLVMPositionBuilderAtEnd(ctx.builder, *bb);
         for inst in &block.instructions {
             gen_instruction(ctx, inst, &blocks)?;

@@ -4,6 +4,7 @@ use super::types::native_llvm_int_type;
 use super::valueref::ValueRef;
 use crate::ast::{ptr_type, BinaryOperator, Type, UnaryOperator};
 use crate::bytecode::*;
+use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
 use libc::*;
 use llvm::core::*;
 use llvm::prelude::*;
@@ -11,7 +12,6 @@ use llvm::*;
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::ptr;
-use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
 
 pub unsafe fn const_int(ctx: &Context, v: i64) -> LLVMValueRef {
     LLVMConstInt(
@@ -85,7 +85,9 @@ pub unsafe fn get_operand(ctx: &mut Context, operand: &Operand) -> CompileResult
 }
 
 pub unsafe fn copy(ctx: &Context, dst: LLVMValueRef, src: LLVMValueRef, typ: LLVMTypeRef) -> CompileResult<()> {
-    let func = ctx.get_function("memcpy").ok_or_else(|| code_gen_error("memcpy not found"))?;
+    let func = ctx
+        .get_function("memcpy")
+        .ok_or_else(|| code_gen_error("memcpy not found"))?;
     let void_ptr_type = LLVMPointerType(LLVMVoidTypeInContext(ctx.context), 0);
     let mut args = vec![
         LLVMBuildBitCast(ctx.builder, dst, void_ptr_type, cstr!("dst_cast")),
@@ -148,7 +150,13 @@ unsafe fn gen_unary_op(ctx: &mut Context, dst: &Var, operator: UnaryOperator, sr
     ctx.set_variable(&dst.name, ValueRef::new(result, dst.typ.clone()))
 }
 
-unsafe fn gen_binary_op(ctx: &mut Context, dst: &Var, op: BinaryOperator, left: &Operand, right: &Operand) -> CompileResult<()> {
+unsafe fn gen_binary_op(
+    ctx: &mut Context,
+    dst: &Var,
+    op: BinaryOperator,
+    left: &Operand,
+    right: &Operand,
+) -> CompileResult<()> {
     let left_type = left.get_type(ctx.target_machine.target.int_size);
     let left = get_operand(ctx, left)?.load(ctx)?;
     let right = get_operand(ctx, right)?.load(ctx)?;
@@ -266,7 +274,7 @@ unsafe fn gen_binary_op(ctx: &mut Context, dst: &Var, op: BinaryOperator, left: 
         (BinaryOperator::And, Type::Bool) => LLVMBuildAnd(ctx.builder, left, right, cstr!("bop")),
         (BinaryOperator::Or, Type::Bool) => LLVMBuildOr(ctx.builder, left, right, cstr!("bop")),
 
-        (_, t) => panic!("Operator {} not supported on type {}", op, t),
+        (_, t) => return code_gen_result(format!("Operator {} not supported on type {}", op, t)),
     };
 
     ctx.set_variable(&dst.name, ValueRef::new(value, dst.typ.clone()))?;
@@ -328,7 +336,12 @@ unsafe fn gen_cast(ctx: &mut Context, dst: &Var, src: &Operand) -> CompileResult
 
         (&Type::Bool, &Type::Pointer(_)) => LLVMBuildIsNull(ctx.builder, operand.value, cstr!("isnt_null")),
 
-        _ => return code_gen_result(format!("Cast from type {} to type {} is not allowed", src_type, dst.typ)),
+        _ => {
+            return code_gen_result(format!(
+                "Cast from type {} to type {} is not allowed",
+                src_type, dst.typ
+            ))
+        }
     };
 
     ctx.set_variable(&dst.name, ValueRef::new(casted, dst.typ.clone()))
@@ -339,7 +352,6 @@ pub unsafe fn gen_instruction(
     instr: &Instruction,
     blocks: &HashMap<BasicBlockRef, LLVMBasicBlockRef>,
 ) -> CompileResult<()> {
-    print!(">> {}", instr);
     match instr {
         Instruction::Store { dst, src } => {
             let dst_var = ctx.get_variable(&dst.name, &dst.typ)?;
@@ -356,26 +368,14 @@ pub unsafe fn gen_instruction(
             ctx.set_variable(&dst.name, ValueRef::new(val, dst.typ.clone()))?;
         }
 
-        Instruction::LoadMember {
-            dst,
-            obj,
-            member_index,
-        }
-        | Instruction::AddressOfMember {
-            dst,
-            obj,
-            member_index,
-        } => {
+        Instruction::LoadMember { dst, obj, member_index }
+        | Instruction::AddressOfMember { dst, obj, member_index } => {
             let obj_var = ctx.get_variable(&obj.name, &obj.typ)?;
             let member_ptr = obj_var.get_member_ptr(ctx, &member_index)?;
             ctx.set_variable(&dst.name, member_ptr)?;
         }
 
-        Instruction::StoreMember {
-            obj,
-            member_index,
-            src,
-        } => {
+        Instruction::StoreMember { obj, member_index, src } => {
             let src_val = get_operand(ctx, src)?;
             let obj_var = ctx.get_variable(&obj.name, &obj.typ)?;
             obj_var.store_member(ctx, member_index, &src_val)?;
@@ -386,47 +386,26 @@ pub unsafe fn gen_instruction(
             ctx.set_variable(&dst.name, v)?;
         }
 
-        Instruction::GetProperty {
-            dst,
-            obj,
-            prop,
-        } => {
+        Instruction::GetProperty { dst, obj, prop } => {
             let obj_var = ctx.get_variable(&obj.name, &obj.typ)?;
             let prop = obj_var.get_property(ctx, *prop)?;
             ctx.set_variable(&dst.name, prop)?;
         }
 
-        Instruction::SetProperty {
-            obj,
-            prop,
-            val,
-        } => {
+        Instruction::SetProperty { obj, prop, val } => {
             let obj_var = ctx.get_variable(&obj.name, &obj.typ)?;
             obj_var.set_property(ctx, *prop, *val)?;
         }
 
-        Instruction::UnaryOp {
-            dst,
-            op,
-            src,
-        } => {
+        Instruction::UnaryOp { dst, op, src } => {
             gen_unary_op(ctx, dst, *op, src)?;
         }
 
-        Instruction::BinaryOp {
-            dst,
-            op,
-            left,
-            right,
-        } => {
+        Instruction::BinaryOp { dst, op, left, right } => {
             gen_binary_op(ctx, dst, *op, left, right)?;
         }
 
-        Instruction::Call {
-            dst,
-            func,
-            args,
-        } => {
+        Instruction::Call { dst, func, args } => {
             let func = ctx
                 .get_function(func)
                 .ok_or_else(|| code_gen_error(format!("Unknown function {}", func)))?;
@@ -454,22 +433,13 @@ pub unsafe fn gen_instruction(
             }
         }
 
-        Instruction::Slice {
-            dst,
-            src,
-            start,
-            len,
-        } => {
+        Instruction::Slice { dst, src, start, len } => {
             let dst_var = ctx.get_variable(&dst.name, &dst.typ)?;
             let src_var = ctx.get_variable(&src.name, &dst.typ)?;
             dst_var.create_slice(ctx, &src_var, start, len)?;
         }
 
-        Instruction::MakeSlice {
-            dst,
-            data,
-            len,
-        } => {
+        Instruction::MakeSlice { dst, data, len } => {
             let dst_var = ctx.get_variable(&dst.name, &dst.typ)?;
             let data_var = ctx.get_variable(&data.name, &data.typ)?;
             let start = Operand::Const(Constant::UInt(0, ctx.target_machine.target.int_size));
@@ -531,7 +501,12 @@ pub unsafe fn gen_instruction(
         } => {
             let on_true_bb = blocks.get(on_true).expect("Unknown basic block");
             let on_false_bb = blocks.get(on_false).expect("Unknown basic block");
-            LLVMBuildCondBr(ctx.builder, get_operand(ctx, cond)?.load(ctx)?, *on_true_bb, *on_false_bb);
+            LLVMBuildCondBr(
+                ctx.builder,
+                get_operand(ctx, cond)?.load(ctx)?,
+                *on_true_bb,
+                *on_false_bb,
+            );
         }
 
         Instruction::Delete(var) => {

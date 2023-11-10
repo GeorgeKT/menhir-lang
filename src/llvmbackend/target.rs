@@ -3,17 +3,18 @@ use std::os::raw::c_char;
 use std::ptr;
 
 use crate::ast::IntSize;
+use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
 use crate::target::Target;
 use llvm::core::*;
 use llvm::prelude::*;
 use llvm::target::*;
 use llvm::target_machine::*;
 
-unsafe fn create_target_machine() -> Result<(String, LLVMTargetMachineRef), String> {
+unsafe fn create_target_machine() -> CompileResult<(String, LLVMTargetMachineRef)> {
     let target_triple = LLVMGetDefaultTargetTriple();
     let target_triple_str = CStr::from_ptr(target_triple)
         .to_str()
-        .expect("Invalid target triple")
+        .map_err(|_| code_gen_error("Invalid C string"))?
         .to_owned();
 
     let mut target: LLVMTargetRef = ptr::null_mut();
@@ -21,14 +22,14 @@ unsafe fn create_target_machine() -> Result<(String, LLVMTargetMachineRef), Stri
     if LLVMGetTargetFromTriple(target_triple, &mut target, &mut error_message) != 0 {
         let msg = CStr::from_ptr(error_message)
             .to_str()
-            .expect("Invalid C string");
+            .map_err(|_| code_gen_error("Invalid C string"))?;
         let e = format!(
             "Unable to get an LLVM target reference for {}: {}",
             target_triple_str, msg
         );
         LLVMDisposeMessage(error_message);
         LLVMDisposeMessage(target_triple);
-        return Err(e);
+        return code_gen_result(e);
     }
 
     let target_machine = LLVMCreateTargetMachine(
@@ -44,7 +45,7 @@ unsafe fn create_target_machine() -> Result<(String, LLVMTargetMachineRef), Stri
     LLVMDisposeMessage(target_triple);
     if target_machine.is_null() {
         let e = format!("Unable to get a LLVM target machine for {}", target_triple_str);
-        return Err(e);
+        return code_gen_result(e);
     }
 
     Ok((target_triple_str, target_machine))
@@ -57,7 +58,7 @@ pub struct TargetMachine {
 }
 
 impl TargetMachine {
-    pub unsafe fn new() -> Result<TargetMachine, String> {
+    pub unsafe fn new() -> CompileResult<TargetMachine> {
         let (target_triplet, target_machine) = create_target_machine()?;
         let target_data = LLVMCreateTargetDataLayout(target_machine);
         let int_size = match LLVMPointerSize(target_data) {
@@ -65,7 +66,7 @@ impl TargetMachine {
             2 => IntSize::I16,
             4 => IntSize::I32,
             8 => IntSize::I64,
-            v => panic!("Not supported native integer size: {}", v),
+            v => return code_gen_result(format!("Not supported native integer size: {}", v)),
         };
 
         Ok(TargetMachine {

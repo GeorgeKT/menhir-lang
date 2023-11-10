@@ -3,13 +3,13 @@ use super::target::TargetMachine;
 use super::valueref::ValueRef;
 use super::CodeGenOptions;
 use crate::ast::{ptr_type, Type};
+use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
 use llvm::core::*;
 use llvm::prelude::*;
 use std::ffi::CString;
 use std::fs::DirBuilder;
 use std::ptr;
 use std::rc::Rc;
-use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
 
 struct StackFrame {
     pub symbols: SymbolTable,

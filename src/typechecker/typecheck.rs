@@ -795,8 +795,8 @@ fn ends_with_early_return(e: &Expression) -> bool {
             } else {
                 false
             }
-        },
-        _ => false
+        }
+        _ => false,
     }
 }
 

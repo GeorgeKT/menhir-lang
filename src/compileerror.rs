@@ -70,7 +70,9 @@ impl Error for CompileError {
 impl fmt::Display for CompileError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
-            CompileError::Other(msg) | CompileError::IO(msg) | CompileError::CodeGeneration(msg) => writeln!(f, "{}", msg),
+            CompileError::Other(msg) | CompileError::IO(msg) | CompileError::CodeGeneration(msg) => {
+                writeln!(f, "{}", msg)
+            }
             CompileError::Parse(ed) | CompileError::Type(ed) | CompileError::UnknownName(ed) => ed.fmt(f),
             CompileError::UnknownType(name, typ) => writeln!(f, "{} has unknown type, expecting {}", name, typ),
             CompileError::Many(errors) => {

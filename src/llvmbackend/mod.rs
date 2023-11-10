@@ -69,7 +69,7 @@ pub struct CodeGenOptions {
     pub optimize: bool,
 }
 
-pub fn llvm_init() -> Result<TargetMachine, String> {
+pub fn llvm_init() -> CompileResult<TargetMachine> {
     unsafe {
         use llvm::initialization::*;
         use llvm::target::*;

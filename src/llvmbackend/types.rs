@@ -26,15 +26,28 @@ unsafe fn slice_to_llvm_type(
         LLVMPointerType(element_type, 0),              // Pointer to data
         native_llvm_int_type(context, target_machine), // Length of string
     ];
-    Ok(LLVMStructTypeInContext(context, member_types.as_mut_ptr(), member_types.len() as c_uint, 0))
+    Ok(LLVMStructTypeInContext(
+        context,
+        member_types.as_mut_ptr(),
+        member_types.len() as c_uint,
+        0,
+    ))
 }
 
-unsafe fn array_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachine, at: &ArrayType) -> CompileResult<LLVMTypeRef> {
+unsafe fn array_to_llvm_type(
+    context: LLVMContextRef,
+    target_machine: &TargetMachine,
+    at: &ArrayType,
+) -> CompileResult<LLVMTypeRef> {
     let element_type = to_llvm_type(context, target_machine, &at.element_type)?;
     Ok(LLVMArrayType(element_type, at.len as c_uint))
 }
 
-unsafe fn sum_type_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachine, st: &SumType) -> CompileResult<LLVMTypeRef> {
+unsafe fn sum_type_to_llvm_type(
+    context: LLVMContextRef,
+    target_machine: &TargetMachine,
+    st: &SumType,
+) -> CompileResult<LLVMTypeRef> {
     let mut member_types = vec![native_llvm_int_type(context, target_machine)]; // first entry is the tag
 
     // Calculate the biggest type
@@ -48,10 +61,19 @@ unsafe fn sum_type_to_llvm_type(context: LLVMContextRef, target_machine: &Target
 
     // Use the largest type, we will cast to the other case types
     member_types.push(largest_type);
-    Ok(LLVMStructTypeInContext(context, member_types.as_mut_ptr(), member_types.len() as c_uint, 0))
+    Ok(LLVMStructTypeInContext(
+        context,
+        member_types.as_mut_ptr(),
+        member_types.len() as c_uint,
+        0,
+    ))
 }
 
-unsafe fn func_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachine, ft: &FuncType) -> CompileResult<LLVMTypeRef> {
+unsafe fn func_to_llvm_type(
+    context: LLVMContextRef,
+    target_machine: &TargetMachine,
+    ft: &FuncType,
+) -> CompileResult<LLVMTypeRef> {
     let mut llvm_arg_types = Vec::with_capacity(ft.args.len());
     for arg in &ft.args {
         let mut arg_type = to_llvm_type(context, target_machine, arg)?;
@@ -69,7 +91,11 @@ unsafe fn func_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMach
     ))
 }
 
-unsafe fn struct_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachine, st: &StructType) -> CompileResult<LLVMTypeRef> {
+unsafe fn struct_to_llvm_type(
+    context: LLVMContextRef,
+    target_machine: &TargetMachine,
+    st: &StructType,
+) -> CompileResult<LLVMTypeRef> {
     let mut llvm_member_types = Vec::with_capacity(st.members.len());
     for m in &st.members {
         llvm_member_types.push(to_llvm_type(context, target_machine, &m.typ)?);
@@ -82,13 +108,22 @@ unsafe fn struct_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMa
     ))
 }
 
-unsafe fn optional_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachine, inner: &Type) -> CompileResult<LLVMTypeRef> {
+unsafe fn optional_to_llvm_type(
+    context: LLVMContextRef,
+    target_machine: &TargetMachine,
+    inner: &Type,
+) -> CompileResult<LLVMTypeRef> {
     let inner = to_llvm_type(context, target_machine, inner)?;
     let mut member_types = vec![
         LLVMInt1TypeInContext(context), // nil or not
         inner,
     ];
-    Ok(LLVMStructTypeInContext(context, member_types.as_mut_ptr(), member_types.len() as c_uint, 0))
+    Ok(LLVMStructTypeInContext(
+        context,
+        member_types.as_mut_ptr(),
+        member_types.len() as c_uint,
+        0,
+    ))
 }
 
 pub unsafe fn native_llvm_int_type(context: LLVMContextRef, target_machine: &TargetMachine) -> LLVMTypeRef {
@@ -100,7 +135,11 @@ pub unsafe fn native_llvm_int_type(context: LLVMContextRef, target_machine: &Tar
     }
 }
 
-pub unsafe fn to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachine, typ: &Type) -> CompileResult<LLVMTypeRef> {
+pub unsafe fn to_llvm_type(
+    context: LLVMContextRef,
+    target_machine: &TargetMachine,
+    typ: &Type,
+) -> CompileResult<LLVMTypeRef> {
     match typ {
         Type::Void => Ok(LLVMVoidTypeInContext(context)),
         Type::Int(IntSize::I8) | Type::UInt(IntSize::I8) => Ok(LLVMInt8TypeInContext(context)),
@@ -122,7 +161,9 @@ pub unsafe fn to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachi
         Type::Generic(_) => {
             code_gen_result("Internal Compiler Error: All generic types must have been resolved before code generation")
         }
-        Type::Unresolved(_) => code_gen_result("Internal Compiler Error: All types must be resolved before code generation"),
+        Type::Unresolved(_) => {
+            code_gen_result("Internal Compiler Error: All types must be resolved before code generation")
+        }
         Type::Unknown => code_gen_result("Internal Compiler Error: all types must be known before code generation"),
         Type::SelfType => code_gen_result("Internal Compiler Error: self type must be known at this point"),
         Type::Interface(_) => code_gen_result("Internal Compiler Error: interface type must be known at this point"),
