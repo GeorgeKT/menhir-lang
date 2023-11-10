@@ -3,6 +3,7 @@ use crate::ast::*;
 use crate::parser::*;
 use crate::span::{Pos, Span};
 use crate::target::Target;
+use pretty_assertions::assert_eq;
 use std::io::Cursor;
 
 fn span(sl: usize, so: usize, el: usize, eo: usize) -> Span {
@@ -98,8 +99,9 @@ fn test_binary_ops() {
     for &(op, op_txt) in &ops {
         let e_txt = format!("a {} b", op_txt);
         let e = th_expr(&e_txt, &target);
-        assert!(
-            e == bin_op(
+        assert_eq!(
+            e,
+            bin_op(
                 op,
                 name_ref("a", span(1, 1, 1, 1)),
                 name_ref("b", span(1, e_txt.len(), 1, e_txt.len())),
@@ -113,8 +115,9 @@ fn test_binary_ops() {
 fn test_precedence() {
     let target = Target::new(IntSize::I32, "");
     let e = th_expr("a + b * c", &target);
-    assert!(
-        e == bin_op(
+    assert_eq!(
+        e,
+        bin_op(
             BinaryOperator::Add,
             name_ref("a", span(1, 1, 1, 1)),
             bin_op(
@@ -132,8 +135,9 @@ fn test_precedence() {
 fn test_precedence_2() {
     let target = Target::new(IntSize::I32, "");
     let e = th_expr("a * b + c ", &target);
-    assert!(
-        e == bin_op(
+    assert_eq!(
+        e,
+        bin_op(
             BinaryOperator::Add,
             bin_op(
                 BinaryOperator::Mul,
@@ -151,8 +155,9 @@ fn test_precedence_2() {
 fn test_precedence_3() {
     let target = Target::new(IntSize::I32, "");
     let e = th_expr("a * b + c / d ", &target);
-    assert!(
-        e == bin_op(
+    assert_eq!(
+        e,
+        bin_op(
             BinaryOperator::Add,
             bin_op(
                 BinaryOperator::Mul,
@@ -175,8 +180,9 @@ fn test_precedence_3() {
 fn test_precedence_4() {
     let target = Target::new(IntSize::I32, "");
     let e = th_expr("a && b || c && d ", &target);
-    assert!(
-        e == bin_op(
+    assert_eq!(
+        e,
+        bin_op(
             BinaryOperator::Or,
             bin_op(
                 BinaryOperator::And,
@@ -199,8 +205,9 @@ fn test_precedence_4() {
 fn test_precedence_5() {
     let target = Target::new(IntSize::I32, "");
     let e = th_expr("a >= b && c < d", &target);
-    assert!(
-        e == bin_op(
+    assert_eq!(
+        e,
+        bin_op(
             BinaryOperator::And,
             bin_op(
                 BinaryOperator::GreaterThanEquals,
@@ -223,8 +230,9 @@ fn test_precedence_5() {
 fn test_precedence_6() {
     let target = Target::new(IntSize::I32, "");
     let e = th_expr("a * (b + c)", &target);
-    assert!(
-        e == bin_op(
+    assert_eq!(
+        e,
+        bin_op(
             BinaryOperator::Mul,
             name_ref("a", span(1, 1, 1, 1)),
             bin_op_with_precedence(
@@ -243,8 +251,9 @@ fn test_precedence_6() {
 fn test_precedence_7() {
     let target = Target::new(IntSize::I32, "");
     let e = th_expr("b + -c", &target);
-    assert!(
-        e == bin_op(
+    assert_eq!(
+        e,
+        bin_op(
             BinaryOperator::Add,
             name_ref("b", span(1, 1, 1, 1)),
             unary_op(UnaryOperator::Sub, name_ref("c", span(1, 6, 1, 6)), span(1, 5, 1, 6)),
@@ -257,8 +266,9 @@ fn test_precedence_7() {
 fn test_precedence_8() {
     let target = Target::new(IntSize::I32, "");
     let e = th_expr("b + c(6)", &target);
-    assert!(
-        e == bin_op(
+    assert_eq!(
+        e,
+        bin_op(
             BinaryOperator::Add,
             name_ref("b", span(1, 1, 1, 1)),
             Expression::Call(Box::new(Call::new(
@@ -275,8 +285,9 @@ fn test_precedence_8() {
 fn test_precedence_9() {
     let target = Target::new(IntSize::I32, "");
     let e = th_expr("c(6) + b", &target);
-    assert!(
-        e == bin_op(
+    assert_eq!(
+        e,
+        bin_op(
             BinaryOperator::Add,
             Expression::Call(Box::new(Call::new(
                 name_ref2("c", span(1, 1, 1, 1)),
@@ -328,15 +339,16 @@ fn test_precedence_10() {
 
     println!("s3:");
     s3.print(0);
-    assert!(e == s3);
+    assert_eq!(e, s3);
 }
 
 #[test]
 fn test_namespaced_call() {
     let target = Target::new(IntSize::I32, "");
     let e = th_expr("foo::bar(7)", &target);
-    assert!(
-        e == Expression::Call(Box::new(Call::new(
+    assert_eq!(
+        e,
+        Expression::Call(Box::new(Call::new(
             name_ref2("foo::bar", span(1, 1, 1, 8)),
             vec![number(7, span(1, 10, 1, 10), &target)],
             span(1, 1, 1, 11),
@@ -348,8 +360,9 @@ fn test_namespaced_call() {
 fn test_array_literal() {
     let target = Target::new(IntSize::I32, "");
     let e = th_expr("[1, 2, 3]", &target);
-    assert!(
-        e == Expression::Literal(array_lit(
+    assert_eq!(
+        e,
+        Expression::Literal(array_lit(
             vec![
                 number(1, span(1, 2, 1, 2), &target),
                 number(2, span(1, 5, 1, 5), &target),
@@ -365,7 +378,7 @@ fn test_array_literal() {
 fn test_array_generator()
 {
     let e = th_expr("[x * x | x <- v]");
-    assert!(e == array_generator(
+    assert_eq!(e, array_generator(
         bin_op(
             BinaryOperator::Mul,
             name_ref("x", span(1, 2, 1, 2)),
@@ -383,15 +396,16 @@ fn test_array_generator()
 fn test_array_pattern() {
     let target = Target::new(IntSize::I32, "");
     let e = th_pattern("[head | tail]", &target);
-    assert!(e == array_pattern("head", "tail", span(1, 1, 1, 13)));
+    assert_eq!(e, array_pattern("head", "tail", span(1, 1, 1, 13)));
 }
 
 #[test]
 fn test_array_concat() {
     let target = Target::new(IntSize::I32, "");
     let e = th_expr("a + [1, 2]", &target);
-    assert!(
-        e == bin_op(
+    assert_eq!(
+        e,
+        bin_op(
             BinaryOperator::Add,
             name_ref("a", span(1, 1, 1, 1)),
             Expression::Literal(array_lit(
@@ -513,8 +527,9 @@ fn test_external_function() {
 fn test_lambda() {
     let target = Target::new(IntSize::I32, "");
     let e = th_expr("fn(a, b) -> a + b", &target);
-    assert!(
-        e == lambda(
+    assert_eq!(
+        e,
+        lambda(
             vec![
                 Argument::new("a", generic_type("a"), false, span(1, 4, 1, 4)),
                 Argument::new("b", generic_type("b"), false, span(1, 7, 1, 7)),
@@ -542,8 +557,9 @@ match a:
 "#,
         &target,
     );
-    assert!(
-        e == match_expression(
+    assert_eq!(
+        e,
+        match_expression(
             name_ref("a", span(2, 7, 2, 7)),
             vec![
                 match_case(
@@ -624,8 +640,9 @@ Point{6, 7}
 "#,
         &target,
     );
-    assert!(
-        e == Expression::StructInitializer(struct_initializer(
+    assert_eq!(
+        e,
+        Expression::StructInitializer(struct_initializer(
             "Point",
             vec![
                 number(6, span(2, 7, 2, 7), &target),
@@ -645,8 +662,9 @@ fn test_anonymous_struct_initializer() {
 "#,
         &target,
     );
-    assert!(
-        e == Expression::StructInitializer(struct_initializer(
+    assert_eq!(
+        e,
+        Expression::StructInitializer(struct_initializer(
             "",
             vec![
                 number(6, span(2, 2, 2, 2), &target),
@@ -666,8 +684,9 @@ a.b.c.d
 "#,
         &target,
     );
-    assert!(
-        e == member_access(
+    assert_eq!(
+        e,
+        member_access(
             member_access(
                 member_access(
                     name_ref("a", span(2, 1, 2, 1)),
@@ -692,8 +711,9 @@ a.b()
 "#,
         &target,
     );
-    assert!(
-        e == member_access(
+    assert_eq!(
+        e,
+        member_access(
             name_ref("a", span(2, 1, 2, 1)),
             MemberAccessType::Call(Box::new(Call::new(
                 name_ref2("b", span(2, 3, 2, 3)),
@@ -829,8 +849,9 @@ fn test_if() {
 if true: 5 else 10"#,
         &target,
     );
-    assert!(
-        e == if_expression(
+    assert_eq!(
+        e,
+        if_expression(
             Expression::Literal(Literal::Bool(span(2, 4, 2, 7), true)),
             number(5, span(2, 10, 2, 10), &target),
             number(10, span(2, 17, 2, 18), &target),
@@ -847,8 +868,9 @@ fn test_block() {
 (a; b; c; 7)"#,
         &target,
     );
-    assert!(
-        e == block(
+    assert_eq!(
+        e,
+        block(
             vec![
                 name_ref("a", span(2, 2, 2, 2)),
                 name_ref("b", span(2, 5, 2, 5)),
@@ -872,20 +894,20 @@ interface Foo:
     );
     let result = md.types.get("test::Foo").unwrap();
     println!("{:?}", result);
-    assert!(
-        *result
-            == TypeDeclaration::Interface(interface(
-                "test::Foo".into(),
-                vec![sig(
-                    "bar",
-                    target.native_int_type.clone(),
-                    vec![
-                        arg("self", ptr_type(Type::SelfType), span(3, 12, 3, 15)),
-                        arg("x", target.native_int_type.clone(), span(3, 18, 3, 23))
-                    ],
-                    span(3, 8, 3, 31)
-                )],
-                span(2, 1, 3, 31)
-            ))
+    assert_eq!(
+        *result,
+        TypeDeclaration::Interface(interface(
+            "test::Foo".into(),
+            vec![sig(
+                "bar",
+                target.native_int_type.clone(),
+                vec![
+                    arg("self", ptr_type(Type::SelfType), span(3, 12, 3, 15)),
+                    arg("x", target.native_int_type.clone(), span(3, 18, 3, 23))
+                ],
+                span(3, 8, 3, 31)
+            )],
+            span(2, 1, 3, 31)
+        ))
     )
 }

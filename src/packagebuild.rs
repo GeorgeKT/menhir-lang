@@ -177,10 +177,6 @@ impl PackageTarget {
         self.find_dependencies(build_options, &mut pkg)?;
         pkg.parse_files(path, &build_options.target_machine.target)?;
 
-        time_operation_mut(2, "Type checking", || {
-            pkg.type_check(&build_options.target_machine.target)
-        })?;
-
         match build_options.dump_flags {
             Some(Dump::AST) | Some(Dump::All) => {
                 println!("AST: {}", pkg.name);
@@ -188,6 +184,10 @@ impl PackageTarget {
             }
             _ => (),
         }
+
+        time_operation_mut(2, "Type checking", || {
+            pkg.type_check(&build_options.target_machine.target)
+        })?;
 
         let mut bc_mod = time_operation(2, "Compile to bytecode", || {
             compile_to_byte_code(&pkg, &build_options.target_machine.target)

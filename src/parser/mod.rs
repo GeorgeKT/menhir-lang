@@ -27,15 +27,13 @@ use self::tokens::{Token, TokenKind};
 fn is_end_of_expression(tok: &Token) -> bool {
     matches!(
         tok.kind,
-        TokenKind::UnaryOperator(_)
-            | TokenKind::BinaryOperator(_)
-            | TokenKind::Number(_)
-            | TokenKind::Identifier(_)
-            | TokenKind::StringLiteral(_)
+        TokenKind::Colon
+            | TokenKind::SemiColon
             | TokenKind::Assign(_)
-            | TokenKind::OpenParen
-            | TokenKind::OpenBracket
-            | TokenKind::OpenCurly
+            | TokenKind::CloseParen
+            | TokenKind::CloseBracket
+            | TokenKind::CloseCurly
+            | TokenKind::EOF
     )
 }
 
@@ -184,10 +182,6 @@ fn parse_binary_op_rhs(
     //use ast::TreePrinter;
 
     loop {
-        if tq.peek().map(is_end_of_expression).unwrap_or(false) {
-            return Ok(lhs);
-        }
-
         if !tq.is_next_binary_operator() {
             return Ok(lhs);
         }
@@ -604,7 +598,7 @@ fn parse_match(tq: &mut TokenQueue, span: &Span, indent_level: usize, target: &T
         let pattern = parse_pattern(tq, indent_level, target)?;
         let tok = tq.expect(&TokenKind::FatArrow)?;
         let t = parse_block(tq, &tok.span.file, indent_level, target)?;
-        let case_span = pattern.span().expanded(tq.pos());
+        let case_span = pattern.span().expanded(t.span().end);
         Ok(match_case(pattern, t, case_span))
     };
 
@@ -961,7 +955,7 @@ fn parse_compiler_call(
 }
 
 fn parse_return(tq: &mut TokenQueue, start: &Span, indent_level: usize, target: &Target) -> CompileResult<Expression> {
-    if tq.peek().map(is_end_of_expression).unwrap_or(true) {
+    if !tq.is_in_same_block(indent_level) {
         Ok(return_expr(Expression::Void, start.clone()))
     } else {
         let expr = parse_expression(tq, indent_level, target)?;
