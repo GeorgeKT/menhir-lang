@@ -145,6 +145,7 @@ fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &Var, func: &mut B
         if b.name == "_" {
             continue;
         }
+
         let v = stack_alloc(func, &b.typ, Some(&b.name));
 
         match b.mode {
@@ -336,8 +337,8 @@ fn name_pattern_match_to_bc(
     nr: &NameRef,
     target_machine: &Target,
 ) {
-    match nr.typ {
-        Type::Enum(ref et) => {
+    match &nr.typ {
+        Type::Enum(et) => {
             let idx = et
                 .index_of(&nr.name)
                 .expect("Internal Compiler Error: cannot determine index of sum type case");
@@ -350,7 +351,7 @@ fn name_pattern_match_to_bc(
             ));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
         }
-        Type::Sum(ref st) => {
+        Type::Sum(st) => {
             let idx = st
                 .index_of(&nr.name)
                 .expect("Internal Compiler Error: cannot determine index of sum type case");
@@ -454,7 +455,7 @@ fn struct_pattern_match_to_bc(
     target_machine: &Target,
 ) {
     func.push_destination(None);
-    match p.typ {
+    match &p.typ {
         Type::Struct(_) => {
             func.add(Instruction::Branch(match_case_bb));
             func.set_current_bb(match_case_bb);
@@ -462,7 +463,7 @@ fn struct_pattern_match_to_bc(
             func.push_scope();
             add_struct_pattern_bindings(p, target, func, target_machine);
         }
-        Type::Sum(ref st) => {
+        Type::Sum(st) => {
             let target_sum_type_index = stack_alloc(func, &target_machine.native_uint_type, None);
             func.add(get_prop_instr(
                 &target_sum_type_index,
@@ -751,8 +752,8 @@ fn match_to_bc(
     target: &Target,
 ) -> Option<Var> {
     func.push_destination(None);
-    let target_var = match m.target {
-        Expression::Dereference(ref de) => {
+    let target_var = match &m.target {
+        Expression::Dereference(de) => {
             let inner_type = de.inner.get_type(target.int_size);
             let v_inner_type = inner_type
                 .get_pointer_element_type()

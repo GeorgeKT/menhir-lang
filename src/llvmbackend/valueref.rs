@@ -148,7 +148,11 @@ impl ValueRef {
             }
 
             Type::Pointer(pt) => {
-                let target = self.load(ctx)?;
+                let target = if val.typ == *pt.as_ref() {
+                    self.load(ctx)?
+                } else {
+                    self.value
+                };
                 if pt.pass_by_value() {
                     LLVMBuildStore(ctx.builder, val.value, target);
                     Ok(())
