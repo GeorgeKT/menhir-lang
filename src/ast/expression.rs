@@ -240,6 +240,9 @@ impl Expression {
                 for e in &mut b.expressions {
                     e.visit_mut(op)?;
                 }
+                for e in &mut b.deferred_expressions {
+                    e.visit_mut(op)?;
+                }
                 Ok(())
             }
 
@@ -393,6 +396,9 @@ impl Expression {
                 for e in &b.expressions {
                     e.visit(op)?;
                 }
+                for e in &b.deferred_expressions {
+                    e.visit(op)?;
+                }
                 Ok(())
             }
 
@@ -506,7 +512,11 @@ impl TreePrinter for Expression {
             Expression::Block(ref b) => {
                 println!("{}block ({}) (type: {})", p, b.span, b.typ);
                 for e in &b.expressions {
-                    e.print(level + 1);
+                    e.print(level + 2);
+                }
+                println!("{} deferred: ", p);
+                for e in &b.deferred_expressions {
+                    e.print(level + 2);
                 }
             }
             Expression::Call(ref c) => c.print(level),

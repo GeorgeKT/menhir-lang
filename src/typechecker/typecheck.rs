@@ -1195,6 +1195,14 @@ fn type_check_block(
         }
     }
 
+    if b.deferred_expressions.is_empty() {
+        ctx.add_destructors(b)?;
+    }
+
+    for e in &mut b.deferred_expressions {
+        type_check_expression(ctx, e, type_hint, target)?;
+    }
+
     ctx.exit_scope();
     valid(b.typ.clone())
 }
@@ -1634,17 +1642,3 @@ pub fn type_check_module(module: &mut Module, target: &Target, imports: &ImportM
     module.type_checked = true;
     Ok(())
 }
-
-/*
-pub fn type_check_module(module: &mut Module, target: &Target, imports: &ImportMap) -> CompileResult<()>
-{
-    match type_check_module2(module, target, imports) {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            println!("Dumping AST:");
-            module.print(0);
-            Err(e)
-        }
-    }
-}
-*/

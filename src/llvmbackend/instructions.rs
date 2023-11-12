@@ -469,8 +469,11 @@ pub unsafe fn gen_instruction(
 
         Instruction::HeapAlloc(var) => {
             let name = CString::new(&var.name[..]).expect("Invalid string");
-            let value = LLVMBuildMalloc(ctx.builder, ctx.resolve_type(&var.typ)?, name.as_ptr());
-            ctx.set_variable(&var.name, ValueRef::new(value, ptr_type(var.typ.clone())))?;
+            let Some(element_type) = var.typ.get_pointer_element_type() else {
+                return Err(code_gen_error("No pointer element type for heap alloc"));
+            };
+            let value = LLVMBuildMalloc(ctx.builder, ctx.resolve_type(element_type)?, name.as_ptr());
+            ctx.set_variable(&var.name, ValueRef::new(value, var.typ.clone()))?;
         }
 
         Instruction::StackAlloc(var) => {
@@ -515,7 +518,7 @@ pub unsafe fn gen_instruction(
         }
 
         Instruction::Delete(var) => {
-            LLVMBuildFree(ctx.builder, ctx.get_variable(&var.name, &var.typ)?.value);
+            LLVMBuildFree(ctx.builder, ctx.get_variable(&var.name, &var.typ)?.load(ctx)?);
         }
     }
 

@@ -5,6 +5,9 @@ use serde_derive::{Deserialize, Serialize};
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Block {
     pub expressions: Vec<Expression>,
+    // expressions to execute before leaving the block
+    // (destructors mostly)
+    pub deferred_expressions: Vec<Expression>,
     pub typ: Type,
     pub span: Span,
 }
@@ -12,6 +15,7 @@ pub struct Block {
 pub fn block(e: Vec<Expression>, span: Span) -> Expression {
     Expression::Block(Box::new(Block {
         expressions: e,
+        deferred_expressions: Vec::new(),
         typ: Type::Unknown,
         span,
     }))

@@ -19,10 +19,7 @@ impl Var {
     }
 
     pub fn named(name: &str, typ: Type) -> Var {
-        Var {
-            name: name.into(),
-            typ,
-        }
+        Var { name: name.into(), typ }
     }
 }
 
@@ -35,16 +32,12 @@ impl fmt::Display for Var {
 #[derive(Debug)]
 pub struct Scope {
     named_vars: HashMap<String, Var>,
-    to_cleanup: Vec<Var>,
-    //insert_block: BasicBlockRef,
-    //insert_position: usize,
 }
 
 impl Scope {
     pub fn new(/*insert_block: BasicBlockRef, insert_position: usize*/) -> Scope {
         Scope {
             named_vars: HashMap::new(),
-            to_cleanup: Vec::new(),
             //insert_block: insert_block,
             //insert_position: insert_position,
         }
@@ -52,31 +45,6 @@ impl Scope {
 
     pub fn add_named_var(&mut self, var: Var) {
         self.named_vars.insert(var.name.clone(), var);
-    }
-
-    /*
-        pub fn add_cleanup_target(&mut self, v: &Var) -> bool
-        {
-            if self.named_vars.get(&v.name).is_none() {
-                false
-            } else {
-                self.to_cleanup.push(v.clone());
-                true
-            }
-        }
-
-        pub fn remove_cleanup_target(&mut self, v: &Var) -> bool
-        {
-            let len = self.to_cleanup.len();
-            self.to_cleanup.retain(|e| e != v);
-            self.to_cleanup.len() < len
-        }
-    */
-    pub fn cleanup(&self, _func: &mut ByteCodeFunction) {
-        // Cleanup in reverse construction order
-        for _v in self.to_cleanup.iter().rev() {
-            panic!("TODO: add destructor calls");
-        }
     }
 }
 
@@ -158,7 +126,9 @@ impl ByteCodeFunction {
 
     pub fn add(&mut self, inst: Instruction) {
         let idx = self.current_bb;
-        if let Some(bb) = self.blocks.get_mut(&idx) { bb.add(inst) }
+        if let Some(bb) = self.blocks.get_mut(&idx) {
+            bb.add(inst)
+        }
     }
 
     pub fn create_basic_block(&mut self) -> BasicBlockRef {
@@ -194,8 +164,7 @@ impl ByteCodeFunction {
     }
 
     pub fn pop_scope(&mut self) {
-        let s = self.scopes.pop().expect("Empty Scope Stack");
-        s.cleanup(self);
+        let _s = self.scopes.pop().expect("Empty Scope Stack");
         if !self.scopes.is_empty() {
             // Add an endscope instruction, but not at function exit
             self.add(Instruction::EndScope);

@@ -126,7 +126,7 @@ fn block_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, b: &Blo
         }
     };
 
-    if b.typ != Type::Void {
+    let ret = if b.typ != Type::Void {
         let dst = get_dst(func, &b.typ);
         func.push_destination(Some(dst.clone()));
         do_block(bc_mod, func, b);
@@ -137,7 +137,18 @@ fn block_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, b: &Blo
         do_block(bc_mod, func, b);
         func.pop_destination();
         None
+    };
+
+    if !b.deferred_expressions.is_empty() {
+        let exit_block = func.create_basic_block();
+        func.add(Instruction::Branch(exit_block));
+        func.set_current_bb(exit_block);
+        for e in &b.deferred_expressions {
+            expr_to_bc(bc_mod, func, e, target);
+        }
     }
+
+    ret
 }
 
 fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &Var, func: &mut ByteCodeFunction, target: &Target) {
@@ -1258,6 +1269,7 @@ fn expr_to_bc(
         }
 
         Expression::Return(ref r) => {
+            // TODO: unwind destructors
             func.push_destination(None);
             if let Some(var) = expr_to_bc(bc_mod, func, &r.expression, target) {
                 func.add(Instruction::Return(Operand::Var(var)));

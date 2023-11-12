@@ -57,7 +57,7 @@ pub use self::types::*;
 pub fn prefix(level: usize) -> String {
     let mut s = String::with_capacity(level);
     for _ in 0..level {
-        s.push(' ')
+        s.push_str("  ")
     }
     s
 }

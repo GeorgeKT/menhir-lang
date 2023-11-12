@@ -32,6 +32,7 @@ use self::context::Context;
 use self::function::{add_libc_functions, gen_function, gen_function_sig};
 pub use self::target::TargetMachine;
 use self::valueref::ValueRef;
+use crate::ast::ptr_type;
 use crate::bytecode::{ByteCodeModule, Constant};
 use crate::compileerror::{code_gen_error, CompileResult};
 use serde_derive::{Deserialize, Serialize};
@@ -104,7 +105,7 @@ unsafe fn gen_global(ctx: &mut Context, glob_name: &str, glob_value: &Constant) 
     let glob = LLVMAddGlobal(ctx.module, ctx.resolve_type(&v.typ)?, name.as_ptr());
     LLVMSetLinkage(glob, LLVMLinkage::LLVMExternalLinkage);
     LLVMSetInitializer(glob, v.value);
-    ctx.set_variable(glob_name, v)
+    ctx.set_variable(glob_name, ValueRef::new(glob, ptr_type(v.typ)))
 }
 
 pub fn llvm_code_generation<'a>(

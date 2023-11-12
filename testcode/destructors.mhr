@@ -1,0 +1,17 @@
+#ret:50
+
+var destruct_counter = 0
+
+struct Box:
+    ptr: *$T
+
+fn ~Box(self):
+    destruct_counter += 1
+    delete self.ptr
+
+fn main() -> int:
+    var ret = 0
+    while destruct_counter < 10:
+        let b = Box{new 5}
+        ret += *b.ptr
+    return ret 
