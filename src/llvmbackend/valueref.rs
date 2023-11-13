@@ -409,8 +409,9 @@ impl ValueRef {
 
             (&Type::String, ByteCodeProperty::Data) => unsafe {
                 let data_ptr = self.slice_data_ptr(ctx)?;
+                let et = data_ptr.get_element_type(ctx)?;
                 ValueRef::new(
-                    LLVMBuildLoad2(ctx.builder, self.get_element_type(ctx)?, data_ptr.value, cstr!("data")),
+                    LLVMBuildLoad2(ctx.builder, et, data_ptr.value, cstr!("data")),
                     ptr_type(Type::UInt(IntSize::I8)),
                 )
             },
