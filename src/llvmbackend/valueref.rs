@@ -153,12 +153,12 @@ impl ValueRef {
                 } else {
                     self.value
                 };
-                if pt.pass_by_value() {
+                if self.typ.is_pointer_to(&val.typ) {
                     LLVMBuildStore(ctx.builder, val.value, target);
-                    Ok(())
                 } else {
-                    copy(ctx, target, val.value, ctx.resolve_type(pt)?)
+                    LLVMBuildStore(ctx.builder, val.load(ctx)?, target);
                 }
+                Ok(())
             }
 
             _ => {
@@ -285,6 +285,11 @@ impl ValueRef {
         };
 
         match element_type {
+            Type::Pointer(_pt) => {
+                let load = ValueRef::new(self.load(ctx)?, element_type.clone());
+                load.get_member_ptr(ctx, index)
+            }
+
             Type::Array(at) => unsafe {
                 let mut indices = vec![get_operand(ctx, index)?.load(ctx)?];
                 Ok(ValueRef::new(

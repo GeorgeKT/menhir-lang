@@ -6,7 +6,7 @@ use crate::ast::{ptr_type, Type};
 use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
 use llvm_sys::core::*;
 use llvm_sys::prelude::*;
-use std::ffi::CString;
+use std::ffi::{c_char, CStr, CString};
 use std::fs::DirBuilder;
 use std::ptr;
 use std::rc::Rc;
@@ -173,11 +173,27 @@ impl<'a> Context<'a> {
         println!("----------------------");
     }
 
+    unsafe fn save_ir(&self, opts: &CodeGenOptions) -> Result<(), String> {
+        let mut error_message: *mut c_char = ptr::null_mut();
+        let ir_file_name = CString::new(format!("{}/{}.ir", opts.build_dir, self.name)).expect("Invalid String");
+        if LLVMPrintModuleToFile(self.module, ir_file_name.into_raw(), &mut error_message) != 0 {
+            let msg = CStr::from_ptr(error_message)
+                .to_str()
+                .expect("Invalid C string");
+            let e = format!("Unable to create ir file: {}", msg);
+            LLVMDisposeMessage(error_message);
+            return Err(e);
+        }
+
+        Ok(())
+    }
+
     pub unsafe fn gen_object_file(&self, opts: &CodeGenOptions) -> Result<String, String> {
         if opts.optimize {
             self.optimize()?;
         }
 
+        self.save_ir(opts)?;
         if opts.dump_ir {
             self.dump_module();
         }
@@ -225,7 +241,6 @@ impl<'a> Context<'a> {
     pub fn verify(&self) -> Result<(), String> {
         use libc::c_char;
         use llvm_sys::analysis::*;
-        use std::ffi::CStr;
         unsafe {
             let mut error_message: *mut c_char = ptr::null_mut();
             if LLVMVerifyModule(

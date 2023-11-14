@@ -1,4 +1,4 @@
-use crate::ast::{FunctionSignature, Type};
+use crate::ast::{Expression, FunctionSignature, Type};
 use crate::bytecode::instruction::Instruction;
 use itertools::free::join;
 use std::collections::{BTreeMap, HashMap};
@@ -32,14 +32,14 @@ impl fmt::Display for Var {
 #[derive(Debug)]
 pub struct Scope {
     named_vars: HashMap<String, Var>,
+    unwind: Vec<Expression>, // Destructor calls
 }
 
 impl Scope {
-    pub fn new(/*insert_block: BasicBlockRef, insert_position: usize*/) -> Scope {
+    pub fn new() -> Scope {
         Scope {
             named_vars: HashMap::new(),
-            //insert_block: insert_block,
-            //insert_position: insert_position,
+            unwind: Vec::new(),
         }
     }
 
@@ -169,6 +169,33 @@ impl ByteCodeFunction {
             // Add an endscope instruction, but not at function exit
             self.add(Instruction::EndScope);
         }
+    }
+
+    pub fn last_instruction_is_return(&self) -> bool {
+        let idx = self.current_bb;
+        self.blocks
+            .get(&idx)
+            .and_then(|bb| bb.instructions.last())
+            .map(|i| matches!(i, Instruction::Return(_) | Instruction::ReturnVoid))
+            .unwrap_or(false)
+    }
+
+    pub fn add_unwind_calls(&mut self, unwind: &Vec<Expression>) {
+        if let Some(s) = self.scopes.last_mut() {
+            for c in unwind {
+                s.unwind.push(c.clone());
+            }
+        }
+    }
+
+    pub fn get_unwind_calls(&mut self) -> Vec<Expression> {
+        let mut unwind_calls = Vec::new();
+        for s in self.scopes.iter_mut().rev() {
+            for e in &s.unwind {
+                unwind_calls.push(e.clone());
+            }
+        }
+        unwind_calls
     }
 
     pub fn push_destination(&mut self, var: Option<Var>) {

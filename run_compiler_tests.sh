@@ -19,6 +19,7 @@ fi
 echo "Current target triplet: ${triplet}"
 fail_count=0
 success_count=0
+fail_list=()
 
 for file in testcode/*.mhr; do
 	name=$(basename -s .mhr ${file})
@@ -29,12 +30,14 @@ for file in testcode/*.mhr; do
 		cat /tmp/compile_output.log
 		echo "---------------------"
 		fail_count=$((fail_count + 1))
+        fail_list+=( "$name" )
 	else
 		build/${triplet}/${name}/${name}
 		test_ret_value=$?
 		test_expected_ret_value=$(head -n 1 $file | cut -b 6-)
 		if [ "$test_ret_value" -ne "$test_expected_ret_value" ]; then
 			fail_count=$((fail_count + 1))
+            fail_list+=( $name )
 			echo "  Run failed, expected $test_expected_ret_value, got $test_ret_value"
 		else
 			success_count=$((success_count + 1))
@@ -44,6 +47,6 @@ for file in testcode/*.mhr; do
 done 
 
 echo "Tests:"
-echo "  fail:    ${fail_count}"
+echo "  fail:    ${fail_count} (failed: ${fail_list[@]})"
 echo "  success: ${success_count}"
 exit ${fail_count}

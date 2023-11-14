@@ -518,7 +518,8 @@ pub unsafe fn gen_instruction(
         }
 
         Instruction::Delete(var) => {
-            LLVMBuildFree(ctx.builder, ctx.get_variable(&var.name, &var.typ)?.load(ctx)?);
+            let var = ctx.get_variable(&var.name, &var.typ)?.load(ctx)?;
+            LLVMBuildFree(ctx.builder, var);
         }
     }
 

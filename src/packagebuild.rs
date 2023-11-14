@@ -2,6 +2,7 @@ use serde_derive::Deserialize;
 use std::env;
 use std::fs::File;
 use std::io::Read;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::ast::TreePrinter;
@@ -193,6 +194,11 @@ impl PackageTarget {
             compile_to_byte_code(&pkg, &build_options.target_machine.target)
         })?;
 
+        let build_dir = format!("build/{}/{}", build_options.target_machine.target.triplet, self.name);
+        let mut bc_dump = File::create(format!("{build_dir}/{}.bc", self.name))?;
+        writeln!(&mut bc_dump, "{bc_mod}")?;
+        drop(bc_dump);
+
         match &build_options.dump_flags {
             Some(Dump::All) | Some(Dump::ByteCode) => {
                 println!("bytecode:");
@@ -213,7 +219,7 @@ impl PackageTarget {
 
         let opts = CodeGenOptions {
             dump_ir: matches!(build_options.dump_flags, Some(Dump::IR) | Some(Dump::All)),
-            build_dir: format!("build/{}/{}", build_options.target_machine.target.triplet, self.name),
+            build_dir,
             output_file_name: output_file_name(&self.name, self.output_type),
             output_type: self.output_type,
             optimize: build_options.optimize,

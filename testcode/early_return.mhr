@@ -1,7 +1,24 @@
-#ret:42
+#ret:45
+
+var destructor_calls = 0
+
+struct Box:
+    ptr: *$T
+
+fn ~Box(self):
+    destructor_calls += 1
+    delete self.ptr 
+
+fn run() -> int:
+    var x = 77
+    let a = Box{new 7}
+    while x < 100:
+        let b = Box{new 8}
+        if x > 42:
+            let c = Box{new 8}
+            return 42
+        x += 1
+    x
 
 fn main() -> int:
-    let x = 77
-    if x > 42:
-        return 42
-    x
+    return run() + destructor_calls
