@@ -21,29 +21,29 @@ fail_count=0
 success_count=0
 fail_list=()
 
-for file in testcode/*.mhr; do
+
+if ! cargo run ${mode} -- build-pkg -i testcode/package.toml > /tmp/compile_output.log; then 
+	echo "*********************"
+	echo "  Compile failed"
+	cat /tmp/compile_output.log
+	echo "---------------------"
+    exit 1
+fi 
+
+for file in testcode/src/*.mhr; do
 	name=$(basename -s .mhr ${file})
 	echo "Testing ${name}"
-	if ! cargo run ${mode} -- build ${file} &> /tmp/compile_output.log; then
-		echo "*********************"
-		echo "  Compile failed"
-		cat /tmp/compile_output.log
-		echo "---------------------"
-		fail_count=$((fail_count + 1))
-        fail_list+=( "$name" )
-	else
-		build/${triplet}/${name}/${name}
-		test_ret_value=$?
-		test_expected_ret_value=$(head -n 1 $file | cut -b 6-)
-		if [ "$test_ret_value" -ne "$test_expected_ret_value" ]; then
-			fail_count=$((fail_count + 1))
-            fail_list+=( $name )
-			echo "  Run failed, expected $test_expected_ret_value, got $test_ret_value"
-		else
-			success_count=$((success_count + 1))
-			echo "  Run succeeded"
-		fi
-	fi
+    testcode/build/${triplet}/${name}/${name}
+    test_ret_value=$?
+    test_expected_ret_value=$(head -n 1 $file | cut -b 6-)
+    if [ "$test_ret_value" -ne "$test_expected_ret_value" ]; then
+        fail_count=$((fail_count + 1))
+        fail_list+=( $name )
+        echo "  Run failed, expected $test_expected_ret_value, got $test_ret_value"
+    else
+        success_count=$((success_count + 1))
+        echo "  Run succeeded"
+    fi
 done 
 
 echo "Tests:"

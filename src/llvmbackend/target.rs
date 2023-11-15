@@ -4,6 +4,7 @@ use std::ptr;
 
 use crate::ast::IntSize;
 use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
+use crate::llvmbackend::instructions::type_name;
 use crate::target::Target;
 use llvm_sys::core::*;
 use llvm_sys::prelude::*;
@@ -58,39 +59,43 @@ pub struct TargetMachine {
 }
 
 impl TargetMachine {
-    pub unsafe fn new() -> CompileResult<TargetMachine> {
-        let (target_triplet, target_machine) = create_target_machine()?;
-        let target_data = LLVMCreateTargetDataLayout(target_machine);
-        let int_size = match LLVMPointerSize(target_data) {
-            1 => IntSize::I8,
-            2 => IntSize::I16,
-            4 => IntSize::I32,
-            8 => IntSize::I64,
-            v => return code_gen_result(format!("Not supported native integer size: {}", v)),
-        };
+    pub fn new() -> CompileResult<TargetMachine> {
+        unsafe {
+            let (target_triplet, target_machine) = create_target_machine()?;
+            let target_data = LLVMCreateTargetDataLayout(target_machine);
+            let int_size = match LLVMPointerSize(target_data) {
+                1 => IntSize::I8,
+                2 => IntSize::I16,
+                4 => IntSize::I32,
+                8 => IntSize::I64,
+                v => return code_gen_result(format!("Not supported native integer size: {}", v)),
+            };
 
-        Ok(TargetMachine {
-            target_machine,
-            target_data,
-            target: Target::new(int_size, target_triplet),
-        })
+            Ok(TargetMachine {
+                target_machine,
+                target_data,
+                target: Target::new(int_size, target_triplet),
+            })
+        }
     }
 
     pub unsafe fn size_of_type(&self, typ: LLVMTypeRef) -> usize {
-        LLVMStoreSizeOfType(self.target_data, typ) as usize
+        LLVMABISizeOfType(self.target_data, typ) as usize
     }
 
     pub unsafe fn emit_to_file(&self, module: LLVMModuleRef, obj_file_name: &str) -> Result<(), String> {
         let mut error_message: *mut c_char = ptr::null_mut();
         let obj_file_name = CString::new(obj_file_name).expect("Invalid String");
+        let obj_file_name_cstr = obj_file_name.into_raw();
         if LLVMTargetMachineEmitToFile(
             self.target_machine,
             module,
-            obj_file_name.into_raw(),
+            obj_file_name_cstr,
             LLVMCodeGenFileType::LLVMObjectFile,
             &mut error_message,
         ) != 0
         {
+            let _ = CString::from_raw(obj_file_name_cstr);
             let msg = CStr::from_ptr(error_message)
                 .to_str()
                 .expect("Invalid C string");
@@ -98,6 +103,8 @@ impl TargetMachine {
             LLVMDisposeMessage(error_message);
             return Err(e);
         }
+
+        let _ = CString::from_raw(obj_file_name_cstr);
         Ok(())
     }
 }

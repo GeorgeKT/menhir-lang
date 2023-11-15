@@ -22,13 +22,15 @@ mod tests;
 mod jit;
 */
 
+use itertools::Itertools;
 use llvm_sys::core::*;
 use llvm_sys::LLVMLinkage;
 use std::ffi::CString;
 use std::fmt;
+use std::path::PathBuf;
 use std::process::{Command, Output};
 
-use self::context::Context;
+pub use self::context::Context;
 use self::function::{add_libc_functions, gen_function, gen_function_sig};
 pub use self::target::TargetMachine;
 use self::valueref::ValueRef;
@@ -59,7 +61,7 @@ impl fmt::Display for OutputType {
 }
 
 pub struct CodeGenOptions {
-    pub build_dir: String,
+    pub build_dir: PathBuf,
     pub output_file_name: String,
     pub output_type: OutputType,
     pub dump_ir: bool,
@@ -110,39 +112,40 @@ unsafe fn gen_global(ctx: &mut Context, glob_name: &str, glob_value: &Constant) 
 
 pub fn llvm_code_generation<'a>(
     bc_mod: &ByteCodeModule,
+    ctx: &mut Context,
     target_machine: &'a TargetMachine,
-) -> CompileResult<Context<'a>> {
-    let mut ctx = Context::new(&bc_mod.name, target_machine)?;
+) -> CompileResult<()> {
+    ctx.create_module(&bc_mod.name);
 
     unsafe {
-        add_libc_functions(&mut ctx)?;
+        add_libc_functions(ctx)?;
 
         for func in &bc_mod.imported_functions {
-            gen_function_sig(&mut ctx, &func.sig, None)?;
+            gen_function_sig(ctx, &func.sig, None)?;
         }
 
         for (glob_name, glob_val) in &bc_mod.globals {
-            gen_global(&mut ctx, glob_name, glob_val)?;
+            gen_global(ctx, glob_name, glob_val)?;
         }
 
-        for func in bc_mod.functions.values() {
+        for (_, func) in bc_mod.functions.iter().sorted_by_key(|x| x.0) {
             if func.sig.name == bc_mod.main_function_name() {
-                gen_function_sig(&mut ctx, &func.sig, Some("main"))?;
+                gen_function_sig(ctx, &func.sig, Some("main"))?;
             } else {
-                gen_function_sig(&mut ctx, &func.sig, None)?;
+                gen_function_sig(ctx, &func.sig, None)?;
             }
         }
 
-        for func in bc_mod.functions.values() {
+        for (_, func) in bc_mod.functions.iter().sorted_by_key(|x| x.0) {
             if !func.external {
-                gen_function(&mut ctx, func)?;
+                gen_function(ctx, func)?;
             }
         }
 
         ctx.verify()?;
     }
 
-    Ok(ctx)
+    Ok(())
 }
 
 #[derive(Default)]
@@ -171,7 +174,7 @@ impl LinkerFlags {
 pub fn link(ctx: &Context, opts: &CodeGenOptions, linker_flags: &LinkerFlags) -> Result<(), String> {
     let obj_file = unsafe { ctx.gen_object_file(opts)? };
 
-    let output_file_path = format!("{}/{}", opts.build_dir, opts.output_file_name);
+    let output_file_path = opts.build_dir.join(format!("{}", opts.output_file_name));
 
     let mut cmd = match opts.output_type {
         OutputType::Binary => {
@@ -198,14 +201,14 @@ pub fn link(ctx: &Context, opts: &CodeGenOptions, linker_flags: &LinkerFlags) ->
         }
     };
 
-    println!("  Linking {}", output_file_path);
+    println!("  Linking {}", output_file_path.display());
     let output: Output = cmd
         .output()
         .map_err(|e| format!("Unable to spawn the linker: {}", e))?;
 
     if !output.status.success() {
         let out = String::from_utf8(output.stderr).expect("Invalid stdout from ld");
-        let msg = format!("Linking {} failed:\n{}", output_file_path, out);
+        let msg = format!("Linking {} failed:\n{}", output_file_path.display(), out);
         return Err(msg);
     }
 

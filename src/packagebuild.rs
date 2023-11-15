@@ -11,7 +11,7 @@ use crate::cli::Dump;
 use crate::compileerror::{CompileError, CompileResult};
 use crate::exportlibrary::ExportLibrary;
 use crate::llvmbackend::TargetMachine;
-use crate::llvmbackend::{link, llvm_code_generation, CodeGenOptions, OutputType};
+use crate::llvmbackend::{link, llvm_code_generation, CodeGenOptions, Context, OutputType};
 use crate::package::Package;
 use crate::timer::{time_operation, time_operation_mut};
 
@@ -19,7 +19,8 @@ pub struct BuildOptions {
     pub optimize: bool,
     pub dump_flags: Option<Dump>,
     pub target_machine: TargetMachine,
-    pub sources_directory: String,
+    pub sources_directory: PathBuf,
+    pub build_directory: PathBuf,
     pub import_directories: Vec<PathBuf>,
 }
 
@@ -31,7 +32,7 @@ pub struct PackageTarget {
     path: Option<PathBuf>,
     depends: Option<Vec<String>>,
 }
-/*
+
 #[derive(Debug, Deserialize, Default)]
 pub struct PackageDescription {
     name: String,
@@ -40,10 +41,10 @@ pub struct PackageDescription {
     license: String,
     version: String,
 }
- */
+
 #[derive(Debug, Deserialize, Default)]
 pub struct PackageData {
-    //package: PackageDescription,
+    package: PackageDescription,
     target: Vec<PackageTarget>,
 }
 
@@ -66,6 +67,7 @@ impl PackageData {
                 path: Some(p.to_owned()),
                 depends: None,
             }],
+            package: PackageDescription::default(),
         })
     }
 
@@ -80,9 +82,10 @@ impl PackageData {
     }
 
     pub fn build(&self, build_options: &BuildOptions) -> CompileResult<()> {
+        let mut ctx = Context::new(&build_options.target_machine)?;
         println!("Compiling for {}", build_options.target_machine.target.triplet);
         for t in &self.target {
-            time_operation(2, "Total build time", || t.build(build_options))?;
+            time_operation_mut(2, "Total build time", || t.build(build_options, &mut ctx))?;
         }
 
         Ok(())
@@ -158,25 +161,26 @@ impl PackageTarget {
         Ok(())
     }
 
-    fn build(&self, build_options: &BuildOptions) -> CompileResult<()> {
+    fn build(&self, build_options: &BuildOptions, ctx: &mut Context) -> CompileResult<()> {
         println!("Building target {}", self.name);
-        let single_file = format!("{}/{}.mhr", build_options.sources_directory, self.name);
-        let dir_name = format!("{}/{}", build_options.sources_directory, self.name);
+        let single_file = build_options
+            .sources_directory
+            .join(format!("{}.mhr", self.name));
+        let dir_name = build_options.sources_directory.join(&self.name);
 
-        let path = if let Some(ref path) = self.path {
-            path.as_path()
+        let path = if let Some(path) = &self.path {
+            path.to_owned()
         } else {
-            let path = Path::new(&single_file);
-            if path.exists() {
-                path
+            if single_file.exists() {
+                single_file
             } else {
-                Path::new(&dir_name)
+                dir_name
             }
         };
 
         let mut pkg = Package::new(&self.name);
         self.find_dependencies(build_options, &mut pkg)?;
-        pkg.parse_files(path, &build_options.target_machine.target)?;
+        pkg.parse_files(&path, &build_options.target_machine.target)?;
 
         time_operation_mut(2, "Type checking", || {
             pkg.type_check(&build_options.target_machine.target)
@@ -194,8 +198,12 @@ impl PackageTarget {
             compile_to_byte_code(&pkg, &build_options.target_machine.target)
         })?;
 
-        let build_dir = format!("build/{}/{}", build_options.target_machine.target.triplet, self.name);
-        let mut bc_dump = File::create(format!("{build_dir}/{}.bc", self.name))?;
+        let build_dir = build_options
+            .build_directory
+            .join(format!("{}/{}", build_options.target_machine.target.triplet, self.name));
+        std::fs::create_dir_all(&build_dir)?;
+
+        let mut bc_dump = File::create(build_dir.join(format!("{}.bc", self.name)))?;
         writeln!(&mut bc_dump, "{bc_mod}")?;
         drop(bc_dump);
 
@@ -225,17 +233,17 @@ impl PackageTarget {
             optimize: build_options.optimize,
         };
 
-        let ctx = time_operation(2, "Code generation", || {
-            llvm_code_generation(&bc_mod, &build_options.target_machine)
+        time_operation_mut(2, "Code generation", || {
+            llvm_code_generation(&bc_mod, ctx, &build_options.target_machine)
         })?;
 
         time_operation(2, "Linking", || link(&ctx, &opts, &pkg.linker_flags))?;
 
         match opts.output_type {
             OutputType::SharedLib | OutputType::StaticLib => {
-                let path = format!("{}/{}.mhr.exports", opts.build_dir, self.name);
+                let path = opts.build_dir.join(format!("{}.mhr.exports", self.name));
                 let mut file = File::create(&path)?;
-                println!("  Generating {}", path);
+                println!("  Generating {}", path.display());
                 let export_lib = ExportLibrary::new(&pkg, opts.output_type);
                 export_lib.save(&mut file)?;
             }

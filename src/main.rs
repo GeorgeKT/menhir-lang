@@ -21,7 +21,7 @@ use clap::Parser;
 use crate::cli::{BuildCommand, BuildPkgCommand, CompilerCommand, ExportsCommand, LibraryType, CLI};
 use crate::compileerror::CompileResult;
 use crate::exportlibrary::ExportLibrary;
-use crate::llvmbackend::{llvm_init, llvm_shutdown, OutputType};
+use crate::llvmbackend::{llvm_init, llvm_shutdown, OutputType, TargetMachine};
 use crate::packagebuild::{BuildOptions, PackageData};
 
 fn build_command(bc: BuildCommand) -> CompileResult<i32> {
@@ -29,7 +29,8 @@ fn build_command(bc: BuildCommand) -> CompileResult<i32> {
         optimize: bc.optimize,
         dump_flags: bc.dump,
         target_machine: llvm_init()?,
-        sources_directory: String::new(),
+        sources_directory: PathBuf::from("."),
+        build_directory: PathBuf::from("build"),
         import_directories: bc.imports,
     };
 
@@ -51,12 +52,19 @@ fn build_package_command(b: BuildPkgCommand) -> CompileResult<i32> {
         PathBuf::from("./package.toml")
     };
 
+    let root_dir = if let Some(root_dir) = package_toml.parent() {
+        root_dir.to_owned()
+    } else {
+        PathBuf::from(".")
+    };
+
     let pkg = PackageData::load(package_toml)?;
     let build_options = BuildOptions {
         optimize: b.optimize,
         dump_flags: b.dump,
         target_machine: llvm_init()?,
-        sources_directory: "src".into(),
+        sources_directory: root_dir.join("src"),
+        build_directory: root_dir.join("build"),
         import_directories: b.imports,
     };
     pkg.build(&build_options)?;
@@ -78,8 +86,8 @@ fn run() -> CompileResult<i32> {
         CompilerCommand::Exports(e) => exports_command(e),
         CompilerCommand::Info { triplet } => {
             if triplet {
-                let target_machine = llvm_init()?;
-                print!("{}", target_machine.target.triplet);
+                llvm_init()?;
+                print!("{}", TargetMachine::new()?.target.triplet);
             }
 
             Ok(0)

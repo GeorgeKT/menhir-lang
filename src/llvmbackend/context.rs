@@ -35,19 +35,30 @@ pub struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
-    pub fn new(module_name: &str, target_machine: &'a TargetMachine) -> Result<Context<'a>, String> {
+    pub fn new(target_machine: &'a TargetMachine) -> Result<Context<'a>, String> {
         unsafe {
-            let context_name = CString::new(module_name).expect("Invalid module name");
             let context = LLVMContextCreate();
             LLVMContextSetOpaquePointers(context, 0);
             Ok(Context::<'a> {
                 context,
-                module: LLVMModuleCreateWithNameInContext(context_name.as_ptr(), context),
+                module: std::ptr::null_mut(),
                 builder: LLVMCreateBuilderInContext(context),
                 target_machine,
-                name: module_name.into(),
+                name: String::new(),
                 stack: vec![StackFrame::new(ptr::null_mut())],
             })
+        }
+    }
+
+    pub fn create_module(&mut self, module_name: &str) {
+        unsafe {
+            if !self.module.is_null() {
+                LLVMDisposeModule(self.module);
+            }
+
+            let context_name = CString::new(module_name).expect("Invalid module name");
+            self.module = LLVMModuleCreateWithNameInContext(context_name.as_ptr(), self.context);
+            self.name = module_name.into();
         }
     }
 
@@ -175,8 +186,9 @@ impl<'a> Context<'a> {
 
     unsafe fn save_ir(&self, opts: &CodeGenOptions) -> Result<(), String> {
         let mut error_message: *mut c_char = ptr::null_mut();
-        let ir_file_name = CString::new(format!("{}/{}.ir", opts.build_dir, self.name)).expect("Invalid String");
-        if LLVMPrintModuleToFile(self.module, ir_file_name.into_raw(), &mut error_message) != 0 {
+        let ir_file_name =
+            CString::new(format!("{}/{}.ir", opts.build_dir.display(), self.name)).expect("Invalid String");
+        if LLVMPrintModuleToFile(self.module, ir_file_name.as_ptr(), &mut error_message) != 0 {
             let msg = CStr::from_ptr(error_message)
                 .to_str()
                 .expect("Invalid C string");
@@ -201,9 +213,9 @@ impl<'a> Context<'a> {
         DirBuilder::new()
             .recursive(true)
             .create(&opts.build_dir)
-            .map_err(|e| format!("Unable to create directory for {}: {}", opts.build_dir, e))?;
+            .map_err(|e| format!("Unable to create directory for {}: {}", opts.build_dir.display(), e))?;
 
-        let obj_file_name = format!("{}/{}.mhr.o", opts.build_dir, self.name);
+        let obj_file_name = format!("{}/{}.mhr.o", opts.build_dir.display(), self.name);
         println!("  Building {}", obj_file_name);
         self.target_machine
             .emit_to_file(self.module, &obj_file_name)?;
