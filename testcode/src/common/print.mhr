@@ -1,0 +1,9 @@
+import common::libc
+
+let STDIN = 0
+let STDOUT = 1
+let STDERR = 2
+
+
+fn print(msg: string) -> int:
+    write(STDOUT, msg.data, msg.len)

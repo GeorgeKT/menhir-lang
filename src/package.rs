@@ -85,19 +85,21 @@ impl Package {
         &mut self,
         input: &mut R,
         dep: &str,
-        deps_dir: &str,
+        deps_dir: &Path,
         target_triplet: &str,
     ) -> Result<(), String> {
         let export_library = ExportLibrary::load(input)?;
         match export_library.output_type {
             OutputType::StaticLib => {
-                let lib_path = format!("{}/{}/{}/lib{}.a", deps_dir, target_triplet, dep, dep);
-                self.linker_flags.linker_static_libs.push(lib_path);
+                let lib_path = deps_dir.join(format!("{}/{}/lib{}.a", target_triplet, dep, dep));
+                self.linker_flags
+                    .linker_static_libs
+                    .push(lib_path.to_owned());
             }
 
             OutputType::SharedLib => {
-                let lib_path = format!("{}/{}/{}/", deps_dir, target_triplet, dep);
-                self.linker_flags.linker_paths.push(lib_path);
+                let lib_path = deps_dir.join(format!("{}/{}/", target_triplet, dep));
+                self.linker_flags.linker_paths.push(lib_path.to_owned());
                 self.linker_flags.linker_shared_libs.push(dep.into());
             }
 

@@ -150,9 +150,9 @@ pub fn llvm_code_generation<'a>(
 
 #[derive(Default)]
 pub struct LinkerFlags {
-    pub linker_paths: Vec<String>,
+    pub linker_paths: Vec<PathBuf>,
     pub linker_shared_libs: Vec<String>,
-    pub linker_static_libs: Vec<String>,
+    pub linker_static_libs: Vec<PathBuf>,
 }
 
 impl LinkerFlags {

@@ -5,6 +5,14 @@ email = "joris.guisson@gmail.com"
 license = "BSD"
 version = "0.1" 
 
+[[target]]
+name="common"
+type="staticlib"
+
+[[target]]
+name="import"
+type="binary"
+depends=["common"]
 
 [[target]]
 name="anonymous_structs"

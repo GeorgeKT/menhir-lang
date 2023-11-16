@@ -1,0 +1,3 @@
+extern fn close(fd: int) -> int
+extern fn write(fd: int, data: *void, len: uint) -> int
+extern fn read(fd: int, var buffer: *void, capacity: uint) -> int

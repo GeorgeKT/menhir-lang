@@ -1,0 +1,5 @@
+#ret: 12
+import common::print
+
+fn main() -> int:
+    print("Hello World\n")

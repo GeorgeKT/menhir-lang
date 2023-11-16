@@ -104,11 +104,11 @@ impl PackageTarget {
     fn find_dependency_in_path(
         &self,
         dep: &str,
-        deps_dir: &str,
+        deps_dir: &Path,
         target_triplet: &str,
         pkg: &mut Package,
     ) -> CompileResult<bool> {
-        let path = format!("{}/{}/{}/{}.mhr.exports", deps_dir, target_triplet, dep, dep);
+        let path = deps_dir.join(format!("{}/{}/{}.mhr.exports", target_triplet, dep, dep));
         if let Ok(mut file) = File::open(path) {
             if pkg
                 .add_library(&mut file, dep, deps_dir, target_triplet)
@@ -125,24 +125,29 @@ impl PackageTarget {
 
     fn find_dependency(&self, dep: &str, build_options: &BuildOptions, pkg: &mut Package) -> CompileResult<()> {
         // Always try the build directory first
-        if self.find_dependency_in_path(dep, "build", &build_options.target_machine.target.triplet, pkg)? {
+        if self.find_dependency_in_path(
+            dep,
+            &build_options.build_directory,
+            &build_options.target_machine.target.triplet,
+            pkg,
+        )? {
             return Ok(());
         }
 
         for import_dir in &build_options.import_directories {
-            if self.find_dependency_in_path(
-                dep,
-                &import_dir.to_string_lossy(),
-                &build_options.target_machine.target.triplet,
-                pkg,
-            )? {
+            if self.find_dependency_in_path(dep, &import_dir, &build_options.target_machine.target.triplet, pkg)? {
                 return Ok(());
             }
         }
 
         if let Ok(import_paths) = env::var("MENHIR_IMPORT_DIRS") {
             for path in import_paths.split(':') {
-                if self.find_dependency_in_path(dep, path, &build_options.target_machine.target.triplet, pkg)? {
+                if self.find_dependency_in_path(
+                    dep,
+                    &Path::new(path),
+                    &build_options.target_machine.target.triplet,
+                    pkg,
+                )? {
                     return Ok(());
                 }
             }
