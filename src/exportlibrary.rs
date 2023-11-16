@@ -24,11 +24,20 @@ impl ExportLibrary {
     }
 
     pub fn load<R: io::Read>(reader: &mut R) -> Result<ExportLibrary, String> {
-        bincode::deserialize_from(reader).map_err(|e| format!("Deserialization error: {}", e))
+        let mut data = String::new();
+        reader
+            .read_to_string(&mut data)
+            .map_err(|e| format!("Failed to read exports library: {e}"))?;
+        ron::from_str(&data).map_err(|e| format!("Failed to deserialize export library: {}", e))
     }
 
     pub fn save<W: io::Write>(&self, writer: &mut W) -> Result<(), String> {
-        bincode::serialize_into(writer, self).map_err(|e| format!("Serialization error: {}", e))
+        let data = ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())
+            .map_err(|e| format!("Failed to serialize exports library: {e}"))?;
+        writer
+            .write(data.as_bytes())
+            .map_err(|e| format!("Failed to write exports library: {}", e))?;
+        Ok(())
     }
 
     pub fn find_import(&self, import_name: &str) -> Option<Rc<Import>> {

@@ -4,7 +4,6 @@ use std::ptr;
 
 use crate::ast::IntSize;
 use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
-use crate::llvmbackend::instructions::type_name;
 use crate::target::Target;
 use llvm_sys::core::*;
 use llvm_sys::prelude::*;

@@ -1,4 +1,5 @@
 mod ast;
+mod buildinputs;
 mod bytecode;
 mod cli;
 mod compileerror;

@@ -105,13 +105,15 @@ impl PackageTarget {
         &self,
         dep: &str,
         deps_dir: &Path,
-        target_triplet: &str,
         pkg: &mut Package,
+        build_options: &BuildOptions,
     ) -> CompileResult<bool> {
+        let target_triplet = &build_options.target_machine.target.triplet;
         let path = deps_dir.join(format!("{}/{}/{}.mhr.exports", target_triplet, dep, dep));
-        if let Ok(mut file) = File::open(path) {
+        if let Ok(mut file) = File::open(&path) {
+            let target_triplet = &build_options.target_machine.target.triplet;
             if pkg
-                .add_library(&mut file, dep, deps_dir, target_triplet)
+                .add_library(&mut file, &path, dep, build_options)
                 .is_ok()
             {
                 Ok(true)
@@ -125,29 +127,19 @@ impl PackageTarget {
 
     fn find_dependency(&self, dep: &str, build_options: &BuildOptions, pkg: &mut Package) -> CompileResult<()> {
         // Always try the build directory first
-        if self.find_dependency_in_path(
-            dep,
-            &build_options.build_directory,
-            &build_options.target_machine.target.triplet,
-            pkg,
-        )? {
+        if self.find_dependency_in_path(dep, &build_options.build_directory, pkg, build_options)? {
             return Ok(());
         }
 
         for import_dir in &build_options.import_directories {
-            if self.find_dependency_in_path(dep, &import_dir, &build_options.target_machine.target.triplet, pkg)? {
+            if self.find_dependency_in_path(dep, &import_dir, pkg, build_options)? {
                 return Ok(());
             }
         }
 
         if let Ok(import_paths) = env::var("MENHIR_IMPORT_DIRS") {
             for path in import_paths.split(':') {
-                if self.find_dependency_in_path(
-                    dep,
-                    &Path::new(path),
-                    &build_options.target_machine.target.triplet,
-                    pkg,
-                )? {
+                if self.find_dependency_in_path(dep, &Path::new(path), pkg, build_options)? {
                     return Ok(());
                 }
             }
@@ -167,7 +159,6 @@ impl PackageTarget {
     }
 
     fn build(&self, build_options: &BuildOptions, ctx: &mut Context) -> CompileResult<()> {
-        println!("Building target {}", self.name);
         let single_file = build_options
             .sources_directory
             .join(format!("{}.mhr", self.name));
@@ -183,9 +174,18 @@ impl PackageTarget {
             }
         };
 
-        let mut pkg = Package::new(&self.name);
+        let mut pkg = Package::new(&self.name, self.output_type);
         self.find_dependencies(build_options, &mut pkg)?;
-        pkg.parse_files(&path, &build_options.target_machine.target)?;
+        pkg.find_input_files(&path, build_options)?;
+        if !pkg.rebuild_needed(build_options) {
+            println!("No build needed for {}", self.name);
+            return Ok(());
+        } else {
+            println!("Building target {}", self.name);
+        }
+
+        pkg.save_inputs(build_options)?;
+        pkg.parse_files(build_options)?;
 
         time_operation_mut(2, "Type checking", || {
             pkg.type_check(&build_options.target_machine.target)

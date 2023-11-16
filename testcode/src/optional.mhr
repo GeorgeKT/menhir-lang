@@ -1,4 +1,5 @@
 #ret:42
+
 fn unwrap_or(opt: ?int, default: int) -> int:
     opt || default
 
