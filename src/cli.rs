@@ -34,11 +34,8 @@ pub enum CompilerCommand {
     BuildPkg(BuildPkgCommand),
     /// List the exported symbols in a exports file
     Exports(ExportsCommand),
-    Info {
-        /// Print the default target triplet of the current system, and exit
-        #[arg(short = 't', long = "triplet", default_value_t = false)]
-        triplet: bool,
-    },
+    Info(InfoCommand),
+    Clean(CleanCommand),
 }
 
 #[derive(Args, Debug)]
@@ -83,4 +80,18 @@ pub struct ExportsCommand {
     /// List the exported symbols in an exports file"
     #[arg(required = true, value_name = "EXPORTS")]
     pub exports_file: PathBuf,
+}
+
+#[derive(Args, Debug)]
+pub struct CleanCommand {
+    /// Specify the package.toml file. If not specified, menhir will look in the current directory for one.
+    #[arg(short = 'i', long = "input", value_name = "PACKAGE_TOML")]
+    pub input_file: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+pub struct InfoCommand {
+    /// Print the default target triplet of the current system, and exit
+    #[arg(short = 't', long = "triplet", default_value_t = false)]
+    pub triplet: bool,
 }

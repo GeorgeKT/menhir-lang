@@ -15,6 +15,11 @@ use crate::llvmbackend::{link, llvm_code_generation, CodeGenOptions, Context, Ou
 use crate::package::Package;
 use crate::timer::{time_operation, time_operation_mut};
 
+pub struct CleanOptions {
+    pub target_machine: TargetMachine,
+    pub build_directory: PathBuf,
+}
+
 pub struct BuildOptions {
     pub optimize: bool,
     pub dump_flags: Option<Dump>,
@@ -90,6 +95,29 @@ impl PackageData {
 
         Ok(())
     }
+
+    pub fn clean(&self, clean_options: &CleanOptions) -> CompileResult<()> {
+        let triplet = &clean_options.target_machine.target.triplet;
+        for target in &self.target {
+            let path = clean_options
+                .build_directory
+                .join(format!("{}/{}", triplet, target.name));
+            if path.exists() {
+                std::fs::remove_dir_all(&path).map_err(|e| format!("Failed to remove {}: {}", path.display(), e))?;
+            }
+        }
+        let triplet_dir = clean_options.build_directory.join(triplet);
+        if std::fs::read_dir(&triplet_dir)?.count() == 0 {
+            std::fs::remove_dir_all(&triplet_dir)
+                .map_err(|e| format!("Failed to remove {}: {}", triplet_dir.display(), e))?;
+        }
+
+        if std::fs::read_dir(&clean_options.build_directory)?.count() == 0 {
+            std::fs::remove_dir_all(&clean_options.build_directory)
+                .map_err(|e| format!("Failed to remove {}: {}", clean_options.build_directory.display(), e))?;
+        }
+        Ok(())
+    }
 }
 
 fn output_file_name(name: &str, output_type: OutputType) -> String {
@@ -111,7 +139,6 @@ impl PackageTarget {
         let target_triplet = &build_options.target_machine.target.triplet;
         let path = deps_dir.join(format!("{}/{}/{}.mhr.exports", target_triplet, dep, dep));
         if let Ok(mut file) = File::open(&path) {
-            let target_triplet = &build_options.target_machine.target.triplet;
             if pkg
                 .add_library(&mut file, &path, dep, build_options)
                 .is_ok()

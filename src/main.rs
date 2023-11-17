@@ -18,6 +18,8 @@ use std::path::PathBuf;
 use std::process::exit;
 
 use clap::Parser;
+use cli::CleanCommand;
+use packagebuild::CleanOptions;
 
 use crate::cli::{BuildCommand, BuildPkgCommand, CompilerCommand, ExportsCommand, LibraryType, CLI};
 use crate::compileerror::CompileResult;
@@ -79,20 +81,43 @@ fn exports_command(e: ExportsCommand) -> CompileResult<i32> {
     Ok(0)
 }
 
+fn clean_command(c: CleanCommand) -> CompileResult<i32> {
+    let package_toml = if let Some(toml) = &c.input_file {
+        toml.clone()
+    } else {
+        PathBuf::from("./package.toml")
+    };
+
+    let root_dir = if let Some(root_dir) = package_toml.parent() {
+        root_dir.to_owned()
+    } else {
+        PathBuf::from(".")
+    };
+
+    let pkg = PackageData::load(package_toml)?;
+    let clean_options = CleanOptions {
+        target_machine: llvm_init()?,
+        build_directory: root_dir.join("build"),
+    };
+    pkg.clean(&clean_options)?;
+    Ok(0)
+}
+
 fn run() -> CompileResult<i32> {
     let cli = CLI::parse();
     match cli.command {
         CompilerCommand::Build(b) => build_command(b),
         CompilerCommand::BuildPkg(b) => build_package_command(b),
         CompilerCommand::Exports(e) => exports_command(e),
-        CompilerCommand::Info { triplet } => {
-            if triplet {
+        CompilerCommand::Info(i) => {
+            if i.triplet {
                 llvm_init()?;
                 print!("{}", TargetMachine::new()?.target.triplet);
             }
 
             Ok(0)
         }
+        CompilerCommand::Clean(c) => clean_command(c),
     }
 }
 
