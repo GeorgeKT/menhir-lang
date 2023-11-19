@@ -99,7 +99,7 @@ fn run_command(r: RunCommand) -> CompileResult<i32> {
     let (pkg, root_dir) = load_package_data(&r.input_file)?;
     let build_options = BuildOptions {
         optimize: r.optimize,
-        dump_flags: r.dump,
+        dump_flags: r.dump.clone(),
         target_machine: llvm_init()?,
         sources_directory: root_dir.join("src"),
         build_directory: root_dir.join("build"),

@@ -1,7 +1,7 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
-#[derive(ValueEnum, Debug, Clone, Copy)]
+#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 #[clap(rename_all = "lower")]
 #[allow(clippy::upper_case_acronyms)]
 pub enum Dump {
@@ -56,8 +56,8 @@ pub struct BuildCommand {
     #[arg(short = 'l', long = "lib")]
     pub lib: Option<LibraryType>,
     /// Dump internal compiler state for debug purposes.
-    #[arg(short = 'd', long = "dump")]
-    pub dump: Option<Dump>,
+    #[arg(short = 'd', long = "dump", use_value_delimiter = true, value_delimiter = ',')]
+    pub dump: Vec<Dump>,
 }
 
 #[derive(Args, Debug)]
@@ -72,8 +72,8 @@ pub struct BuildPkgCommand {
     #[arg(short = 'I', long = "imports", use_value_delimiter = true, value_delimiter = ',')]
     pub imports: Vec<PathBuf>,
     /// Dump internal compiler state for debug purposes.
-    #[arg(short = 'd', long = "dump")]
-    pub dump: Option<Dump>,
+    #[arg(short = 'd', long = "dump", use_value_delimiter = true, value_delimiter = ',')]
+    pub dump: Vec<Dump>,
 }
 
 #[derive(Args, Debug)]
@@ -112,8 +112,8 @@ pub struct RunCommand {
     #[arg(short = 'I', long = "imports", use_value_delimiter = true, value_delimiter = ',')]
     pub imports: Vec<PathBuf>,
     /// Dump internal compiler state for debug purposes.
-    #[arg(short = 'd', long = "dump")]
-    pub dump: Option<Dump>,
+    #[arg(short = 'd', long = "dump", use_value_delimiter = true, value_delimiter = ',')]
+    pub dump: Vec<Dump>,
     #[clap(trailing_var_arg = true, allow_hyphen_values = true)]
     pub command_args: Vec<String>,
 }

@@ -25,7 +25,7 @@ pub struct CleanOptions {
 
 pub struct BuildOptions {
     pub optimize: bool,
-    pub dump_flags: Option<Dump>,
+    pub dump_flags: Vec<Dump>,
     pub target_machine: TargetMachine,
     pub sources_directory: PathBuf,
     pub build_directory: PathBuf,
@@ -278,12 +278,9 @@ impl PackageTarget {
             pkg.type_check(&build_options.target_machine.target)
         })?;
 
-        match build_options.dump_flags {
-            Some(Dump::AST) | Some(Dump::All) => {
-                println!("AST: {}", pkg.name);
-                pkg.print(0);
-            }
-            _ => (),
+        if build_options.dump_flags.contains(&Dump::AST) || build_options.dump_flags.contains(&Dump::All) {
+            println!("AST: {}", pkg.name);
+            pkg.print(0);
         }
 
         let mut bc_mod = time_operation(2, "Compile to bytecode", || {
@@ -299,14 +296,11 @@ impl PackageTarget {
         writeln!(&mut bc_dump, "{bc_mod}")?;
         drop(bc_dump);
 
-        match &build_options.dump_flags {
-            Some(Dump::All) | Some(Dump::ByteCode) => {
-                println!("bytecode:");
-                println!("------\n");
-                println!("{}", bc_mod);
-                println!("------\n");
-            }
-            _ => (),
+        if build_options.dump_flags.contains(&Dump::ByteCode) || build_options.dump_flags.contains(&Dump::All) {
+            println!("bytecode:");
+            println!("------\n");
+            println!("{}", bc_mod);
+            println!("------\n");
         }
 
         time_operation_mut(2, "Optimization", || {
@@ -318,7 +312,7 @@ impl PackageTarget {
         });
 
         let opts = CodeGenOptions {
-            dump_ir: matches!(build_options.dump_flags, Some(Dump::IR) | Some(Dump::All)),
+            dump_ir: build_options.dump_flags.contains(&Dump::IR) || build_options.dump_flags.contains(&Dump::All),
             build_dir,
             output_file_name: output_file_name(&self.name, self.output_type),
             output_type: self.output_type,
