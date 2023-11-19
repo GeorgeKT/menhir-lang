@@ -1,13 +1,16 @@
-use serde_derive::Deserialize;
+use serde_derive::{Deserialize, Serialize};
 use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::process::ExitStatus;
 
 use crate::ast::TreePrinter;
 use crate::bytecode::{compile_to_byte_code, optimize_module, OptimizationLevel};
 use crate::cli::Dump;
+use crate::cli::RunCommand;
 use crate::compileerror::{CompileError, CompileResult};
 use crate::exportlibrary::ExportLibrary;
 use crate::llvmbackend::TargetMachine;
@@ -29,6 +32,13 @@ pub struct BuildOptions {
     pub import_directories: Vec<PathBuf>,
 }
 
+impl BuildOptions {
+    pub fn target_build_dir(&self, target: &str) -> PathBuf {
+        self.build_directory
+            .join(format!("{}/{}", self.target_machine.target.triplet, target))
+    }
+}
+
 #[derive(Debug, Deserialize, Default)]
 pub struct PackageTarget {
     name: String,
@@ -38,13 +48,13 @@ pub struct PackageTarget {
     depends: Option<Vec<String>>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Eq, PartialEq)]
 pub struct PackageDescription {
-    name: String,
-    author: String,
-    email: String,
-    license: String,
-    version: String,
+    pub name: String,
+    pub author: String,
+    pub email: String,
+    pub license: String,
+    pub version: String,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -82,7 +92,7 @@ impl PackageData {
         file.read_to_string(&mut package_data)?;
 
         let package: PackageData = toml::from_str(&package_data)
-            .map_err(|e| CompileError::Other(format!("Failed to decode {}: {}", path.as_ref().to_string_lossy(), e)))?;
+            .map_err(|e| format!("Failed to decode {}: {}", path.as_ref().to_string_lossy(), e))?;
         Ok(package)
     }
 
@@ -90,7 +100,9 @@ impl PackageData {
         let mut ctx = Context::new(&build_options.target_machine)?;
         println!("Compiling for {}", build_options.target_machine.target.triplet);
         for t in &self.target {
-            time_operation_mut(2, "Total build time", || t.build(build_options, &mut ctx))?;
+            time_operation_mut(2, "Total build time", || {
+                t.build(build_options, &mut ctx, &self.package)
+            })?;
         }
 
         Ok(())
@@ -107,20 +119,68 @@ impl PackageData {
             }
         }
         let triplet_dir = clean_options.build_directory.join(triplet);
-        if std::fs::read_dir(&triplet_dir)?.count() == 0 {
+        if triplet_dir.exists() && std::fs::read_dir(&triplet_dir)?.count() == 0 {
             std::fs::remove_dir_all(&triplet_dir)
                 .map_err(|e| format!("Failed to remove {}: {}", triplet_dir.display(), e))?;
         }
 
-        if std::fs::read_dir(&clean_options.build_directory)?.count() == 0 {
+        if clean_options.build_directory.exists() && std::fs::read_dir(&clean_options.build_directory)?.count() == 0 {
             std::fs::remove_dir_all(&clean_options.build_directory)
                 .map_err(|e| format!("Failed to remove {}: {}", clean_options.build_directory.display(), e))?;
         }
         Ok(())
     }
+
+    fn get_run_target(&self, target: &Option<String>) -> CompileResult<&PackageTarget> {
+        if let Some(target) = target {
+            for t in &self.target {
+                if &t.name != target {
+                    continue;
+                }
+                if t.output_type != OutputType::Binary {
+                    return Err(CompileError::Other(format!("Target {} is not a binary", t.name)));
+                }
+
+                return Ok(t);
+            }
+
+            Err(CompileError::Other(format!("There is no target named {}", target)))
+        } else {
+            let mut candidate = None;
+            for t in &self.target {
+                if t.output_type == OutputType::Binary {
+                    if candidate.is_some() {
+                        return Err(CompileError::Other(format!("Multiple binaries are available, please choose the binary to run using the -t or --target option.")));
+                    }
+                    candidate = Some(t);
+                }
+            }
+
+            return candidate.ok_or_else(|| CompileError::Other(format!("This package has no binary to run")));
+        }
+    }
+
+    pub fn run(
+        &self,
+        target: &Option<String>,
+        build_options: &BuildOptions,
+        r: &RunCommand,
+    ) -> CompileResult<ExitStatus> {
+        let t = self.get_run_target(target)?;
+        let binary = build_options.target_build_dir(&t.name).join(&t.name);
+        let mut cmd = Command::new(binary);
+        cmd.args(r.command_args.iter());
+        let mut p = cmd
+            .spawn()
+            .map_err(|e| format!("Failed to spawn {}: {e}", t.name))?;
+        let ec = p
+            .wait()
+            .map_err(|e| format!("Failed to wait on {}: {e}", t.name))?;
+        Ok(ec)
+    }
 }
 
-fn output_file_name(name: &str, output_type: OutputType) -> String {
+pub fn output_file_name(name: &str, output_type: OutputType) -> String {
     match output_type {
         OutputType::Binary => name.into(),
         OutputType::StaticLib => format!("lib{}.a", name),
@@ -185,7 +245,7 @@ impl PackageTarget {
         Ok(())
     }
 
-    fn build(&self, build_options: &BuildOptions, ctx: &mut Context) -> CompileResult<()> {
+    fn build(&self, build_options: &BuildOptions, ctx: &mut Context, desc: &PackageDescription) -> CompileResult<()> {
         let single_file = build_options
             .sources_directory
             .join(format!("{}.mhr", self.name));
@@ -201,7 +261,7 @@ impl PackageTarget {
             }
         };
 
-        let mut pkg = Package::new(&self.name, self.output_type);
+        let mut pkg = Package::new(&self.name, self.output_type, desc);
         self.find_dependencies(build_options, &mut pkg)?;
         pkg.find_input_files(&path, build_options)?;
         if !pkg.rebuild_needed(build_options) {
@@ -265,9 +325,7 @@ impl PackageTarget {
             optimize: build_options.optimize,
         };
 
-        time_operation_mut(2, "Code generation", || {
-            llvm_code_generation(&bc_mod, ctx, &build_options.target_machine)
-        })?;
+        time_operation_mut(2, "Code generation", || llvm_code_generation(&bc_mod, ctx, desc))?;
 
         time_operation(2, "Linking", || link(&ctx, &opts, &pkg.linker_flags))?;
 

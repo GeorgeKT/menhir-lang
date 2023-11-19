@@ -37,9 +37,10 @@ use self::valueref::ValueRef;
 use crate::ast::ptr_type;
 use crate::bytecode::{ByteCodeModule, Constant};
 use crate::compileerror::{code_gen_error, CompileResult};
+use crate::packagebuild::PackageDescription;
 use serde_derive::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, Default)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum OutputType {
     #[serde(rename = "binary")]
     #[default]
@@ -102,7 +103,7 @@ pub fn llvm_shutdown() {
 }
 
 unsafe fn gen_global(ctx: &mut Context, glob_name: &str, glob_value: &Constant) -> CompileResult<()> {
-    let v = ValueRef::from_const(ctx, glob_value)?;
+    let v = ValueRef::const_global(ctx, glob_value)?;
     let name = CString::new(glob_name.as_bytes()).map_err(|_| code_gen_error("Invalid string"))?;
     let glob = LLVMAddGlobal(ctx.module, ctx.resolve_type(&v.typ)?, name.as_ptr());
     LLVMSetLinkage(glob, LLVMLinkage::LLVMExternalLinkage);
@@ -110,10 +111,24 @@ unsafe fn gen_global(ctx: &mut Context, glob_name: &str, glob_value: &Constant) 
     ctx.set_variable(glob_name, ValueRef::new(glob, ptr_type(v.typ)))
 }
 
+unsafe fn add_metadata(ctx: &mut Context, module_name: &str, desc: &PackageDescription) -> CompileResult<()> {
+    let metadata = format!(
+        "name:{};version:{};author:{};email:{};license:{}",
+        desc.name, desc.version, desc.author, desc.email, desc.license
+    );
+
+    gen_global(
+        ctx,
+        &format!("__MENHIR_{}_BUILD_INFO__", module_name),
+        &Constant::String(metadata),
+    )?;
+    Ok(())
+}
+
 pub fn llvm_code_generation<'a>(
     bc_mod: &ByteCodeModule,
     ctx: &mut Context,
-    target_machine: &'a TargetMachine,
+    desc: &PackageDescription,
 ) -> CompileResult<()> {
     ctx.create_module(&bc_mod.name);
 
@@ -127,6 +142,8 @@ pub fn llvm_code_generation<'a>(
         for (glob_name, glob_val) in &bc_mod.globals {
             gen_global(ctx, glob_name, glob_val)?;
         }
+
+        add_metadata(ctx, &bc_mod.name, desc)?;
 
         for (_, func) in bc_mod.functions.iter().sorted_by_key(|x| x.0) {
             if func.sig.name == bc_mod.main_function_name() {

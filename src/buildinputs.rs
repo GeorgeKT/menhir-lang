@@ -3,6 +3,8 @@ use std::{collections::HashSet, path::PathBuf};
 
 use serde_derive::{Deserialize, Serialize};
 
+use crate::packagebuild::PackageDescription;
+
 #[derive(Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub enum BuildInput {
     SourceFile {
@@ -19,6 +21,7 @@ pub enum BuildInput {
 #[derive(Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct BuildInputs {
     pub inputs: HashSet<BuildInput>,
+    pub description: PackageDescription,
 }
 
 impl BuildInputs {

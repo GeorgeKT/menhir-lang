@@ -36,6 +36,7 @@ pub enum CompilerCommand {
     Exports(ExportsCommand),
     Info(InfoCommand),
     Clean(CleanCommand),
+    Run(RunCommand),
 }
 
 #[derive(Args, Debug)]
@@ -94,4 +95,25 @@ pub struct InfoCommand {
     /// Print the default target triplet of the current system, and exit
     #[arg(short = 't', long = "triplet", default_value_t = false)]
     pub triplet: bool,
+}
+
+#[derive(Args, Debug)]
+#[clap(trailing_var_arg = true)]
+pub struct RunCommand {
+    /// Specify the package.toml file. If not specified, menhir will look in the current directory for one.
+    #[arg(short = 'i', long = "input", value_name = "PACKAGE_TOML")]
+    pub input_file: Option<PathBuf>,
+    #[arg(short = 't', long = "target", value_name = "TARGET")]
+    pub target: Option<String>,
+    /// Optimize the code
+    #[arg(short = 'O', long = "optimize", default_value_t = false)]
+    pub optimize: bool,
+    /// Directory to look for imports, use a comma separated list for more then one.
+    #[arg(short = 'I', long = "imports", use_value_delimiter = true, value_delimiter = ',')]
+    pub imports: Vec<PathBuf>,
+    /// Dump internal compiler state for debug purposes.
+    #[arg(short = 'd', long = "dump")]
+    pub dump: Option<Dump>,
+    #[clap(trailing_var_arg = true, allow_hyphen_values = true)]
+    pub command_args: Vec<String>,
 }

@@ -1,5 +1,10 @@
 #ret:42
+import common::print
+
 let THE_ANSWER = 42
+let THE_QUESTION = "Life, the Universe and Everything ?"
+
 
 fn main() -> int:
+    print(THE_QUESTION)
     THE_ANSWER

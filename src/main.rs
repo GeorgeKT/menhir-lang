@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::process::exit;
 
 use clap::Parser;
-use cli::CleanCommand;
+use cli::{CleanCommand, RunCommand};
 use packagebuild::CleanOptions;
 
 use crate::cli::{BuildCommand, BuildPkgCommand, CompilerCommand, ExportsCommand, LibraryType, CLI};
@@ -48,8 +48,8 @@ fn build_command(bc: BuildCommand) -> CompileResult<i32> {
     Ok(0)
 }
 
-fn build_package_command(b: BuildPkgCommand) -> CompileResult<i32> {
-    let package_toml = if let Some(toml) = &b.input_file {
+fn load_package_data(input_file: &Option<PathBuf>) -> CompileResult<(PackageData, PathBuf)> {
+    let package_toml = if let Some(toml) = input_file {
         toml.clone()
     } else {
         PathBuf::from("./package.toml")
@@ -61,7 +61,11 @@ fn build_package_command(b: BuildPkgCommand) -> CompileResult<i32> {
         PathBuf::from(".")
     };
 
-    let pkg = PackageData::load(package_toml)?;
+    Ok((PackageData::load(package_toml)?, root_dir))
+}
+
+fn build_package_command(b: BuildPkgCommand) -> CompileResult<i32> {
+    let (pkg, root_dir) = load_package_data(&b.input_file)?;
     let build_options = BuildOptions {
         optimize: b.optimize,
         dump_flags: b.dump,
@@ -82,25 +86,28 @@ fn exports_command(e: ExportsCommand) -> CompileResult<i32> {
 }
 
 fn clean_command(c: CleanCommand) -> CompileResult<i32> {
-    let package_toml = if let Some(toml) = &c.input_file {
-        toml.clone()
-    } else {
-        PathBuf::from("./package.toml")
-    };
-
-    let root_dir = if let Some(root_dir) = package_toml.parent() {
-        root_dir.to_owned()
-    } else {
-        PathBuf::from(".")
-    };
-
-    let pkg = PackageData::load(package_toml)?;
+    let (pkg, root_dir) = load_package_data(&c.input_file)?;
     let clean_options = CleanOptions {
         target_machine: llvm_init()?,
         build_directory: root_dir.join("build"),
     };
     pkg.clean(&clean_options)?;
     Ok(0)
+}
+
+fn run_command(r: RunCommand) -> CompileResult<i32> {
+    let (pkg, root_dir) = load_package_data(&r.input_file)?;
+    let build_options = BuildOptions {
+        optimize: r.optimize,
+        dump_flags: r.dump,
+        target_machine: llvm_init()?,
+        sources_directory: root_dir.join("src"),
+        build_directory: root_dir.join("build"),
+        import_directories: r.imports.clone(),
+    };
+    pkg.build(&build_options)?;
+    let ec = pkg.run(&r.target, &build_options, &r)?;
+    Ok(ec.code().unwrap_or(255))
 }
 
 fn run() -> CompileResult<i32> {
@@ -118,6 +125,7 @@ fn run() -> CompileResult<i32> {
             Ok(0)
         }
         CompilerCommand::Clean(c) => clean_command(c),
+        CompilerCommand::Run(r) => run_command(r),
     }
 }
 

@@ -37,7 +37,23 @@ impl ValueRef {
         }
     }
 
-    unsafe fn const_string(ctx: &Context, s: &str) -> CompileResult<ValueRef> {
+    pub unsafe fn const_global(ctx: &Context, cst: &Constant) -> CompileResult<ValueRef> {
+        match cst {
+            Constant::String(s) => {
+                let char_type = LLVMInt8TypeInContext(ctx.context);
+                let str_data = ValueRef::const_string_data(ctx, s)?;
+                let mut data = [
+                    LLVMConstPointerCast(str_data, LLVMPointerType(char_type, 0)),
+                    const_uint(ctx, s.len() as u64),
+                ];
+                let cs = LLVMConstStructInContext(ctx.context, data.as_mut_ptr(), 2, 0);
+                Ok(ValueRef::new(cs, Type::String))
+            }
+            _ => ValueRef::from_const(ctx, cst),
+        }
+    }
+
+    unsafe fn const_string_data(ctx: &Context, s: &str) -> CompileResult<LLVMValueRef> {
         let char_type = LLVMInt8TypeInContext(ctx.context);
         let glob = LLVMAddGlobal(
             ctx.module,
@@ -52,7 +68,12 @@ impl ValueRef {
             0,
         );
         LLVMSetInitializer(glob, const_string);
+        Ok(glob)
+    }
 
+    unsafe fn const_string(ctx: &Context, s: &str) -> CompileResult<ValueRef> {
+        let char_type = LLVMInt8TypeInContext(ctx.context);
+        let glob = ValueRef::const_string_data(ctx, s)?;
         let dst = ValueRef::new(
             LLVMBuildAlloca(ctx.builder, ctx.resolve_type(&Type::String)?, cstr!("str")),
             ptr_type(Type::String),

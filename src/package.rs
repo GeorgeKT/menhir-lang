@@ -11,7 +11,7 @@ use crate::buildinputs::{BuildInput, BuildInputs};
 use crate::compileerror::{type_error, CompileError, CompileResult};
 use crate::exportlibrary::ExportLibrary;
 use crate::llvmbackend::{LinkerFlags, OutputType};
-use crate::packagebuild::BuildOptions;
+use crate::packagebuild::{output_file_name, BuildOptions, PackageDescription};
 use crate::parser::parse_file;
 use crate::span::Span;
 use crate::target::Target;
@@ -74,11 +74,14 @@ pub struct Package {
 }
 
 impl Package {
-    pub fn new(name: &str, output_type: OutputType) -> Package {
+    pub fn new(name: &str, output_type: OutputType, desc: &PackageDescription) -> Package {
         Package {
             name: name.into(),
             modules: HashMap::new(),
-            inputs: BuildInputs::default(),
+            inputs: BuildInputs {
+                description: desc.clone(),
+                ..Default::default()
+            },
             import_data: ImportData {
                 imports: ImportMap::new(),
                 libraries: Vec::new(),
@@ -130,7 +133,7 @@ impl Package {
                 .map_err(|e| format!("Failed to calculate digest of {}: {e}", path.display()))?,
             path: path
                 .strip_prefix(root)
-                .map_err(|e| format!("Failed to strip prefix of export library path"))?
+                .map_err(|e| format!("Failed to strip prefix of export library path: {e}"))?
                 .to_owned(),
         });
 
@@ -173,29 +176,15 @@ impl Package {
     }
 
     pub fn rebuild_needed(&self, build_options: &BuildOptions) -> bool {
-        let output_file = match self.output_type {
-            OutputType::Binary => build_options.build_directory.join(format!(
-                "{}/{}/{}",
-                build_options.target_machine.target.triplet, self.name, self.name
-            )),
-            OutputType::StaticLib => build_options.build_directory.join(format!(
-                "{}/{}/lib{}.a",
-                build_options.target_machine.target.triplet, self.name, self.name
-            )),
-            OutputType::SharedLib => build_options.build_directory.join(format!(
-                "{}/{}/lib{}.so",
-                build_options.target_machine.target.triplet, self.name, self.name
-            )),
-        };
+        let output_file = build_options
+            .target_build_dir(&self.name)
+            .join(output_file_name(&self.name, self.output_type));
 
         if !output_file.exists() {
             return true;
         }
 
-        let inputs_file_path = build_options.build_directory.join(format!(
-            "{}/{}/inputs",
-            build_options.target_machine.target.triplet, self.name
-        ));
+        let inputs_file_path = build_options.target_build_dir(&self.name).join("inputs");
         let Ok(mut inputs_file) = File::open(inputs_file_path) else {
             return true;
         };
@@ -212,10 +201,7 @@ impl Package {
     }
 
     pub fn save_inputs(&self, build_options: &BuildOptions) -> CompileResult<()> {
-        let inputs_file_path = build_options.build_directory.join(format!(
-            "{}/{}/inputs",
-            build_options.target_machine.target.triplet, self.name
-        ));
+        let inputs_file_path = build_options.target_build_dir(&self.name).join("inputs");
         std::fs::create_dir_all(inputs_file_path.parent().expect("Parent path must exist"))?;
 
         let mut file = File::create(&inputs_file_path)
