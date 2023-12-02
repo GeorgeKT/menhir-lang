@@ -3,7 +3,6 @@ import common::print
 
 struct Fail:
     msg: string
-    
 
 fn subtract_10(x: int) -> int ! Fail:
     if x < 10: 

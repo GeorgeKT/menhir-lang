@@ -1,12 +1,12 @@
 use crate::ast::Type;
 use crate::span::Span;
+use console::Style;
 use std::convert::From;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
 use std::io;
 use std::io::BufRead;
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ErrorData {
@@ -86,12 +86,13 @@ impl fmt::Display for CompileError {
 }
 
 pub fn print_message(msg: &str, span: &Span) {
+    let red = Style::new().red();
     fn repeat_string(s: &str, count: usize) -> String {
         s.repeat(count)
     }
 
     let prefix = "| ";
-    println!("{}: {}", span, msg);
+    println!("{}: {}", span, red.apply_to(msg));
     if let Ok(file) = File::open(&span.file) {
         let start_line = if span.start.line >= 4 { span.start.line - 4 } else { 0 };
         let reader = io::BufReader::new(file);
@@ -108,13 +109,13 @@ pub fn print_message(msg: &str, span: &Span) {
                 };
                 let carets = repeat_string("^", end - span.start.offset + 1);
                 let whitespace = repeat_string(" ", span.start.offset - 1);
-                println!("     {}{}{}", prefix, whitespace, carets);
+                println!("     {}{}{}", prefix, whitespace, red.apply_to(carets));
             } else if line_idx == span.end.line {
                 let carets = repeat_string("^", span.end.offset);
-                println!("     {}{}", prefix, carets);
+                println!("     {}{}", prefix, red.apply_to(carets));
             } else if line_idx > span.start.line && line_idx < span.end.line && !line.is_empty() {
                 let carets = repeat_string("^", line.len());
-                println!("     {}{}", prefix, carets);
+                println!("     {}{}", prefix, red.apply_to(carets));
             }
 
             if line_idx >= span.end.line + 3 {
