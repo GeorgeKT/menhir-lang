@@ -1358,9 +1358,9 @@ fn parse_module<Input: Read>(
     Ok(())
 }
 
-pub fn parse_file(file_path: &Path, namespace: &str, target: &Target) -> CompileResult<Module> {
+pub fn parse_file(file_path: &Path, namespace: &str, target: &Target, show_timing: bool) -> CompileResult<Module> {
     let op_name = format!("Parsing {}", file_path.to_string_lossy());
-    time_operation(2, &op_name, || {
+    time_operation(show_timing, 2, &op_name, || {
         let mut module = Module::new(namespace);
         let mut file = fs::File::open(file_path)?;
         parse_module(

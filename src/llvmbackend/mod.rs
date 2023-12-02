@@ -214,7 +214,6 @@ pub fn link(ctx: &Context, opts: &CodeGenOptions, linker_flags: &LinkerFlags) ->
         }
     };
 
-    println!("  Linking {}", output_file_path.display());
     let output: Output = cmd
         .output()
         .map_err(|e| format!("Unable to spawn the linker: {}", e))?;

@@ -60,6 +60,8 @@ pub struct BuildCommand {
     pub dump: Vec<Dump>,
     #[arg(short = 'f', long = "force-rebuild", default_value_t = false)]
     pub force_rebuild: bool,
+    #[arg(short = 'T', long = "show-timing", default_value_t = false)]
+    pub show_timing: bool,
 }
 
 #[derive(Args, Debug)]
@@ -78,6 +80,8 @@ pub struct BuildPkgCommand {
     pub dump: Vec<Dump>,
     #[arg(short = 'f', long = "force-rebuild", default_value_t = false)]
     pub force_rebuild: bool,
+    #[arg(short = 'T', long = "show-timing", default_value_t = false)]
+    pub show_timing: bool,
 }
 
 #[derive(Args, Debug)]
@@ -120,6 +124,8 @@ pub struct RunCommand {
     pub dump: Vec<Dump>,
     #[arg(short = 'f', long = "force-rebuild", default_value_t = false)]
     pub force_rebuild: bool,
+    #[arg(short = 'T', long = "show-timing", default_value_t = false)]
+    pub show_timing: bool,
     #[clap(trailing_var_arg = true, allow_hyphen_values = true)]
     pub command_args: Vec<String>,
 }

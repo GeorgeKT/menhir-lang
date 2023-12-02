@@ -207,7 +207,6 @@ impl Context {
             .map_err(|e| format!("Unable to create directory for {}: {}", opts.build_dir.display(), e))?;
 
         let obj_file_name = format!("{}/{}.mhr.o", opts.build_dir.display(), self.name);
-        println!("  Building {}", obj_file_name);
         self.target_machine
             .emit_to_file(self.module, &obj_file_name)?;
         Ok(obj_file_name)

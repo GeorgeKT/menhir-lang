@@ -31,6 +31,7 @@ fn build_command(bc: BuildCommand) -> CompileResult<i32> {
         build_directory: PathBuf::from("build"),
         import_directories: bc.imports,
         force_rebuild: bc.force_rebuild,
+        show_timing: bc.show_timing,
     };
 
     let output_type = match bc.lib {
@@ -70,6 +71,7 @@ fn build_package_command(b: BuildPkgCommand) -> CompileResult<i32> {
         build_directory: root_dir.join("build"),
         import_directories: b.imports,
         force_rebuild: b.force_rebuild,
+        show_timing: b.show_timing,
     };
     pkg.build(&build_options)?;
     Ok(0)
@@ -102,6 +104,7 @@ fn run_command(r: RunCommand) -> CompileResult<i32> {
         build_directory: root_dir.join("build"),
         import_directories: r.imports.clone(),
         force_rebuild: r.force_rebuild,
+        show_timing: r.show_timing,
     };
     pkg.build(&build_options)?;
     let ec = pkg.run(&r.target, &build_options, &r)?;
