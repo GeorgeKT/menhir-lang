@@ -15,7 +15,7 @@ use std::ptr;
 
 pub unsafe fn const_int(ctx: &Context, v: i64) -> LLVMValueRef {
     LLVMConstInt(
-        native_llvm_int_type(ctx.context, ctx.target_machine),
+        native_llvm_int_type(ctx.context, &ctx.target_machine),
         v as c_ulonglong,
         1,
     )
@@ -23,7 +23,7 @@ pub unsafe fn const_int(ctx: &Context, v: i64) -> LLVMValueRef {
 
 pub unsafe fn const_uint(ctx: &Context, v: u64) -> LLVMValueRef {
     LLVMConstInt(
-        native_llvm_int_type(ctx.context, ctx.target_machine),
+        native_llvm_int_type(ctx.context, &ctx.target_machine),
         v as c_ulonglong,
         0,
     )
@@ -85,24 +85,10 @@ pub unsafe fn get_operand(ctx: &mut Context, operand: &Operand) -> CompileResult
 }
 
 pub unsafe fn copy(ctx: &Context, dst: LLVMValueRef, src: LLVMValueRef, typ: LLVMTypeRef) -> CompileResult<()> {
-    let func = ctx
-        .get_function("memcpy")
-        .ok_or_else(|| code_gen_error("memcpy not found"))?;
-    let void_ptr_type = LLVMPointerType(LLVMVoidTypeInContext(ctx.context), 0);
-    let mut args = vec![
-        LLVMBuildBitCast(ctx.builder, dst, void_ptr_type, cstr!("dst_cast")),
-        LLVMBuildBitCast(ctx.builder, src, void_ptr_type, cstr!("src_cast")),
-        const_uint(ctx, ctx.target_machine.size_of_type(typ) as u64),
-    ];
-
-    LLVMBuildCall2(
-        ctx.builder,
-        ctx.resolve_type(&func.typ)?,
-        func.function,
-        args.as_mut_ptr(),
-        args.len() as c_uint,
-        cstr!("ac"),
-    );
+    let align = ctx.target_machine.alignment_of_type(typ) as u32;
+    let size = const_uint(ctx, ctx.target_machine.size_of_type(typ) as u64);
+    //println!("size of {}: {}", type_name(typ), ctx.target_machine.size_of_type(typ));
+    LLVMBuildMemCpy(ctx.builder, dst, align, src, align, size);
     Ok(())
 }
 

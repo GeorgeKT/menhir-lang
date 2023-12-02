@@ -31,10 +31,11 @@ fn build_command(bc: BuildCommand) -> CompileResult<i32> {
     let build_options = BuildOptions {
         optimize: bc.optimize,
         dump_flags: bc.dump,
-        target_machine: llvm_init()?,
+        target_machine: TargetMachine::new()?,
         sources_directory: PathBuf::from("."),
         build_directory: PathBuf::from("build"),
         import_directories: bc.imports,
+        force_rebuild: bc.force_rebuild,
     };
 
     let output_type = match bc.lib {
@@ -69,10 +70,11 @@ fn build_package_command(b: BuildPkgCommand) -> CompileResult<i32> {
     let build_options = BuildOptions {
         optimize: b.optimize,
         dump_flags: b.dump,
-        target_machine: llvm_init()?,
+        target_machine: TargetMachine::new()?,
         sources_directory: root_dir.join("src"),
         build_directory: root_dir.join("build"),
         import_directories: b.imports,
+        force_rebuild: b.force_rebuild,
     };
     pkg.build(&build_options)?;
     Ok(0)
@@ -88,7 +90,7 @@ fn exports_command(e: ExportsCommand) -> CompileResult<i32> {
 fn clean_command(c: CleanCommand) -> CompileResult<i32> {
     let (pkg, root_dir) = load_package_data(&c.input_file)?;
     let clean_options = CleanOptions {
-        target_machine: llvm_init()?,
+        target_machine: TargetMachine::new()?,
         build_directory: root_dir.join("build"),
     };
     pkg.clean(&clean_options)?;
@@ -100,10 +102,11 @@ fn run_command(r: RunCommand) -> CompileResult<i32> {
     let build_options = BuildOptions {
         optimize: r.optimize,
         dump_flags: r.dump.clone(),
-        target_machine: llvm_init()?,
+        target_machine: TargetMachine::new()?,
         sources_directory: root_dir.join("src"),
         build_directory: root_dir.join("build"),
         import_directories: r.imports.clone(),
+        force_rebuild: r.force_rebuild,
     };
     pkg.build(&build_options)?;
     let ec = pkg.run(&r.target, &build_options, &r)?;
@@ -112,13 +115,13 @@ fn run_command(r: RunCommand) -> CompileResult<i32> {
 
 fn run() -> CompileResult<i32> {
     let cli = CLI::parse();
+    llvm_init()?;
     match cli.command {
         CompilerCommand::Build(b) => build_command(b),
         CompilerCommand::BuildPkg(b) => build_package_command(b),
         CompilerCommand::Exports(e) => exports_command(e),
         CompilerCommand::Info(i) => {
             if i.triplet {
-                llvm_init()?;
                 print!("{}", TargetMachine::new()?.target.triplet);
             }
 

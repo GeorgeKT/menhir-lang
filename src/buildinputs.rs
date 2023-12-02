@@ -3,7 +3,14 @@ use std::{collections::HashSet, path::PathBuf};
 
 use serde_derive::{Deserialize, Serialize};
 
-use crate::packagebuild::PackageDescription;
+use crate::packagebuild::{BuildOptions, PackageDescription};
+
+#[derive(Serialize, Deserialize, Hash, PartialEq, Eq, Default)]
+pub struct BuildFlags {
+    pub optimize: bool,
+    pub import_directories: Vec<PathBuf>,
+    pub target: String,
+}
 
 #[derive(Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub enum BuildInput {
@@ -21,12 +28,19 @@ pub enum BuildInput {
 #[derive(Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct BuildInputs {
     pub inputs: HashSet<BuildInput>,
+    pub flags: BuildFlags,
     pub description: PackageDescription,
 }
 
 impl BuildInputs {
     pub fn add(&mut self, b: BuildInput) {
         self.inputs.insert(b);
+    }
+
+    pub fn set_flags(&mut self, build_options: &BuildOptions) {
+        self.flags.optimize = build_options.optimize;
+        self.flags.import_directories = build_options.import_directories.clone();
+        self.flags.target = build_options.target_machine.target.triplet.clone();
     }
 
     pub fn load<R: Read>(reader: &mut R) -> Result<BuildInputs, String> {

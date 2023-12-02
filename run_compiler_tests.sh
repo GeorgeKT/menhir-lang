@@ -22,7 +22,7 @@ success_count=0
 fail_list=()
 
 
-if ! cargo run ${mode} -- build-pkg -i testcode/package.toml > /tmp/compile_output.log; then 
+if ! cargo run ${mode} -- build-pkg -O -f -i testcode/package.toml > /tmp/compile_output.log; then 
 	echo "*********************"
 	echo "  Compile failed"
 	cat /tmp/compile_output.log

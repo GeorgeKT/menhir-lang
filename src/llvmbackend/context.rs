@@ -25,28 +25,28 @@ impl StackFrame {
     }
 }
 
-pub struct Context<'a> {
+pub struct Context {
     pub context: LLVMContextRef,
     pub module: LLVMModuleRef,
     pub builder: LLVMBuilderRef,
-    pub target_machine: &'a TargetMachine,
+    pub target_machine: TargetMachine,
     name: String,
     stack: Vec<StackFrame>,
 }
 
-impl<'a> Context<'a> {
-    pub fn new(target_machine: &'a TargetMachine, module_name: &str) -> Result<Context<'a>, String> {
+impl Context {
+    pub fn new(module_name: &str) -> Result<Context, String> {
         unsafe {
             let context = LLVMContextCreate();
             LLVMContextSetOpaquePointers(context, 0);
             let context_name = CString::new(module_name).expect("Invalid module name");
             let module = LLVMModuleCreateWithNameInContext(context_name.as_ptr(), context);
             let name = module_name.into();
-            Ok(Context::<'a> {
+            Ok(Context {
                 context,
                 module,
                 builder: LLVMCreateBuilderInContext(context),
-                target_machine,
+                target_machine: TargetMachine::new().map_err(|e| format!("{e}"))?,
                 name,
                 stack: vec![StackFrame::new(ptr::null_mut())],
             })
@@ -158,7 +158,7 @@ impl<'a> Context<'a> {
     pub fn resolve_type(&self, typ: &Type) -> CompileResult<LLVMTypeRef> {
         unsafe {
             use crate::llvmbackend::types::to_llvm_type;
-            to_llvm_type(self.context, self.target_machine, typ)
+            to_llvm_type(self.context, &self.target_machine, typ)
         }
     }
 
@@ -268,7 +268,7 @@ impl<'a> Context<'a> {
     }
 }
 
-impl<'a> Drop for Context<'a> {
+impl Drop for Context {
     fn drop(&mut self) {
         unsafe {
             LLVMDisposeBuilder(self.builder);

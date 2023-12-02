@@ -11,7 +11,6 @@ use super::valueref::ValueRef;
 use crate::ast::*;
 use crate::bytecode::*;
 use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
-use crate::span::Span;
 
 pub unsafe fn gen_function_sig(
     ctx: &mut Context,
@@ -110,27 +109,5 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction) -> Compil
     }
 
     ctx.pop_stack();
-    Ok(())
-}
-
-pub unsafe fn add_libc_functions(ctx: &mut Context) -> CompileResult<()> {
-    // memcpy
-    let memcpy_sig = sig(
-        "memcpy",
-        ptr_type(Type::Void),
-        vec![
-            Argument::new("dst", ptr_type(Type::Void), false, Span::default()),
-            Argument::new("src", ptr_type(Type::Void), false, Span::default()),
-            Argument::new(
-                "size",
-                ctx.target_machine.target.native_uint_type.clone(),
-                false,
-                Span::default(),
-            ),
-        ],
-        Span::default(),
-    );
-
-    gen_function_sig(ctx, &memcpy_sig, None)?;
     Ok(())
 }

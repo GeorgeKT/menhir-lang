@@ -82,6 +82,10 @@ impl TargetMachine {
         LLVMABISizeOfType(self.target_data, typ) as usize
     }
 
+    pub unsafe fn alignment_of_type(&self, typ: LLVMTypeRef) -> usize {
+        LLVMABIAlignmentOfType(self.target_data, typ) as usize
+    }
+
     pub unsafe fn emit_to_file(&self, module: LLVMModuleRef, obj_file_name: &str) -> Result<(), String> {
         let mut error_message: *mut c_char = ptr::null_mut();
         let obj_file_name = CString::new(obj_file_name).expect("Invalid String");

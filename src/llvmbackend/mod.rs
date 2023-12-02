@@ -31,7 +31,7 @@ use std::path::PathBuf;
 use std::process::{Command, Output};
 
 pub use self::context::Context;
-use self::function::{add_libc_functions, gen_function, gen_function_sig};
+use self::function::{gen_function, gen_function_sig};
 pub use self::target::TargetMachine;
 use self::valueref::ValueRef;
 use crate::ast::ptr_type;
@@ -69,7 +69,7 @@ pub struct CodeGenOptions {
     pub optimize: bool,
 }
 
-pub fn llvm_init() -> CompileResult<TargetMachine> {
+pub fn llvm_init() -> CompileResult<()> {
     unsafe {
         use llvm_sys::initialization::*;
         use llvm_sys::target::*;
@@ -92,7 +92,7 @@ pub fn llvm_init() -> CompileResult<TargetMachine> {
         LLVMInitializeIPA(pass_registry);
         LLVMInitializeCodeGen(pass_registry);
         LLVMInitializeTarget(pass_registry);
-        TargetMachine::new()
+        Ok(())
     }
 }
 
@@ -131,8 +131,6 @@ pub fn llvm_code_generation<'a>(
     desc: &PackageDescription,
 ) -> CompileResult<()> {
     unsafe {
-        add_libc_functions(ctx)?;
-
         for func in &bc_mod.imported_functions {
             gen_function_sig(ctx, &func.sig, None)?;
         }

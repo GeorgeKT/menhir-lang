@@ -58,6 +58,8 @@ pub struct BuildCommand {
     /// Dump internal compiler state for debug purposes.
     #[arg(short = 'd', long = "dump", use_value_delimiter = true, value_delimiter = ',')]
     pub dump: Vec<Dump>,
+    #[arg(short = 'f', long = "force-rebuild", default_value_t = false)]
+    pub force_rebuild: bool,
 }
 
 #[derive(Args, Debug)]
@@ -74,6 +76,8 @@ pub struct BuildPkgCommand {
     /// Dump internal compiler state for debug purposes.
     #[arg(short = 'd', long = "dump", use_value_delimiter = true, value_delimiter = ',')]
     pub dump: Vec<Dump>,
+    #[arg(short = 'f', long = "force-rebuild", default_value_t = false)]
+    pub force_rebuild: bool,
 }
 
 #[derive(Args, Debug)]
@@ -114,6 +118,8 @@ pub struct RunCommand {
     /// Dump internal compiler state for debug purposes.
     #[arg(short = 'd', long = "dump", use_value_delimiter = true, value_delimiter = ',')]
     pub dump: Vec<Dump>,
+    #[arg(short = 'f', long = "force-rebuild", default_value_t = false)]
+    pub force_rebuild: bool,
     #[clap(trailing_var_arg = true, allow_hyphen_values = true)]
     pub command_args: Vec<String>,
 }

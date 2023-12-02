@@ -30,6 +30,7 @@ pub struct BuildOptions {
     pub sources_directory: PathBuf,
     pub build_directory: PathBuf,
     pub import_directories: Vec<PathBuf>,
+    pub force_rebuild: bool,
 }
 
 impl BuildOptions {
@@ -316,7 +317,7 @@ impl PackageTarget {
             optimize: build_options.optimize,
         };
 
-        let mut ctx = Context::new(&build_options.target_machine, &desc.name)?;
+        let mut ctx = Context::new(&self.name)?;
         time_operation_mut(2, "Code generation", || llvm_code_generation(&bc_mod, &mut ctx, desc))?;
 
         time_operation(2, "Linking", || link(&ctx, &opts, &pkg.linker_flags))?;

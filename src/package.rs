@@ -176,6 +176,10 @@ impl Package {
     }
 
     pub fn rebuild_needed(&self, build_options: &BuildOptions) -> bool {
+        if build_options.force_rebuild {
+            return true;
+        }
+
         let output_file = build_options
             .target_build_dir(&self.name)
             .join(output_file_name(&self.name, self.output_type));
@@ -227,6 +231,7 @@ impl Package {
     }
 
     pub fn find_input_files(&mut self, path: &Path, build_options: &BuildOptions) -> CompileResult<()> {
+        self.inputs.set_flags(build_options);
         if path.exists() && path.is_file() {
             self.inputs.add(BuildInput::SourceFile {
                 digest: sha256::try_digest(path)

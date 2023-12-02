@@ -13,9 +13,12 @@ fn rvo_needed(func: &ByteCodeFunction) -> bool {
 
 fn rvo_func(func: &mut ByteCodeFunction) {
     let return_type_arg = ptr_type(mem::replace(&mut func.sig.return_type, Type::Void));
-    func.sig
-        .args
-        .push(Argument::new("$ret", return_type_arg.clone(), true, Span::default()));
+    func.sig.args.push(Argument::new(
+        RVO_PARAM_NAME,
+        return_type_arg.clone(),
+        true,
+        Span::default(),
+    ));
 
     func.replace_instruction(|instr: &Instruction| {
         if let Instruction::Return(ref operand) = *instr {
