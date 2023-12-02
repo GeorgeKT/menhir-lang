@@ -1,12 +1,9 @@
 mod ast;
-mod buildinputs;
+mod build;
 mod bytecode;
 mod cli;
 mod compileerror;
-mod exportlibrary;
 mod llvmbackend;
-mod package;
-mod packagebuild;
 mod parser;
 mod span;
 mod target;
@@ -19,13 +16,11 @@ use std::process::exit;
 
 use clap::Parser;
 use cli::{CleanCommand, RunCommand};
-use packagebuild::CleanOptions;
 
+use crate::build::{BuildOptions, CleanOptions, ExportLibrary, PackageData};
 use crate::cli::{BuildCommand, BuildPkgCommand, CompilerCommand, ExportsCommand, LibraryType, CLI};
 use crate::compileerror::CompileResult;
-use crate::exportlibrary::ExportLibrary;
 use crate::llvmbackend::{llvm_init, llvm_shutdown, OutputType, TargetMachine};
-use crate::packagebuild::{BuildOptions, PackageData};
 
 fn build_command(bc: BuildCommand) -> CompileResult<i32> {
     let build_options = BuildOptions {

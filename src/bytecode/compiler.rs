@@ -2,9 +2,9 @@ use super::consteval::expr_to_const;
 use super::function::*;
 use super::instruction::*;
 use crate::ast::*;
+use crate::build::Package;
 use crate::bytecode::{ByteCodeFunction, ByteCodeModule};
 use crate::compileerror::{type_error_result, CompileResult};
-use crate::package::Package;
 use crate::target::Target;
 use std::collections::HashMap;
 
