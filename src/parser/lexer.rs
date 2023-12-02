@@ -187,6 +187,8 @@ impl Lexer {
             "interface" => TokenKind::Interface,
             "fn" => TokenKind::Func,
             "return" => TokenKind::Return,
+            "ok" => TokenKind::Ok,
+            "error" => TokenKind::Error,
             _ => TokenKind::Identifier(std::mem::take(&mut self.data)),
         };
 

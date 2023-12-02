@@ -7,6 +7,7 @@ mod unusedfunctions;
 
 use self::emptyblocks::remove_empty_blocks;
 use self::returnvalueoptimization::return_value_optimization;
+pub use self::returnvalueoptimization::RVO_PARAM_NAME;
 use self::unusedfunctions::eliminate_unused_functions;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]

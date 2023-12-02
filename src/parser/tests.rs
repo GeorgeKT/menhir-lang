@@ -49,7 +49,7 @@ pub fn name_ref(name: &str, span: Span) -> Expression {
     Expression::NameRef(NameRef {
         name: name.into(),
         typ: Type::Unknown,
-        span: span,
+        span,
     })
 }
 
@@ -60,21 +60,28 @@ pub fn name_ref2(name: &str, span: Span) -> NameRef {
 #[test]
 fn test_basic_expressions() {
     let target = Target::new(IntSize::I32, "");
-    assert!(th_expr("1000", &target) == number(1000, span(1, 1, 1, 4), &target));
-    assert!(th_expr("id", &target) == name_ref("id", span(1, 1, 1, 2)));
-    assert!(
-        th_expr("-1000", &target)
-            == unary_op(
-                UnaryOperator::Sub,
-                number(1000, span(1, 2, 1, 5), &target),
-                span(1, 1, 1, 5)
-            )
+    assert_eq!(th_expr("1000", &target), number(1000, span(1, 1, 1, 4), &target));
+    assert_eq!(th_expr("id", &target), name_ref("id", span(1, 1, 1, 2)));
+    assert_eq!(
+        th_expr("-1000", &target),
+        unary_op(
+            UnaryOperator::Sub,
+            number(1000, span(1, 2, 1, 5), &target),
+            span(1, 1, 1, 5)
+        )
     );
-    assert!(
-        th_expr("!id", &target) == unary_op(UnaryOperator::Not, name_ref("id", span(1, 2, 1, 3)), span(1, 1, 1, 3))
+    assert_eq!(
+        th_expr("!id", &target),
+        unary_op(UnaryOperator::Not, name_ref("id", span(1, 2, 1, 3)), span(1, 1, 1, 3))
     );
-    assert!(th_expr("true", &target) == Expression::Literal(Literal::Bool(span(1, 1, 1, 4), true)));
-    assert!(th_expr("false", &target) == Expression::Literal(Literal::Bool(span(1, 1, 1, 5), false)));
+    assert_eq!(
+        th_expr("true", &target),
+        Expression::Literal(Literal::Bool(span(1, 1, 1, 4), true))
+    );
+    assert_eq!(
+        th_expr("false", &target),
+        Expression::Literal(Literal::Bool(span(1, 1, 1, 5), false))
+    );
 }
 
 #[test]
@@ -428,22 +435,22 @@ fn arg(name: &str, typ: Type, span: Span) -> Argument {
 fn test_function_with_args() {
     let target = Target::new(IntSize::I32, "");
     let md = th_mod("fn foo(a: int, b: int) -> int: 7", &target);
-    assert!(
-        *md.functions.get("test::foo").unwrap()
-            == Function::new(
-                sig(
-                    "test::foo",
-                    target.native_int_type.clone(),
-                    vec![
-                        arg("a", target.native_int_type.clone(), span(1, 8, 1, 13)),
-                        arg("b", target.native_int_type.clone(), span(1, 16, 1, 21)),
-                    ],
-                    span(1, 1, 1, 29)
-                ),
-                true,
-                number(7, span(1, 32, 1, 32), &target),
-                span(1, 1, 1, 32)
-            )
+    assert_eq!(
+        *md.functions.get("test::foo").unwrap(),
+        Function::new(
+            sig(
+                "test::foo",
+                target.native_int_type.clone(),
+                vec![
+                    arg("a", target.native_int_type.clone(), span(1, 8, 1, 13)),
+                    arg("b", target.native_int_type.clone(), span(1, 16, 1, 21)),
+                ],
+                span(1, 1, 1, 29)
+            ),
+            true,
+            number(7, span(1, 32, 1, 32), &target),
+            span(1, 1, 1, 32)
+        )
     )
 }
 
@@ -451,19 +458,19 @@ fn test_function_with_args() {
 fn test_function_with_no_args() {
     let target = Target::new(IntSize::I32, "");
     let md = th_mod("fn foo() -> int: 7", &target);
-    assert!(
-        *md.functions.get("test::foo").unwrap()
-            == Function::new(
-                sig(
-                    "test::foo",
-                    target.native_int_type.clone(),
-                    Vec::new(),
-                    span(1, 1, 1, 15)
-                ),
-                true,
-                number(7, span(1, 18, 1, 18), &target),
-                span(1, 1, 1, 18)
-            )
+    assert_eq!(
+        *md.functions.get("test::foo").unwrap(),
+        Function::new(
+            sig(
+                "test::foo",
+                target.native_int_type.clone(),
+                Vec::new(),
+                span(1, 1, 1, 15)
+            ),
+            true,
+            number(7, span(1, 18, 1, 18), &target),
+            span(1, 1, 1, 18)
+        )
     )
 }
 
@@ -471,14 +478,14 @@ fn test_function_with_no_args() {
 fn test_function_with_no_return_type() {
     let target = Target::new(IntSize::I32, "");
     let md = th_mod("fn foo(): 7", &target);
-    assert!(
-        *md.functions.get("test::foo").unwrap()
-            == Function::new(
-                sig("test::foo", Type::Void, Vec::new(), span(1, 1, 1, 8)),
-                true,
-                number(7, span(1, 11, 1, 11), &target),
-                span(1, 1, 1, 11)
-            )
+    assert_eq!(
+        *md.functions.get("test::foo").unwrap(),
+        Function::new(
+            sig("test::foo", Type::Void, Vec::new(), span(1, 1, 1, 8)),
+            true,
+            number(7, span(1, 11, 1, 11), &target),
+            span(1, 1, 1, 11)
+        )
     )
 }
 
@@ -486,27 +493,47 @@ fn test_function_with_no_return_type() {
 fn test_function_with_func_type() {
     let target = Target::new(IntSize::I32, "");
     let md = th_mod("fn foo(a: fn(int, int) -> int) -> int: 7", &target);
-    assert!(
-        *md.functions.get("test::foo").unwrap()
-            == Function::new(
-                sig(
-                    "test::foo",
-                    target.native_int_type.clone(),
-                    vec![Argument::new(
-                        "a",
-                        func_type(
-                            vec![target.native_int_type.clone(), target.native_int_type.clone(),],
-                            target.native_int_type.clone(),
-                        ),
-                        false,
-                        span(1, 8, 1, 29)
-                    ),],
-                    span(1, 1, 1, 37)
-                ),
-                true,
-                number(7, span(1, 40, 1, 40), &target),
-                span(1, 1, 1, 40)
-            )
+    assert_eq!(
+        *md.functions.get("test::foo").unwrap(),
+        Function::new(
+            sig(
+                "test::foo",
+                target.native_int_type.clone(),
+                vec![Argument::new(
+                    "a",
+                    func_type(
+                        vec![target.native_int_type.clone(), target.native_int_type.clone(),],
+                        target.native_int_type.clone(),
+                    ),
+                    false,
+                    span(1, 8, 1, 29)
+                ),],
+                span(1, 1, 1, 37)
+            ),
+            true,
+            number(7, span(1, 40, 1, 40), &target),
+            span(1, 1, 1, 40)
+        )
+    )
+}
+
+#[test]
+fn test_function_with_result() {
+    let target = Target::new(IntSize::I32, "");
+    let md = th_mod("fn foo() -> int ! string: 7", &target);
+    assert_eq!(
+        *md.functions.get("test::foo").unwrap(),
+        Function::new(
+            sig(
+                "test::foo",
+                result_type(target.native_int_type.clone(), Type::String),
+                Vec::new(),
+                span(1, 1, 1, 24)
+            ),
+            true,
+            number(7, span(1, 27, 1, 27), &target),
+            span(1, 1, 1, 27)
+        )
     )
 }
 
@@ -514,12 +541,12 @@ fn test_function_with_func_type() {
 fn test_external_function() {
     let target = Target::new(IntSize::I32, "");
     let md = th_mod("extern fn foo() -> int", &target);
-    assert!(
-        *md.externals.get("foo").unwrap()
-            == ExternalFunction::new(
-                sig("foo", target.native_int_type.clone(), Vec::new(), span(1, 11, 1, 22)),
-                span(1, 1, 1, 22)
-            )
+    assert_eq!(
+        *md.externals.get("foo").unwrap(),
+        ExternalFunction::new(
+            sig("foo", target.native_int_type.clone(), Vec::new(), span(1, 11, 1, 22)),
+            span(1, 1, 1, 22)
+        )
     )
 }
 
@@ -594,16 +621,16 @@ struct Point:
 "#,
         &target,
     );
-    assert!(
-        *md.types.get("test::Point").unwrap()
-            == TypeDeclaration::Struct(struct_declaration(
-                "test::Point",
-                vec![
-                    struct_member_declaration("x", target.native_int_type.clone(), span(3, 5, 3, 10)),
-                    struct_member_declaration("y", target.native_int_type.clone(), span(4, 5, 4, 10)),
-                ],
-                span(2, 1, 4, 10)
-            ))
+    assert_eq!(
+        *md.types.get("test::Point").unwrap(),
+        TypeDeclaration::Struct(struct_declaration(
+            "test::Point",
+            vec![
+                struct_member_declaration("x", target.native_int_type.clone(), span(3, 5, 3, 10)),
+                struct_member_declaration("y", target.native_int_type.clone(), span(4, 5, 4, 10)),
+            ],
+            span(2, 1, 4, 10)
+        ))
     )
 }
 
@@ -618,16 +645,16 @@ struct Point:
 "#,
         &target,
     );
-    assert!(
-        *md.types.get("test::Point").unwrap()
-            == TypeDeclaration::Struct(struct_declaration(
-                "test::Point",
-                vec![
-                    struct_member_declaration("x", generic_type("a"), span(3, 5, 3, 9)),
-                    struct_member_declaration("y", generic_type("b"), span(4, 5, 4, 9)),
-                ],
-                span(2, 1, 4, 9)
-            ))
+    assert_eq!(
+        *md.types.get("test::Point").unwrap(),
+        TypeDeclaration::Struct(struct_declaration(
+            "test::Point",
+            vec![
+                struct_member_declaration("x", generic_type("a"), span(3, 5, 3, 9)),
+                struct_member_declaration("y", generic_type("b"), span(4, 5, 4, 9)),
+            ],
+            span(2, 1, 4, 9)
+        ))
     )
 }
 
@@ -736,16 +763,16 @@ enum Option:
 "#,
         &target,
     );
-    assert!(
-        *md.types.get("test::Option").unwrap()
-            == TypeDeclaration::Sum(sum_type_decl(
-                "test::Option",
-                vec![
-                    sum_type_case_decl("test::Option::Some", None, span(3, 5, 3, 8)),
-                    sum_type_case_decl("test::Option::None", None, span(4, 5, 4, 8)),
-                ],
-                span(2, 1, 4, 8)
-            ))
+    assert_eq!(
+        *md.types.get("test::Option").unwrap(),
+        TypeDeclaration::Sum(sum_type_decl(
+            "test::Option",
+            vec![
+                sum_type_case_decl("test::Option::Some", None, span(3, 5, 3, 8)),
+                sum_type_case_decl("test::Option::None", None, span(4, 5, 4, 8)),
+            ],
+            span(2, 1, 4, 8)
+        ))
     )
 }
 
@@ -763,36 +790,36 @@ enum Foo:
     );
     let result = md.types.get("test::Foo").unwrap();
     result.print(1);
-    assert!(
-        *result
-            == TypeDeclaration::Sum(sum_type_decl(
-                "test::Foo",
-                vec![
-                    sum_type_case_decl(
-                        "test::Foo::Bar",
-                        Some(struct_declaration(
-                            "Foo::Bar",
-                            vec![
-                                struct_member_declaration("x", target.native_int_type.clone(), span(3, 9, 3, 14)),
-                                struct_member_declaration("y", target.native_int_type.clone(), span(3, 17, 3, 22)),
-                            ],
-                            span(3, 5, 3, 23)
-                        )),
+    assert_eq!(
+        *result,
+        TypeDeclaration::Sum(sum_type_decl(
+            "test::Foo",
+            vec![
+                sum_type_case_decl(
+                    "test::Foo::Bar",
+                    Some(struct_declaration(
+                        "Foo::Bar",
+                        vec![
+                            struct_member_declaration("x", target.native_int_type.clone(), span(3, 9, 3, 14)),
+                            struct_member_declaration("y", target.native_int_type.clone(), span(3, 17, 3, 22)),
+                        ],
                         span(3, 5, 3, 23)
-                    ),
-                    sum_type_case_decl("test::Foo::Foo", None, span(4, 5, 4, 7)),
-                    sum_type_case_decl(
-                        "test::Foo::Baz",
-                        Some(struct_declaration(
-                            "Foo::Baz",
-                            vec![struct_member_declaration("bla", Type::Bool, span(5, 9, 5, 17)),],
-                            span(5, 5, 5, 18)
-                        )),
+                    )),
+                    span(3, 5, 3, 23)
+                ),
+                sum_type_case_decl("test::Foo::Foo", None, span(4, 5, 4, 7)),
+                sum_type_case_decl(
+                    "test::Foo::Baz",
+                    Some(struct_declaration(
+                        "Foo::Baz",
+                        vec![struct_member_declaration("bla", Type::Bool, span(5, 9, 5, 17)),],
                         span(5, 5, 5, 18)
-                    ),
-                ],
-                span(2, 1, 5, 18)
-            ))
+                    )),
+                    span(5, 5, 5, 18)
+                ),
+            ],
+            span(2, 1, 5, 18)
+        ))
     )
 }
 
@@ -809,35 +836,35 @@ fn foo(p: Point<int>) -> int: 7
 "#,
         &target,
     );
-    assert!(
-        *md.types.get("test::Point").unwrap()
-            == TypeDeclaration::Struct(struct_declaration(
-                "test::Point",
-                vec![
-                    struct_member_declaration("x", generic_type("a"), span(3, 5, 3, 9)),
-                    struct_member_declaration("y", generic_type("b"), span(4, 5, 4, 9)),
-                ],
-                span(2, 1, 4, 9)
-            ))
+    assert_eq!(
+        *md.types.get("test::Point").unwrap(),
+        TypeDeclaration::Struct(struct_declaration(
+            "test::Point",
+            vec![
+                struct_member_declaration("x", generic_type("a"), span(3, 5, 3, 9)),
+                struct_member_declaration("y", generic_type("b"), span(4, 5, 4, 9)),
+            ],
+            span(2, 1, 4, 9)
+        ))
     );
 
-    assert!(
-        *md.functions.get("test::foo").unwrap()
-            == Function::new(
-                sig(
-                    "test::foo",
-                    target.native_int_type.clone(),
-                    vec![arg(
-                        "p",
-                        unresolved_type("Point", vec![target.native_int_type.clone()]),
-                        span(6, 8, 6, 20)
-                    ),],
-                    span(6, 1, 6, 28)
-                ),
-                true,
-                number(7, span(6, 31, 6, 31), &target),
-                span(6, 1, 6, 31)
-            )
+    assert_eq!(
+        *md.functions.get("test::foo").unwrap(),
+        Function::new(
+            sig(
+                "test::foo",
+                target.native_int_type.clone(),
+                vec![arg(
+                    "p",
+                    unresolved_type("Point", vec![target.native_int_type.clone()]),
+                    span(6, 8, 6, 20)
+                ),],
+                span(6, 1, 6, 28)
+            ),
+            true,
+            number(7, span(6, 31, 6, 31), &target),
+            span(6, 1, 6, 31)
+        )
     )
 }
 

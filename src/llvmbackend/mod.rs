@@ -130,8 +130,6 @@ pub fn llvm_code_generation<'a>(
     ctx: &mut Context,
     desc: &PackageDescription,
 ) -> CompileResult<()> {
-    ctx.create_module(&bc_mod.name);
-
     unsafe {
         add_libc_functions(ctx)?;
 

@@ -149,6 +149,22 @@ pub fn fill_in_generics(
             Ok(optional_type(inner))
         }
 
+        (Type::Result(generic_rt), Type::Result(actual_rt)) => {
+            let ok_typ = if generic_rt.ok_typ.is_generic() {
+                fill_in_generics(ctx, &actual_rt.ok_typ, &generic_rt.ok_typ, known_types, span)?
+            } else {
+                generic_rt.ok_typ.clone()
+            };
+
+            let err_typ = if generic_rt.err_typ.is_generic() {
+                fill_in_generics(ctx, &actual_rt.err_typ, &generic_rt.err_typ, known_types, span)?
+            } else {
+                generic_rt.err_typ.clone()
+            };
+
+            Ok(result_type(ok_typ, err_typ))
+        }
+
         _ => map_err(),
     }
 }

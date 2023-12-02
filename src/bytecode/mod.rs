@@ -10,7 +10,7 @@ use std::fmt;
 pub use self::compiler::compile_to_byte_code;
 pub use self::function::*;
 pub use self::instruction::*;
-pub use self::optimizer::{optimize_module, OptimizationLevel};
+pub use self::optimizer::{optimize_module, OptimizationLevel, RVO_PARAM_NAME};
 
 #[derive(Debug)]
 pub struct ByteCodeModule {

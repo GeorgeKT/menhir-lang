@@ -357,8 +357,16 @@ pub unsafe fn gen_instruction(
             let dst_var = ctx.get_variable(&dst.name, &dst.typ)?;
             let vr = get_operand(ctx, src)?;
             dst_var.store(ctx, &vr)?;
-            if let Type::Func(ft) = &dst.typ {
-                gen_function_ptr(ctx, &dst.name, vr.value, ft.return_type.clone(), dst.typ.clone())?;
+            if let Operand::Func(name) = src {
+                let fi = ctx.get_function(name).expect("Unknown function");
+                gen_function_ptr(
+                    ctx,
+                    &dst.name,
+                    vr.value,
+                    fi.return_type.clone(),
+                    dst.typ.clone(),
+                    fi.rvo,
+                )?;
             }
         }
 
@@ -520,6 +528,11 @@ pub unsafe fn gen_instruction(
         Instruction::Delete(var) => {
             let var = ctx.get_variable(&var.name, &var.typ)?.load(ctx)?;
             LLVMBuildFree(ctx.builder, var);
+        }
+
+        Instruction::Alias { dst, obj } => {
+            let var = ctx.get_variable(&obj.name, &obj.typ)?;
+            ctx.set_variable(&dst.name, var)?;
         }
     }
 

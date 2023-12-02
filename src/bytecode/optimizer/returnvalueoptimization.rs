@@ -5,6 +5,8 @@ use crate::bytecode::{
 use crate::span::Span;
 use std::mem;
 
+pub const RVO_PARAM_NAME: &'static str = "$ret_rvo";
+
 fn rvo_needed(func: &ByteCodeFunction) -> bool {
     !func.sig.return_type.pass_by_value() && func.sig.return_type != Type::Void
 }
@@ -18,13 +20,15 @@ fn rvo_func(func: &mut ByteCodeFunction) {
     func.replace_instruction(|instr: &Instruction| {
         if let Instruction::Return(ref operand) = *instr {
             vec![
-                store_operand_instr(&Var::named("$ret", return_type_arg.clone()), operand.clone()),
+                store_operand_instr(&Var::named(RVO_PARAM_NAME, return_type_arg.clone()), operand.clone()),
                 Instruction::ReturnVoid,
             ]
         } else {
             Vec::new()
         }
     });
+
+    func.sig.rvo = true;
 }
 
 fn rvo_replace_calls(bc_func: &mut ByteCodeFunction, rvo_calls: &[String]) {

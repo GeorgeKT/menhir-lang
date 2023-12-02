@@ -174,8 +174,6 @@ fn add_struct_pattern_bindings(p: &StructPattern, struct_var: &Var, func: &mut B
                 func.add(address_of_member_instr(&v, struct_var, idx, target.int_size));
             }
         }
-
-        func.add_named_var(v);
     }
 }
 
@@ -344,11 +342,8 @@ fn member_access_to_bc(
 }
 
 fn name_pattern_match_to_bc(
-    bc_mod: &mut ByteCodeModule,
     func: &mut ByteCodeFunction,
-    mc: &MatchCase,
     target: &Var,
-    match_end_bb: BasicBlockRef,
     match_case_bb: BasicBlockRef,
     next_bb: BasicBlockRef,
     nr: &NameRef,
@@ -387,35 +382,34 @@ fn name_pattern_match_to_bc(
             panic!("Internal Compiler Error: Expression is not a valid match pattern");
         }
     }
+}
 
-    match_case_body_to_bc(
-        bc_mod,
-        func,
-        mc,
-        match_case_bb,
-        match_end_bb,
-        next_bb,
-        false,
-        target_machine,
-    );
+fn binding_pattern_match_to_bc(func: &mut ByteCodeFunction, target: &Var, match_case_bb: BasicBlockRef, nr: &NameRef) {
+    let dst = Var::named(&nr.name, target.typ.clone());
+    func.add(Instruction::Alias {
+        dst: dst.clone(),
+        obj: target.clone(),
+    });
+    func.add_named_var(dst);
+    func.add(Instruction::Branch(match_case_bb));
 }
 
 fn match_case_body_to_bc(
     bc_mod: &mut ByteCodeModule,
     func: &mut ByteCodeFunction,
-    mc: &MatchCase,
+    body: &Expression,
     match_case_bb: BasicBlockRef,
     match_end_bb: BasicBlockRef,
     next_bb: BasicBlockRef,
-    end_scope: bool,
     target: &Target,
 ) {
     func.set_current_bb(match_case_bb);
-    expr_to_bc(bc_mod, func, &mc.to_execute, target);
-    if end_scope {
-        func.pop_scope();
+    expr_to_bc(bc_mod, func, body, target);
+    let add_branch = !func.last_instruction_is_return();
+    func.pop_scope();
+    if add_branch {
+        func.add(Instruction::Branch(match_end_bb));
     }
-    func.add(Instruction::Branch(match_end_bb));
     func.set_current_bb(next_bb);
 }
 
@@ -461,11 +455,8 @@ fn array_pattern_match_to_bc(
 }
 
 fn struct_pattern_match_to_bc(
-    bc_mod: &mut ByteCodeModule,
     func: &mut ByteCodeFunction,
-    mc: &MatchCase,
     target: &Var,
-    match_end_bb: BasicBlockRef,
     match_case_bb: BasicBlockRef,
     next_bb: BasicBlockRef,
     p: &StructPattern,
@@ -516,148 +507,157 @@ fn struct_pattern_match_to_bc(
     }
 
     func.pop_destination();
-    match_case_body_to_bc(
+}
+
+fn optional_pattern_match_to_bc(
+    func: &mut ByteCodeFunction,
+    target: &Var,
+    match_case_bb: BasicBlockRef,
+    next_bb: BasicBlockRef,
+    o: &OptionalPattern,
+) {
+    let cond = stack_alloc(func, &Type::Bool, None);
+    func.add(load_optional_flag_instr(&cond, target));
+    func.add(branch_if_instr(&cond, match_case_bb, next_bb));
+
+    func.set_current_bb(match_case_bb);
+
+    let binding = stack_alloc(func, &o.inner_type, Some(&o.binding));
+    func.add(load_instr(&binding, target));
+}
+
+fn nil_pattern_match_to_bc(
+    func: &mut ByteCodeFunction,
+    target: &Var,
+    match_case_bb: BasicBlockRef,
+    next_bb: BasicBlockRef,
+) {
+    let cond = stack_alloc(func, &Type::Bool, None);
+    func.add(load_optional_flag_instr(&cond, target));
+    func.add(branch_if_instr(&cond, next_bb, match_case_bb));
+}
+
+fn result_pattern_match_to_bc(
+    bc_mod: &mut ByteCodeModule,
+    func: &mut ByteCodeFunction,
+    target: &Var,
+    match_end_bb: BasicBlockRef,
+    match_case_bb: BasicBlockRef,
+    next_bb: BasicBlockRef,
+    inner_type: &Type,
+    inner_pattern: &Pattern,
+    is_ok: bool,
+    target_machine: &Target,
+) {
+    let index = if is_ok { 0 } else { 1 };
+    let bind_bb = func.create_basic_block();
+
+    let cond = stack_alloc(func, &Type::Bool, None);
+    let sti = get_dst(func, &Type::Int(target_machine.int_size));
+    func.add(get_prop_instr(&sti, target, ByteCodeProperty::SumTypeIndex));
+    func.add(binary_op_instr(
+        &cond,
+        BinaryOperator::Equals,
+        Operand::Var(sti),
+        Operand::const_int(index, target_machine.int_size),
+    ));
+    func.add(branch_if_instr(&cond, bind_bb, next_bb));
+
+    func.set_current_bb(bind_bb);
+    let inner = stack_alloc(func, inner_type, None);
+    func.add(load_member_instr(
+        &inner,
+        target,
+        index as usize,
+        target_machine.int_size,
+    ));
+    pattern_to_bc(
         bc_mod,
         func,
-        mc,
+        inner_pattern,
+        &inner,
         match_case_bb,
         match_end_bb,
         next_bb,
-        true,
         target_machine,
     );
 }
 
-fn match_case_to_bc(
+fn pattern_to_bc(
     bc_mod: &mut ByteCodeModule,
     func: &mut ByteCodeFunction,
-    mc: &MatchCase,
+    pattern: &Pattern,
     target: &Var,
+    match_case_bb: BasicBlockRef,
     match_end_bb: BasicBlockRef,
+    next_bb: BasicBlockRef,
     target_machine: &Target,
 ) {
-    let match_case_bb = func.create_basic_block();
-    let next_bb = func.create_basic_block();
-
-    let add_literal_case = |bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, op: Operand| {
+    let add_literal_case = |func: &mut ByteCodeFunction, op: Operand| {
         func.push_destination(None);
         let cond = stack_alloc(func, &Type::Bool, None);
         func.add(binary_op_instr(&cond, BinaryOperator::Equals, op, var_op(target)));
         func.add(branch_if_instr(&cond, match_case_bb, next_bb));
         func.pop_destination();
-        match_case_body_to_bc(
-            bc_mod,
-            func,
-            mc,
-            match_case_bb,
-            match_end_bb,
-            next_bb,
-            false,
-            target_machine,
-        );
     };
 
-    match &mc.pattern {
+    match pattern {
         Pattern::Literal(Literal::Int(_, v, int_size)) => {
-            add_literal_case(bc_mod, func, Operand::const_int(*v, *int_size));
+            add_literal_case(func, Operand::const_int(*v, *int_size));
         }
 
         Pattern::Literal(Literal::UInt(_, v, int_size)) => {
-            add_literal_case(bc_mod, func, Operand::const_uint(*v, *int_size));
+            add_literal_case(func, Operand::const_uint(*v, *int_size));
         }
 
         Pattern::Literal(Literal::Float(_, v, float_size)) => {
-            add_literal_case(bc_mod, func, float_op(v, *float_size));
+            add_literal_case(func, float_op(v, *float_size));
         }
 
         Pattern::Literal(Literal::Bool(_, v)) => {
-            add_literal_case(bc_mod, func, Operand::const_bool(*v));
+            add_literal_case(func, Operand::const_bool(*v));
         }
 
         Pattern::Literal(Literal::Char(_, v)) => {
-            add_literal_case(bc_mod, func, Operand::const_char(*v));
+            add_literal_case(func, Operand::const_char(*v));
         }
 
         Pattern::Literal(Literal::NullPtr(_, inner_type)) => {
-            add_literal_case(bc_mod, func, Operand::Const(Constant::NullPtr(inner_type.clone())));
+            add_literal_case(func, Operand::Const(Constant::NullPtr(inner_type.clone())));
         }
 
-        Pattern::Name(nr) => name_pattern_match_to_bc(
-            bc_mod,
-            func,
-            mc,
-            target,
-            match_end_bb,
-            match_case_bb,
-            next_bb,
-            nr,
-            target_machine,
-        ),
+        Pattern::Name(nr) => name_pattern_match_to_bc(func, target, match_case_bb, next_bb, nr, target_machine),
+
+        Pattern::Binding(nr) => binding_pattern_match_to_bc(func, target, match_case_bb, nr),
 
         Pattern::Any(_) => {
             func.add(Instruction::Branch(match_case_bb));
-            match_case_body_to_bc(
-                bc_mod,
-                func,
-                mc,
-                match_case_bb,
-                match_end_bb,
-                next_bb,
-                false,
-                target_machine,
-            );
         }
 
-        Pattern::EmptyArray(_) => {
-            match target.typ {
-                Type::Array(_) | Type::Slice(_) => {
-                    let len = stack_alloc(func, &target_machine.native_uint_type, None);
-                    let cond = stack_alloc(func, &Type::Bool, None);
-                    func.add(get_prop_instr(&len, target, ByteCodeProperty::Len));
-                    func.add(binary_op_instr(
-                        &cond,
-                        BinaryOperator::Equals,
-                        var_op(&len),
-                        Operand::const_uint(0, target_machine.int_size),
-                    ));
-                    func.add(branch_if_instr(&cond, match_case_bb, next_bb))
-                }
-                _ => panic!("Internal Compiler Error: Match expression cannot be matched with an empty array pattern"),
+        Pattern::EmptyArray(_) => match target.typ {
+            Type::Array(_) | Type::Slice(_) => {
+                let len = stack_alloc(func, &target_machine.native_uint_type, None);
+                let cond = stack_alloc(func, &Type::Bool, None);
+                func.add(get_prop_instr(&len, target, ByteCodeProperty::Len));
+                func.add(binary_op_instr(
+                    &cond,
+                    BinaryOperator::Equals,
+                    var_op(&len),
+                    Operand::const_uint(0, target_machine.int_size),
+                ));
+                func.add(branch_if_instr(&cond, match_case_bb, next_bb));
             }
+            _ => panic!("Internal Compiler Error: Match expression cannot be matched with an empty array pattern"),
+        },
 
-            match_case_body_to_bc(
-                bc_mod,
-                func,
-                mc,
-                match_case_bb,
-                match_end_bb,
-                next_bb,
-                false,
-                target_machine,
-            );
-        }
-
-        Pattern::Array(ap) => {
-            match target.typ {
-                Type::Array(_) | Type::Slice(_) => {
-                    func.push_destination(None);
-                    array_pattern_match_to_bc(func, ap, target, match_case_bb, next_bb, target_machine);
-                    func.pop_destination();
-                }
-                _ => panic!("Internal Compiler Error: Match expression cannot be matched with an array pattern"),
+        Pattern::Array(ap) => match target.typ {
+            Type::Array(_) | Type::Slice(_) => {
+                func.push_destination(None);
+                array_pattern_match_to_bc(func, ap, target, match_case_bb, next_bb, target_machine);
+                func.pop_destination();
             }
-
-            match_case_body_to_bc(
-                bc_mod,
-                func,
-                mc,
-                match_case_bb,
-                match_end_bb,
-                next_bb,
-                false,
-                target_machine,
-            );
-        }
+            _ => panic!("Internal Compiler Error: Match expression cannot be matched with an array pattern"),
+        },
 
         Pattern::Literal(Literal::Array(a)) => {
             func.push_destination(None);
@@ -672,16 +672,6 @@ fn match_case_to_bc(
             ));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
             func.pop_destination();
-            match_case_body_to_bc(
-                bc_mod,
-                func,
-                mc,
-                match_case_bb,
-                match_end_bb,
-                next_bb,
-                false,
-                target_machine,
-            );
         }
 
         Pattern::Literal(Literal::String(_, s)) => {
@@ -695,71 +685,66 @@ fn match_case_to_bc(
             ));
             func.add(branch_if_instr(&cond, match_case_bb, next_bb));
             func.pop_destination();
-            match_case_body_to_bc(
-                bc_mod,
-                func,
-                mc,
-                match_case_bb,
-                match_end_bb,
-                next_bb,
-                false,
-                target_machine,
-            );
         }
 
-        Pattern::Struct(p) => {
-            struct_pattern_match_to_bc(
-                bc_mod,
-                func,
-                mc,
-                target,
-                match_end_bb,
-                match_case_bb,
-                next_bb,
-                p,
-                target_machine,
-            );
-        }
+        Pattern::Struct(p) => struct_pattern_match_to_bc(func, target, match_case_bb, next_bb, p, target_machine),
 
-        Pattern::Nil(_) => {
-            let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(load_optional_flag_instr(&cond, target));
-            func.add(branch_if_instr(&cond, next_bb, match_case_bb));
-            match_case_body_to_bc(
-                bc_mod,
-                func,
-                mc,
-                match_case_bb,
-                match_end_bb,
-                next_bb,
-                false,
-                target_machine,
-            );
-        }
+        Pattern::Nil(_) => nil_pattern_match_to_bc(func, target, match_case_bb, next_bb),
 
-        Pattern::Optional(o) => {
-            let cond = stack_alloc(func, &Type::Bool, None);
-            func.add(load_optional_flag_instr(&cond, target));
-            func.add(branch_if_instr(&cond, match_case_bb, next_bb));
+        Pattern::Optional(o) => optional_pattern_match_to_bc(func, target, match_case_bb, next_bb, o),
 
-            func.set_current_bb(match_case_bb);
-            func.push_scope();
+        Pattern::Ok(o) => result_pattern_match_to_bc(
+            bc_mod,
+            func,
+            target,
+            match_end_bb,
+            match_case_bb,
+            next_bb,
+            &o.inner_type,
+            &o.inner,
+            true,
+            target_machine,
+        ),
 
-            let binding = stack_alloc(func, &o.inner_type, Some(&o.binding));
-            func.add(load_instr(&binding, target));
-            func.add_named_var(binding);
-            match_case_body_to_bc(
-                bc_mod,
-                func,
-                mc,
-                match_case_bb,
-                match_end_bb,
-                next_bb,
-                true,
-                target_machine,
-            );
-        }
+        Pattern::Error(e) => result_pattern_match_to_bc(
+            bc_mod,
+            func,
+            target,
+            match_end_bb,
+            match_case_bb,
+            next_bb,
+            &e.inner_type,
+            &e.inner,
+            false,
+            target_machine,
+        ),
     }
+}
+
+fn match_case_to_bc(
+    bc_mod: &mut ByteCodeModule,
+    func: &mut ByteCodeFunction,
+    pattern: &Pattern,
+    body: &Expression,
+    target: &Var,
+    match_end_bb: BasicBlockRef,
+    target_machine: &Target,
+) {
+    let match_case_bb = func.create_basic_block();
+    let next_bb = func.create_basic_block();
+
+    func.push_scope();
+    pattern_to_bc(
+        bc_mod,
+        func,
+        pattern,
+        target,
+        match_case_bb,
+        match_end_bb,
+        next_bb,
+        target_machine,
+    );
+    match_case_body_to_bc(bc_mod, func, body, match_case_bb, match_end_bb, next_bb, target_machine);
 }
 
 fn match_to_bc(
@@ -801,7 +786,15 @@ fn match_to_bc(
     func.push_scope();
     func.push_destination(dst.clone());
     for mc in &m.cases {
-        match_case_to_bc(bc_mod, func, mc, &target_var, match_end_bb, target);
+        match_case_to_bc(
+            bc_mod,
+            func,
+            &mc.pattern,
+            &mc.to_execute,
+            &target_var,
+            match_end_bb,
+            target,
+        );
     }
     func.pop_destination();
 
@@ -823,9 +816,11 @@ fn while_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, w: &Whi
     func.set_current_bb(body_bb);
     func.push_scope();
     expr_to_bc(bc_mod, func, &w.body, target);
+    let keep_looping = !func.last_instruction_is_return();
     func.pop_scope();
-    func.add(Instruction::Branch(cond_bb));
-
+    if keep_looping {
+        func.add(Instruction::Branch(cond_bb));
+    }
     func.set_current_bb(post_while_bb);
 }
 
@@ -863,15 +858,18 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
     func.push_destination(None);
     func.push_scope();
     expr_to_bc(bc_mod, func, &f.body, target);
+    let keep_looping = !func.last_instruction_is_return();
     func.pop_scope();
     func.pop_destination();
-    func.add(binary_op_instr(
-        &index,
-        BinaryOperator::Add,
-        var_op(&index),
-        Operand::const_uint(1, target.int_size),
-    ));
-    func.add(Instruction::Branch(cond_bb));
+    if keep_looping {
+        func.add(binary_op_instr(
+            &index,
+            BinaryOperator::Add,
+            var_op(&index),
+            Operand::const_uint(1, target.int_size),
+        ));
+        func.add(Instruction::Branch(cond_bb));
+    }
 
     func.set_current_bb(post_for_bb);
     func.pop_scope();
@@ -934,6 +932,53 @@ fn optional_compare_to_bc(func: &mut ByteCodeFunction, l: &Var, r: &Var, dst: &V
     func.set_current_bb(end_bb);
 }
 
+fn optional_or_to_bc(func: &mut ByteCodeFunction, l: &Var, r: &Var, dst: &Var) {
+    let l_is_valid = stack_alloc(func, &Type::Bool, None);
+    let store_r_bb = func.create_basic_block();
+    let store_l_bb = func.create_basic_block();
+    let end_bb = func.create_basic_block();
+    func.add(load_optional_flag_instr(&l_is_valid, &l));
+    func.add(branch_if_instr(&l_is_valid, store_l_bb, store_r_bb));
+
+    func.set_current_bb(store_r_bb);
+    func.add(store_instr(&dst, &r));
+    func.add(Instruction::Branch(end_bb));
+
+    func.set_current_bb(store_l_bb);
+    func.add(load_instr(&dst, &l));
+    func.add(Instruction::Branch(end_bb));
+    func.set_current_bb(end_bb);
+}
+
+fn result_or_to_bc(func: &mut ByteCodeFunction, l: &Var, r: &Var, dst: &Var, target: &Target) {
+    let l_is_ok = stack_alloc(func, &Type::Bool, None);
+    let sti = stack_alloc(func, &target.native_int_type, None);
+
+    let ok_branch = func.create_basic_block();
+    let error_branch = func.create_basic_block();
+    let end_bb = func.create_basic_block();
+
+    func.add(get_prop_instr(&sti, l, ByteCodeProperty::SumTypeIndex));
+    func.add(binary_op_instr(
+        &l_is_ok,
+        BinaryOperator::Equals,
+        Operand::Var(sti),
+        Operand::const_int(0, target.int_size),
+    ));
+    func.add(branch_if_instr(&l_is_ok, ok_branch, error_branch));
+    func.set_current_bb(ok_branch);
+    let tmp = stack_alloc(func, &dst.typ, Some("tmp"));
+    func.add(load_member_instr(&tmp, l, 0, target.int_size));
+    func.add(store_instr(dst, &tmp));
+    func.add(Instruction::Branch(end_bb));
+
+    func.set_current_bb(error_branch);
+    func.add(store_instr(dst, r));
+    func.add(Instruction::Branch(end_bb));
+
+    func.set_current_bb(end_bb);
+}
+
 fn binary_op_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, op: &BinaryOp, target: &Target) -> Var {
     func.push_destination(None);
     let l = to_bc(bc_mod, func, &op.left, target);
@@ -952,25 +997,20 @@ fn binary_op_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, op:
             }
 
             BinaryOperator::Or => {
-                let l_is_valid = stack_alloc(func, &Type::Bool, None);
-                let store_r_bb = func.create_basic_block();
-                let store_l_bb = func.create_basic_block();
-                let end_bb = func.create_basic_block();
-                func.add(load_optional_flag_instr(&l_is_valid, &l));
-                func.add(branch_if_instr(&l_is_valid, store_l_bb, store_r_bb));
-
-                func.set_current_bb(store_r_bb);
-                func.add(store_instr(&dst, &r));
-                func.add(Instruction::Branch(end_bb));
-
-                func.set_current_bb(store_l_bb);
-                func.add(load_instr(&dst, &l));
-                func.add(Instruction::Branch(end_bb));
-                func.set_current_bb(end_bb);
+                optional_or_to_bc(func, &l, &r, &dst);
             }
 
             _ => {
                 panic!("Operator {} not supported on optional", op.operator);
+            }
+        },
+
+        Type::Result(_) => match op.operator {
+            BinaryOperator::Or => {
+                result_or_to_bc(func, &l, &r, &dst, target);
+            }
+            _ => {
+                panic!("Operator {} not supported on result", op.operator);
             }
         },
 
@@ -1003,8 +1043,11 @@ fn if_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, if_expr: &
         func.set_current_bb(false_bb);
         func.push_scope();
         expr_to_bc(bc_mod, func, on_false, target);
+        let add_branch = !func.last_instruction_is_return();
         func.pop_scope();
-        func.add(Instruction::Branch(end_bb));
+        if add_branch {
+            func.add(Instruction::Branch(end_bb));
+        }
     } else {
         func.add(branch_if_instr(&cond, true_bb, end_bb));
     }
@@ -1012,8 +1055,11 @@ fn if_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, if_expr: &
     func.set_current_bb(true_bb);
     func.push_scope();
     expr_to_bc(bc_mod, func, &if_expr.on_true, target);
+    let add_branch = !func.last_instruction_is_return();
     func.pop_scope();
-    func.add(Instruction::Branch(end_bb));
+    if add_branch {
+        func.add(Instruction::Branch(end_bb));
+    }
 
     func.pop_destination();
     func.set_current_bb(end_bb);
@@ -1306,6 +1352,39 @@ fn expr_to_bc(
             }
             func.pop_destination();
             None
+        }
+        Expression::ResultToBool(r) => {
+            let dst = get_dst(func, &Type::Bool);
+            func.push_destination(None);
+            let value = to_bc(bc_mod, func, r, target);
+            func.pop_destination();
+            let sti = get_dst(func, &Type::Int(target.int_size));
+            func.add(get_prop_instr(&sti, &value, ByteCodeProperty::SumTypeIndex));
+            func.add(binary_op_instr(
+                &dst,
+                BinaryOperator::Equals,
+                Operand::Var(sti),
+                Operand::const_int(0, target.int_size),
+            ));
+            Some(dst)
+        }
+        Expression::ToOkResult(r) => {
+            let dst = get_dst(func, &r.result_type);
+            func.push_destination(None);
+            let inner = to_bc(bc_mod, func, &r.inner, target);
+            func.pop_destination();
+            func.add(set_prop_instr(&dst, ByteCodeProperty::SumTypeIndex, 0));
+            func.add(store_member_instr(&dst, 0, inner, target.int_size));
+            Some(dst)
+        }
+        Expression::ToErrResult(r) => {
+            let dst = get_dst(func, &r.result_type);
+            func.push_destination(None);
+            let inner = to_bc(bc_mod, func, &r.inner, target);
+            func.pop_destination();
+            func.add(set_prop_instr(&dst, ByteCodeProperty::SumTypeIndex, 1));
+            func.add(store_member_instr(&dst, 1, inner, target.int_size));
+            Some(dst)
         }
     }
 }

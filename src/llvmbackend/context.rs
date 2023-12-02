@@ -35,30 +35,21 @@ pub struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
-    pub fn new(target_machine: &'a TargetMachine) -> Result<Context<'a>, String> {
+    pub fn new(target_machine: &'a TargetMachine, module_name: &str) -> Result<Context<'a>, String> {
         unsafe {
             let context = LLVMContextCreate();
             LLVMContextSetOpaquePointers(context, 0);
+            let context_name = CString::new(module_name).expect("Invalid module name");
+            let module = LLVMModuleCreateWithNameInContext(context_name.as_ptr(), context);
+            let name = module_name.into();
             Ok(Context::<'a> {
                 context,
-                module: std::ptr::null_mut(),
+                module,
                 builder: LLVMCreateBuilderInContext(context),
                 target_machine,
-                name: String::new(),
+                name,
                 stack: vec![StackFrame::new(ptr::null_mut())],
             })
-        }
-    }
-
-    pub fn create_module(&mut self, module_name: &str) {
-        unsafe {
-            if !self.module.is_null() {
-                LLVMDisposeModule(self.module);
-            }
-
-            let context_name = CString::new(module_name).expect("Invalid module name");
-            self.module = LLVMModuleCreateWithNameInContext(context_name.as_ptr(), self.context);
-            self.name = module_name.into();
         }
     }
 

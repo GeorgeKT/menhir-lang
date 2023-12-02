@@ -1,4 +1,5 @@
 use crate::ast::*;
+use crate::compileerror::{type_error_result, CompileResult};
 use crate::span::Span;
 use crate::target::Target;
 use itertools::free::join;
@@ -139,6 +140,12 @@ impl fmt::Display for FloatSize {
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
+pub struct ResultType {
+    pub ok_typ: Type,
+    pub err_typ: Type,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub enum Type {
     Void,
     Unknown,
@@ -160,6 +167,7 @@ pub enum Type {
     Enum(Rc<EnumType>),
     Optional(Rc<Type>),
     Interface(Rc<InterfaceType>),
+    Result(Rc<ResultType>),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
@@ -194,15 +202,28 @@ impl Type {
     }
 
     // If possible generate a conversion expression
-    pub fn convert(&self, from_type: &Type, expr: &Expression) -> Option<Expression> {
-        match (self, from_type) {
+    pub fn convert(&self, from_type: &Type, expr: &Expression) -> CompileResult<Option<Expression>> {
+        Ok(match (self, from_type) {
             (Type::Slice(st), Type::Array(at)) if st.element_type == at.element_type => {
                 Some(array_to_slice(expr.clone(), expr.span()))
             }
 
             (Type::Optional(inner), _) if *inner.deref() == *from_type => Some(to_optional(expr.clone(), self.clone())),
 
+            (Type::Result(rt), _) => {
+                if rt.ok_typ == rt.err_typ {
+                    return type_error_result(&expr.span(), "Result type has the same ok and error type, use an ok or error expression to disambiguate this conversion to a result type");
+                } else if rt.ok_typ == *from_type {
+                    Some(to_ok_result(expr.clone(), self.clone(), expr.span()))
+                } else if rt.err_typ == *from_type {
+                    Some(to_err_result(expr.clone(), self.clone(), expr.span()))
+                } else {
+                    None
+                }
+            }
+
             (&Type::Bool, &Type::Optional(_)) => Some(Expression::OptionalToBool(Box::new(expr.clone()))),
+            (&Type::Bool, &Type::Result(_)) => Some(Expression::ResultToBool(Box::new(expr.clone()))),
 
             (Type::Optional(inner), _) if from_type.is_optional_of(&Type::Unknown) => {
                 Some(nil_expr_with_type(expr.span(), inner.deref().clone()))
@@ -228,13 +249,14 @@ impl Type {
             (&Type::Bool, &Type::Pointer(_)) => Some(type_cast(expr.clone(), Type::Bool, expr.span())),
 
             _ => None,
-        }
+        })
     }
 
     pub fn is_convertible(&self, dst_type: &Type) -> bool {
         match (self, dst_type) {
             (Type::Array(at), Type::Slice(st)) => at.element_type == st.element_type,
-            (_, Type::Optional(inner)) => *inner.deref() == *dst_type,
+            (_, Type::Optional(inner)) => inner.deref() == self,
+            (_, Type::Result(rt)) => &rt.ok_typ == self || &rt.err_typ == self,
             _ => false,
         }
     }
@@ -275,16 +297,17 @@ impl Type {
     }
 
     pub fn is_generic(&self) -> bool {
-        match *self {
+        match self {
             Type::Generic(_) => true,
-            Type::Array(ref at) => at.element_type.is_generic(),
-            Type::Slice(ref st) => st.element_type.is_generic(),
-            Type::Func(ref ft) => ft.return_type.is_generic() || ft.args.iter().any(|a| a.is_generic()),
-            Type::Struct(ref st) => st.members.iter().any(|m| m.typ.is_generic()),
-            Type::Sum(ref st) => st.cases.iter().any(|c| c.typ.is_generic()),
-            Type::Unresolved(ref ut) => ut.generic_args.iter().any(|t| t.is_generic()),
-            Type::Pointer(ref inner) => inner.is_generic(),
-            Type::Interface(ref i) => !i.generic_args.is_empty(),
+            Type::Array(at) => at.element_type.is_generic(),
+            Type::Slice(st) => st.element_type.is_generic(),
+            Type::Func(ft) => ft.return_type.is_generic() || ft.args.iter().any(|a| a.is_generic()),
+            Type::Struct(st) => st.members.iter().any(|m| m.typ.is_generic()),
+            Type::Sum(st) => st.cases.iter().any(|c| c.typ.is_generic()),
+            Type::Unresolved(ut) => ut.generic_args.iter().any(|t| t.is_generic()),
+            Type::Pointer(inner) => inner.is_generic(),
+            Type::Interface(i) => !i.generic_args.is_empty(),
+            Type::Result(rt) => rt.ok_typ.is_generic() || rt.err_typ.is_generic(),
             _ => false,
         }
     }
@@ -321,6 +344,14 @@ impl Type {
     pub fn is_optional_of(&self, other_type: &Type) -> bool {
         if let Type::Optional(ref inner_type) = *self {
             *inner_type.deref() == *other_type
+        } else {
+            false
+        }
+    }
+
+    pub fn is_result_of(&self, other_type: &Type) -> bool {
+        if let Type::Result(r) = self {
+            r.ok_typ == *other_type
         } else {
             false
         }
@@ -439,6 +470,13 @@ pub fn optional_type(inner: Type) -> Type {
     Type::Optional(Rc::new(inner))
 }
 
+pub fn result_type(ok: Type, err: Type) -> Type {
+    Type::Result(Rc::new(ResultType {
+        ok_typ: ok,
+        err_typ: err,
+    }))
+}
+
 pub fn generic_type(name: &str) -> Type {
     Type::Generic(Rc::new(GenericType::Any(name.into())))
 }
@@ -500,12 +538,13 @@ impl fmt::Display for Type {
             Type::Slice(ref at) => write!(f, "{}[]", at.element_type),
             Type::Generic(ref g) => write!(f, "${}", g),
             Type::Func(ref ft) => write!(f, "({}) -> {}", join(ft.args.iter(), ", "), ft.return_type),
-            Type::Struct(ref st) => write!(f, "{{{}}}", join(st.members.iter(), ", ")),
+            Type::Struct(ref st) => write!(f, "{}{{{}}}", st.name, join(st.members.iter(), ", ")),
             Type::Sum(ref st) => write!(f, "{}", join(st.cases.iter().map(|m| &m.typ), " | ")),
             Type::Enum(ref st) => write!(f, "{}", join(st.cases.iter(), " | ")),
             Type::Optional(ref inner) => write!(f, "?{}", inner),
             Type::Interface(ref i) => write!(f, "interface {}", i.name),
             Type::SelfType => write!(f, "Self"),
+            Type::Result(ref r) => write!(f, "{} ! {}", r.ok_typ, r.err_typ),
         }
     }
 }

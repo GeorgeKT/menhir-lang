@@ -4,6 +4,7 @@ use crate::compileerror::{unknown_name_result, CompileResult};
 use crate::target::Target;
 use std::collections::HashSet;
 use std::ops::Deref;
+use std::rc::Rc;
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum TypeResolved {
@@ -18,8 +19,8 @@ enum ResolveMode {
 }
 
 fn resolve_type_helper(ctx: &TypeCheckerContext, typ: &Type) -> (Option<Type>, TypeResolved) {
-    match *typ {
-        Type::Unresolved(ref ut) => {
+    match typ {
+        Type::Unresolved(ut) => {
             if let Some(r) = ctx.resolve(&ut.name) {
                 (Some(r.typ.clone()), TypeResolved::Yes)
             } else {
@@ -27,12 +28,27 @@ fn resolve_type_helper(ctx: &TypeCheckerContext, typ: &Type) -> (Option<Type>, T
             }
         }
 
-        Type::Pointer(ref inner) => {
+        Type::Pointer(inner) => {
             let r = resolve_type_helper(ctx, inner);
             if let (Some(typ), TypeResolved::Yes) = r {
                 (Some(ptr_type(typ)), TypeResolved::Yes)
             } else {
                 r
+            }
+        }
+
+        Type::Result(rt) => {
+            let mut dst = ResultType {
+                ok_typ: rt.ok_typ.clone(),
+                err_typ: rt.err_typ.clone(),
+            };
+            let ok_resolved = resolve_type(ctx, &mut dst.ok_typ);
+            let err_resolved = resolve_type(ctx, &mut dst.err_typ);
+
+            if ok_resolved == TypeResolved::Yes && err_resolved == TypeResolved::Yes {
+                (Some(Type::Result(Rc::new(dst))), TypeResolved::Yes)
+            } else {
+                (None, TypeResolved::No)
             }
         }
 

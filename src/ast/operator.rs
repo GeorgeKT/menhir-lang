@@ -66,13 +66,17 @@ impl BinaryOperator {
 pub enum UnaryOperator {
     Not,
     Sub,
+    TryResult,
+    TryOptional,
 }
 
 impl fmt::Display for UnaryOperator {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        match *self {
+        match self {
             UnaryOperator::Not => write!(fmt, "!"),
             UnaryOperator::Sub => write!(fmt, "-"),
+            UnaryOperator::TryResult => write!(fmt, "!"),
+            UnaryOperator::TryOptional => write!(fmt, "?"),
         }
     }
 }

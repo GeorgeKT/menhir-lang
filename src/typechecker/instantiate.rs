@@ -12,7 +12,7 @@ fn matches_function_signature(
 ) -> Result<(), String> {
     fn type_matches(expected: &Type, actual: &Type, concrete_type: &Type) -> bool {
         match (expected, actual) {
-            (&Type::Pointer(ref e), &Type::Pointer(ref a)) | (&Type::Optional(ref e), &Type::Optional(ref a)) => {
+            (Type::Pointer(e), Type::Pointer(a)) | (Type::Optional(e), Type::Optional(a)) => {
                 type_matches(e, a, concrete_type)
             }
             (Type::Array(e), Type::Array(a)) => type_matches(&e.element_type, &a.element_type, concrete_type),
@@ -51,7 +51,7 @@ fn matches_function_signature(
 }
 
 fn satisfies_interface(ctx: &TypeCheckerContext, concrete_type: &Type, interface: &Type) -> Result<(), String> {
-    let it = if let Type::Interface(ref it) = *interface {
+    let it = if let Type::Interface(it) = interface {
         it
     } else {
         return Err(format!("{} is not an interface type", interface.name()));
@@ -70,11 +70,11 @@ fn satisfies_interface(ctx: &TypeCheckerContext, concrete_type: &Type, interface
 }
 
 fn check_interface_constraints(ctx: &TypeCheckerContext, generic: &Type, concrete: &Type) -> Result<Type, String> {
-    match *generic {
-        Type::Generic(ref gt) => match *gt.deref() {
+    match generic {
+        Type::Generic(gt) => match gt.deref() {
             GenericType::Any(_) => Ok(concrete.clone()),
 
-            GenericType::Restricted(ref interfaces) => {
+            GenericType::Restricted(interfaces) => {
                 for interface in interfaces {
                     satisfies_interface(ctx, concrete, interface).map_err(|msg| {
                         format!(
@@ -103,12 +103,12 @@ fn make_concrete_type(ctx: &TypeCheckerContext, mapping: &GenericMapping, generi
         return check_interface_constraints(ctx, generic, concrete);
     }
 
-    let typ = match *generic {
-        Type::Array(ref at) => array_type(make_concrete_type(ctx, mapping, &at.element_type)?, at.len),
+    let typ = match generic {
+        Type::Array(at) => array_type(make_concrete_type(ctx, mapping, &at.element_type)?, at.len),
 
-        Type::Slice(ref st) => slice_type(make_concrete_type(ctx, mapping, &st.element_type)?),
+        Type::Slice(st) => slice_type(make_concrete_type(ctx, mapping, &st.element_type)?),
 
-        Type::Func(ref ft) => {
+        Type::Func(ft) => {
             let mut args = Vec::new();
             for t in &ft.args {
                 args.push(make_concrete_type(ctx, mapping, t)?);
@@ -117,7 +117,7 @@ fn make_concrete_type(ctx: &TypeCheckerContext, mapping: &GenericMapping, generi
             func_type(args, make_concrete_type(ctx, mapping, &ft.return_type)?)
         }
 
-        Type::Struct(ref st) => {
+        Type::Struct(st) => {
             let mut members = Vec::new();
             for m in &st.members {
                 members.push(struct_member(&m.name, make_concrete_type(ctx, mapping, &m.typ)?));
@@ -126,7 +126,7 @@ fn make_concrete_type(ctx: &TypeCheckerContext, mapping: &GenericMapping, generi
             struct_type(&st.name, members)
         }
 
-        Type::Sum(ref st) => {
+        Type::Sum(st) => {
             let mut cases = Vec::new();
             for c in &st.cases {
                 cases.push(sum_type_case(&c.name, make_concrete_type(ctx, mapping, &c.typ)?));
@@ -135,9 +135,9 @@ fn make_concrete_type(ctx: &TypeCheckerContext, mapping: &GenericMapping, generi
             sum_type(&st.name, cases)
         }
 
-        Type::Pointer(ref inner) => ptr_type(make_concrete_type(ctx, mapping, inner)?),
+        Type::Pointer(inner) => ptr_type(make_concrete_type(ctx, mapping, inner)?),
 
-        Type::Optional(ref inner) => optional_type(make_concrete_type(ctx, mapping, inner)?),
+        Type::Optional(inner) => optional_type(make_concrete_type(ctx, mapping, inner)?),
 
         _ => generic.clone(),
     };
@@ -162,10 +162,10 @@ fn substitute_bindings(
     let mut bindings = Vec::with_capacity(lb.len());
     for b in lb {
         let binding_expr = substitute_expr(ctx, generic_args, &b.init)?;
-        let new_binding = match b.binding_type {
-            BindingType::Name(ref name) => name_binding(name.clone(), binding_expr, b.mutable, b.span.clone()),
+        let new_binding = match &b.binding_type {
+            BindingType::Name(name) => name_binding(name.clone(), binding_expr, b.mutable, b.span.clone()),
 
-            BindingType::Struct(ref s) => binding(
+            BindingType::Struct(s) => binding(
                 BindingType::Struct(substitute_struct_pattern(ctx, generic_args, s)?),
                 binding_expr,
                 b.mutable,
@@ -200,10 +200,10 @@ fn substitute_struct_pattern(
 }
 
 fn substitute_pattern(ctx: &TypeCheckerContext, generic_args: &GenericMapping, p: &Pattern) -> CompileResult<Pattern> {
-    match *p {
-        Pattern::Struct(ref sp) => Ok(Pattern::Struct(substitute_struct_pattern(ctx, generic_args, sp)?)),
+    match p {
+        Pattern::Struct(sp) => Ok(Pattern::Struct(substitute_struct_pattern(ctx, generic_args, sp)?)),
 
-        Pattern::Name(ref nr) => {
+        Pattern::Name(nr) => {
             let new_nr = NameRef {
                 name: nr.name.clone(),
                 span: nr.span.clone(),
@@ -212,9 +212,7 @@ fn substitute_pattern(ctx: &TypeCheckerContext, generic_args: &GenericMapping, p
             Ok(Pattern::Name(new_nr))
         }
 
-        Pattern::Literal(Literal::Array(ref al)) => {
-            substitute_array_literal(ctx, generic_args, al).map(Pattern::Literal)
-        }
+        Pattern::Literal(Literal::Array(al)) => substitute_array_literal(ctx, generic_args, al).map(Pattern::Literal),
 
         _ => Ok(p.clone()),
     }
@@ -260,8 +258,8 @@ fn substitute_member_access(
     sma: &MemberAccess,
 ) -> CompileResult<MemberAccess> {
     let left = substitute_expr(ctx, generic_args, &sma.left)?;
-    let right = match sma.right {
-        MemberAccessType::Call(ref c) => {
+    let right = match &sma.right {
+        MemberAccessType::Call(c) => {
             let new_c = substitute_call(ctx, generic_args, c)?;
             MemberAccessType::Call(Box::new(new_c))
         }
@@ -281,28 +279,28 @@ fn substitute_expr(
     generic_args: &GenericMapping,
     e: &Expression,
 ) -> CompileResult<Expression> {
-    match *e {
-        Expression::UnaryOp(ref op) => {
+    match e {
+        Expression::UnaryOp(op) => {
             let e = substitute_expr(ctx, generic_args, &op.expression)?;
             Ok(unary_op(op.operator, e, op.span.clone()))
         }
 
-        Expression::BinaryOp(ref op) => {
+        Expression::BinaryOp(op) => {
             let l = substitute_expr(ctx, generic_args, &op.left)?;
             let r = substitute_expr(ctx, generic_args, &op.right)?;
             Ok(bin_op(op.operator, l, r, op.span.clone()))
         }
 
-        Expression::Literal(Literal::Array(ref a)) => {
+        Expression::Literal(Literal::Array(a)) => {
             substitute_array_literal(ctx, generic_args, a).map(Expression::Literal)
         }
 
-        Expression::Call(ref c) => {
+        Expression::Call(c) => {
             let new_c = substitute_call(ctx, generic_args, c)?;
             Ok(Expression::Call(Box::new(new_c)))
         }
 
-        Expression::Lambda(ref l) => {
+        Expression::Lambda(l) => {
             let mut args = Vec::with_capacity(l.sig.args.len());
             for a in &l.sig.args {
                 args.push(Argument::new(
@@ -316,7 +314,7 @@ fn substitute_expr(
             Ok(lambda(args, expr, l.span.clone()))
         }
 
-        Expression::Match(ref m) => {
+        Expression::Match(m) => {
             let target = substitute_expr(ctx, generic_args, &m.target)?;
             let mut cases = Vec::with_capacity(m.cases.len());
             for c in &m.cases {
@@ -327,15 +325,15 @@ fn substitute_expr(
             Ok(match_expression(target, cases, m.span.clone()))
         }
 
-        Expression::Bindings(ref l) => {
+        Expression::Bindings(l) => {
             let nb = substitute_bindings(ctx, generic_args, &l.bindings)?;
             Ok(bindings(nb, l.span.clone()))
         }
 
-        Expression::If(ref i) => {
+        Expression::If(i) => {
             let cond = substitute_expr(ctx, generic_args, &i.condition)?;
             let then = substitute_expr(ctx, generic_args, &i.on_true)?;
-            if let Some(ref else_block) = i.on_false {
+            if let Some(else_block) = &i.on_false {
                 Ok(if_expression(
                     cond,
                     then,
@@ -347,7 +345,7 @@ fn substitute_expr(
             }
         }
 
-        Expression::Block(ref b) => {
+        Expression::Block(b) => {
             let mut new_expressions = Vec::with_capacity(b.expressions.len());
             for e in &b.expressions {
                 new_expressions.push(substitute_expr(ctx, generic_args, e)?);
@@ -355,11 +353,11 @@ fn substitute_expr(
             Ok(block(new_expressions, b.span.clone()))
         }
 
-        Expression::Literal(ref lit) => Ok(Expression::Literal(lit.clone())),
+        Expression::Literal(lit) => Ok(Expression::Literal(lit.clone())),
 
-        Expression::NameRef(ref nr) => Ok(Expression::NameRef(substitute_name_ref(ctx, generic_args, nr)?)),
+        Expression::NameRef(nr) => Ok(Expression::NameRef(substitute_name_ref(ctx, generic_args, nr)?)),
 
-        Expression::StructInitializer(ref si) => {
+        Expression::StructInitializer(si) => {
             let mut nmi = Vec::with_capacity(si.member_initializers.len());
             for e in &si.member_initializers {
                 let new_e = substitute_expr(ctx, generic_args, e)?;
@@ -373,12 +371,12 @@ fn substitute_expr(
             )))
         }
 
-        Expression::MemberAccess(ref sma) => {
+        Expression::MemberAccess(sma) => {
             let ma = substitute_member_access(ctx, generic_args, sma)?;
             Ok(Expression::MemberAccess(Box::new(ma)))
         }
 
-        Expression::New(ref n) => {
+        Expression::New(n) => {
             let inner = substitute_expr(ctx, generic_args, &n.inner)?;
             Ok(new_with_type(
                 inner,
@@ -387,35 +385,35 @@ fn substitute_expr(
             ))
         }
 
-        Expression::Delete(ref n) => {
+        Expression::Delete(n) => {
             let inner = substitute_expr(ctx, generic_args, &n.inner)?;
             Ok(delete(inner, n.span.clone()))
         }
 
-        Expression::ArrayToSlice(ref ats) => {
+        Expression::ArrayToSlice(ats) => {
             let inner = substitute_expr(ctx, generic_args, &ats.inner)?;
             Ok(array_to_slice(inner, ats.span.clone()))
         }
 
-        Expression::AddressOf(ref a) => {
+        Expression::AddressOf(a) => {
             let inner = substitute_expr(ctx, generic_args, &a.inner)?;
             Ok(address_of(inner, a.span.clone()))
         }
 
-        Expression::Dereference(ref d) => {
+        Expression::Dereference(d) => {
             let inner = substitute_expr(ctx, generic_args, &d.inner)?;
             Ok(dereference(inner, d.span.clone()))
         }
 
-        Expression::Assign(ref a) => {
-            let l = match a.left {
-                AssignTarget::Var(ref nr) => AssignTarget::Var(substitute_name_ref(ctx, generic_args, nr)?),
+        Expression::Assign(a) => {
+            let l = match &a.left {
+                AssignTarget::Var(nr) => AssignTarget::Var(substitute_name_ref(ctx, generic_args, nr)?),
 
-                AssignTarget::MemberAccess(ref ma) => {
+                AssignTarget::MemberAccess(ma) => {
                     AssignTarget::MemberAccess(substitute_member_access(ctx, generic_args, ma)?)
                 }
 
-                AssignTarget::Dereference(ref d) => {
+                AssignTarget::Dereference(d) => {
                     let inner = substitute_expr(ctx, generic_args, &d.inner)?;
                     AssignTarget::Dereference(DereferenceExpression {
                         inner,
@@ -424,7 +422,7 @@ fn substitute_expr(
                     })
                 }
 
-                AssignTarget::IndexOperation(ref iop) => {
+                AssignTarget::IndexOperation(iop) => {
                     let target = substitute_expr(ctx, generic_args, &iop.target)?;
                     let index_expr = substitute_expr(ctx, generic_args, &iop.index_expr)?;
                     AssignTarget::IndexOperation(IndexOperation {
@@ -439,28 +437,28 @@ fn substitute_expr(
             Ok(assign(a.operator, l, r, a.span.clone()))
         }
 
-        Expression::While(ref w) => {
+        Expression::While(w) => {
             let c = substitute_expr(ctx, generic_args, &w.cond)?;
             let b = substitute_expr(ctx, generic_args, &w.body)?;
             Ok(while_loop(c, b, w.span.clone()))
         }
 
-        Expression::For(ref f) => {
+        Expression::For(f) => {
             let i = substitute_expr(ctx, generic_args, &f.iterable)?;
             let b = substitute_expr(ctx, generic_args, &f.body)?;
             Ok(for_loop(&f.loop_variable, i, b, f.span.clone()))
         }
 
-        Expression::Nil(ref span) => Ok(Expression::Nil(span.clone())),
+        Expression::Nil(span) => Ok(Expression::Nil(span.clone())),
 
-        Expression::OptionalToBool(ref inner) => Ok(Expression::OptionalToBool(inner.clone())),
+        Expression::OptionalToBool(inner) => Ok(Expression::OptionalToBool(inner.clone())),
 
-        Expression::ToOptional(ref t) => {
+        Expression::ToOptional(t) => {
             let inner = substitute_expr(ctx, generic_args, &t.inner)?;
             Ok(to_optional(inner, t.optional_type.clone()))
         }
 
-        Expression::Cast(ref t) => {
+        Expression::Cast(t) => {
             let inner = substitute_expr(ctx, generic_args, &t.inner)?;
             Ok(type_cast(
                 inner,
@@ -471,17 +469,12 @@ fn substitute_expr(
 
         Expression::Void => Ok(Expression::Void),
 
-        Expression::CompilerCall(CompilerCall::SizeOf(ref t, ref span)) => {
+        Expression::CompilerCall(CompilerCall::SizeOf(t, span)) => {
             let new_t = make_concrete(ctx, generic_args, t, span)?;
             Ok(Expression::CompilerCall(CompilerCall::SizeOf(new_t, span.clone())))
         }
 
-        Expression::CompilerCall(CompilerCall::Slice {
-            ref data,
-            ref len,
-            ref typ,
-            ref span,
-        }) => {
+        Expression::CompilerCall(CompilerCall::Slice { data, len, typ, span }) => {
             let new_data = substitute_expr(ctx, generic_args, data)?;
             let new_len = substitute_expr(ctx, generic_args, len)?;
             let new_type = make_concrete(ctx, generic_args, typ, span)?;
@@ -493,15 +486,29 @@ fn substitute_expr(
             }))
         }
 
-        Expression::IndexOperation(ref iop) => {
+        Expression::IndexOperation(iop) => {
             let target = substitute_expr(ctx, generic_args, &iop.target)?;
             let index_expr = substitute_expr(ctx, generic_args, &iop.index_expr)?;
             Ok(index_op(target, index_expr, iop.span.clone()))
         }
 
-        Expression::Return(ref r) => {
+        Expression::Return(r) => {
             let e = substitute_expr(ctx, generic_args, &r.expression)?;
             Ok(return_expr(e, r.span.clone()))
+        }
+        Expression::ResultToBool(r) => {
+            let e = substitute_expr(ctx, generic_args, r)?;
+            Ok(Expression::ResultToBool(Box::new(e)))
+        }
+        Expression::ToOkResult(r) => {
+            let typ = make_concrete(ctx, generic_args, &r.result_type, &r.inner.span())?;
+            let e = substitute_expr(ctx, generic_args, &r.inner)?;
+            Ok(to_ok_result(e, typ, r.span.clone()))
+        }
+        Expression::ToErrResult(r) => {
+            let typ = make_concrete(ctx, generic_args, &r.result_type, &r.inner.span())?;
+            let e = substitute_expr(ctx, generic_args, &r.inner)?;
+            Ok(to_err_result(e, typ, r.span.clone()))
         }
     }
 }
@@ -531,6 +538,7 @@ pub fn instantiate(
         args,
         span: func.sig.span.clone(),
         typ: func_type(arg_types, return_type),
+        rvo: false,
     };
 
     let body = substitute_expr(ctx, generic_args, &func.expression)?;

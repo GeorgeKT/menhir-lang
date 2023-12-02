@@ -188,7 +188,7 @@ fn parse_binary_op_rhs(
 
         let op = tq.expect_binary_operator()?;
         if op == BinaryOperator::As {
-            let typ = parse_type(tq, indent_level, target)?;
+            let (typ, _) = parse_type(tq, indent_level, target)?;
             let span = lhs.span().expanded(tq.pos());
             lhs = combine_type_cast(lhs, typ, span);
             continue;
@@ -269,7 +269,7 @@ fn parse_generic_arg_list(tq: &mut TokenQueue, indent_level: usize, target: &Tar
         indent_level,
         target,
     )?;
-    Ok(args)
+    Ok(args.into_iter().map(|(t, _)| t).collect())
 }
 
 fn to_primitive(name: &str, target: &Target) -> Option<Type> {
@@ -295,77 +295,124 @@ fn to_primitive(name: &str, target: &Target) -> Option<Type> {
     }
 }
 
-fn parse_start_of_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<Type> {
-    if tq.is_next(&TokenKind::BinaryOperator(BinaryOperator::Mul)) {
+fn parse_generic_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<(Type, Span)> {
+    let start = tq.expect(&TokenKind::Dollar)?.span;
+    if tq.is_next(&TokenKind::OpenParen) {
         tq.pop()?;
-        let inner = parse_type(tq, indent_level, target)?;
-        Ok(Type::Pointer(Rc::new(inner)))
-    } else if tq.is_next(&TokenKind::Dollar) {
-        tq.pop()?;
-        if tq.is_next(&TokenKind::OpenParen) {
-            tq.pop()?;
-            let constraints = parse_list(
-                tq,
-                &TokenKind::BinaryOperator(BinaryOperator::Add),
-                &TokenKind::CloseParen,
-                parse_type,
-                indent_level,
-                target,
-            )?;
-            Ok(generic_type_with_constraints(constraints))
-        } else {
-            let (name, _span) = tq.expect_identifier()?;
-            Ok(generic_type(&name))
+        let constraints = parse_list(
+            tq,
+            &TokenKind::BinaryOperator(BinaryOperator::Add),
+            &TokenKind::CloseParen,
+            parse_type,
+            indent_level,
+            target,
+        )?;
+        let span = start.expanded(tq.pos());
+        if constraints.is_empty() {
+            return parse_error_result(&span, "Empty generic constraints list");
         }
-    } else if tq.is_next(&TokenKind::QuestionMark) {
-        tq.pop()?;
-        let inner = parse_type(tq, indent_level, target)?;
-        Ok(Type::Optional(Rc::new(inner)))
-    } else if tq.is_next(&TokenKind::Func) {
-        // Function signature: fn(a, b) -> c
-        tq.pop()?;
-        tq.expect(&TokenKind::OpenParen)?;
-        let args = parse_comma_separated_list(tq, &TokenKind::CloseParen, parse_type, indent_level, target)?;
-        tq.expect(&TokenKind::Arrow)?;
-        let ret = parse_type(tq, indent_level, target)?;
-        Ok(func_type(args, ret))
-    } else if tq.is_next(&TokenKind::OpenCurly) {
-        tq.pop()?;
-        let member_types = parse_comma_separated_list(tq, &TokenKind::CloseCurly, parse_type, indent_level, target)?;
-        Ok(struct_type(
+        let ci = constraints.into_iter().map(|(t, _)| t);
+        Ok((generic_type_with_constraints(ci.collect()), span))
+    } else {
+        let (name, span) = tq.expect_identifier()?;
+        Ok((generic_type(&name), start.expanded(span.end)))
+    }
+}
+
+fn parse_function_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<(Type, Span)> {
+    // Function signature: fn(a, b) -> c
+    let start = tq.expect(&TokenKind::Func)?.span;
+    tq.expect(&TokenKind::OpenParen)?;
+    let args = parse_comma_separated_list(tq, &TokenKind::CloseParen, parse_type, indent_level, target)?
+        .into_iter()
+        .map(|(t, _)| t)
+        .collect();
+    tq.expect(&TokenKind::Arrow)?;
+    let (ret, span) = parse_type(tq, indent_level, target)?;
+    Ok((func_type(args, ret), start.expanded(span.end)))
+}
+
+fn parse_pointer_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<(Type, Span)> {
+    let start = tq
+        .expect(&TokenKind::BinaryOperator(BinaryOperator::Mul))?
+        .span;
+    let (inner, span) = parse_type(tq, indent_level, target)?;
+    Ok((Type::Pointer(Rc::new(inner)), start.expanded(span.end)))
+}
+
+fn parse_optional_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<(Type, Span)> {
+    let start = tq.expect(&TokenKind::QuestionMark)?.span;
+    let (inner, span) = parse_type(tq, indent_level, target)?;
+    Ok((Type::Optional(Rc::new(inner)), start.expanded(span.end)))
+}
+
+fn parse_struct_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<(Type, Span)> {
+    let start = tq.expect(&TokenKind::OpenCurly)?.span;
+    let member_types = parse_comma_separated_list(tq, &TokenKind::CloseCurly, parse_type, indent_level, target)?;
+    let span = start.expanded(tq.pos());
+    Ok((
+        struct_type(
             "",
             member_types
                 .into_iter()
-                .map(|member_type| struct_member("", member_type))
+                .map(|(member_type, _)| struct_member("", member_type))
                 .collect(),
-        ))
-    } else {
-        let (name, _pos) = tq.expect_identifier()?;
-        match to_primitive(&name, target) {
-            Some(t) => Ok(t),
-            None => {
-                let generic_args = parse_generic_arg_list(tq, indent_level, target)?;
-                Ok(unresolved_type(&name, generic_args))
-            }
+        ),
+        span,
+    ))
+}
+
+fn parse_primitive_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<(Type, Span)> {
+    let (name, pos) = tq.expect_identifier()?;
+    match to_primitive(&name, target) {
+        Some(t) => Ok((t, pos)),
+        None => {
+            let generic_args = parse_generic_arg_list(tq, indent_level, target)?;
+            Ok((unresolved_type(&name, generic_args), pos.expanded(tq.pos())))
         }
     }
 }
 
-fn parse_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<Type> {
-    let mut typ = parse_start_of_type(tq, indent_level, target)?;
-    while tq.is_next(&TokenKind::OpenBracket) {
-        tq.pop()?;
-        if tq.is_next(&TokenKind::CloseBracket) {
+fn parse_start_of_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<(Type, Span)> {
+    if tq.is_next(&TokenKind::BinaryOperator(BinaryOperator::Mul)) {
+        parse_pointer_type(tq, indent_level, target)
+    } else if tq.is_next(&TokenKind::Dollar) {
+        parse_generic_type(tq, indent_level, target)
+    } else if tq.is_next(&TokenKind::QuestionMark) {
+        parse_optional_type(tq, indent_level, target)
+    } else if tq.is_next(&TokenKind::Func) {
+        parse_function_type(tq, indent_level, target)
+    } else if tq.is_next(&TokenKind::OpenCurly) {
+        parse_struct_type(tq, indent_level, target)
+    } else {
+        parse_primitive_type(tq, indent_level, target)
+    }
+}
+
+fn parse_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<(Type, Span)> {
+    let (mut typ, mut span) = parse_start_of_type(tq, indent_level, target)?;
+    loop {
+        if tq.is_next(&TokenKind::OpenBracket) {
             tq.pop()?;
-            typ = slice_type(typ);
+            if tq.is_next(&TokenKind::CloseBracket) {
+                span = span.expanded(tq.pop()?.span.end);
+                typ = slice_type(typ);
+            } else {
+                let (len, _span) = tq.expect_int()?;
+                typ = array_type(typ, len as usize);
+                span = span.expanded(tq.expect(&TokenKind::CloseBracket)?.span.end);
+            }
+        } else if tq.is_next(&TokenKind::UnaryOperator(UnaryOperator::Not)) {
+            tq.pop()?;
+            let (err_typ, err_span) = parse_type(tq, indent_level, target)?;
+            span = span.expanded(err_span.end);
+            typ = result_type(typ, err_typ);
         } else {
-            let (len, _span) = tq.expect_int()?;
-            typ = array_type(typ, len as usize);
-            tq.expect(&TokenKind::CloseBracket)?;
+            break;
         }
     }
 
-    Ok(typ)
+    Ok((typ, span))
 }
 
 fn parse_function_argument(
@@ -384,7 +431,7 @@ fn parse_function_argument(
     let (name, span) = tq.expect_identifier()?;
     let typ = if tq.is_next(&TokenKind::Colon) {
         tq.expect(&TokenKind::Colon)?;
-        parse_type(tq, indent_level, target)?
+        parse_type(tq, indent_level, target)?.0
     } else if name == "self" {
         if *self_type != Type::Unknown {
             self_type.clone()
@@ -422,7 +469,7 @@ fn parse_function_signature(
     let args = parse_function_arguments(tq, self_type, indent_level, target)?;
     let ret_type = if tq.is_next(&TokenKind::Arrow) {
         tq.pop()?;
-        parse_type(tq, indent_level, target)?
+        parse_type(tq, indent_level, target)?.0
     } else {
         Type::Void
     };
@@ -483,7 +530,7 @@ fn parse_function_declaration(
     let args = parse_function_arguments(tq, &self_type, indent_level, target)?;
     let ret_type = if tq.is_next(&TokenKind::Arrow) {
         tq.pop()?;
-        parse_type(tq, indent_level, target)?
+        parse_type(tq, indent_level, target)?.0
     } else {
         Type::Void
     };
@@ -565,6 +612,18 @@ pub fn parse_pattern(tq: &mut TokenQueue, indent_level: usize, target: &Target) 
         }
 
         TokenKind::Nil => Ok(Pattern::Nil(tok.span)),
+
+        TokenKind::Ok => {
+            let inner = parse_pattern(tq, indent_level, target)?;
+            let span = tok.span.expanded(inner.span().end);
+            Ok(ok_pattern(inner, span))
+        }
+
+        TokenKind::Error => {
+            let inner = parse_pattern(tq, indent_level, target)?;
+            let span = tok.span.expanded(inner.span().end);
+            Ok(error_pattern(inner, span))
+        }
 
         _ => parse_error_result(&tok.span, format!("Unexpected token '{}'", tok)),
     }
@@ -698,7 +757,7 @@ fn parse_sum_type(
 
     let parse_sum_type_case = |tq: &mut TokenQueue, indent_level: usize, target: &Target| {
         if tq.is_next_at(1, &TokenKind::OpenCurly) {
-            let sd = parse_struct_type(tq, &sum_type_name, indent_level, target)?;
+            let sd = parse_struct_declaration(tq, &sum_type_name, indent_level, target)?;
             let span = sd.span.clone();
             let name = namespaced(namespace, &sd.name);
             Ok(sum_type_case_decl(&name, Some(sd), span))
@@ -725,7 +784,7 @@ fn namespaced(namespace: &str, name: &str) -> String {
     }
 }
 
-fn parse_struct_type(
+fn parse_struct_declaration(
     tq: &mut TokenQueue,
     namespace: &str,
     indent_level: usize,
@@ -736,7 +795,7 @@ fn parse_struct_type(
     let parse_struct_member = |tq: &mut TokenQueue, indent_level: usize, target: &Target| {
         let (member_name, member_name_span) = tq.expect_identifier()?;
         tq.expect(&TokenKind::Colon)?;
-        let typ = parse_type(tq, indent_level, target)?;
+        let (typ, _) = parse_type(tq, indent_level, target)?;
         Ok(struct_member_declaration(
             &member_name,
             typ,
@@ -924,7 +983,7 @@ fn parse_compiler_call(
     match &name[..] {
         "size" => {
             tq.expect(&TokenKind::OpenParen)?;
-            let typ = parse_type(tq, indent_level, target)?;
+            let (typ, _) = parse_type(tq, indent_level, target)?;
             tq.expect(&TokenKind::CloseParen)?;
 
             Ok(Expression::CompilerCall(CompilerCall::SizeOf(
@@ -1055,6 +1114,18 @@ fn parse_expression_start(
 
         TokenKind::Return => parse_return(tq, &tok.span, indent_level, target)?,
 
+        TokenKind::Ok => {
+            let inner = parse_expression(tq, indent_level, target)?;
+            let span = tok.span.expanded(inner.span().end);
+            to_ok_result(inner, Type::Unknown, span)
+        }
+
+        TokenKind::Error => {
+            let inner = parse_expression(tq, indent_level, target)?;
+            let span = tok.span.expanded(inner.span().end);
+            to_err_result(inner, Type::Unknown, span)
+        }
+
         _ => return parse_error_result(&tok.span, format!("Unexpected token '{}'", tok)),
     };
 
@@ -1071,6 +1142,16 @@ fn parse_expression_start(
             TokenKind::BinaryOperator(BinaryOperator::Dot) => {
                 tq.push_front(next);
                 lhs = parse_member_access(tq, lhs, indent_level, target)?;
+            }
+
+            TokenKind::QuestionMark => {
+                let span = lhs.span().expanded(next.span.end);
+                lhs = unary_op(UnaryOperator::TryOptional, lhs, span);
+            }
+
+            TokenKind::UnaryOperator(UnaryOperator::Not) => {
+                let span = lhs.span().expanded(next.span.end);
+                lhs = unary_op(UnaryOperator::TryResult, lhs, span)
             }
 
             _ => {
@@ -1212,7 +1293,7 @@ fn parse_module<Input: Read>(
             }
 
             TokenKind::Struct => {
-                let mut sd = parse_struct_type(&mut tq, namespace, indent_level, target)?;
+                let mut sd = parse_struct_declaration(&mut tq, namespace, indent_level, target)?;
                 sd.span = tok.span.expanded(sd.span.end);
                 if module.types.contains_key(&sd.name) {
                     return parse_error_result(&sd.span, format!("Type {} redefined", sd.name));
@@ -1298,9 +1379,11 @@ use crate::package::Package;
 
 #[cfg(test)]
 pub fn parse_str(code: &str, root_namespace: &str, target: &Target) -> CompileResult<Package> {
+    use crate::llvmbackend::OutputType;
+    use crate::packagebuild::PackageDescription;
     use std::io::Cursor;
 
-    let mut pkg = Package::new(root_namespace);
+    let mut pkg = Package::new(root_namespace, OutputType::Binary, &PackageDescription::default());
     let mut module = Module::new(root_namespace);
     let mut cursor = Cursor::new(code);
     parse_module(&mut module, &mut cursor, root_namespace, "", target)?;

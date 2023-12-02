@@ -7,8 +7,8 @@ fn empty_block(bb: &BasicBlock) -> Option<BasicBlockRef> {
         return None;
     }
 
-    if let Instruction::Branch(bb_ref) = bb.instructions[0] {
-        Some(bb_ref)
+    if let Some(Instruction::Branch(bb_ref)) = bb.instructions.first() {
+        Some(*bb_ref)
     } else {
         None
     }

@@ -24,6 +24,8 @@ pub enum TokenKind {
     Arrow,
     FatArrow,
     Assign(AssignOperator),
+    Ok,
+    Error,
     Match,
     Let,
     In,
@@ -108,6 +110,8 @@ impl Display for TokenKind {
             TokenKind::At => write!(fmt, "@"),
             TokenKind::Return => write!(fmt, "return"),
             TokenKind::EOF => write!(fmt, "EOF"),
+            TokenKind::Ok => write!(fmt, "ok"),
+            TokenKind::Error => write!(fmt, "error"),
         }
     }
 }

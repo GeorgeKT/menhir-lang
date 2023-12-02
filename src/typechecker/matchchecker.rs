@@ -143,6 +143,28 @@ fn check_optional_match_is_exhaustive(m: &MatchExpression) -> CompileResult<()> 
     }
 }
 
+fn check_result_match_is_exhaustive(m: &MatchExpression) -> CompileResult<()> {
+    let mut ok_seen = false;
+    let mut error_seen = false;
+    for c in &m.cases {
+        match c.pattern {
+            Pattern::Ok(_) => ok_seen = true,
+            Pattern::Error(_) => error_seen = true,
+            Pattern::Any(_) => return Ok(()),
+            _ => (),
+        }
+    }
+
+    if !ok_seen || !error_seen {
+        type_error_result(
+            &m.span,
+            "Incomplete pattern match, not all possible results are matched again",
+        )
+    } else {
+        Ok(())
+    }
+}
+
 pub fn check_match_is_exhaustive(m: &MatchExpression, target_type: &Type) -> CompileResult<()> {
     let any_match_seen = check_any_match(m)?;
 
@@ -167,6 +189,8 @@ pub fn check_match_is_exhaustive(m: &MatchExpression, target_type: &Type) -> Com
         Type::Bool => check_bool_match_is_exhaustive(m),
 
         Type::Optional(_) => check_optional_match_is_exhaustive(m),
+
+        Type::Result(_) => check_result_match_is_exhaustive(m),
 
         _ => {
             if !any_match_seen {

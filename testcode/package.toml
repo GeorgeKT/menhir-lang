@@ -235,4 +235,8 @@ type="binary"
 name="optional"
 type="binary"
 
+[[target]]
+name="errors"
+type="binary"
+depends=["common"]
 

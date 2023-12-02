@@ -376,6 +376,26 @@ impl ValueRef {
                     ptr_type(case_type.clone()),
                 ))
             },
+            Type::Result(rt) => unsafe {
+                let index = match *index {
+                    Operand::Const(Constant::Int(v, _)) => v as usize,
+                    Operand::Const(Constant::UInt(v, _)) => v as usize,
+                    _ => return code_gen_result("Result type member access has to be through an integer"),
+                };
+
+                if index > 1 {
+                    return code_gen_result(format!("Invalid result type member index {index}"));
+                }
+
+                let self_type = ctx.resolve_type(element_type)?;
+                let st_data_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 1, cstr!("rt_data_ptr"));
+                let case_type = if index == 0 { &rt.ok_typ } else { &rt.err_typ };
+                let type_to_cast_to = LLVMPointerType(ctx.resolve_type(case_type)?, 0);
+                Ok(ValueRef::new(
+                    LLVMBuildBitCast(ctx.builder, st_data_ptr, type_to_cast_to, cstr!("rt_member_ptr")),
+                    ptr_type(case_type.clone()),
+                ))
+            },
             _ => unsafe {
                 let index = get_operand(ctx, index)?.load(ctx)?;
                 let mut indices = vec![index];
@@ -451,6 +471,15 @@ impl ValueRef {
                 )
             },
 
+            (Type::Result(_), ByteCodeProperty::SumTypeIndex) => unsafe {
+                let self_type = ctx.resolve_type(element_type)?;
+                let rti_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 0, cstr!("rti_ptr"));
+                ValueRef::new(
+                    LLVMBuildLoad2(ctx.builder, ctx.native_uint_type()?, rti_ptr, cstr!("rti")),
+                    native_uint_type,
+                )
+            },
+
             _ => return code_gen_result("Get property not allowed"),
         })
     }
@@ -466,7 +495,12 @@ impl ValueRef {
                 LLVMBuildStore(ctx.builder, const_uint(ctx, value as u64), sti_ptr);
                 Ok(())
             },
-
+            (Type::Result(_), ByteCodeProperty::SumTypeIndex) => unsafe {
+                let self_type = ctx.resolve_type(element_type)?;
+                let rti_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 0, cstr!("rti_ptr"));
+                LLVMBuildStore(ctx.builder, const_uint(ctx, value as u64), rti_ptr);
+                Ok(())
+            },
             _ => code_gen_result("Set property not allowed"),
         }
     }

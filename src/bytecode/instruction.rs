@@ -225,6 +225,10 @@ pub enum Instruction {
         on_false: BasicBlockRef,
     },
     Delete(Var),
+    Alias {
+        dst: Var,
+        obj: Var,
+    },
 }
 
 impl Instruction {
@@ -509,6 +513,10 @@ impl fmt::Display for Instruction {
 
             Instruction::StoreNil(v) => {
                 writeln!(f, "  storenil {}", v)
+            }
+
+            Instruction::Alias { dst, obj } => {
+                writeln!(f, "  alias {} {}", dst, obj)
             }
         }
     }

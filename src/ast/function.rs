@@ -35,6 +35,7 @@ pub struct FunctionSignature {
     pub args: Vec<Argument>,
     pub span: Span,
     pub typ: Type,
+    pub rvo: bool,
 }
 
 impl FunctionSignature {
@@ -51,6 +52,7 @@ impl FunctionSignature {
                     .collect(),
                 span: Span::default(),
                 typ: typ.clone(),
+                rvo: false,
             };
 
             Some(s)
@@ -122,6 +124,7 @@ pub fn sig(name: &str, ret: Type, args: Vec<Argument>, span: Span) -> FunctionSi
         args,
         span,
         typ: Type::Unknown,
+        rvo: false,
     }
 }
 

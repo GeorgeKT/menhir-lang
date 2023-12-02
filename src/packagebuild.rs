@@ -97,12 +97,9 @@ impl PackageData {
     }
 
     pub fn build(&self, build_options: &BuildOptions) -> CompileResult<()> {
-        let mut ctx = Context::new(&build_options.target_machine)?;
         println!("Compiling for {}", build_options.target_machine.target.triplet);
         for t in &self.target {
-            time_operation_mut(2, "Total build time", || {
-                t.build(build_options, &mut ctx, &self.package)
-            })?;
+            time_operation_mut(2, "Total build time", || t.build(build_options, &self.package))?;
         }
 
         Ok(())
@@ -245,7 +242,7 @@ impl PackageTarget {
         Ok(())
     }
 
-    fn build(&self, build_options: &BuildOptions, ctx: &mut Context, desc: &PackageDescription) -> CompileResult<()> {
+    fn build(&self, build_options: &BuildOptions, desc: &PackageDescription) -> CompileResult<()> {
         let single_file = build_options
             .sources_directory
             .join(format!("{}.mhr", self.name));
@@ -319,7 +316,8 @@ impl PackageTarget {
             optimize: build_options.optimize,
         };
 
-        time_operation_mut(2, "Code generation", || llvm_code_generation(&bc_mod, ctx, desc))?;
+        let mut ctx = Context::new(&build_options.target_machine, &desc.name)?;
+        time_operation_mut(2, "Code generation", || llvm_code_generation(&bc_mod, &mut ctx, desc))?;
 
         time_operation(2, "Linking", || link(&ctx, &opts, &pkg.linker_flags))?;
 

@@ -34,7 +34,7 @@ pub unsafe fn gen_function_sig(
     let cstring = CString::new(llvm_name.as_bytes()).map_err(|_| code_gen_error("Invalid string"))?;
     let name = cstring.as_ptr();
     let func = LLVMAddFunction(ctx.module, name, function_type);
-    let fi = FunctionInstance::new(&sig.name, func, sig.return_type.clone(), sig.get_type());
+    let fi = FunctionInstance::new(&sig.name, func, sig.return_type.clone(), sig.get_type(), sig.rvo);
     ctx.add_function(Rc::new(fi))?;
     Ok(())
 }
@@ -45,8 +45,9 @@ pub unsafe fn gen_function_ptr(
     func_ptr: LLVMValueRef,
     return_type: Type,
     typ: Type,
+    rvo: bool,
 ) -> CompileResult<()> {
-    let fi = FunctionInstance::new(name, func_ptr, return_type, typ);
+    let fi = FunctionInstance::new(name, func_ptr, return_type, typ, rvo);
     ctx.add_function(Rc::new(fi))
 }
 
@@ -64,7 +65,8 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction) -> Compil
         let var = LLVMGetParam(fi.function, i as libc::c_uint);
         match arg.typ {
             Type::Func(ref ft) => {
-                gen_function_ptr(ctx, &arg.name, var, ft.return_type.clone(), arg.typ.clone())?;
+                let rvo = arg.name == RVO_PARAM_NAME;
+                gen_function_ptr(ctx, &arg.name, var, ft.return_type.clone(), arg.typ.clone(), rvo)?;
                 ctx.set_variable(&arg.name, ValueRef::new(var, arg.typ.clone()))?;
             }
 

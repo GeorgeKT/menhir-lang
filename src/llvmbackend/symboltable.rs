@@ -10,15 +10,17 @@ pub struct FunctionInstance {
     pub name: String,
     pub return_type: Type,
     pub typ: Type,
+    pub rvo: bool,
 }
 
 impl FunctionInstance {
-    pub fn new(name: &str, func: LLVMValueRef, return_type: Type, typ: Type) -> FunctionInstance {
+    pub fn new(name: &str, func: LLVMValueRef, return_type: Type, typ: Type, rvo: bool) -> FunctionInstance {
         FunctionInstance {
             name: name.into(),
             function: func,
             return_type,
             typ,
+            rvo,
         }
     }
 }

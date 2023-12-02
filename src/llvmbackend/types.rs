@@ -69,6 +69,28 @@ unsafe fn sum_type_to_llvm_type(
     ))
 }
 
+unsafe fn result_type_to_llvm_type(
+    context: LLVMContextRef,
+    target_machine: &TargetMachine,
+    rt: &ResultType,
+) -> CompileResult<LLVMTypeRef> {
+    let mut member_types = vec![native_llvm_int_type(context, target_machine)]; // first entry is the tag
+    let ok_typ = to_llvm_type(context, target_machine, &rt.ok_typ)?;
+    let err_typ = to_llvm_type(context, target_machine, &rt.err_typ)?;
+    if target_machine.size_of_type(ok_typ) > target_machine.size_of_type(err_typ) {
+        member_types.push(ok_typ);
+    } else {
+        member_types.push(err_typ);
+    }
+
+    Ok(LLVMStructTypeInContext(
+        context,
+        member_types.as_mut_ptr(),
+        member_types.len() as c_uint,
+        0,
+    ))
+}
+
 unsafe fn func_to_llvm_type(
     context: LLVMContextRef,
     target_machine: &TargetMachine,
@@ -83,12 +105,10 @@ unsafe fn func_to_llvm_type(
         llvm_arg_types.push(arg_type);
     }
 
-    Ok(LLVMFunctionType(
-        to_llvm_type(context, target_machine, &ft.return_type)?,
-        llvm_arg_types.as_mut_ptr(),
-        ft.args.len() as c_uint,
-        0,
-    ))
+    let ret = to_llvm_type(context, target_machine, &ft.return_type)?;
+    let nft = LLVMFunctionType(ret, llvm_arg_types.as_mut_ptr(), ft.args.len() as c_uint, 0);
+
+    Ok(nft)
 }
 
 unsafe fn struct_to_llvm_type(
@@ -158,6 +178,7 @@ pub unsafe fn to_llvm_type(
         Type::Struct(st) => struct_to_llvm_type(context, target_machine, st),
         Type::Sum(st) => sum_type_to_llvm_type(context, target_machine, st),
         Type::Optional(ot) => optional_to_llvm_type(context, target_machine, ot),
+        Type::Result(rt) => result_type_to_llvm_type(context, target_machine, rt),
         Type::Generic(_) => {
             code_gen_result("Internal Compiler Error: All generic types must have been resolved before code generation")
         }
