@@ -32,7 +32,7 @@ fn matches_function_signature(
             }
 
             for (idx, (e_arg, a_arg)) in e.args.iter().zip(a.args.iter()).enumerate() {
-                if !type_matches(e_arg, a_arg, concrete_type) {
+                if !type_matches(&e_arg.typ, &a_arg.typ, concrete_type) {
                     return Err(format!(
                         "The type of argument {} does not match on method {}.",
                         idx, method_name
@@ -111,7 +111,10 @@ fn make_concrete_type(ctx: &TypeCheckerContext, mapping: &GenericMapping, generi
         Type::Func(ft) => {
             let mut args = Vec::new();
             for t in &ft.args {
-                args.push(make_concrete_type(ctx, mapping, t)?);
+                args.push(FuncArg {
+                    typ: make_concrete_type(ctx, mapping, &t.typ)?,
+                    mutable: t.mutable,
+                });
             }
 
             func_type(args, make_concrete_type(ctx, mapping, &ft.return_type)?)
@@ -528,7 +531,10 @@ pub fn instantiate(
             arg.mutable,
             arg.span.clone(),
         ));
-        arg_types.push(arg_typ);
+        arg_types.push(FuncArg {
+            typ: arg_typ,
+            mutable: arg.mutable,
+        });
     }
 
     let return_type = make_concrete(ctx, generic_args, &func.sig.return_type, &func.sig.span)?;
@@ -538,7 +544,6 @@ pub fn instantiate(
         args,
         span: func.sig.span.clone(),
         typ: func_type(arg_types, return_type),
-        rvo: false,
     };
 
     let body = substitute_expr(ctx, generic_args, &func.expression)?;

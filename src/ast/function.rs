@@ -2,6 +2,8 @@ use crate::ast::{func_type, prefix, Expression, TreePrinter, Type};
 use crate::span::Span;
 use serde_derive::{Deserialize, Serialize};
 
+use super::FuncArg;
+
 #[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct Argument {
     pub name: String,
@@ -35,7 +37,6 @@ pub struct FunctionSignature {
     pub args: Vec<Argument>,
     pub span: Span,
     pub typ: Type,
-    pub rvo: bool,
 }
 
 impl FunctionSignature {
@@ -48,11 +49,10 @@ impl FunctionSignature {
                     .args
                     .iter()
                     .enumerate()
-                    .map(|(idx, at)| Argument::new(format!("arg{}", idx), at.clone(), false, Span::default()))
+                    .map(|(idx, at)| Argument::new(format!("arg{}", idx), at.typ.clone(), at.mutable, Span::default()))
                     .collect(),
                 span: Span::default(),
                 typ: typ.clone(),
-                rvo: false,
             };
 
             Some(s)
@@ -63,7 +63,13 @@ impl FunctionSignature {
 
     pub fn get_type(&self) -> Type {
         func_type(
-            self.args.iter().map(|arg| arg.typ.clone()).collect(),
+            self.args
+                .iter()
+                .map(|arg| FuncArg {
+                    typ: arg.typ.clone(),
+                    mutable: arg.mutable,
+                })
+                .collect(),
             self.return_type.clone(),
         )
     }
@@ -124,7 +130,6 @@ pub fn sig(name: &str, ret: Type, args: Vec<Argument>, span: Span) -> FunctionSi
         args,
         span,
         typ: Type::Unknown,
-        rvo: false,
     }
 }
 

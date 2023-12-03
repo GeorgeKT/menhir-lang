@@ -98,8 +98,8 @@ unsafe fn func_to_llvm_type(
 ) -> CompileResult<LLVMTypeRef> {
     let mut llvm_arg_types = Vec::with_capacity(ft.args.len());
     for arg in &ft.args {
-        let mut arg_type = to_llvm_type(context, target_machine, arg)?;
-        if !arg.pass_by_value() {
+        let mut arg_type = to_llvm_type(context, target_machine, &arg.typ)?;
+        if !arg.typ.pass_by_value() {
             arg_type = LLVMPointerType(arg_type, 0);
         }
         llvm_arg_types.push(arg_type);

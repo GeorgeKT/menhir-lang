@@ -1,4 +1,4 @@
-use crate::ast::{ptr_type, Argument, Type};
+use crate::ast::{func_type, ptr_type, Argument, FuncArg, Type};
 use crate::bytecode::{
     store_operand_instr, void_call_instr, ByteCodeFunction, ByteCodeModule, Instruction, Operand, Var,
 };
@@ -20,6 +20,18 @@ fn rvo_func(func: &mut ByteCodeFunction) {
         Span::default(),
     ));
 
+    func.sig.typ = func_type(
+        func.sig
+            .args
+            .iter()
+            .map(|a| FuncArg {
+                typ: a.typ.clone(),
+                mutable: a.mutable,
+            })
+            .collect(),
+        Type::Void,
+    );
+
     func.replace_instruction(|instr: &Instruction| {
         if let Instruction::Return(ref operand) = *instr {
             vec![
@@ -30,8 +42,6 @@ fn rvo_func(func: &mut ByteCodeFunction) {
             Vec::new()
         }
     });
-
-    func.sig.rvo = true;
 }
 
 fn rvo_replace_calls(bc_func: &mut ByteCodeFunction, rvo_calls: &[String]) {

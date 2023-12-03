@@ -41,7 +41,7 @@ fn build_command(bc: BuildCommand) -> CompileResult<i32> {
     };
 
     let pkg = PackageData::single_file(&bc.input_file, output_type)?;
-    pkg.build(&build_options)?;
+    pkg.build(&build_options, &None)?;
     Ok(0)
 }
 
@@ -73,7 +73,7 @@ fn build_package_command(b: BuildPkgCommand) -> CompileResult<i32> {
         force_rebuild: b.force_rebuild,
         show_timing: b.show_timing,
     };
-    pkg.build(&build_options)?;
+    pkg.build(&build_options, &None)?;
     Ok(0)
 }
 
@@ -106,7 +106,7 @@ fn run_command(r: RunCommand) -> CompileResult<i32> {
         force_rebuild: r.force_rebuild,
         show_timing: r.show_timing,
     };
-    pkg.build(&build_options)?;
+    pkg.build(&build_options, &r.target)?;
     let ec = pkg.run(&r.target, &build_options, &r)?;
     Ok(ec.code().unwrap_or(255))
 }

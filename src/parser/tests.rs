@@ -502,7 +502,10 @@ fn test_function_with_func_type() {
                 vec![Argument::new(
                     "a",
                     func_type(
-                        vec![target.native_int_type.clone(), target.native_int_type.clone(),],
+                        vec![
+                            func_arg(target.native_int_type.clone(), false),
+                            func_arg(target.native_int_type.clone(), false)
+                        ],
                         target.native_int_type.clone(),
                     ),
                     false,

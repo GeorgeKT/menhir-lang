@@ -98,14 +98,45 @@ impl PackageData {
         Ok(package)
     }
 
-    pub fn build(&self, build_options: &BuildOptions) -> CompileResult<()> {
+    fn get_target(&self, target: &str) -> Option<&PackageTarget> {
+        for t in &self.target {
+            if t.name == target {
+                return Some(t);
+            }
+        }
+        None
+    }
+
+    fn build_target_and_dependencies(&self, build_options: &BuildOptions, target: &str) -> CompileResult<()> {
+        let Some(t) = self.get_target(target) else {
+            return Err(CompileError::Other(format!("Unknown target {target}")));
+        };
+
+        if let Some(deps) = &t.depends {
+            for dep in deps {
+                if self.get_target(dep).is_some() {
+                    self.build_target_and_dependencies(build_options, dep)?;
+                }
+            }
+        }
+
+        time_operation_mut(build_options.show_timing, 2, "Total build time", || {
+            t.build(build_options, &self.package)
+        })?;
+        Ok(())
+    }
+
+    pub fn build(&self, build_options: &BuildOptions, target_name: &Option<String>) -> CompileResult<()> {
         println!("Compiling for {}", build_options.target_machine.target.triplet);
+        if let Some(tgt) = target_name {
+            return self.build_target_and_dependencies(build_options, tgt.as_str());
+        }
+
         for t in &self.target {
             time_operation_mut(build_options.show_timing, 2, "Total build time", || {
                 t.build(build_options, &self.package)
             })?;
         }
-
         Ok(())
     }
 

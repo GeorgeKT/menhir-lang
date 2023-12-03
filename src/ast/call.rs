@@ -1,4 +1,4 @@
-use crate::ast::{func_type, prefix, Expression, GenericMapping, IntSize, NameRef, TreePrinter, Type};
+use crate::ast::{prefix, Expression, GenericMapping, NameRef, TreePrinter, Type};
 use crate::span::Span;
 use serde_derive::{Deserialize, Serialize};
 
@@ -9,6 +9,7 @@ pub struct Call {
     pub span: Span,
     pub generic_args: GenericMapping,
     pub return_type: Type,
+    pub function_type: Type,
 }
 
 impl Call {
@@ -19,12 +20,12 @@ impl Call {
             span,
             generic_args: GenericMapping::new(),
             return_type: Type::Unknown,
+            function_type: Type::Unknown,
         }
     }
 
-    pub fn callee_type(&self, int_size: IntSize) -> Type {
-        let arg_types = self.args.iter().map(|e| e.get_type(int_size)).collect();
-        func_type(arg_types, self.return_type.clone())
+    pub fn callee_type(&self) -> Type {
+        self.function_type.clone()
     }
 }
 

@@ -3,7 +3,6 @@ use super::{
     TreePrinter, TypeDeclaration,
 };
 use crate::compileerror::CompileResult;
-use crate::target::Target;
 use std::collections::{HashMap, HashSet};
 
 pub struct Module {
@@ -33,13 +32,13 @@ impl Module {
         !self.functions.contains_key(&call.callee.name) && !self.externals.contains_key(&call.callee.name)
     }
 
-    fn get_imported_symbols(&self, target: &Target) -> HashMap<String, Symbol> {
+    fn get_imported_symbols(&self) -> HashMap<String, Symbol> {
         let mut symbols = HashMap::new();
         for func in self.functions.values() {
             let mut find_imported_calls = |e: &Expression| -> CompileResult<()> {
                 match *e {
                     Expression::Call(ref call) if self.is_imported_call(call) => {
-                        let typ = call.callee_type(target.int_size);
+                        let typ = call.callee_type();
                         let symbol = Symbol::new(&call.callee.name, &typ, false, &call.span, SymbolType::External);
                         symbols.insert(call.callee.name.clone(), symbol);
                     }
@@ -54,7 +53,7 @@ impl Module {
         symbols
     }
 
-    pub fn get_exported_symbols(&self, target: &Target) -> Import {
+    pub fn get_exported_symbols(&self) -> Import {
         let mut import = Import::new(self.name.clone());
         for (name, binding) in &self.globals {
             import.symbols.insert(
@@ -93,7 +92,7 @@ impl Module {
             );
         }
 
-        import.imported_symbols = self.get_imported_symbols(target);
+        import.imported_symbols = self.get_imported_symbols();
         import
     }
 }

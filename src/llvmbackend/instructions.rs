@@ -54,7 +54,7 @@ pub unsafe fn get_operand(ctx: &mut Context, operand: &Operand) -> CompileResult
     match operand {
         Operand::Func(func) => {
             let fi = ctx.get_function(func).expect("Unknown function");
-            Ok(ValueRef::new(fi.function, fi.typ.clone()))
+            Ok(ValueRef::new(fi.function, fi.sig.typ.clone()))
         }
 
         Operand::Var(v) => ctx.get_variable(&v.name, &v.typ),
@@ -92,7 +92,7 @@ pub unsafe fn copy(ctx: &Context, dst: LLVMValueRef, src: LLVMValueRef, typ: LLV
     Ok(())
 }
 
-unsafe fn get_function_arg(ctx: &mut Context, operand: &Operand) -> CompileResult<LLVMValueRef> {
+unsafe fn get_function_arg(ctx: &mut Context, operand: &Operand, mutable: bool) -> CompileResult<LLVMValueRef> {
     match operand {
         Operand::Var(v) => {
             let src = ctx.get_variable(&v.name, &v.typ)?;
@@ -109,10 +109,12 @@ unsafe fn get_function_arg(ctx: &mut Context, operand: &Operand) -> CompileResul
                 src.load(ctx)
             } else if v.typ == src.typ {
                 Ok(src.value)
-            } else {
+            } else if mutable {
                 let dst = ctx.stack_alloc("argcopy", inner_type)?;
                 copy(ctx, dst, src.value, ctx.resolve_type(inner_type)?)?;
                 Ok(dst)
+            } else {
+                Ok(src.value)
             }
         }
 
@@ -345,14 +347,7 @@ pub unsafe fn gen_instruction(
             dst_var.store(ctx, &vr)?;
             if let Operand::Func(name) = src {
                 let fi = ctx.get_function(name).expect("Unknown function");
-                gen_function_ptr(
-                    ctx,
-                    &dst.name,
-                    vr.value,
-                    fi.return_type.clone(),
-                    dst.typ.clone(),
-                    fi.rvo,
-                )?;
+                gen_function_ptr(ctx, &dst.name, vr.value, fi.sig.clone())?;
             }
         }
 
@@ -408,18 +403,21 @@ pub unsafe fn gen_instruction(
             let func = ctx
                 .get_function(func)
                 .ok_or_else(|| code_gen_error(format!("Unknown function {}", func)))?;
+
             let mut func_args = Vec::with_capacity(args.len());
-            for arg in args {
-                func_args.push(get_function_arg(ctx, arg)?);
+            for (arg, arg_def) in args.iter().zip(func.sig.args.iter()) {
+                let fa = get_function_arg(ctx, arg, arg_def.mutable)?;
+                func_args.push(fa);
             }
 
+            let ct = ctx.resolve_type(&func.sig.typ)?;
             let call = LLVMBuildCall2(
                 ctx.builder,
-                ctx.resolve_type(&func.typ)?,
+                ct,
                 func.function,
                 func_args.as_mut_ptr(),
                 args.len() as c_uint,
-                if func.return_type != Type::Void {
+                if func.sig.return_type != Type::Void {
                     cstr!("call")
                 } else {
                     cstr!("")
@@ -427,7 +425,7 @@ pub unsafe fn gen_instruction(
             );
 
             if let Some(dst) = dst {
-                let ret = ValueRef::new(call, func.return_type.clone());
+                let ret = ValueRef::new(call, func.sig.return_type.clone());
                 ctx.set_variable(&dst.name, ret)?;
             }
         }

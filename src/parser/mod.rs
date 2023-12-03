@@ -319,14 +319,29 @@ fn parse_generic_type(tq: &mut TokenQueue, indent_level: usize, target: &Target)
     }
 }
 
+fn parse_function_type_arg(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<FuncArg> {
+    let mutable = if tq.is_next(&TokenKind::Var) {
+        tq.expect(&TokenKind::Var)?;
+        true
+    } else {
+        false
+    };
+
+    let (typ, _) = parse_type(tq, indent_level, target)?;
+    Ok(FuncArg { typ, mutable })
+}
+
 fn parse_function_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<(Type, Span)> {
     // Function signature: fn(a, b) -> c
     let start = tq.expect(&TokenKind::Func)?.span;
     tq.expect(&TokenKind::OpenParen)?;
-    let args = parse_comma_separated_list(tq, &TokenKind::CloseParen, parse_type, indent_level, target)?
-        .into_iter()
-        .map(|(t, _)| t)
-        .collect();
+    let args = parse_comma_separated_list(
+        tq,
+        &TokenKind::CloseParen,
+        parse_function_type_arg,
+        indent_level,
+        target,
+    )?;
     tq.expect(&TokenKind::Arrow)?;
     let (ret, span) = parse_type(tq, indent_level, target)?;
     Ok((func_type(args, ret), start.expanded(span.end)))
@@ -1375,12 +1390,12 @@ pub fn parse_file(file_path: &Path, namespace: &str, target: &Target, show_timin
 }
 
 #[cfg(test)]
-use crate::package::Package;
+use crate::build::Package;
 
 #[cfg(test)]
 pub fn parse_str(code: &str, root_namespace: &str, target: &Target) -> CompileResult<Package> {
+    use crate::build::PackageDescription;
     use crate::llvmbackend::OutputType;
-    use crate::packagebuild::PackageDescription;
     use std::io::Cursor;
 
     let mut pkg = Package::new(root_namespace, OutputType::Binary, &PackageDescription::default());

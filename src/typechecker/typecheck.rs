@@ -325,7 +325,7 @@ fn resolve_generic_args_in_call(
     loop {
         arg_types.clear();
         for (arg, expected_arg_type) in c.args.iter_mut().zip(ft.args.iter()) {
-            let expected_arg_type = make_concrete(ctx, &c.generic_args, expected_arg_type, &arg.span())?;
+            let expected_arg_type = make_concrete(ctx, &c.generic_args, &expected_arg_type.typ, &arg.span())?;
             let arg_type = type_check_expression(ctx, arg, Some(&expected_arg_type), target)?;
             let arg_type = make_concrete(ctx, &c.generic_args, &arg_type, &arg.span())?;
 
@@ -365,7 +365,7 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call, target: &Target) 
 
         let arg_types = resolve_generic_args_in_call(ctx, ft, c, target)?;
         for (idx, arg) in c.args.iter_mut().enumerate() {
-            let expected_arg_type = make_concrete(ctx, &c.generic_args, &ft.args[idx], &arg.span())?;
+            let expected_arg_type = make_concrete(ctx, &c.generic_args, &ft.args[idx].typ, &arg.span())?;
             let arg_type = &arg_types[idx];
             convert_type(ctx, &expected_arg_type, arg_type, arg, target)?;
         }
@@ -375,7 +375,8 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call, target: &Target) 
             return valid(c.return_type.clone());
         }
         c.return_type = ft.return_type.clone();
-        valid(ft.return_type.clone())
+        c.function_type = Type::Func(ft.clone());
+        valid(c.return_type.clone())
     } else {
         type_error_result(&c.span, format!("{} is not callable", c.callee.name))
     }
@@ -526,7 +527,7 @@ fn is_instantiation_of(concrete_type: &Type, generic_type: &Type) -> bool {
                 && a.args
                     .iter()
                     .zip(b.args.iter())
-                    .all(|(ma, mb)| is_instantiation_of(ma, mb))
+                    .all(|(ma, mb)| is_instantiation_of(&ma.typ, &mb.typ))
         }
         (Type::Sum(a), Type::Sum(b)) => a
             .cases

@@ -37,15 +37,15 @@ impl Lambda {
                     );
                 }
 
-                for (arg_typ, ref mut arg) in ft.args.iter().zip(self.sig.args.iter_mut()) {
+                for (ft_arg, ref mut arg) in ft.args.iter().zip(self.sig.args.iter_mut()) {
                     if arg.typ.is_generic() {
-                        arg.typ = arg_typ.clone();
-                    } else if arg.typ != *arg_typ {
+                        arg.typ = ft_arg.typ.clone();
+                    } else if arg.typ != ft_arg.typ {
                         return type_error_result(
                             &self.span,
                             format!(
                                 "Type mismatch in lambda expression, argument {}, has type {} not {}",
-                                arg.name, arg.typ, arg_typ
+                                arg.name, arg.typ, ft_arg.typ
                             ),
                         );
                     }

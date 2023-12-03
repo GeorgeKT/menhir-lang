@@ -95,8 +95,11 @@ pub fn fill_in_generics(
 
             let mut new_args = Vec::with_capacity(generic_ft.args.len());
             for (ga, aa) in generic_ft.args.iter().zip(actual_ft.args.iter()) {
-                let na = fill_in_generics(ctx, aa, ga, known_types, span)?;
-                new_args.push(na);
+                let na = fill_in_generics(ctx, &aa.typ, &ga.typ, known_types, span)?;
+                new_args.push(FuncArg {
+                    typ: na,
+                    mutable: ga.mutable,
+                });
             }
 
             let nr = fill_in_generics(ctx, &actual_ft.return_type, &generic_ft.return_type, known_types, span)?;
@@ -173,7 +176,7 @@ pub fn fill_in_generics(
 mod tests {
     use super::*;
     use crate::ast::{
-        array_type, func_type, generic_type, ptr_type, slice_type, string_type, GenericMapping, IntSize, Type,
+        array_type, func_arg, func_type, generic_type, ptr_type, slice_type, string_type, GenericMapping, IntSize, Type,
     };
     use crate::span::Span;
     use crate::typechecker::instantiate::make_concrete;
@@ -250,11 +253,19 @@ mod tests {
         let ctx = TypeCheckerContext::new(ImportSymbolResolver::ImportMap(&imports));
         let mut tm = GenericMapping::new();
         let ga = func_type(
-            vec![generic_type("a"), generic_type("b"), generic_type("c")],
+            vec![
+                func_arg(generic_type("a"), false),
+                func_arg(generic_type("b"), false),
+                func_arg(generic_type("c"), false),
+            ],
             generic_type("d"),
         );
         let aa = func_type(
-            vec![Type::Int(IntSize::I32), Type::Float(FloatSize::F64), Type::Bool],
+            vec![
+                func_arg(Type::Int(IntSize::I32), false),
+                func_arg(Type::Float(FloatSize::F64), false),
+                func_arg(Type::Bool, false),
+            ],
             string_type(),
         );
         let r = fill_in_generics(&ctx, &aa, &ga, &mut tm, &Span::default());
@@ -273,15 +284,19 @@ mod tests {
         let ctx = TypeCheckerContext::new(ImportSymbolResolver::ImportMap(&imports));
         let mut tm = GenericMapping::new();
         let ga = func_type(
-            vec![generic_type("a"), generic_type("b"), generic_type("c")],
+            vec![
+                func_arg(generic_type("a"), false),
+                func_arg(generic_type("b"), false),
+                func_arg(generic_type("c"), false),
+            ],
             generic_type("d"),
         );
         let aa = func_type(
             vec![
-                Type::Int(IntSize::I32),
-                Type::Float(FloatSize::F64),
-                Type::Bool,
-                Type::Int(IntSize::I32),
+                func_arg(Type::Int(IntSize::I32), false),
+                func_arg(Type::Float(FloatSize::F64), false),
+                func_arg(Type::Bool, false),
+                func_arg(Type::Int(IntSize::I32), false),
             ],
             string_type(),
         );
@@ -298,19 +313,19 @@ mod tests {
         let mut tm = GenericMapping::new();
         let ga = func_type(
             vec![
-                generic_type("a"),
-                generic_type("b"),
-                generic_type("c"),
-                Type::Int(IntSize::I32),
+                func_arg(generic_type("a"), false),
+                func_arg(generic_type("b"), false),
+                func_arg(generic_type("c"), false),
+                func_arg(Type::Int(IntSize::I32), false),
             ],
             generic_type("d"),
         );
         let aa = func_type(
             vec![
-                Type::Int(IntSize::I32),
-                Type::Float(FloatSize::F64),
-                Type::Bool,
-                Type::Int(IntSize::I32),
+                func_arg(Type::Int(IntSize::I32), false),
+                func_arg(Type::Float(FloatSize::F64), false),
+                func_arg(Type::Bool, false),
+                func_arg(Type::Int(IntSize::I32), false),
             ],
             string_type(),
         );
@@ -358,14 +373,23 @@ mod tests {
         .unwrap();
         add(&mut tm, &generic_type("c"), &Type::Bool, &Span::default()).unwrap();
 
-        let ga = func_type(vec![generic_type("a"), generic_type("b")], generic_type("c"));
-        let aa = func_type(vec![Type::Unknown, Type::Unknown], Type::Unknown);
+        let ga = func_type(
+            vec![func_arg(generic_type("a"), false), func_arg(generic_type("b"), false)],
+            generic_type("c"),
+        );
+        let aa = func_type(
+            vec![func_arg(Type::Unknown, false), func_arg(Type::Unknown, false)],
+            Type::Unknown,
+        );
         let r = fill_in_generics(&ctx, &aa, &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
         println!("r: {:?}", r);
         assert!(
             r == Ok(func_type(
-                vec![Type::Int(IntSize::I32), Type::Float(FloatSize::F64)],
+                vec![
+                    func_arg(Type::Int(IntSize::I32), false),
+                    func_arg(Type::Float(FloatSize::F64), false)
+                ],
                 Type::Bool
             ))
         );

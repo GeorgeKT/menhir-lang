@@ -64,8 +64,14 @@ pub struct StructType {
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
+pub struct FuncArg {
+    pub typ: Type,
+    pub mutable: bool,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct FuncType {
-    pub args: Vec<Type>,
+    pub args: Vec<FuncArg>,
     pub return_type: Type,
 }
 
@@ -301,7 +307,7 @@ impl Type {
             Type::Generic(_) => true,
             Type::Array(at) => at.element_type.is_generic(),
             Type::Slice(st) => st.element_type.is_generic(),
-            Type::Func(ft) => ft.return_type.is_generic() || ft.args.iter().any(|a| a.is_generic()),
+            Type::Func(ft) => ft.return_type.is_generic() || ft.args.iter().any(|a| a.typ.is_generic()),
             Type::Struct(st) => st.members.iter().any(|m| m.typ.is_generic()),
             Type::Sum(st) => st.cases.iter().any(|c| c.typ.is_generic()),
             Type::Unresolved(ut) => ut.generic_args.iter().any(|t| t.is_generic()),
@@ -411,8 +417,12 @@ impl Type {
     }
 }
 
-pub fn func_type(args: Vec<Type>, ret: Type) -> Type {
+pub fn func_type(args: Vec<FuncArg>, ret: Type) -> Type {
     Type::Func(Rc::new(FuncType { args, return_type: ret }))
+}
+
+pub fn func_arg(typ: Type, mutable: bool) -> FuncArg {
+    FuncArg { typ, mutable }
 }
 
 pub fn array_type(element_type: Type, len: usize) -> Type {
@@ -568,6 +578,15 @@ impl fmt::Display for GenericType {
     }
 }
 
+impl fmt::Display for FuncArg {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        if self.mutable {
+            write!(f, "var {}", self.typ)
+        } else {
+            write!(f, "{}", self.typ)
+        }
+    }
+}
 impl TreePrinter for Type {
     fn print(&self, level: usize) {
         println!("{}{}", prefix(level), self);

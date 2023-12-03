@@ -2,25 +2,21 @@ use llvm_sys::prelude::*;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast::Type;
+use crate::ast::FunctionSignature;
 use crate::llvmbackend::valueref::ValueRef;
 
 pub struct FunctionInstance {
     pub function: LLVMValueRef,
     pub name: String,
-    pub return_type: Type,
-    pub typ: Type,
-    pub rvo: bool,
+    pub sig: FunctionSignature,
 }
 
 impl FunctionInstance {
-    pub fn new(name: &str, func: LLVMValueRef, return_type: Type, typ: Type, rvo: bool) -> FunctionInstance {
+    pub fn new(func: LLVMValueRef, name: impl Into<String>, sig: FunctionSignature) -> FunctionInstance {
         FunctionInstance {
-            name: name.into(),
             function: func,
-            return_type,
-            typ,
-            rvo,
+            sig,
+            name: name.into(),
         }
     }
 }

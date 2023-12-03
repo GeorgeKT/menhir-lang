@@ -275,7 +275,7 @@ impl Package {
                         type_check_module(module, target, &imports)?;
                         self.import_data
                             .imports
-                            .insert(module.name.clone(), Rc::new(module.get_exported_symbols(target)));
+                            .insert(module.name.clone(), Rc::new(module.get_exported_symbols()));
                         count += 1;
                     }
 
