@@ -116,10 +116,7 @@ fn resolve_function_args_and_ret_type(
             }
         }
 
-        args.push(FuncArg {
-            typ: arg.typ.clone(),
-            mutable: arg.mutable,
-        });
+        args.push(func_arg(arg.typ.clone(), arg.mutable));
     }
 
     sig.typ = func_type(args, sig.return_type.clone());

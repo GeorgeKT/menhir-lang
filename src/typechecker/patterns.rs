@@ -318,13 +318,13 @@ fn type_check_ok_pattern_match(
         target_is_mutable,
         target,
     )?;
-    ok.inner_type = e_type.clone();
+    ok.inner_type = rt.ok_typ.clone();
     Ok(e_type)
 }
 
 fn type_check_error_pattern_match(
     ctx: &mut TypeCheckerContext,
-    ok: &mut ErrorPattern,
+    err: &mut ErrorPattern,
     e: &mut Expression,
     target_type: &Type,
     return_type: &Type,
@@ -332,19 +332,19 @@ fn type_check_error_pattern_match(
     target: &Target,
 ) -> CompileResult<Type> {
     let Type::Result(rt) = target_type else {
-        return type_error_result(&ok.span, format!("Cannot match type {} to result type", target_type));
+        return type_error_result(&err.span, format!("Cannot match type {} to result type", target_type));
     };
 
     let e_type = type_check_pattern_match(
         ctx,
-        &mut ok.inner,
+        &mut err.inner,
         e,
         &rt.err_typ,
         return_type,
         target_is_mutable,
         target,
     )?;
-    ok.inner_type = e_type.clone();
+    err.inner_type = rt.err_typ.clone();
     Ok(e_type)
 }
 

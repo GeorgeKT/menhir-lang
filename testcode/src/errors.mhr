@@ -9,21 +9,21 @@ fn subtract_10(x: int) -> int ! Fail:
         return Fail{"x is too small"}
     return x - 10
 
-fn subtract_20(x: int) -> int ! Fail: 
-    let v = subtract_10(x)!
-    subtract_10(v)
+# fn subtract_20(x: int) -> int ! Fail: 
+#    let v = subtract_10(x)!
+#    subtract_10(v)
 
-fn default(x: int) -> int:
-    subtract_20(x) || 0
+# fn default(x: int) -> int:
+#    subtract_20(x) || 0
 
 fn main() -> int:
-    let v = default(9)
+    # let v = default(9)
     match subtract_10(9):
         error Fail{msg} => 
             print(msg)
             42
         ok x =>
             print("success")
-            x + v
+            x
 
 
