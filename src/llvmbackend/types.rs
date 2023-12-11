@@ -135,7 +135,7 @@ unsafe fn optional_to_llvm_type(
 ) -> CompileResult<LLVMTypeRef> {
     let inner = to_llvm_type(context, target_machine, inner)?;
     let mut member_types = vec![
-        LLVMInt1TypeInContext(context), // nil or not
+        native_llvm_int_type(context, target_machine), // nil or not
         inner,
     ];
     Ok(LLVMStructTypeInContext(

@@ -1,7 +1,7 @@
-use crate::bytecode::function::ByteCodeFunction;
-use crate::bytecode::instruction::{Instruction, Operand};
-use crate::bytecode::ByteCodeModule;
 use crate::compileerror::print_message;
+use crate::lazycode::function::ByteCodeFunction;
+use crate::lazycode::ByteCodeModule;
+use crate::lazycode::Operand;
 use std::collections::HashSet;
 
 // Find all calls recursively, and remove them from the unused_calls HashSet
@@ -21,22 +21,9 @@ fn find_used_calls_rec(
         }
     };
 
-    func.for_each_instruction(|instr: &Instruction| {
-        match instr {
-            Instruction::Call { func, .. } => {
-                handle_func(func);
-            }
-
-            Instruction::Store {
-                src: Operand::Func(func),
-                ..
-            } => {
-                handle_func(func);
-            }
-
-            _ => (),
-        }
-        true
+    func.visit_operands(&mut |op: &Operand| match op {
+        Operand::Func { name, .. } => handle_func(&name),
+        _ => (),
     })
 }
 

@@ -9,8 +9,8 @@ use super::instructions::*;
 use super::symboltable::FunctionInstance;
 use super::valueref::ValueRef;
 use crate::ast::*;
-use crate::bytecode::*;
-use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
+use crate::compileerror::{code_gen_error, CompileResult};
+use crate::lazycode::*;
 
 pub unsafe fn gen_function_sig(
     ctx: &mut Context,
@@ -51,9 +51,7 @@ pub unsafe fn gen_function_ptr(
 }
 
 pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction) -> CompileResult<()> {
-    let Some(fi) = ctx.get_function(&func.sig.name) else {
-        return code_gen_result("Internal Compiler Error: Unknown function");
-    };
+    let fi = ctx.get_function(&func.sig.name)?;
 
     let entry_bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, cstr!("entry"));
     LLVMPositionBuilderAtEnd(ctx.builder, entry_bb);
@@ -91,21 +89,21 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction) -> Compil
     let mut blocks = HashMap::new();
     blocks.insert(0, entry_bb);
 
-    for (bb_ref, bb) in &func.blocks {
+    for (idx, bb) in func.blocks.iter() {
         if bb.name != "entry" {
             let bb_name = CString::new(bb.name.as_bytes()).map_err(|_| code_gen_error("Invalid block name"))?;
             let new_bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, bb_name.as_ptr());
-            blocks.insert(*bb_ref, new_bb);
+            blocks.insert(*idx, new_bb);
         }
     }
 
-    for (bb_ref, block) in &func.blocks {
+    for (bb_ref, block) in func.blocks.iter() {
         let bb = blocks
-            .get(bb_ref)
+            .get(&bb_ref)
             .ok_or_else(|| code_gen_error("Unknown basic block"))?;
         LLVMPositionBuilderAtEnd(ctx.builder, *bb);
         for inst in &block.instructions {
-            gen_instruction(ctx, inst, &blocks)?;
+            gen_instruction(ctx, func, inst, &blocks)?;
         }
     }
 

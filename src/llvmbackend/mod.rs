@@ -9,6 +9,7 @@ macro_rules! cstr {
 mod context;
 mod function;
 mod instructions;
+mod operand;
 mod symboltable;
 mod target;
 mod types;
@@ -36,8 +37,8 @@ pub use self::target::TargetMachine;
 use self::valueref::ValueRef;
 use crate::ast::ptr_type;
 use crate::build::PackageDescription;
-use crate::bytecode::{ByteCodeModule, Constant};
 use crate::compileerror::{code_gen_error, CompileResult};
+use crate::lazycode::{ByteCodeModule, Constant};
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, Default, PartialEq, Eq)]

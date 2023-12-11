@@ -1,8 +1,8 @@
 mod ast;
 mod build;
-mod bytecode;
 mod cli;
 mod compileerror;
+mod lazycode;
 mod llvmbackend;
 mod parser;
 mod span;

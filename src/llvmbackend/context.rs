@@ -1,8 +1,8 @@
-use super::symboltable::{FunctionInstance, SymbolTable, VariableInstance};
+use super::symboltable::{FunctionInstance, SymbolTable, VariableInstance, VariableInstancePtr};
 use super::target::TargetMachine;
 use super::valueref::ValueRef;
 use super::CodeGenOptions;
-use crate::ast::{ptr_type, Type};
+use crate::ast::{IntSize, Type};
 use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
 use llvm_sys::core::*;
 use llvm_sys::prelude::*;
@@ -54,10 +54,8 @@ impl Context {
     }
 
     pub fn set_variable(&mut self, name: &str, vr: ValueRef) -> CompileResult<()> {
-        if let Some(vi) = self.get_variable_instance(name) {
-            unsafe {
-                vi.value.store(self, &vr)?;
-            }
+        if let Ok(vi) = self.get_variable(name) {
+            vi.store(self, &vr)?;
             Ok(())
         } else {
             let var = Rc::new(VariableInstance {
@@ -68,7 +66,7 @@ impl Context {
         }
     }
 
-    pub fn add_variable_instance(&mut self, vi: Rc<VariableInstance>) -> CompileResult<()> {
+    fn add_variable_instance(&mut self, vi: VariableInstancePtr) -> CompileResult<()> {
         self.stack
             .last_mut()
             .ok_or_else(|| code_gen_error("Stack is empty"))?
@@ -96,25 +94,13 @@ impl Context {
         }
     }
 
-    fn get_variable_instance(&self, name: &str) -> Option<Rc<VariableInstance>> {
+    pub fn get_variable(&self, name: &str) -> CompileResult<VariableInstancePtr> {
         for sf in self.stack.iter().rev() {
-            let v = sf.symbols.get_variable(name);
-            if v.is_some() {
-                return v;
+            if let Some(v) = sf.symbols.get_variable(name) {
+                return Ok(v.clone());
             }
         }
-        None
-    }
-
-    pub fn get_variable(&mut self, name: &str, typ: &Type) -> CompileResult<ValueRef> {
-        if let Some(vi) = self.get_variable_instance(name) {
-            return Ok(vi.value.clone());
-        }
-
-        let val = self.stack_alloc(name, typ)?;
-        let ret = ValueRef::new(val, ptr_type(typ.clone()));
-        self.set_variable(name, ret.clone())?;
-        Ok(ret)
+        code_gen_result(format!("Unknown variable {name}"))
     }
 
     pub fn add_function(&mut self, f: Rc<FunctionInstance>) -> CompileResult<()> {
@@ -126,15 +112,14 @@ impl Context {
         Ok(())
     }
 
-    pub fn get_function(&self, name: &str) -> Option<Rc<FunctionInstance>> {
+    pub fn get_function(&self, name: &str) -> CompileResult<Rc<FunctionInstance>> {
         for sf in self.stack.iter().rev() {
-            let func = sf.symbols.get_function(name);
-            if func.is_some() {
-                return func;
+            if let Some(func) = sf.symbols.get_function(name) {
+                return Ok(func);
             }
         }
 
-        None
+        code_gen_result(format!("Unknown function {name}"))
     }
 
     pub fn push_stack(&mut self, func: LLVMValueRef) {
@@ -164,6 +149,10 @@ impl Context {
 
     pub fn native_uint_type(&self) -> CompileResult<LLVMTypeRef> {
         self.resolve_type(&self.target_machine.target.native_uint_type)
+    }
+
+    pub fn int_size(&self) -> IntSize {
+        self.target_machine.target.int_size
     }
 
     pub fn dump_module(&self) {

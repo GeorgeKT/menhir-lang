@@ -1,5 +1,5 @@
-use crate::bytecode::function::{BasicBlock, BasicBlockRef, ByteCodeFunction};
-use crate::bytecode::instruction::Instruction;
+use crate::lazycode::instruction::Instruction;
+use crate::lazycode::{BasicBlock, BasicBlockRef, ByteCodeFunction};
 
 // If the block only has a branch instruction to another block, it is considered empty
 fn empty_block(bb: &BasicBlock) -> Option<BasicBlockRef> {
@@ -7,8 +7,8 @@ fn empty_block(bb: &BasicBlock) -> Option<BasicBlockRef> {
         return None;
     }
 
-    if let Some(Instruction::Branch(bb_ref)) = bb.instructions.first() {
-        Some(*bb_ref)
+    if let Some(Instruction::Branch { block }) = bb.instructions.first() {
+        Some(*block)
     } else {
         None
     }
@@ -16,17 +16,13 @@ fn empty_block(bb: &BasicBlock) -> Option<BasicBlockRef> {
 
 fn replace_branch_target(func: &mut ByteCodeFunction, to_replace: BasicBlockRef, replacement: BasicBlockRef) {
     func.for_each_instruction_mut(|instr: &mut Instruction| {
-        match *instr {
-            Instruction::Branch(ref mut bb_ref) => {
-                if *bb_ref == to_replace {
-                    *bb_ref = replacement;
+        match instr {
+            Instruction::Branch { block } => {
+                if *block == to_replace {
+                    *block = replacement;
                 }
             }
-            Instruction::BranchIf {
-                ref mut on_true,
-                ref mut on_false,
-                ..
-            } => {
+            Instruction::BranchIf { on_true, on_false, .. } => {
                 if *on_true == to_replace {
                     *on_true = replacement;
                 }

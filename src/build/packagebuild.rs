@@ -10,10 +10,10 @@ use std::process::ExitStatus;
 
 use super::{ExportLibrary, Package};
 use crate::ast::TreePrinter;
-use crate::bytecode::{compile_to_byte_code, optimize_module, OptimizationLevel};
 use crate::cli::Dump;
 use crate::cli::RunCommand;
 use crate::compileerror::{CompileError, CompileResult};
+use crate::lazycode::{compile_to_byte_code, optimize_module, OptimizationLevel};
 use crate::llvmbackend::TargetMachine;
 use crate::llvmbackend::{link, llvm_code_generation, CodeGenOptions, Context, OutputType};
 use crate::timer::{time_operation, time_operation_mut};

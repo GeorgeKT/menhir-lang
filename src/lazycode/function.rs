@@ -1,54 +1,41 @@
-use crate::ast::{Expression, FunctionSignature, Type};
-use crate::bytecode::instruction::Instruction;
-use itertools::free::join;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashSet};
 use std::fmt;
 
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct Var {
-    pub name: String,
-    pub typ: Type,
-}
+use itertools::join;
 
-impl Var {
-    pub fn new(idx: usize, typ: Type) -> Var {
-        Var {
-            name: format!("$var{}", idx),
-            typ,
-        }
-    }
-
-    pub fn named(name: &str, typ: Type) -> Var {
-        Var { name: name.into(), typ }
-    }
-}
-
-impl fmt::Display for Var {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "({}: {})", self.name, self.typ)
-    }
-}
+use super::{
+    instruction::{BasicBlockRef, Instruction},
+    operand::Operand,
+};
+use crate::ast::{Expression, FunctionSignature, Type};
 
 #[derive(Debug)]
 pub struct Scope {
-    named_vars: HashMap<String, Var>,
+    names: HashSet<String>,
     unwind: Vec<Expression>, // Destructor calls
 }
 
 impl Scope {
     pub fn new() -> Scope {
         Scope {
-            named_vars: HashMap::new(),
+            names: HashSet::new(),
             unwind: Vec::new(),
         }
     }
 
-    pub fn add_named_var(&mut self, var: Var) {
-        self.named_vars.insert(var.name.clone(), var);
+    /// Add a name, if already in use append a number
+    pub fn add_name(&mut self, name: &str) -> String {
+        let mut full_name = String::from(name);
+        let mut cnt = 1;
+        while self.names.contains(&full_name) {
+            full_name = format!("{name}{cnt}");
+            cnt += 1;
+        }
+
+        self.names.insert(full_name.clone());
+        full_name
     }
 }
-
-pub type BasicBlockRef = usize;
 
 pub fn bb_name(bb: BasicBlockRef) -> String {
     if bb == 0 {
@@ -95,9 +82,7 @@ pub struct ByteCodeFunction {
     pub external: bool,
     current_bb: usize,
     bb_counter: usize,
-    var_counter: usize,
     scopes: Vec<Scope>,
-    destinations: Vec<Option<Var>>,
 }
 
 impl ByteCodeFunction {
@@ -108,20 +93,29 @@ impl ByteCodeFunction {
             external,
             current_bb: 0,
             bb_counter: 0,
-            var_counter: 0,
             scopes: vec![Scope::new()],
-            destinations: Vec::new(),
         };
+
+        f.sig.do_rvo();
 
         if !external {
             let entry = f.create_basic_block();
             f.set_current_bb(entry);
-
-            for arg in &sig.args {
-                f.add_named_var(Var::named(&arg.name, arg.typ.clone()));
-            }
         }
         f
+    }
+
+    pub fn return_type(&self) -> Type {
+        if !self.sig.rvo {
+            self.sig.return_type.clone()
+        } else {
+            self.sig
+                .args
+                .last()
+                .expect("ICE: a function with rvo should have a last argument")
+                .typ
+                .clone()
+        }
     }
 
     pub fn add(&mut self, inst: Instruction) {
@@ -129,6 +123,17 @@ impl ByteCodeFunction {
         if let Some(bb) = self.blocks.get_mut(&idx) {
             bb.add(inst)
         }
+    }
+
+    pub fn declare(&mut self, name: &str, init: Option<Operand>, typ: Type) -> Operand {
+        let scope = self.scopes.last_mut().expect("ICE: empty scope stack");
+        let name = scope.add_name(name);
+        let var = Operand::Var {
+            name: name.clone(),
+            typ: typ.clone(),
+        };
+        self.add(Instruction::Declare { name, init, typ });
+        var
     }
 
     pub fn create_basic_block(&mut self) -> BasicBlockRef {
@@ -144,40 +149,26 @@ impl ByteCodeFunction {
         self.current_bb = bb_ref;
     }
 
-    pub fn new_var(&mut self, typ: Type) -> Var {
-        let idx = self.var_counter;
-        self.var_counter += 1;
-        let v = Var::new(idx, typ);
-        self.add_named_var(v.clone());
-        v
-    }
-
-    pub fn push_scope(&mut self) {
-        let idx = self.current_bb;
-        let _insert_position = self
-            .blocks
-            .get_mut(&idx)
-            .map(|bb| bb.instructions.len() + 1)
-            .expect("Unknown block");
-        self.scopes.push(Scope::new());
-        self.add(Instruction::StartScope);
-    }
-
-    pub fn pop_scope(&mut self) {
-        let _s = self.scopes.pop().expect("Empty Scope Stack");
-        if !self.scopes.is_empty() {
-            // Add an endscope instruction, but not at function exit
-            self.add(Instruction::EndScope);
-        }
-    }
-
     pub fn last_instruction_is_return(&self) -> bool {
         let idx = self.current_bb;
         self.blocks
             .get(&idx)
             .and_then(|bb| bb.instructions.last())
-            .map(|i| matches!(i, Instruction::Return(_) | Instruction::ReturnVoid))
+            .map(|i| matches!(i, Instruction::Return { .. }))
             .unwrap_or(false)
+    }
+
+    pub fn push_scope(&mut self) {
+        self.scopes.push(Scope::new());
+        self.add(Instruction::ScopeStart);
+    }
+
+    pub fn pop_scope(&mut self) {
+        let _s = self.scopes.pop().expect("ICE: Empty Scope Stack");
+        if !self.scopes.is_empty() {
+            // Add an endscope instruction, but not at function exit
+            self.add(Instruction::ScopeEnd);
+        }
     }
 
     pub fn add_unwind_calls(&mut self, unwind: &Vec<Expression>) {
@@ -198,31 +189,23 @@ impl ByteCodeFunction {
         unwind_calls
     }
 
-    pub fn push_destination(&mut self, var: Option<Var>) {
-        self.destinations.push(var);
-    }
-
-    pub fn pop_destination(&mut self) {
-        let _ = self.destinations.pop();
-    }
-
-    pub fn get_destination(&self) -> Option<Var> {
-        match self.destinations.last() {
-            Some(Some(var)) => Some(var.clone()),
-            _ => None,
-        }
-    }
-
-    pub fn add_named_var(&mut self, var: Var) {
-        let scope = self.scopes.last_mut().expect("Empty Scope Stack");
-        scope.add_named_var(var);
-    }
-
-    pub fn for_each_instruction<Func: FnMut(&Instruction) -> bool>(&self, mut f: Func) {
+    pub fn visit_operands<Func: FnMut(&Operand)>(&self, f: &mut Func) {
         for block in self.blocks.values() {
             for instr in &block.instructions {
-                if !f(instr) {
-                    return;
+                match instr {
+                    Instruction::Declare { init, .. } => {
+                        if let Some(op) = init {
+                            op.visit(f);
+                        }
+                    }
+                    Instruction::Store { dst, value } => {
+                        dst.visit(f);
+                        value.visit(f);
+                    }
+                    Instruction::BranchIf { cond, .. } => cond.visit(f),
+                    Instruction::Return { value } => value.visit(f),
+                    Instruction::Delete { object } => object.visit(f),
+                    _ => (),
                 }
             }
         }
@@ -237,44 +220,6 @@ impl ByteCodeFunction {
             }
         }
     }
-
-    pub fn replace_instruction<Func>(&mut self, f: Func)
-    where
-        Func: Fn(&Instruction) -> Vec<Instruction>,
-    {
-        for block in self.blocks.values_mut() {
-            let mut idx = 0;
-            while idx < block.instructions.len() {
-                let replacements = f(&block.instructions[idx]);
-                if !replacements.is_empty() {
-                    block.instructions.remove(idx);
-                    for r in replacements {
-                        block.instructions.insert(idx, r);
-                        idx += 1;
-                    }
-                } else {
-                    idx += 1;
-                }
-            }
-        }
-    }
-
-    /*
-    pub fn remove_instruction<Pred: Fn(&Instruction) -> bool>(&mut self, pred: Pred) {
-        for block in self.blocks.values_mut() {
-            block.instructions.retain(|instr| !pred(instr));
-        }
-    }
-
-    pub fn add_cleanup_target(&mut self, v: &Var)
-    {
-        for scope in self.scopes.iter_mut().rev() {
-            if scope.add_cleanup_target(v) {
-                break;
-            }
-        }
-    }
-    */
 }
 
 impl fmt::Display for ByteCodeFunction {

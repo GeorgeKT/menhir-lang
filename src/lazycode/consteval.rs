@@ -1,5 +1,5 @@
 use crate::ast::{BinaryOp, BinaryOperator, Block, Expression, IntSize, Literal, UnaryOp, UnaryOperator};
-use crate::bytecode::Constant;
+use crate::lazycode::Constant;
 
 fn lit_to_const(lit: &Literal) -> Option<Constant> {
     match *lit {
@@ -124,15 +124,11 @@ fn block_to_const(block: &Block) -> Option<Constant> {
 }
 
 pub fn expr_to_const(expr: &Expression) -> Option<Constant> {
-    match *expr {
-        Expression::Literal(ref lit) => lit_to_const(lit),
-
-        Expression::UnaryOp(ref uop) => unary_op_to_const(uop),
-
-        Expression::BinaryOp(ref bop) => binary_op_to_const(bop),
-
-        Expression::Block(ref block) => block_to_const(block),
-
+    match expr {
+        Expression::Literal(lit) => lit_to_const(lit),
+        Expression::UnaryOp(uop) => unary_op_to_const(uop),
+        Expression::BinaryOp(bop) => binary_op_to_const(bop),
+        Expression::Block(block) => block_to_const(block),
         _ => None,
     }
 }

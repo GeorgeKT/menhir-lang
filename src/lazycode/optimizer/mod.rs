@@ -1,13 +1,10 @@
-use crate::bytecode::function::ByteCodeFunction;
-use crate::bytecode::ByteCodeModule;
+use crate::lazycode::function::ByteCodeFunction;
+use crate::lazycode::ByteCodeModule;
 
 mod emptyblocks;
-mod returnvalueoptimization;
 mod unusedfunctions;
 
 use self::emptyblocks::remove_empty_blocks;
-use self::returnvalueoptimization::return_value_optimization;
-pub use self::returnvalueoptimization::RVO_PARAM_NAME;
 use self::unusedfunctions::eliminate_unused_functions;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
@@ -22,7 +19,6 @@ pub fn optimize_function(func: &mut ByteCodeFunction, _lvl: OptimizationLevel) {
 
 pub fn optimize_module(module: &mut ByteCodeModule, lvl: OptimizationLevel) {
     eliminate_unused_functions(module);
-    return_value_optimization(module);
     for func in module.functions.values_mut() {
         if !func.external {
             optimize_function(func, lvl);
@@ -34,9 +30,9 @@ pub fn optimize_module(module: &mut ByteCodeModule, lvl: OptimizationLevel) {
 mod test {
     use super::*;
     use crate::ast::{sig, Type};
-    use crate::bytecode::function::ByteCodeFunction;
-    use crate::bytecode::instruction::Instruction;
-    use crate::bytecode::test::generate_byte_code;
+    use crate::lazycode::function::ByteCodeFunction;
+    use crate::lazycode::instruction::Instruction;
+    use crate::lazycode::test::generate_byte_code;
     use crate::span::Span;
 
     #[test]

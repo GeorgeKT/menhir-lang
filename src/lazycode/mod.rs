@@ -1,16 +1,18 @@
+use std::{collections::HashMap, fmt};
+
+pub use self::compiler::compile_to_byte_code;
+pub use self::function::{BasicBlock, ByteCodeFunction};
+pub use self::instruction::{BasicBlockRef, Instruction};
+pub use self::operand::{ByteCodeProperty, CallArg, Constant, Operand};
+pub use self::optimizer::*;
+
 mod compiler;
 mod consteval;
 mod function;
 mod instruction;
+mod operand;
 mod optimizer;
-
-use std::collections::HashMap;
-use std::fmt;
-
-pub use self::compiler::compile_to_byte_code;
-pub use self::function::*;
-pub use self::instruction::*;
-pub use self::optimizer::{optimize_module, OptimizationLevel, RVO_PARAM_NAME};
+mod patterns;
 
 #[derive(Debug)]
 pub struct ByteCodeModule {
@@ -49,8 +51,8 @@ impl fmt::Display for ByteCodeModule {
 #[cfg(test)]
 pub mod test {
     use crate::ast::{IntSize, TreePrinter};
-    use crate::bytecode::{compile_to_byte_code, ByteCodeModule};
     use crate::compileerror::CompileResult;
+    use crate::lazycode::{compile_to_byte_code, ByteCodeModule};
     use crate::parser::parse_str;
     use crate::target::Target;
 

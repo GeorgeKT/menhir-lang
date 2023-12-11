@@ -544,6 +544,7 @@ pub fn instantiate(
         args,
         span: func.sig.span.clone(),
         typ: func_type(arg_types, return_type),
+        rvo: false,
     };
 
     let body = substitute_expr(ctx, generic_args, &func.expression)?;

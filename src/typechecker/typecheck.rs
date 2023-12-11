@@ -350,6 +350,7 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call, target: &Target) 
         .ok_or_else(|| unknown_name(&c.callee.span, format!("Unknown call {}", c.callee.name)))?;
 
     c.callee.name = resolved.name;
+    c.callee.typ = resolved.typ.clone();
     if let Type::Func(ft) = &resolved.typ {
         if ft.args.len() != c.args.len() {
             return type_error_result(

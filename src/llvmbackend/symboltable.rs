@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::ast::FunctionSignature;
+use crate::compileerror::CompileResult;
 use crate::llvmbackend::valueref::ValueRef;
+
+use super::Context;
 
 pub struct FunctionInstance {
     pub function: LLVMValueRef,
@@ -26,8 +29,16 @@ pub struct VariableInstance {
     pub name: String,
 }
 
+impl VariableInstance {
+    pub fn store(&self, ctx: &Context, vr: &ValueRef) -> CompileResult<()> {
+        unsafe { self.value.store(ctx, vr) }
+    }
+}
+
+pub type VariableInstancePtr = Rc<VariableInstance>;
+
 pub struct SymbolTable {
-    vars: HashMap<String, Rc<VariableInstance>>,
+    vars: HashMap<String, VariableInstancePtr>,
     funcs: HashMap<String, Rc<FunctionInstance>>,
 }
 
@@ -39,13 +50,13 @@ impl SymbolTable {
         }
     }
 
-    pub fn add_variable(&mut self, var: Rc<VariableInstance>) {
+    pub fn add_variable(&mut self, var: VariableInstancePtr) {
         // We already checked for duplicates during the type checking fase
         let name = var.name.clone();
         self.vars.insert(name, var);
     }
 
-    pub fn get_variable(&self, name: &str) -> Option<Rc<VariableInstance>> {
+    pub fn get_variable(&self, name: &str) -> Option<VariableInstancePtr> {
         self.vars.get(name).cloned()
     }
 

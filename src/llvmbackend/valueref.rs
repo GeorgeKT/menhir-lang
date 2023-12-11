@@ -4,16 +4,27 @@ use llvm_sys::prelude::*;
 use llvm_sys::LLVMLinkage;
 
 use super::context::Context;
-use super::instructions::{const_bool, const_char, const_float, const_int, const_uint, copy, get_operand};
+use super::operand::{const_bool, const_char, const_float, const_int, const_uint, copy, gen_operand};
 use crate::ast::*;
-use crate::bytecode::{ByteCodeProperty, Constant, Operand};
 use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
+use crate::lazycode::{ByteCodeProperty, Constant, Operand};
 //use crate::llvmbackend::instructions::type_name;
 
 #[derive(Clone)]
 pub struct ValueRef {
     pub value: LLVMValueRef,
     pub typ: Type,
+}
+
+fn get_const_usize(op: &Operand) -> CompileResult<usize> {
+    match op {
+        Operand::Constant { value } => match value {
+            Constant::Int(v, _) => Ok(*v as usize),
+            Constant::UInt(v, _) => Ok(*v as usize),
+            _ => code_gen_result("Expected const usize"),
+        },
+        _ => code_gen_result("Expected const usize"),
+    }
 }
 
 impl ValueRef {
@@ -262,57 +273,19 @@ impl ValueRef {
         }
     }
 
-    pub fn load_optional_flag(&self, ctx: &Context) -> CompileResult<ValueRef> {
-        let typ = self.typ.get_pointer_element_type().unwrap_or(&self.typ);
-        match *typ {
-            Type::Optional(_) => unsafe {
-                let self_type = ctx.resolve_type(typ)?;
-                let opt_flag_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 0, cstr!("opt_flag_ptr"));
-                Ok(ValueRef::new(
-                    LLVMBuildLoad2(
-                        ctx.builder,
-                        LLVMInt1TypeInContext(ctx.context),
-                        opt_flag_ptr,
-                        cstr!("is_nil"),
-                    ),
-                    Type::Bool,
-                ))
-            },
-
-            _ => code_gen_result(format!("is_nil not allowed on type {}", self.typ)),
-        }
-    }
-
-    pub fn store_nil(&self, ctx: &Context) -> CompileResult<()> {
-        let Some(element_type) = self.typ.get_pointer_element_type() else {
-            return code_gen_result(format!("storenil not allowed on type {}", self.typ));
-        };
-
-        match element_type {
-            Type::Optional(_) => unsafe {
-                let self_type = ctx.resolve_type(element_type)?;
-                let opt_flag_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 0, cstr!("opt_flag_ptr"));
-                LLVMBuildStore(ctx.builder, const_bool(ctx, false), opt_flag_ptr);
-                Ok(())
-            },
-
-            _ => code_gen_result("storenil only allowed on optional type"),
-        }
-    }
-
     pub fn get_member_ptr(&self, ctx: &mut Context, index: &Operand) -> CompileResult<ValueRef> {
-        let Some(element_type) = self.typ.get_pointer_element_type() else {
+        let Some(element_type) = self.typ.get_element_type() else {
             return code_gen_result(format!("Load member not allowed on type {}", self.typ));
         };
 
-        match element_type {
+        match &element_type {
             Type::Pointer(_pt) => {
                 let load = ValueRef::new(self.load(ctx)?, element_type.clone());
                 load.get_member_ptr(ctx, index)
             }
 
             Type::Array(at) => unsafe {
-                let mut indices = vec![get_operand(ctx, index)?.load(ctx)?];
+                let mut indices = vec![gen_operand(ctx, index, None)?.load(ctx)?];
                 Ok(ValueRef::new(
                     LLVMBuildInBoundsGEP2(
                         ctx.builder,
@@ -328,7 +301,7 @@ impl ValueRef {
 
             Type::Slice(st) => unsafe {
                 let data_ptr = self.slice_data_ptr(ctx)?;
-                let mut indices = vec![get_operand(ctx, index)?.load(ctx)?];
+                let mut indices = vec![gen_operand(ctx, index, None)?.load(ctx)?];
                 let element_ptr = LLVMBuildGEP2(
                     ctx.builder,
                     ctx.resolve_type(&st.element_type)?,
@@ -341,13 +314,8 @@ impl ValueRef {
             },
 
             Type::Struct(st) => unsafe {
-                let index = match *index {
-                    Operand::Const(Constant::Int(v, _)) => v as usize,
-                    Operand::Const(Constant::UInt(v, _)) => v as usize,
-                    _ => return code_gen_result("Struct member access has to be through an integer"),
-                };
-
-                let self_type = ctx.resolve_type(element_type)?;
+                let index = get_const_usize(index)?;
+                let self_type = ctx.resolve_type(&element_type)?;
                 Ok(ValueRef::new(
                     LLVMBuildStructGEP2(
                         ctx.builder,
@@ -361,13 +329,8 @@ impl ValueRef {
             },
 
             Type::Sum(st) => unsafe {
-                let index = match *index {
-                    Operand::Const(Constant::Int(v, _)) => v as usize,
-                    Operand::Const(Constant::UInt(v, _)) => v as usize,
-                    _ => return code_gen_result("Sum type member access has to be through an integer"),
-                };
-
-                let self_type = ctx.resolve_type(element_type)?;
+                let index = get_const_usize(index)?;
+                let self_type = ctx.resolve_type(&element_type)?;
                 let st_data_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 1, cstr!("st_data_ptr"));
                 let case_type = &st.cases[index].typ;
                 let type_to_cast_to = LLVMPointerType(ctx.resolve_type(case_type)?, 0);
@@ -377,17 +340,12 @@ impl ValueRef {
                 ))
             },
             Type::Result(rt) => unsafe {
-                let index = match *index {
-                    Operand::Const(Constant::Int(v, _)) => v as usize,
-                    Operand::Const(Constant::UInt(v, _)) => v as usize,
-                    _ => return code_gen_result("Result type member access has to be through an integer"),
-                };
-
+                let index = get_const_usize(index)?;
                 if index > 1 {
                     return code_gen_result(format!("Invalid result type member index {index}"));
                 }
 
-                let self_type = ctx.resolve_type(element_type)?;
+                let self_type = ctx.resolve_type(&element_type)?;
                 let st_data_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 1, cstr!("rt_data_ptr"));
                 let case_type = if index == 0 { &rt.ok_typ } else { &rt.err_typ };
                 let type_to_cast_to = LLVMPointerType(ctx.resolve_type(case_type)?, 0);
@@ -397,7 +355,7 @@ impl ValueRef {
                 ))
             },
             _ => unsafe {
-                let index = get_operand(ctx, index)?.load(ctx)?;
+                let index = gen_operand(ctx, index, None)?.load(ctx)?;
                 let mut indices = vec![index];
                 Ok(ValueRef::new(
                     LLVMBuildGEP2(
@@ -414,14 +372,7 @@ impl ValueRef {
         }
     }
 
-    pub fn store_member(&self, ctx: &mut Context, index: &Operand, value: &ValueRef) -> CompileResult<()> {
-        unsafe {
-            let member_ptr = self.get_member_ptr(ctx, index)?;
-            member_ptr.store(ctx, value)
-        }
-    }
-
-    pub fn get_property(&self, ctx: &Context, prop: ByteCodeProperty) -> CompileResult<ValueRef> {
+    pub fn get_property(&self, ctx: &mut Context, prop: ByteCodeProperty) -> CompileResult<ValueRef> {
         let Some(element_type) = self.typ.get_pointer_element_type() else {
             return code_gen_result(format!("Get property not allowed on type {}", self.typ));
         };
@@ -432,7 +383,7 @@ impl ValueRef {
                 ValueRef::new(const_uint(ctx, a.len as u64), native_uint_type)
             },
 
-            (&Type::Slice(_), ByteCodeProperty::Len) | (&Type::String, ByteCodeProperty::Len) => unsafe {
+            (Type::Slice(_), ByteCodeProperty::Len) | (Type::String, ByteCodeProperty::Len) => unsafe {
                 let len_ptr = self.slice_len_ptr(ctx)?;
                 ValueRef::new(
                     LLVMBuildLoad2(ctx.builder, ctx.native_uint_type()?, len_ptr.value, cstr!("len")),
@@ -453,7 +404,7 @@ impl ValueRef {
                 )
             },
 
-            (&Type::String, ByteCodeProperty::Data) => unsafe {
+            (Type::String, ByteCodeProperty::Data) => unsafe {
                 let data_ptr = self.slice_data_ptr(ctx)?;
                 let et = data_ptr.get_element_type(ctx)?;
                 ValueRef::new(
@@ -462,7 +413,11 @@ impl ValueRef {
                 )
             },
 
-            (&Type::Sum(_), ByteCodeProperty::SumTypeIndex) => unsafe {
+            (Type::Array(_), ByteCodeProperty::Data) => {
+                self.get_member_ptr(ctx, &Operand::const_uint(0, ctx.int_size()))?
+            }
+
+            (Type::Sum(_), ByteCodeProperty::SumTypeIndex) => unsafe {
                 let self_type = ctx.resolve_type(element_type)?;
                 let sti_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 0, cstr!("sti_ptr"));
                 ValueRef::new(
@@ -480,6 +435,14 @@ impl ValueRef {
                 )
             },
 
+            (Type::Optional(_), ByteCodeProperty::SumTypeIndex) => unsafe {
+                let self_type = ctx.resolve_type(element_type)?;
+                let rti_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 0, cstr!("rti_ptr"));
+                ValueRef::new(
+                    LLVMBuildLoad2(ctx.builder, ctx.native_uint_type()?, rti_ptr, cstr!("rti")),
+                    native_uint_type,
+                )
+            },
             _ => return code_gen_result("Get property not allowed"),
         })
     }
@@ -499,6 +462,12 @@ impl ValueRef {
                 let self_type = ctx.resolve_type(element_type)?;
                 let rti_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 0, cstr!("rti_ptr"));
                 LLVMBuildStore(ctx.builder, const_uint(ctx, value as u64), rti_ptr);
+                Ok(())
+            },
+            (Type::Optional(_), ByteCodeProperty::SumTypeIndex) => unsafe {
+                let self_type = ctx.resolve_type(element_type)?;
+                let sti_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 0, cstr!("rti_ptr"));
+                LLVMBuildStore(ctx.builder, const_uint(ctx, value as u64), sti_ptr);
                 Ok(())
             },
             _ => code_gen_result("Set property not allowed"),
@@ -539,21 +508,5 @@ impl ValueRef {
             vr,
             ptr_type(Type::UInt(ctx.target_machine.target.int_size)),
         ))
-    }
-
-    pub unsafe fn create_slice(
-        &self,
-        ctx: &mut Context,
-        data: &ValueRef,
-        offset: &Operand,
-        len: &Operand,
-    ) -> CompileResult<()> {
-        let data_ptr = self.slice_data_ptr(ctx)?;
-        let len_ptr = self.slice_len_ptr(ctx)?;
-        let len = get_operand(ctx, len)?;
-        let member_ptr = data.get_member_ptr(ctx, offset)?;
-        LLVMBuildStore(ctx.builder, member_ptr.value, data_ptr.value);
-        LLVMBuildStore(ctx.builder, len.load(ctx)?, len_ptr.value);
-        Ok(())
     }
 }

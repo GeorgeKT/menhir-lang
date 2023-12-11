@@ -2,7 +2,7 @@ use crate::ast::{func_type, prefix, Expression, TreePrinter, Type};
 use crate::span::Span;
 use serde_derive::{Deserialize, Serialize};
 
-use super::FuncArg;
+use super::{ptr_type, FuncArg};
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct Argument {
@@ -37,9 +37,29 @@ pub struct FunctionSignature {
     pub args: Vec<Argument>,
     pub span: Span,
     pub typ: Type,
+    pub rvo: bool,
 }
 
+pub const RVO_RETURN_ARG: &'static str = "$rvo_ret";
+
 impl FunctionSignature {
+    pub fn do_rvo(&mut self) {
+        // Do rvo after generics are instantiated
+        if self.rvo || self.return_type.pass_by_value() || self.typ.is_generic() {
+            return;
+        }
+
+        self.args.push(Argument {
+            name: RVO_RETURN_ARG.to_string(),
+            typ: ptr_type(self.return_type.clone()),
+            mutable: true,
+            span: self.span.clone(),
+        });
+        self.return_type = Type::Void;
+        self.typ = self.get_type();
+        self.rvo = true;
+    }
+
     pub fn from_type(name: &str, typ: &Type) -> Option<FunctionSignature> {
         if let Type::Func(ref ft) = *typ {
             let s = FunctionSignature {
@@ -53,6 +73,7 @@ impl FunctionSignature {
                     .collect(),
                 span: Span::default(),
                 typ: typ.clone(),
+                rvo: false,
             };
 
             Some(s)
@@ -130,6 +151,7 @@ pub fn sig(name: &str, ret: Type, args: Vec<Argument>, span: Span) -> FunctionSi
         args,
         span,
         typ: Type::Unknown,
+        rvo: false,
     }
 }
 

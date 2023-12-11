@@ -433,10 +433,6 @@ pub fn slice_type(element_type: Type) -> Type {
     Type::Slice(Rc::new(SliceType { element_type }))
 }
 
-pub fn string_type() -> Type {
-    Type::String
-}
-
 pub fn string_type_representation(native_int_size: IntSize) -> StructType {
     StructType {
         name: "string".into(),
