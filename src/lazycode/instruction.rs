@@ -7,6 +7,9 @@ pub type BasicBlockRef = usize;
 
 #[derive(Debug)]
 pub enum Instruction {
+    Exec {
+        operand: Operand,
+    },
     Declare {
         name: String,
         init: Option<Operand>,
@@ -37,6 +40,7 @@ pub enum Instruction {
 impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Instruction::Exec { operand } => writeln!(f, "  exec {operand}"),
             Instruction::Declare { name, init, typ } => {
                 if let Some(init) = init {
                     writeln!(f, "  decl {name}: {typ} {init}")

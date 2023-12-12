@@ -404,6 +404,10 @@ impl Type {
         )
     }
 
+    pub fn should_do_rvo(&self) -> bool {
+        !self.pass_by_value() && self != &Type::Void && !self.is_generic()
+    }
+
     pub fn get_pointer_element_type(&self) -> Option<&Type> {
         if let Type::Pointer(ref inner) = *self {
             Some(inner.deref())

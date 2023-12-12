@@ -92,7 +92,7 @@ fn call_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, call: &C
         .map(|(a, d)| call_arg(expr_to_bc(bc_mod, func, a, target), d.mutable))
         .collect();
 
-    let rvo = !ft.return_type.pass_by_value();
+    let rvo = ft.return_type.should_do_rvo();
     if rvo {
         // rvo, so alloc the destination and pass it to the function
         let rvo_arg = func.declare(RVO_RETURN_ARG, None, ft.return_type.clone());
@@ -184,7 +184,7 @@ fn member_access_to_bc(
                 .zip(ft.args.iter())
                 .map(|(e, d)| call_arg(expr_to_bc(bc_mod, func, e, target), d.mutable))
                 .collect();
-            if !call.return_type.pass_by_value() {
+            if call.return_type.should_do_rvo() {
                 // rvo, so alloc the destination and pass it to the function
                 let rvo_arg = func.declare(RVO_RETURN_ARG, None, call.return_type.clone());
                 args.push(call_arg(rvo_arg, true));
@@ -374,7 +374,7 @@ fn while_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, w: &Whi
     func.push_scope();
     expr_to_bc(bc_mod, func, &w.body, target);
     let keep_looping = !func.last_instruction_is_return();
-    func.pop_scope();
+    func.pop_scope(bc_mod, target);
     if keep_looping {
         func.add(branch_instr(cond_bb));
     }
@@ -422,7 +422,7 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
     func.push_scope();
     expr_to_bc(bc_mod, func, &f.body, target);
     let keep_looping = !func.last_instruction_is_return();
-    func.pop_scope();
+    func.pop_scope(bc_mod, target);
     if keep_looping {
         func.add(store_instr(
             index.clone(),
@@ -437,7 +437,7 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
     }
 
     func.set_current_bb(post_for_bb);
-    func.pop_scope();
+    func.pop_scope(bc_mod, target);
 }
 
 fn if_to_bc(
@@ -459,7 +459,7 @@ fn if_to_bc(
         func.push_scope();
         let val = expr_to_bc(bc_mod, func, on_false, target);
         let add_branch = !func.last_instruction_is_return();
-        func.pop_scope();
+        func.pop_scope(bc_mod, target);
         if add_branch {
             func.add(store_instr(dst.clone(), val));
             func.add(branch_instr(end_bb));
@@ -472,7 +472,7 @@ fn if_to_bc(
     func.push_scope();
     let val = expr_to_bc(bc_mod, func, &if_expr.on_true, target);
     let add_branch = !func.last_instruction_is_return();
-    func.pop_scope();
+    func.pop_scope(bc_mod, target);
     if add_branch {
         func.add(store_instr(dst.clone(), val));
         func.add(branch_instr(end_bb));
@@ -494,7 +494,8 @@ fn lambda_to_bc(bc_mod: &mut ByteCodeModule, l: &Lambda, target: &Target) -> Ope
 fn early_return(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, target: &Target) {
     let unwind_calls = func.get_unwind_calls();
     for c in unwind_calls {
-        let _ = expr_to_bc(bc_mod, func, &c, target);
+        let operand = expr_to_bc(bc_mod, func, &c, target);
+        func.add(Instruction::Exec { operand });
     }
 }
 
@@ -579,10 +580,10 @@ fn match_case_body_to_bc(
     let add_branch = !func.last_instruction_is_return();
     if add_branch {
         func.add(store_instr(dst, val));
-        func.pop_scope();
+        func.pop_scope(bc_mod, target);
         func.add(branch_instr(match_end_bb));
     } else {
-        func.pop_scope();
+        func.pop_scope(bc_mod, target);
     }
     func.set_current_bb(next_bb);
 }
@@ -649,7 +650,7 @@ fn match_to_bc(
 
     func.add(branch_instr(match_end_bb));
     func.set_current_bb(match_end_bb);
-    func.pop_scope();
+    func.pop_scope(bc_mod, target);
     dst
 }
 
@@ -776,7 +777,7 @@ fn func_to_bc(
     let ret = expr_to_bc(bc_mod, &mut llfunc, expression, target);
     // Pop final scope before returning
     if !llfunc.last_instruction_is_return() {
-        llfunc.pop_scope();
+        llfunc.pop_scope(bc_mod, target);
         if llfunc.sig.rvo {
             llfunc.add(store_instr(rvo_var(&llfunc), ret));
             llfunc.add(ret_instr(Operand::Void));

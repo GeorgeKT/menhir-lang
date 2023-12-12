@@ -27,6 +27,10 @@ pub unsafe fn gen_instruction(
     blocks: &HashMap<BasicBlockRef, LLVMBasicBlockRef>,
 ) -> CompileResult<()> {
     match instr {
+        Instruction::Exec { operand } => {
+            gen_operand(ctx, operand, None)?;
+            Ok(())
+        }
         Instruction::Declare { name, init, typ } => {
             let vr = ValueRef::new(ctx.stack_alloc(name, typ)?, ptr_type(typ.clone()));
             if let Some(init) = init {
@@ -67,7 +71,7 @@ pub unsafe fn gen_instruction(
         }
         Instruction::Delete { object } => {
             let var = gen_operand(ctx, object, None)?;
-            LLVMBuildFree(ctx.builder, var.value);
+            LLVMBuildFree(ctx.builder, var.load(ctx)?);
             Ok(())
         }
         Instruction::ScopeStart => {

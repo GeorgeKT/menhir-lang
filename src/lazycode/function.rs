@@ -3,11 +3,14 @@ use std::fmt;
 
 use itertools::join;
 
+use super::compiler::expr_to_bc;
+use super::ByteCodeModule;
 use super::{
     instruction::{BasicBlockRef, Instruction},
     operand::Operand,
 };
 use crate::ast::{Expression, FunctionSignature, Type};
+use crate::target::Target;
 
 #[derive(Debug)]
 pub struct Scope {
@@ -163,8 +166,12 @@ impl ByteCodeFunction {
         self.add(Instruction::ScopeStart);
     }
 
-    pub fn pop_scope(&mut self) {
-        let _s = self.scopes.pop().expect("ICE: Empty Scope Stack");
+    pub fn pop_scope(&mut self, bc_mod: &mut ByteCodeModule, target: &Target) {
+        let s = self.scopes.pop().expect("ICE: Empty Scope Stack");
+        for uc in &s.unwind {
+            let operand = expr_to_bc(bc_mod, self, uc, target);
+            self.add(Instruction::Exec { operand });
+        }
         if !self.scopes.is_empty() {
             // Add an endscope instruction, but not at function exit
             self.add(Instruction::ScopeEnd);
@@ -193,6 +200,7 @@ impl ByteCodeFunction {
         for block in self.blocks.values() {
             for instr in &block.instructions {
                 match instr {
+                    Instruction::Exec { operand } => operand.visit(f),
                     Instruction::Declare { init, .. } => {
                         if let Some(op) = init {
                             op.visit(f);
