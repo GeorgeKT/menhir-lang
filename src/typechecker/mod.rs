@@ -1,3 +1,4 @@
+mod destructors;
 mod genericmapper;
 mod instantiate;
 mod instantiategenerics;

@@ -135,8 +135,10 @@ pub fn fill_in_generics(
                     return map_err();
                 }
 
-                let nt = fill_in_generics(ctx, &aa.typ, &ga.typ, known_types, span)?;
-                new_cases.push(sum_type_case(&aa.name, nt));
+                if let (Some(aat), Some(gat)) = (&aa.typ, &ga.typ) {
+                    let nt = fill_in_generics(ctx, aat, gat, known_types, span)?;
+                    new_cases.push(sum_type_case(&aa.name, Some(nt)));
+                }
             }
 
             Ok(sum_type(&actual_st.name, new_cases))
@@ -176,7 +178,7 @@ pub fn fill_in_generics(
 mod tests {
     use super::*;
     use crate::ast::{
-        array_type, func_arg, func_type, generic_type, ptr_type, slice_type, string_type, GenericMapping, IntSize, Type,
+        array_type, func_arg, func_type, generic_type, ptr_type, slice_type, GenericMapping, IntSize, Type,
     };
     use crate::span::Span;
     use crate::typechecker::instantiate::make_concrete;
@@ -266,7 +268,7 @@ mod tests {
                 func_arg(Type::Float(FloatSize::F64), false),
                 func_arg(Type::Bool, false),
             ],
-            string_type(),
+            Type::String,
         );
         let r = fill_in_generics(&ctx, &aa, &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);

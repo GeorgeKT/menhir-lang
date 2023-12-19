@@ -1,7 +1,6 @@
 use super::typecheckercontext::TypeCheckerContext;
 use crate::ast::*;
 use crate::compileerror::{unknown_name_result, CompileResult};
-use crate::target::Target;
 use std::collections::HashSet;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -153,7 +152,6 @@ fn resolve_sum_case_types(
     ctx: &mut TypeCheckerContext,
     st: &mut SumTypeDeclaration,
     mode: ResolveMode,
-    target: &Target,
 ) -> CompileResult<TypeResolved> {
     if st.typ != Type::Unknown {
         return Ok(TypeResolved::Yes);
@@ -161,22 +159,18 @@ fn resolve_sum_case_types(
 
     let mut case_types = Vec::with_capacity(st.cases.len());
     for c in &mut st.cases {
-        if let Some(ref mut sd) = c.data {
+        if let Some(sd) = &mut c.data {
             if resolve_struct_member_types(ctx, sd, mode)? == TypeResolved::No {
                 return Ok(TypeResolved::No);
             } else {
-                case_types.push(sum_type_case(&c.name, sd.typ.clone()));
+                case_types.push(sum_type_case(&c.name, Some(sd.typ.clone())));
             }
         } else {
-            case_types.push(sum_type_case(&c.name, target.native_uint_type.clone()));
-            // Use integer type for cases without structs
+            case_types.push(sum_type_case(&c.name, None));
         }
     }
 
-    if case_types
-        .iter()
-        .all(|ct| ct.typ == target.native_uint_type)
-    {
+    if case_types.iter().all(|ct| ct.typ.is_none()) {
         let case_names: Vec<String> = st.cases.iter().map(|c| c.name.clone()).collect();
         st.typ = enum_type(&st.name, case_names);
     } else {
@@ -219,12 +213,7 @@ fn resolve_interface_types(
     Ok(TypeResolved::Yes)
 }
 
-fn resolve_all_types(
-    ctx: &mut TypeCheckerContext,
-    module: &mut Module,
-    mode: ResolveMode,
-    target: &Target,
-) -> CompileResult<usize> {
+fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: ResolveMode) -> CompileResult<usize> {
     let mut num_resolved = 0;
     for typ in module.types.values_mut() {
         match *typ {
@@ -243,7 +232,7 @@ fn resolve_all_types(
             }
 
             TypeDeclaration::Sum(ref mut s) => {
-                if resolve_sum_case_types(ctx, s, mode, target)? == TypeResolved::Yes {
+                if resolve_sum_case_types(ctx, s, mode)? == TypeResolved::Yes {
                     ctx.add(Symbol::new(&s.name, &s.typ, false, &s.span, SymbolType::Normal))?;
                     match s.typ {
                         Type::Enum(ref et) => {
@@ -270,17 +259,17 @@ fn resolve_all_types(
     Ok(num_resolved)
 }
 
-pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module, target: &Target) -> CompileResult<()> {
+pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module) -> CompileResult<()> {
     let mut num_resolved = 0;
     loop {
         let already_resolved = num_resolved;
-        num_resolved = resolve_all_types(ctx, module, ResolveMode::Lazy, target)?;
+        num_resolved = resolve_all_types(ctx, module, ResolveMode::Lazy)?;
 
         if num_resolved == module.types.len() {
             break;
         } else if already_resolved == num_resolved {
             // We weren't able to resolve any in this pass, so something is missing
-            resolve_all_types(ctx, module, ResolveMode::Forced, target)?;
+            resolve_all_types(ctx, module, ResolveMode::Forced)?;
             break;
         }
     }

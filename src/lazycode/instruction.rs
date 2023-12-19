@@ -15,6 +15,11 @@ pub enum Instruction {
         init: Option<Operand>,
         typ: Type,
     },
+    Alias {
+        name: String,
+        value: Operand,
+        typ: Type,
+    },
     Store {
         dst: Operand,
         value: Operand,
@@ -41,9 +46,10 @@ impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Instruction::Exec { operand } => writeln!(f, "  exec {operand}"),
+            Instruction::Alias { name, value, typ } => writeln!(f, "  alias {name}: {typ} = {value}"),
             Instruction::Declare { name, init, typ } => {
                 if let Some(init) = init {
-                    writeln!(f, "  decl {name}: {typ} {init}")
+                    writeln!(f, "  decl {name}: {typ} = {init}")
                 } else {
                     writeln!(f, "  decl {name}: {typ}")
                 }
@@ -64,7 +70,12 @@ impl fmt::Display for Instruction {
 }
 
 pub fn ret_instr(value: Operand) -> Instruction {
-    Instruction::Return { value }
+    if let Operand::Var { typ: Type::Void, .. } = &value {
+        // Ignore void variables
+        Instruction::Return { value: Operand::Void }
+    } else {
+        Instruction::Return { value }
+    }
 }
 
 pub fn branch_if_instr(cond: Operand, on_true: BasicBlockRef, on_false: BasicBlockRef) -> Instruction {
@@ -84,9 +95,45 @@ pub fn store_instr(dst: Operand, value: Operand) -> Instruction {
 }
 
 impl Instruction {
+    pub fn visit_operands<F>(&self, f: &mut F)
+    where
+        F: FnMut(&Operand),
+    {
+        match self {
+            Instruction::Exec { operand } => operand.visit(f),
+            Instruction::Declare { init, .. } => {
+                if let Some(op) = init {
+                    op.visit(f);
+                }
+            }
+            Instruction::Store { dst, value } => {
+                dst.visit(f);
+                value.visit(f);
+            }
+            Instruction::BranchIf { cond, .. } => cond.visit(f),
+            Instruction::Return { value } => value.visit(f),
+            Instruction::Delete { object } => object.visit(f),
+            Instruction::Alias { value, .. } => value.visit(f),
+            Instruction::Branch { .. } | Instruction::ScopeStart | Instruction::ScopeEnd => (),
+        }
+    }
+
     pub fn is_terminator(&self) -> bool {
         match self {
             Instruction::Return { .. } | Instruction::Branch { .. } | Instruction::BranchIf { .. } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_void_store(&self) -> bool {
+        match self {
+            Instruction::Store { dst, .. } => {
+                if let Operand::Var { typ, .. } = dst {
+                    *typ == Type::Void
+                } else {
+                    false
+                }
+            }
             _ => false,
         }
     }

@@ -33,6 +33,7 @@ mod test {
     use crate::lazycode::function::ByteCodeFunction;
     use crate::lazycode::instruction::Instruction;
     use crate::lazycode::test::generate_byte_code;
+    use crate::lazycode::Operand;
     use crate::span::Span;
 
     #[test]
@@ -41,11 +42,11 @@ mod test {
         let mut func = ByteCodeFunction::new(&func_sig, false);
         let bb1 = func.create_basic_block();
         let bb2 = func.create_basic_block();
-        func.add(Instruction::Branch(bb1));
+        func.add(Instruction::Branch { block: bb1 });
         func.set_current_bb(bb1);
-        func.add(Instruction::Branch(bb2));
+        func.add(Instruction::Branch { block: bb2 });
         func.set_current_bb(bb2);
-        func.add(Instruction::ReturnVoid);
+        func.add(Instruction::Return { value: Operand::Void });
 
         optimize_function(&mut func, OptimizationLevel::Normal);
         assert!(func.blocks.get(&bb1).is_none());

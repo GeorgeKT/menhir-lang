@@ -1003,6 +1003,7 @@ fn parse_compiler_call(
 
             Ok(Expression::CompilerCall(CompilerCall::SizeOf(
                 typ,
+                target.int_size,
                 start.expanded(tq.pos()),
             )))
         }

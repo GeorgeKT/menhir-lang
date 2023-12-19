@@ -3,6 +3,7 @@ use std::fmt;
 
 use itertools::join;
 
+use super::blockorder::determine_block_order;
 use super::compiler::expr_to_bc;
 use super::ByteCodeModule;
 use super::{
@@ -14,29 +15,12 @@ use crate::target::Target;
 
 #[derive(Debug)]
 pub struct Scope {
-    names: HashSet<String>,
     unwind: Vec<Expression>, // Destructor calls
 }
 
 impl Scope {
     pub fn new() -> Scope {
-        Scope {
-            names: HashSet::new(),
-            unwind: Vec::new(),
-        }
-    }
-
-    /// Add a name, if already in use append a number
-    pub fn add_name(&mut self, name: &str) -> String {
-        let mut full_name = String::from(name);
-        let mut cnt = 1;
-        while self.names.contains(&full_name) {
-            full_name = format!("{name}{cnt}");
-            cnt += 1;
-        }
-
-        self.names.insert(full_name.clone());
-        full_name
+        Scope { unwind: Vec::new() }
     }
 }
 
@@ -51,14 +35,16 @@ pub fn bb_name(bb: BasicBlockRef) -> String {
 #[derive(Debug)]
 pub struct BasicBlock {
     pub name: String,
+    pub bb_ref: BasicBlockRef,
     pub instructions: Vec<Instruction>,
 }
 
 impl BasicBlock {
-    pub fn new(name: String) -> BasicBlock {
+    pub fn new(name: String, bb_ref: BasicBlockRef) -> BasicBlock {
         BasicBlock {
             name,
             instructions: Vec::new(),
+            bb_ref,
         }
     }
 
@@ -74,7 +60,16 @@ impl BasicBlock {
             return;
         }
 
+        if inst.is_void_store() {
+            // Ignore void stores
+            return;
+        }
+
         self.instructions.push(inst);
+    }
+
+    pub fn ends_with_return(&self) -> bool {
+        matches!(self.instructions.last(), Some(Instruction::Return { .. }))
     }
 }
 
@@ -86,6 +81,8 @@ pub struct ByteCodeFunction {
     current_bb: usize,
     bb_counter: usize,
     scopes: Vec<Scope>,
+    names: HashSet<String>,
+    pub block_order: Vec<BasicBlockRef>,
 }
 
 impl ByteCodeFunction {
@@ -97,7 +94,13 @@ impl ByteCodeFunction {
             current_bb: 0,
             bb_counter: 0,
             scopes: vec![Scope::new()],
+            names: HashSet::new(),
+            block_order: Vec::new(),
         };
+
+        for arg in &f.sig.args {
+            f.names.insert(arg.name.clone());
+        }
 
         f.sig.do_rvo();
 
@@ -124,18 +127,46 @@ impl ByteCodeFunction {
     pub fn add(&mut self, inst: Instruction) {
         let idx = self.current_bb;
         if let Some(bb) = self.blocks.get_mut(&idx) {
-            bb.add(inst)
+            bb.add(inst);
         }
     }
 
-    pub fn declare(&mut self, name: &str, init: Option<Operand>, typ: Type) -> Operand {
-        let scope = self.scopes.last_mut().expect("ICE: empty scope stack");
-        let name = scope.add_name(name);
+    /// Add a name, if already in use append a number
+    fn add_name(&mut self, name: &str) -> String {
+        let mut full_name = String::from(name);
+        let mut cnt = 1;
+
+        while self.names.contains(&full_name) {
+            full_name = format!("{name}{cnt}");
+            cnt += 1;
+        }
+
+        self.names.insert(full_name.clone());
+        full_name
+    }
+
+    pub fn alias(&mut self, name: &str, value: Operand, typ: Type) -> Operand {
+        let name = self.add_name(name);
         let var = Operand::Var {
             name: name.clone(),
             typ: typ.clone(),
         };
-        self.add(Instruction::Declare { name, init, typ });
+
+        self.add(Instruction::Alias { name, value, typ });
+        var
+    }
+
+    pub fn declare(&mut self, name: &str, init: Option<Operand>, typ: Type) -> Operand {
+        let name = self.add_name(name);
+        let var = Operand::Var {
+            name: name.clone(),
+            typ: typ.clone(),
+        };
+
+        // Ignore void types
+        if typ != Type::Void {
+            self.add(Instruction::Declare { name, init, typ });
+        }
         var
     }
 
@@ -143,7 +174,7 @@ impl ByteCodeFunction {
         let bb_ref = self.bb_counter;
         self.bb_counter += 1;
         let name = bb_name(bb_ref);
-        self.blocks.insert(bb_ref, BasicBlock::new(name));
+        self.blocks.insert(bb_ref, BasicBlock::new(name, bb_ref));
         bb_ref
     }
 
@@ -164,6 +195,10 @@ impl ByteCodeFunction {
     pub fn push_scope(&mut self) {
         self.scopes.push(Scope::new());
         self.add(Instruction::ScopeStart);
+    }
+
+    pub fn pop_scope_no_destructors(&mut self) {
+        self.scopes.pop().expect("ICE: Empty Scope Stack");
     }
 
     pub fn pop_scope(&mut self, bc_mod: &mut ByteCodeModule, target: &Target) {
@@ -199,22 +234,7 @@ impl ByteCodeFunction {
     pub fn visit_operands<Func: FnMut(&Operand)>(&self, f: &mut Func) {
         for block in self.blocks.values() {
             for instr in &block.instructions {
-                match instr {
-                    Instruction::Exec { operand } => operand.visit(f),
-                    Instruction::Declare { init, .. } => {
-                        if let Some(op) = init {
-                            op.visit(f);
-                        }
-                    }
-                    Instruction::Store { dst, value } => {
-                        dst.visit(f);
-                        value.visit(f);
-                    }
-                    Instruction::BranchIf { cond, .. } => cond.visit(f),
-                    Instruction::Return { value } => value.visit(f),
-                    Instruction::Delete { object } => object.visit(f),
-                    _ => (),
-                }
+                instr.visit_operands(f);
             }
         }
     }
@@ -227,6 +247,10 @@ impl ByteCodeFunction {
                 }
             }
         }
+    }
+
+    pub fn calculate_block_order(&mut self) {
+        determine_block_order(self);
     }
 }
 
@@ -245,7 +269,11 @@ impl fmt::Display for ByteCodeFunction {
             ),
             self.sig.return_type
         )?;
-        for bb in self.blocks.values() {
+        for bb_ref in &self.block_order {
+            let Some(bb) = self.blocks.get(bb_ref) else {
+                continue;
+            };
+
             writeln!(f, " {}:", bb.name)?;
             for inst in &bb.instructions {
                 inst.fmt(f)?;

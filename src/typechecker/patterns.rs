@@ -36,7 +36,7 @@ fn type_check_struct_pattern(
                 .expect("Internal Compiler Error: cannot determine index of sum type case");
             let case = &st.cases[idx];
             match &case.typ {
-                Type::Struct(s) => {
+                Some(Type::Struct(s)) => {
                     if s.members.len() != p.bindings.len() {
                         type_error_result(
                             &p.span,
@@ -160,11 +160,11 @@ fn type_check_name_pattern(
     target: &Target,
 ) -> CompileResult<Type> {
     type_check_name(ctx, nr, Some(&target_type))?;
-    if &nr.typ != target_type {
+    if &nr.typ != target_type && !target_type.is_pointer_to(&nr.typ) {
         return type_error_result(
             &nr.span,
             format!(
-                "Cannot pattern match an expression of type {} with an expression of type {}",
+                "Cannot pattern match an expression of type:\n{}\nwith an expression of type:\n{}\n",
                 target_type, nr.typ
             ),
         );
@@ -176,7 +176,7 @@ fn type_check_name_pattern(
                 .index_of(&nr.name)
                 .expect("Internal Compiler Error: cannot determine index of sum type case");
             let case = &st.cases[idx];
-            if case.typ == target.native_uint_type {
+            if case.typ.is_none() {
                 infer_matched_type(ctx, e, return_type, target)
             } else {
                 type_error_result(
@@ -228,11 +228,11 @@ fn type_check_struct_pattern_match(
 ) -> CompileResult<Type> {
     ctx.enter_scope(None);
     type_check_struct_pattern(ctx, p, target_is_mutable)?;
-    if &p.typ != target_type {
+    if &p.typ != target_type && !target_type.is_pointer_to(&p.typ) {
         return type_error_result(
             &p.span,
             format!(
-                "Cannot pattern match an expression of type {} with an expression of type {}",
+                "Cannot pattern match an expression of type:\n{}\nwith an expression of type:\n{}\n",
                 target_type, p.typ
             ),
         );

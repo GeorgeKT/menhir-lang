@@ -22,12 +22,14 @@ impl fmt::Display for Property {
 pub struct Field {
     pub name: String,
     pub index: usize,
+    pub typ: Type,
 }
 
 pub fn field(name: &str, index: usize) -> Field {
     Field {
         name: name.into(),
         index,
+        typ: Type::Unknown,
     }
 }
 

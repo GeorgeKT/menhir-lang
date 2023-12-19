@@ -2,6 +2,8 @@ use crate::ast::*;
 use crate::compileerror::*;
 use std::collections::hash_map::{Entry, HashMap};
 
+use super::destructors::destructor_name;
+
 struct Scope {
     symbols: HashMap<String, Symbol>,
     destructor_calls: Vec<Expression>,
@@ -111,8 +113,8 @@ impl<'a> TypeCheckerContext<'a> {
         self.stack.push(Scope::new(function_return_type));
     }
 
-    fn get_destructor_call(&self, sym: &Symbol) -> CompileResult<Option<Expression>> {
-        let mut name = match &sym.typ {
+    pub fn get_destructor(&self, typ: &Type) -> CompileResult<Option<Symbol>> {
+        let name = match typ {
             Type::Struct(st) => st.name.clone(),
             Type::Sum(et) => et.name.clone(),
             _ => {
@@ -120,13 +122,7 @@ impl<'a> TypeCheckerContext<'a> {
             }
         };
 
-        let destructor_name = if let Some(ns) = name.rfind("::") {
-            name.insert(ns + 2, '~');
-            name
-        } else {
-            format!("~{name}")
-        };
-
+        let destructor_name = destructor_name(&name);
         let Some(ds) = self.resolve(&destructor_name) else {
             return Ok(None);
         };
@@ -142,12 +138,17 @@ impl<'a> TypeCheckerContext<'a> {
             return type_error_result(&ds.span, "Destructor must be a function");
         }
 
+        Ok(Some(ds))
+    }
+
+    pub fn get_destructor_call(&self, self_expr: Expression, typ: &Type) -> CompileResult<Option<Expression>> {
+        let Some(ds) = self.get_destructor(typ)? else {
+            return Ok(None);
+        };
+
         let call = Call::new(
-            NameRef::new(destructor_name, ds.span.clone()),
-            vec![address_of(
-                Expression::NameRef(NameRef::new(sym.name.clone(), ds.span.clone())),
-                ds.span.clone(),
-            )],
+            NameRef::new(ds.name.clone(), ds.span.clone()),
+            vec![self_expr],
             ds.span.clone(),
         );
         Ok(Some(Expression::Call(Box::new(call))))
@@ -190,7 +191,11 @@ impl<'a> TypeCheckerContext<'a> {
     pub fn add(&mut self, symbol: Symbol) -> CompileResult<()> {
         match symbol.symbol_type {
             SymbolType::Normal => {
-                let ds = self.get_destructor_call(&symbol)?;
+                let param = address_of(
+                    Expression::NameRef(NameRef::new(symbol.name.clone(), symbol.span.clone())),
+                    symbol.span.clone(),
+                );
+                let ds = self.get_destructor_call(param, &symbol.typ)?;
                 if let Some(sf) = self.stack.last_mut() {
                     sf.add(symbol, ds)
                 } else {

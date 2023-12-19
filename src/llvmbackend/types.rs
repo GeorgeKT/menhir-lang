@@ -53,9 +53,13 @@ unsafe fn sum_type_to_llvm_type(
     // Calculate the biggest type
     let mut largest_type = ptr::null_mut::<LLVMType>();
     for c in &st.cases {
-        let case_typ = to_llvm_type(context, target_machine, &c.typ)?;
-        if largest_type.is_null() || target_machine.size_of_type(case_typ) > target_machine.size_of_type(largest_type) {
-            largest_type = case_typ;
+        if let Some(ct) = &c.typ {
+            let case_typ = to_llvm_type(context, target_machine, ct)?;
+            if largest_type.is_null()
+                || target_machine.size_of_type(case_typ) > target_machine.size_of_type(largest_type)
+            {
+                largest_type = case_typ;
+            }
         }
     }
 

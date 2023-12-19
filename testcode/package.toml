@@ -75,6 +75,14 @@ name="destructors"
 type="binary"
 
 [[target]]
+name="sum_destructors"
+type="binary"
+
+[[target]]
+name="nested_destructors"
+type="binary"
+
+[[target]]
 name="early_return"
 type="binary"
 

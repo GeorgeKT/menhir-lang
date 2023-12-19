@@ -1,15 +1,19 @@
 use super::context::Context;
 use super::operand::gen_operand;
 use super::operand::gen_operand_dst;
+use super::symboltable::FunctionInstance;
 use super::valueref::ValueRef;
 use crate::ast::ptr_type;
+use crate::ast::FunctionSignature;
 use crate::ast::Type;
+use crate::compileerror::code_gen_error;
 use crate::compileerror::CompileResult;
 use crate::lazycode::*;
 use llvm_sys::core::*;
 use llvm_sys::prelude::*;
 use std::collections::HashMap;
 use std::ptr;
+use std::rc::Rc;
 
 #[allow(unused)]
 pub unsafe fn type_name(typ: LLVMTypeRef) -> String {
@@ -18,6 +22,21 @@ pub unsafe fn type_name(typ: LLVMTypeRef) -> String {
     let ret_name = String::from(CStr::from_ptr(name).to_str().expect("Invalid string"));
     LLVMDisposeMessage(name);
     ret_name
+}
+
+unsafe fn add_variable(ctx: &mut Context, name: &str, vr: ValueRef, typ: &Type) -> CompileResult<()> {
+    if typ.is_function() {
+        let fi = Rc::new(FunctionInstance {
+            function: vr.load(ctx)?,
+            name: name.into(),
+            sig: FunctionSignature::from_type(name, typ)
+                .ok_or_else(|| code_gen_error(format!("Cannot generate function signature for {name}")))?,
+        });
+        ctx.add_function(fi)?;
+    }
+
+    ctx.set_variable(name, vr)?;
+    Ok(())
 }
 
 pub unsafe fn gen_instruction(
@@ -36,12 +55,16 @@ pub unsafe fn gen_instruction(
             if let Some(init) = init {
                 gen_operand_dst(ctx, init, &vr)?;
             }
-            ctx.set_variable(name, vr)?;
-            Ok(())
+
+            add_variable(ctx, name, vr, typ)
+        }
+        Instruction::Alias { name, value, typ } => {
+            let vr = gen_operand(ctx, value, None)?;
+            add_variable(ctx, name, vr, typ)
         }
         Instruction::Store { dst, value } => {
-            let dst = gen_operand(ctx, dst, None)?;
-            let _value = gen_operand_dst(ctx, value, &dst)?;
+            let dst_var = gen_operand(ctx, dst, None)?;
+            let _value = gen_operand_dst(ctx, value, &dst_var)?;
             Ok(())
         }
         Instruction::Branch { block } => {
@@ -71,7 +94,7 @@ pub unsafe fn gen_instruction(
         }
         Instruction::Delete { object } => {
             let var = gen_operand(ctx, object, None)?;
-            LLVMBuildFree(ctx.builder, var.load(ctx)?);
+            LLVMBuildFree(ctx.builder, var.value);
             Ok(())
         }
         Instruction::ScopeStart => {

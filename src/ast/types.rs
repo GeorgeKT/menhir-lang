@@ -11,7 +11,7 @@ use std::rc::Rc;
 #[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct SumTypeCase {
     pub name: String,
-    pub typ: Type,
+    pub typ: Option<Type>,
 }
 
 pub trait SumTypeCaseIndexOf {
@@ -309,7 +309,10 @@ impl Type {
             Type::Slice(st) => st.element_type.is_generic(),
             Type::Func(ft) => ft.return_type.is_generic() || ft.args.iter().any(|a| a.typ.is_generic()),
             Type::Struct(st) => st.members.iter().any(|m| m.typ.is_generic()),
-            Type::Sum(st) => st.cases.iter().any(|c| c.typ.is_generic()),
+            Type::Sum(st) => st
+                .cases
+                .iter()
+                .any(|c| c.typ.as_ref().map(|t| t.is_generic()).unwrap_or(false)),
             Type::Unresolved(ut) => ut.generic_args.iter().any(|t| t.is_generic()),
             Type::Pointer(inner) => inner.is_generic(),
             Type::Interface(i) => !i.generic_args.is_empty(),
@@ -324,6 +327,10 @@ impl Type {
 
     pub fn is_unknown(&self) -> bool {
         matches!(*self, Type::Unknown)
+    }
+
+    pub fn is_function(&self) -> bool {
+        matches!(*self, Type::Func(_))
     }
 
     pub fn get_property_type(&self, name: &str, target: &Target) -> Option<(Type, MemberAccessType)> {
@@ -447,7 +454,7 @@ pub fn string_type_representation(native_int_size: IntSize) -> StructType {
     }
 }
 
-pub fn sum_type_case(name: &str, typ: Type) -> SumTypeCase {
+pub fn sum_type_case(name: &str, typ: Option<Type>) -> SumTypeCase {
     SumTypeCase { name: name.into(), typ }
 }
 
@@ -527,7 +534,7 @@ pub fn interface_type(name: &str, generic_args: Vec<Type>, functions: Vec<Functi
 
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        match *self {
+        match self {
             Type::Void => write!(f, "void"),
             Type::Unknown => write!(f, "unknown"),
             Type::Int(precision) => write!(f, "int{}", precision),
@@ -544,17 +551,23 @@ impl fmt::Display for Type {
                     write!(f, "{}<{}>", s.name, join(s.generic_args.iter(), ","))
                 }
             }
-            Type::Array(ref at) => write!(f, "{}[{}]", at.element_type, at.len),
-            Type::Slice(ref at) => write!(f, "{}[]", at.element_type),
-            Type::Generic(ref g) => write!(f, "${}", g),
-            Type::Func(ref ft) => write!(f, "({}) -> {}", join(ft.args.iter(), ", "), ft.return_type),
-            Type::Struct(ref st) => write!(f, "{}{{{}}}", st.name, join(st.members.iter(), ", ")),
-            Type::Sum(ref st) => write!(f, "{}", join(st.cases.iter().map(|m| &m.typ), " | ")),
-            Type::Enum(ref st) => write!(f, "{}", join(st.cases.iter(), " | ")),
-            Type::Optional(ref inner) => write!(f, "?{}", inner),
-            Type::Interface(ref i) => write!(f, "interface {}", i.name),
+            Type::Array(at) => write!(f, "{}[{}]", at.element_type, at.len),
+            Type::Slice(at) => write!(f, "{}[]", at.element_type),
+            Type::Generic(g) => write!(f, "${}", g),
+            Type::Func(ft) => write!(f, "({}) -> {}", join(ft.args.iter(), ", "), ft.return_type),
+            Type::Struct(st) => {
+                if st.name.is_empty() {
+                    write!(f, "{{{}}}", join(st.members.iter(), ", "))
+                } else {
+                    write!(f, "{}", st.name)
+                }
+            }
+            Type::Sum(st) => write!(f, "{}", st.name),
+            Type::Enum(st) => write!(f, "{}", st.name),
+            Type::Optional(inner) => write!(f, "?{}", inner),
+            Type::Interface(i) => write!(f, "interface {}", i.name),
             Type::SelfType => write!(f, "Self"),
-            Type::Result(ref r) => write!(f, "{} ! {}", r.ok_typ, r.err_typ),
+            Type::Result(r) => write!(f, "{} ! {}", r.ok_typ, r.err_typ),
         }
     }
 }

@@ -132,7 +132,12 @@ fn make_concrete_type(ctx: &TypeCheckerContext, mapping: &GenericMapping, generi
         Type::Sum(st) => {
             let mut cases = Vec::new();
             for c in &st.cases {
-                cases.push(sum_type_case(&c.name, make_concrete_type(ctx, mapping, &c.typ)?));
+                let case_typ = if let Some(st) = &c.typ {
+                    Some(make_concrete_type(ctx, mapping, st)?)
+                } else {
+                    None
+                };
+                cases.push(sum_type_case(&c.name, case_typ));
             }
 
             sum_type(&st.name, cases)
@@ -141,6 +146,11 @@ fn make_concrete_type(ctx: &TypeCheckerContext, mapping: &GenericMapping, generi
         Type::Pointer(inner) => ptr_type(make_concrete_type(ctx, mapping, inner)?),
 
         Type::Optional(inner) => optional_type(make_concrete_type(ctx, mapping, inner)?),
+
+        Type::Result(rt) => result_type(
+            make_concrete_type(ctx, mapping, &rt.ok_typ)?,
+            make_concrete_type(ctx, mapping, &rt.err_typ)?,
+        ),
 
         _ => generic.clone(),
     };
@@ -216,6 +226,42 @@ fn substitute_pattern(ctx: &TypeCheckerContext, generic_args: &GenericMapping, p
         }
 
         Pattern::Literal(Literal::Array(al)) => substitute_array_literal(ctx, generic_args, al).map(Pattern::Literal),
+
+        Pattern::Binding(nr) => {
+            let new_nr = NameRef {
+                name: nr.name.clone(),
+                span: nr.span.clone(),
+                typ: make_concrete(ctx, generic_args, &nr.typ, &nr.span)?,
+            };
+            Ok(Pattern::Binding(new_nr))
+        }
+
+        Pattern::Optional(opt) => {
+            let new_opt = OptionalPattern {
+                binding: opt.binding.clone(),
+                span: opt.span.clone(),
+                inner_type: make_concrete(ctx, generic_args, &opt.inner_type, &opt.span)?,
+            };
+            Ok(Pattern::Optional(new_opt))
+        }
+
+        Pattern::Ok(ok) => {
+            let new_ok = OkPattern {
+                inner: Box::new(substitute_pattern(ctx, generic_args, &ok.inner)?),
+                span: ok.span.clone(),
+                inner_type: make_concrete(ctx, generic_args, &ok.inner_type, &ok.span)?,
+            };
+            Ok(Pattern::Ok(new_ok))
+        }
+
+        Pattern::Error(err) => {
+            let new_ok = ErrorPattern {
+                inner: Box::new(substitute_pattern(ctx, generic_args, &err.inner)?),
+                span: err.span.clone(),
+                inner_type: make_concrete(ctx, generic_args, &err.inner_type, &err.span)?,
+            };
+            Ok(Pattern::Error(new_ok))
+        }
 
         _ => Ok(p.clone()),
     }
@@ -472,9 +518,13 @@ fn substitute_expr(
 
         Expression::Void => Ok(Expression::Void),
 
-        Expression::CompilerCall(CompilerCall::SizeOf(t, span)) => {
+        Expression::CompilerCall(CompilerCall::SizeOf(t, int_size, span)) => {
             let new_t = make_concrete(ctx, generic_args, t, span)?;
-            Ok(Expression::CompilerCall(CompilerCall::SizeOf(new_t, span.clone())))
+            Ok(Expression::CompilerCall(CompilerCall::SizeOf(
+                new_t,
+                *int_size,
+                span.clone(),
+            )))
         }
 
         Expression::CompilerCall(CompilerCall::Slice { data, len, typ, span }) => {

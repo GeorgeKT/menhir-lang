@@ -4,6 +4,8 @@ use crate::ast::{ptr_type, BinaryOperator, Type, UnaryOperator};
 use crate::compileerror::CompileResult;
 use crate::compileerror::{code_gen_error, code_gen_result};
 use crate::lazycode::{ByteCodeProperty, CallArg, Operand};
+#[allow(unused)]
+use crate::llvmbackend::instructions::type_name;
 
 use super::types::native_llvm_int_type;
 use super::valueref::ValueRef;
@@ -75,7 +77,7 @@ unsafe fn gen_binary_op(
     right: &Operand,
     typ: &Type,
 ) -> CompileResult<ValueRef> {
-    let left_type = left.get_type(ctx.target_machine.target.int_size);
+    let left_type = left.get_type();
     let left = gen_operand(ctx, left, None)?.load(ctx)?;
     let right = gen_operand(ctx, right, None)?.load(ctx)?;
 
@@ -200,7 +202,7 @@ unsafe fn gen_binary_op(
 
 unsafe fn gen_cast(ctx: &mut Context, src: &Operand, typ: Type) -> CompileResult<ValueRef> {
     let operand = gen_operand(ctx, src, None)?;
-    let src_type = src.get_type(ctx.target_machine.target.int_size);
+    let src_type = src.get_type();
     let casted = match (&typ, &src_type) {
         (&Type::UInt(_), &Type::Int(_)) | (&Type::Int(_), &Type::UInt(_)) => LLVMBuildIntCast(
             ctx.builder,
@@ -256,23 +258,22 @@ unsafe fn gen_cast(ctx: &mut Context, src: &Operand, typ: Type) -> CompileResult
     Ok(ValueRef::new(casted, typ))
 }
 
-unsafe fn gen_function_arg(ctx: &mut Context, arg: &Operand, mutable: bool) -> CompileResult<LLVMValueRef> {
-    let src = gen_operand(ctx, arg, None)?;
-    if !src.typ.is_pointer() {
-        return Ok(src.value);
+unsafe fn gen_function_arg(ctx: &mut Context, arg: &CallArg) -> CompileResult<LLVMValueRef> {
+    let src = gen_operand(ctx, &arg.arg, None)?;
+    if let Some(inner_type) = src.typ.get_pointer_element_type() {
+        if let Type::Func(_) = inner_type {
+            return src.load(ctx);
+        } else if &arg.arg_type == inner_type && arg.arg_type.pass_by_value() {
+            return src.load(ctx);
+        } else {
+            return Ok(src.value);
+        }
     }
 
-    let inner_type = src
-        .typ
-        .get_pointer_element_type()
-        .ok_or_else(|| code_gen_error("Expecting pointer type here"))?;
-    if let Type::Func(_) = inner_type {
-        src.load(ctx)
-    } else if inner_type.pass_by_value() {
-        src.load(ctx)
-    } else if mutable {
-        let dst = ctx.stack_alloc("argcopy", inner_type)?;
-        copy(ctx, dst, src.value, ctx.resolve_type(inner_type)?)?;
+    if arg.mutable && !arg.arg_type.pass_by_value() {
+        // Copy the argument to allow the function to mutate it
+        let dst = ctx.stack_alloc("argcopy", &src.typ)?;
+        copy(ctx, dst, src.value, ctx.resolve_type(&src.typ)?)?;
         Ok(dst)
     } else {
         Ok(src.value)
@@ -297,7 +298,7 @@ unsafe fn gen_call(
                 continue;
             }
         }
-        let fa = gen_function_arg(ctx, &arg.arg, arg.mutable)?;
+        let fa = gen_function_arg(ctx, arg)?;
         func_args.push(fa);
     }
 
@@ -374,8 +375,8 @@ unsafe fn gen_enum(ctx: &mut Context, variant: usize, typ: &Type, dst: Option<Va
 }
 
 unsafe fn gen_dereference(ctx: &mut Context, inner: &Operand, typ: &Type) -> CompileResult<ValueRef> {
-    let inner = gen_operand(ctx, inner, None)?;
-    Ok(ValueRef::new(inner.load(ctx)?, typ.clone()))
+    let inner_vr = gen_operand(ctx, inner, None)?;
+    Ok(ValueRef::new(inner_vr.load(ctx)?, typ.clone()))
 }
 
 unsafe fn gen_result(
@@ -448,11 +449,11 @@ pub unsafe fn gen_operand(ctx: &mut Context, operand: &Operand, dst: Option<Valu
         Operand::Member { obj, idx, typ } => {
             let obj = gen_operand(ctx, obj, None)?;
             let m = obj.get_member_ptr(ctx, idx)?;
-            if let Type::Pointer(_) = typ {
-                Ok(m)
-            } else {
-                Ok(ValueRef::new(m.load(ctx)?, typ.clone()))
-            }
+            Ok(ValueRef::new(m.load(ctx)?, typ.clone()))
+        }
+        Operand::MemberPtr { obj, idx, .. } => {
+            let obj = gen_operand(ctx, obj, None)?;
+            Ok(obj.get_member_ptr(ctx, idx)?)
         }
         Operand::AddressOf { obj } => gen_operand(ctx, obj, None)?.address_of(),
         Operand::Binary { op, left, right, typ } => gen_binary_op(ctx, *op, left, right, typ),
@@ -462,7 +463,7 @@ pub unsafe fn gen_operand(ctx: &mut Context, operand: &Operand, dst: Option<Valu
         Operand::Sum { variant, inner, typ } => gen_sum(ctx, *variant, inner, typ, dst),
         Operand::Enum { variant, typ } => gen_enum(ctx, *variant, typ, dst),
         Operand::Dereference { inner, typ } => gen_dereference(ctx, inner, typ),
-        Operand::SizeOf { typ } => {
+        Operand::SizeOf { typ, .. } => {
             let llvm_type = ctx.resolve_type(typ)?;
             Ok(ValueRef::new(
                 LLVMSizeOf(llvm_type),

@@ -88,7 +88,7 @@ impl TreePrinter for AddressOfExpression {
 impl TreePrinter for DereferenceExpression {
     fn print(&self, level: usize) {
         let p = prefix(level);
-        println!("{}dereference (span: {})", p, self.span);
+        println!("{}dereference (span: {}, type: {})", p, self.span, self.typ);
         self.inner.print(level + 1)
     }
 }

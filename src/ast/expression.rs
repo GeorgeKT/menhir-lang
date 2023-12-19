@@ -181,7 +181,7 @@ impl Expression {
             Expression::OptionalToBool(inner) => inner.span(),
             Expression::ToOptional(t) => t.inner.span(),
             Expression::Cast(t) => t.span.clone(),
-            Expression::CompilerCall(CompilerCall::SizeOf(_, span)) => span.clone(),
+            Expression::CompilerCall(CompilerCall::SizeOf(_, _, span)) => span.clone(),
             Expression::CompilerCall(CompilerCall::Slice { span, .. }) => span.clone(),
             Expression::IndexOperation(iop) => iop.span.clone(),
             Expression::Return(r) => r.span.clone(),
@@ -192,7 +192,7 @@ impl Expression {
         }
     }
 
-    pub fn get_type(&self, int_size: IntSize) -> Type {
+    pub fn get_type(&self) -> Type {
         match self {
             Expression::Literal(lit) => lit.get_type(),
             Expression::UnaryOp(op) => op.typ.clone(),
@@ -212,16 +212,16 @@ impl Expression {
             Expression::MemberAccess(sma) => sma.typ.clone(),
             Expression::New(n) => n.typ.clone(),
             Expression::ArrayToSlice(a) => a.slice_type.clone(),
-            Expression::AddressOf(a) => ptr_type(a.inner.get_type(int_size)),
+            Expression::AddressOf(a) => ptr_type(a.inner.get_type()),
             Expression::Dereference(d) => d.typ.clone(),
             Expression::Assign(_) => Type::Void,
             Expression::Nil(nt) => nt.typ.clone(),
             Expression::OptionalToBool(_) => Type::Bool,
-            Expression::ToOptional(t) => optional_type(t.inner.get_type(int_size)),
+            Expression::ToOptional(t) => optional_type(t.inner.get_type()),
             Expression::Cast(t) => t.destination_type.clone(),
-            Expression::CompilerCall(cc) => cc.get_type(int_size),
+            Expression::CompilerCall(cc) => cc.get_type(),
             Expression::IndexOperation(iop) => iop.typ.clone(),
-            Expression::Return(r) => r.expression.get_type(int_size),
+            Expression::Return(r) => r.expression.get_type(),
             Expression::Void | Expression::While(_) | Expression::Delete(_) | Expression::For(_) => Type::Void,
             Expression::ResultToBool(_) => Type::Bool,
             Expression::ToOkResult(r) => r.result_type.clone(),

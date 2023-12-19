@@ -32,6 +32,7 @@ pub struct BuildOptions {
     pub import_directories: Vec<PathBuf>,
     pub force_rebuild: bool,
     pub show_timing: bool,
+    pub target: Option<String>,
 }
 
 impl BuildOptions {
@@ -126,9 +127,9 @@ impl PackageData {
         Ok(())
     }
 
-    pub fn build(&self, build_options: &BuildOptions, target_name: &Option<String>) -> CompileResult<()> {
+    pub fn build(&self, build_options: &BuildOptions) -> CompileResult<()> {
         println!("Compiling for {}", build_options.target_machine.target.triplet);
-        if let Some(tgt) = target_name {
+        if let Some(tgt) = &build_options.target {
             return self.build_target_and_dependencies(build_options, tgt.as_str());
         }
 
@@ -328,13 +329,6 @@ impl PackageTarget {
         writeln!(&mut bc_dump, "{bc_mod}")?;
         drop(bc_dump);
 
-        if build_options.dump_flags.contains(&Dump::ByteCode) || build_options.dump_flags.contains(&Dump::All) {
-            println!("bytecode:");
-            println!("------\n");
-            println!("{}", bc_mod);
-            println!("------\n");
-        }
-
         time_operation_mut(build_options.show_timing, 2, "Optimization", || {
             if build_options.optimize {
                 optimize_module(&mut bc_mod, OptimizationLevel::Normal);
@@ -343,6 +337,12 @@ impl PackageTarget {
             }
         });
 
+        if build_options.dump_flags.contains(&Dump::ByteCode) || build_options.dump_flags.contains(&Dump::All) {
+            println!("bytecode:");
+            println!("------\n");
+            println!("{}", bc_mod);
+            println!("------\n");
+        }
         let opts = CodeGenOptions {
             dump_ir: build_options.dump_flags.contains(&Dump::IR) || build_options.dump_flags.contains(&Dump::All),
             build_dir,

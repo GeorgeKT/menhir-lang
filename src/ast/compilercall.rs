@@ -4,7 +4,7 @@ use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum CompilerCall {
-    SizeOf(Type, Span),
+    SizeOf(Type, IntSize, Span),
     Slice {
         data: Box<Expression>,
         len: Box<Expression>,
@@ -14,10 +14,10 @@ pub enum CompilerCall {
 }
 
 impl CompilerCall {
-    pub fn get_type(&self, int_size: IntSize) -> Type {
-        match *self {
-            CompilerCall::SizeOf(_, _) => Type::UInt(int_size),
-            CompilerCall::Slice { ref typ, .. } => typ.clone(),
+    pub fn get_type(&self) -> Type {
+        match self {
+            CompilerCall::SizeOf(_, int_size, _) => Type::UInt(*int_size),
+            CompilerCall::Slice { typ, .. } => typ.clone(),
         }
     }
 }
@@ -25,14 +25,9 @@ impl CompilerCall {
 impl TreePrinter for CompilerCall {
     fn print(&self, level: usize) {
         let p = prefix(level);
-        match *self {
-            CompilerCall::SizeOf(ref typ, ref span) => println!("{}@size({}) (span: {})", p, typ, span),
-            CompilerCall::Slice {
-                ref data,
-                ref len,
-                ref typ,
-                ref span,
-            } => {
+        match self {
+            CompilerCall::SizeOf(typ, _, span) => println!("{}@size({}) (span: {})", p, typ, span),
+            CompilerCall::Slice { data, len, typ, span } => {
                 println!("{}@slice (span: {}, type: {})", p, span, typ);
                 data.print(level + 1);
                 len.print(level + 1);

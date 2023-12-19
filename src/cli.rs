@@ -82,6 +82,8 @@ pub struct BuildPkgCommand {
     pub force_rebuild: bool,
     #[arg(short = 'T', long = "show-timing", default_value_t = false)]
     pub show_timing: bool,
+    #[arg(short = 't', long = "target", value_name = "TARGET")]
+    pub target: Option<String>,
 }
 
 #[derive(Args, Debug)]

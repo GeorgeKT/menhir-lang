@@ -1,3 +1,4 @@
+use super::destructors::create_destructors;
 use super::genericmapper::fill_in_generics;
 use super::instantiate::make_concrete;
 use super::instantiategenerics::instantiate_generics;
@@ -205,7 +206,7 @@ fn basic_bin_op_checks(
         }
     }
 
-    let new_left_type = b.left.get_type(target.int_size);
+    let new_left_type = b.left.get_type();
     if !new_left_type.is_binary_operator_supported(b.operator) {
         type_error_result(
             &b.span,
@@ -226,7 +227,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp, target: 
     match b.operator {
         BinaryOperator::Add | BinaryOperator::Sub | BinaryOperator::Mul | BinaryOperator::Div | BinaryOperator::Mod => {
             basic_bin_op_checks(ctx, b, left_type, right_type, target)?;
-            b.typ = b.left.get_type(target.int_size);
+            b.typ = b.left.get_type();
             valid(b.typ.clone())
         }
 
@@ -268,9 +269,25 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp, target: 
                     replace_by(Expression::Literal(Literal::Bool(b.span.clone(), false)))
                 };
             } else if left_type.is_optional() && right_type.is_optional_of(&Type::Unknown) {
-                type_check_with_conversion(ctx, &mut b.right, &left_type, target)?;
+                if b.operator == BinaryOperator::Equals {
+                    return replace_by(unary_op(
+                        UnaryOperator::Not,
+                        Expression::OptionalToBool(Box::new(b.left.clone())),
+                        b.span.clone(),
+                    ));
+                } else {
+                    return replace_by(Expression::OptionalToBool(Box::new(b.left.clone())));
+                };
             } else if right_type.is_optional() && left_type.is_optional_of(&Type::Unknown) {
-                type_check_with_conversion(ctx, &mut b.left, &right_type, target)?;
+                if b.operator == BinaryOperator::Equals {
+                    return replace_by(unary_op(
+                        UnaryOperator::Not,
+                        Expression::OptionalToBool(Box::new(b.right.clone())),
+                        b.span.clone(),
+                    ));
+                } else {
+                    return replace_by(Expression::OptionalToBool(Box::new(b.right.clone())));
+                };
             } else {
                 basic_bin_op_checks(ctx, b, left_type, right_type, target)?;
             }
@@ -373,6 +390,7 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call, target: &Target) 
 
         if ft.return_type.is_generic() {
             c.return_type = make_concrete(ctx, &c.generic_args, &ft.return_type, &c.span)?;
+            c.function_type = make_concrete(ctx, &c.generic_args, &resolved.typ, &c.span)?;
             return valid(c.return_type.clone());
         }
         c.return_type = ft.return_type.clone();
@@ -534,7 +552,11 @@ fn is_instantiation_of(concrete_type: &Type, generic_type: &Type) -> bool {
             .cases
             .iter()
             .zip(b.cases.iter())
-            .all(|(ma, mb)| is_instantiation_of(&ma.typ, &mb.typ)),
+            .all(|(ma, mb)| match (&ma.typ, &mb.typ) {
+                (Some(mat), Some(mbt)) => is_instantiation_of(mat, mbt),
+                (None, None) => true,
+                _ => false,
+            }),
         _ => false,
     }
 }
@@ -835,15 +857,18 @@ fn type_check_struct_initializer(
             valid(si.typ.clone())
         }
         Type::Sum(st) => {
-            let idx = st
-                .index_of(&si.struct_name)
-                .expect("Internal Compiler Error: cannot determine index of sum type case");
+            let idx = st.index_of(&si.struct_name).ok_or_else(|| {
+                type_error(
+                    &si.span,
+                    format!("Cannot determine index of sum type case {}", si.struct_name),
+                )
+            })?;
             let mut sum_type_cases = Vec::with_capacity(st.cases.len());
             for (i, case) in st.cases.iter().enumerate() {
                 let typ = if i == idx {
                     match &case.typ {
-                        Type::Struct(s) => type_check_struct_members_in_initializer(ctx, s, si, target)?,
-                        Type::Int(p) => Type::Int(*p),
+                        Some(Type::Struct(s)) => Some(type_check_struct_members_in_initializer(ctx, s, si, target)?),
+                        None => None,
                         _ => return type_error_result(&si.span, "Invalid sum type case"),
                     }
                 } else {
@@ -876,9 +901,9 @@ fn find_member_type(members: &[StructMember], member_name: &str, span: &Span) ->
         .ok_or_else(|| unknown_name(span, format!("Unknown struct member {}", member_name)))
 }
 
-fn member_call_to_call(left: &Expression, call: &Call, int_size: IntSize) -> Expression {
+fn member_call_to_call(left: &Expression, call: &Call) -> Expression {
     let mut args = Vec::with_capacity(call.args.len() + 1);
-    let first_arg = match left.get_type(int_size) {
+    let first_arg = match left.get_type() {
         Type::Pointer(_) => left.clone(),
         _ => address_of(left.clone(), left.span()),
     };
@@ -980,6 +1005,7 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
         (MemberAccessType::Name(field), Type::Struct(st)) => {
             let (member_idx, member_type) = find_member_type(&st.members, &field.name, &sma.span)?;
             field.index = member_idx;
+            field.typ = member_type.clone();
             (member_type, None)
         }
 
@@ -999,13 +1025,13 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
         (MemberAccessType::Call(call), Type::Struct(st)) => {
             let call_name = format!("{}.{}", st.name, call.callee.name);
             call.callee.name = call_name;
-            return replace_by(member_call_to_call(&sma.left, &call, target.int_size));
+            return replace_by(member_call_to_call(&sma.left, &call));
         }
 
         (MemberAccessType::Call(call), Type::Sum(st)) => {
             let call_name = format!("{}.{}", st.name, call.callee.name);
             call.callee.name = call_name;
-            return replace_by(member_call_to_call(&sma.left, &call, target.int_size));
+            return replace_by(member_call_to_call(&sma.left, &call));
         }
 
         (MemberAccessType::Call(call), Type::Generic(gt)) => (type_check_generic_member_call(ctx, call, gt)?, None),
@@ -1037,7 +1063,7 @@ fn type_check_block(
         let typ = type_check_expression(ctx, e, type_hint, target)?;
         if idx == num - 1 {
             if let Expression::Return(r) = e {
-                b.typ = r.expression.get_type(target.int_size);
+                b.typ = r.expression.get_type();
             } else {
                 b.typ = typ;
             }
@@ -1162,7 +1188,7 @@ fn type_check_index_operation(
     Ok(typ)
 }
 
-fn to_regular_assign(a: &mut Assign, int_size: IntSize) {
+fn to_regular_assign(a: &mut Assign) {
     let op = match a.operator {
         AssignOperator::Assign => return,
         AssignOperator::Add => BinaryOperator::Add,
@@ -1180,7 +1206,7 @@ fn to_regular_assign(a: &mut Assign, int_size: IntSize) {
         AssignTarget::IndexOperation(i) => Expression::IndexOperation(Box::new(i.clone())),
     };
 
-    let right = bin_op_with_type(op, left, a.right.clone(), a.right.span(), a.right.get_type(int_size));
+    let right = bin_op_with_type(op, left, a.right.clone(), a.right.span(), a.right.get_type());
 
     a.operator = AssignOperator::Assign;
     a.right = right;
@@ -1190,11 +1216,13 @@ fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign, target: &Targ
     let dst_type = match &mut a.left {
         AssignTarget::Var(nr) => {
             type_check_name(ctx, nr, None)?;
-            if !ctx.resolve(&nr.name).map(|rn| rn.mutable).unwrap_or(false) {
-                return type_error_result(
-                    &nr.span,
-                    format!("Attempting to modify non mutable variable {}", nr.name),
-                );
+            if let Some(rn) = ctx.resolve(&nr.name) {
+                if !rn.mutable {
+                    return type_error_result(
+                        &nr.span,
+                        format!("Attempting to modify non mutable variable {}", nr.name),
+                    );
+                }
             }
             nr.typ.clone()
         }
@@ -1239,7 +1267,7 @@ fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign, target: &Targ
             }
         }
     }
-    to_regular_assign(a, target.int_size); // Convert to a regular assign, for code generation
+    to_regular_assign(a); // Convert to a regular assign, for code generation
     valid(Type::Void)
 }
 
@@ -1306,7 +1334,7 @@ fn type_check_compiler_call(
     target: &Target,
 ) -> TypeCheckResult {
     match cc {
-        CompilerCall::SizeOf(typ, span) => {
+        CompilerCall::SizeOf(typ, _, span) => {
             if resolve_type(ctx, typ) == TypeResolved::No {
                 type_error_result(span, format!("Unable to resolve type {}", typ))
             } else {
@@ -1493,9 +1521,10 @@ pub fn type_check_expression(
 }
 
 pub fn type_check_module(module: &mut Module, target: &Target, imports: &ImportMap) -> CompileResult<()> {
+    let mut destructors_added = false;
     loop {
         let mut ctx = TypeCheckerContext::new(ImportSymbolResolver::ImportMap(imports));
-        resolve_types(&mut ctx, module, target)?;
+        resolve_types(&mut ctx, module)?;
 
         for global in module.globals.values_mut() {
             if global.typ == Type::Unknown {
@@ -1520,7 +1549,15 @@ pub fn type_check_module(module: &mut Module, target: &Target, imports: &ImportM
         instantiate_generics(module, &mut ctx, imports, target)?;
         // As long as we are adding new generic functions, we need to type check the module again
         if count == module.functions.len() {
-            break;
+            if !destructors_added {
+                create_destructors(&ctx, module)?;
+                destructors_added = true;
+                //module.print(0);
+            }
+
+            if count == module.functions.len() {
+                break;
+            }
         }
     }
 

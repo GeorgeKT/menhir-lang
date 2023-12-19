@@ -89,19 +89,27 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction) -> Compil
     let mut blocks = HashMap::new();
     blocks.insert(0, entry_bb);
 
-    for (idx, bb) in func.blocks.iter() {
-        if bb.name != "entry" {
-            let bb_name = CString::new(bb.name.as_bytes()).map_err(|_| code_gen_error("Invalid block name"))?;
+    for bb_ref in func.block_order.iter() {
+        let block = func
+            .blocks
+            .get(bb_ref)
+            .ok_or_else(|| code_gen_error("Unknown basic block"))?;
+        if block.name != "entry" {
+            let bb_name = CString::new(block.name.as_bytes()).map_err(|_| code_gen_error("Invalid block name"))?;
             let new_bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, bb_name.as_ptr());
-            blocks.insert(*idx, new_bb);
+            blocks.insert(*bb_ref, new_bb);
         }
     }
 
-    for (bb_ref, block) in func.blocks.iter() {
+    for bb_ref in func.block_order.iter() {
         let bb = blocks
-            .get(&bb_ref)
+            .get(bb_ref)
             .ok_or_else(|| code_gen_error("Unknown basic block"))?;
         LLVMPositionBuilderAtEnd(ctx.builder, *bb);
+        let block = func
+            .blocks
+            .get(bb_ref)
+            .ok_or_else(|| code_gen_error("Unknown basic block"))?;
         for inst in &block.instructions {
             gen_instruction(ctx, func, inst, &blocks)?;
         }
