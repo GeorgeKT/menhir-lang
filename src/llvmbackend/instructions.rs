@@ -12,7 +12,6 @@ use crate::lazycode::*;
 use llvm_sys::core::*;
 use llvm_sys::prelude::*;
 use std::collections::HashMap;
-use std::ptr;
 use std::rc::Rc;
 
 #[allow(unused)]
@@ -43,7 +42,7 @@ pub unsafe fn gen_instruction(
     ctx: &mut Context,
     func: &ByteCodeFunction,
     instr: &Instruction,
-    blocks: &HashMap<BasicBlockRef, LLVMBasicBlockRef>,
+    blocks: &HashMap<usize, LLVMBasicBlockRef>,
 ) -> CompileResult<()> {
     match instr {
         Instruction::Exec { operand } => {
@@ -67,8 +66,8 @@ pub unsafe fn gen_instruction(
             let _value = gen_operand_dst(ctx, value, &dst_var)?;
             Ok(())
         }
-        Instruction::Branch { block } => {
-            let llvm_bb = blocks.get(block).expect("Unknown basic block");
+        Instruction::Branch { to } => {
+            let llvm_bb = blocks.get(&to.id).expect("Unknown basic block");
             LLVMBuildBr(ctx.builder, *llvm_bb);
             Ok(())
         }
@@ -77,8 +76,8 @@ pub unsafe fn gen_instruction(
             on_true,
             on_false,
         } => {
-            let on_true_bb = blocks.get(on_true).expect("Unknown basic block");
-            let on_false_bb = blocks.get(on_false).expect("Unknown basic block");
+            let on_true_bb = blocks.get(&on_true.id).expect("Unknown basic block");
+            let on_false_bb = blocks.get(&on_false.id).expect("Unknown basic block");
             let cond = gen_operand(ctx, cond, None)?;
             LLVMBuildCondBr(ctx.builder, cond.load(ctx)?, *on_true_bb, *on_false_bb);
             Ok(())
@@ -97,12 +96,9 @@ pub unsafe fn gen_instruction(
             LLVMBuildFree(ctx.builder, var.value);
             Ok(())
         }
-        Instruction::ScopeStart => {
-            ctx.push_stack(ptr::null_mut());
-            Ok(())
-        }
-        Instruction::ScopeEnd => {
-            ctx.pop_stack();
+        Instruction::Label { label } => {
+            let llvm_bb = blocks.get(&label.id).expect("Unknown basic block");
+            LLVMPositionBuilderAtEnd(ctx.builder, *llvm_bb);
             Ok(())
         }
     }

@@ -156,6 +156,7 @@ pub fn llvm_code_generation<'a>(
             }
         }
 
+        ctx.pop_stack();
         ctx.verify()?;
     }
 

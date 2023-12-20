@@ -3,7 +3,26 @@ use crate::ast::Type;
 use super::operand::Operand;
 use std::fmt;
 
-pub type BasicBlockRef = usize;
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct Label {
+    pub id: usize,
+}
+
+impl Label {
+    pub fn new(id: usize) -> Label {
+        Label { id }
+    }
+
+    pub fn block_name(&self) -> String {
+        format!("block{}", self.id)
+    }
+}
+
+impl fmt::Display for Label {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "@{}", self.id)
+    }
+}
 
 #[derive(Debug)]
 pub enum Instruction {
@@ -25,12 +44,12 @@ pub enum Instruction {
         value: Operand,
     },
     Branch {
-        block: BasicBlockRef,
+        to: Label,
     },
     BranchIf {
         cond: Operand,
-        on_true: BasicBlockRef,
-        on_false: BasicBlockRef,
+        on_true: Label,
+        on_false: Label,
     },
     Return {
         value: Operand,
@@ -38,8 +57,9 @@ pub enum Instruction {
     Delete {
         object: Operand,
     },
-    ScopeStart,
-    ScopeEnd,
+    Label {
+        label: Label,
+    },
 }
 
 impl fmt::Display for Instruction {
@@ -55,16 +75,15 @@ impl fmt::Display for Instruction {
                 }
             }
             Instruction::Store { dst, value } => writeln!(f, "  store {dst} {value}"),
-            Instruction::Branch { block } => writeln!(f, "  br {block}"),
+            Instruction::Branch { to } => writeln!(f, "  br {to}"),
             Instruction::BranchIf {
                 cond,
                 on_true,
                 on_false,
             } => writeln!(f, "  brif {cond} {on_true} {on_false}"),
             Instruction::Return { value } => writeln!(f, "  ret {value}"),
-            Instruction::ScopeStart => writeln!(f, "  scope start"),
-            Instruction::ScopeEnd => writeln!(f, "  scope end"),
             Instruction::Delete { object } => writeln!(f, "  del {object}"),
+            Instruction::Label { label } => writeln!(f, " {}:", label.id),
         }
     }
 }
@@ -78,7 +97,7 @@ pub fn ret_instr(value: Operand) -> Instruction {
     }
 }
 
-pub fn branch_if_instr(cond: Operand, on_true: BasicBlockRef, on_false: BasicBlockRef) -> Instruction {
+pub fn branch_if_instr(cond: Operand, on_true: Label, on_false: Label) -> Instruction {
     Instruction::BranchIf {
         cond,
         on_true,
@@ -86,8 +105,8 @@ pub fn branch_if_instr(cond: Operand, on_true: BasicBlockRef, on_false: BasicBlo
     }
 }
 
-pub fn branch_instr(block: BasicBlockRef) -> Instruction {
-    Instruction::Branch { block }
+pub fn branch_instr(label: Label) -> Instruction {
+    Instruction::Branch { to: label }
 }
 
 pub fn store_instr(dst: Operand, value: Operand) -> Instruction {
@@ -114,7 +133,7 @@ impl Instruction {
             Instruction::Return { value } => value.visit(f),
             Instruction::Delete { object } => object.visit(f),
             Instruction::Alias { value, .. } => value.visit(f),
-            Instruction::Branch { .. } | Instruction::ScopeStart | Instruction::ScopeEnd => (),
+            Instruction::Branch { .. } | Instruction::Label { .. } => (),
         }
     }
 

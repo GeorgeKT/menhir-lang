@@ -13,7 +13,7 @@ use crate::ast::TreePrinter;
 use crate::cli::Dump;
 use crate::cli::RunCommand;
 use crate::compileerror::{CompileError, CompileResult};
-use crate::lazycode::{compile_to_byte_code, optimize_module, OptimizationLevel};
+use crate::lazycode::{compile_to_byte_code, optimize_module};
 use crate::llvmbackend::TargetMachine;
 use crate::llvmbackend::{link, llvm_code_generation, CodeGenOptions, Context, OutputType};
 use crate::timer::{time_operation, time_operation_mut};
@@ -331,9 +331,9 @@ impl PackageTarget {
 
         time_operation_mut(build_options.show_timing, 2, "Optimization", || {
             if build_options.optimize {
-                optimize_module(&mut bc_mod, OptimizationLevel::Normal);
+                optimize_module(&mut bc_mod);
             } else {
-                optimize_module(&mut bc_mod, OptimizationLevel::Minimal);
+                optimize_module(&mut bc_mod);
             }
         });
 

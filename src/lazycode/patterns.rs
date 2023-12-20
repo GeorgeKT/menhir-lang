@@ -5,27 +5,21 @@ use crate::ast::{
 use crate::target::Target;
 
 use super::compiler::expr_to_bc;
-use super::function::ByteCodeFunction;
-use super::instruction::{branch_if_instr, branch_instr, BasicBlockRef};
+use super::instruction::{branch_if_instr, branch_instr, Label};
 use super::operand::{Constant, Operand};
+use super::scope::Scope;
 use super::ByteCodeModule;
 
-fn literal_match_to_bc(
-    func: &mut ByteCodeFunction,
-    match_target: Operand,
-    lit: Operand,
-    match_case_bb: BasicBlockRef,
-    next_bb: BasicBlockRef,
-) {
+fn literal_match_to_bc(scope: &mut Scope, match_target: Operand, lit: Operand, match_case_bb: Label, next_bb: Label) {
     let cond = Operand::binary(BinaryOperator::Equals, lit, match_target, Type::Bool);
-    func.add(branch_if_instr(cond, match_case_bb, next_bb));
+    scope.add(branch_if_instr(cond, match_case_bb, next_bb));
 }
 
 fn name_pattern_match_to_bc(
-    func: &mut ByteCodeFunction,
+    scope: &mut Scope,
     match_target: Operand,
-    match_case_bb: BasicBlockRef,
-    next_bb: BasicBlockRef,
+    match_case_bb: Label,
+    next_bb: Label,
     nr: &NameRef,
     target_machine: &Target,
 ) {
@@ -40,7 +34,7 @@ fn name_pattern_match_to_bc(
                 Operand::const_uint(idx as u64, target_machine.int_size),
                 Type::Bool,
             );
-            func.add(branch_if_instr(cond, match_case_bb, next_bb));
+            scope.add(branch_if_instr(cond, match_case_bb, next_bb));
         }
         Type::Sum(st) => {
             let idx = st
@@ -53,7 +47,7 @@ fn name_pattern_match_to_bc(
                 Operand::const_uint(idx as u64, target_machine.int_size),
                 Type::Bool,
             );
-            func.add(branch_if_instr(cond, match_case_bb, next_bb));
+            scope.add(branch_if_instr(cond, match_case_bb, next_bb));
         }
         _ => {
             panic!("Internal Compiler Error: Expression is not a valid match pattern");
@@ -61,21 +55,16 @@ fn name_pattern_match_to_bc(
     }
 }
 
-fn binding_pattern_match_to_bc(
-    func: &mut ByteCodeFunction,
-    match_target: Operand,
-    match_case_bb: BasicBlockRef,
-    nr: &NameRef,
-) {
-    func.alias(&nr.name, match_target, nr.typ.clone());
-    func.add(branch_instr(match_case_bb));
+fn binding_pattern_match_to_bc(scope: &mut Scope, match_target: Operand, match_case_bb: Label, nr: &NameRef) {
+    scope.alias(&nr.name, match_target, nr.typ.clone());
+    scope.add(branch_instr(match_case_bb));
 }
 
 fn empty_array_pattern_to_bc(
-    func: &mut ByteCodeFunction,
+    scope: &mut Scope,
     match_target: Operand,
-    match_case_bb: BasicBlockRef,
-    next_bb: BasicBlockRef,
+    match_case_bb: Label,
+    next_bb: Label,
     target_machine: &Target,
 ) {
     match match_target.get_type() {
@@ -87,18 +76,18 @@ fn empty_array_pattern_to_bc(
                 Operand::const_uint(0, target_machine.int_size),
                 Type::Bool,
             );
-            func.add(branch_if_instr(cond, match_case_bb, next_bb));
+            scope.add(branch_if_instr(cond, match_case_bb, next_bb));
         }
         _ => panic!("Internal Compiler Error: Match expression cannot be matched with an empty array pattern"),
     }
 }
 
 fn array_pattern_match_to_bc(
-    func: &mut ByteCodeFunction,
+    scope: &mut Scope,
     ap: &ArrayPattern,
     seq: Operand,
-    match_case_bb: BasicBlockRef,
-    next_bb: BasicBlockRef,
+    match_case_bb: Label,
+    next_bb: Label,
     target: &Target,
 ) {
     let head_type = seq
@@ -111,7 +100,7 @@ fn array_pattern_match_to_bc(
         head_type.clone(),
     );
 
-    let _head = func.alias(&ap.head, head, head_type.clone());
+    let _head = scope.alias(&ap.head, head, head_type.clone());
 
     let tail_type = slice_type(head_type.clone());
     let tail_len = Operand::binary(
@@ -130,7 +119,7 @@ fn array_pattern_match_to_bc(
         tail_type.clone(),
     );
 
-    func.alias(&ap.tail, tail, tail_type);
+    scope.alias(&ap.tail, tail, tail_type);
 
     let cond = Operand::binary(
         BinaryOperator::GreaterThan,
@@ -138,10 +127,10 @@ fn array_pattern_match_to_bc(
         Operand::const_uint(0, target.int_size),
         Type::Bool,
     );
-    func.add(branch_if_instr(cond, match_case_bb, next_bb));
+    scope.add(branch_if_instr(cond, match_case_bb, next_bb));
 }
 
-fn add_struct_pattern_bindings(p: &StructPattern, struct_var: Operand, func: &mut ByteCodeFunction, target: &Target) {
+fn add_struct_pattern_bindings(p: &StructPattern, struct_var: Operand, scope: &mut Scope, target: &Target) {
     for (idx, b) in p.bindings.iter().enumerate() {
         if b.name == "_" {
             continue;
@@ -160,24 +149,26 @@ fn add_struct_pattern_bindings(p: &StructPattern, struct_var: Operand, func: &mu
                 ptr_type(b.typ.clone()),
             )
         };
-        func.alias(&b.name, member, b.typ.clone());
+        scope.alias(&b.name, member, b.typ.clone());
     }
 }
 
 fn struct_pattern_match_to_bc(
-    func: &mut ByteCodeFunction,
+    scope: &mut Scope,
     match_target: Operand,
-    match_case_bb: BasicBlockRef,
-    next_bb: BasicBlockRef,
+    match_case_bb: Label,
+    next_bb: Label,
     p: &StructPattern,
     target_machine: &Target,
 ) {
     match &p.typ {
         Type::Struct(_) => {
-            func.add(branch_instr(match_case_bb));
-            func.set_current_bb(match_case_bb);
+            let bindings = scope.label();
+            scope.add(branch_instr(bindings));
+            scope.start_label(bindings);
 
-            add_struct_pattern_bindings(p, match_target, func, target_machine);
+            add_struct_pattern_bindings(p, match_target, scope, target_machine);
+            scope.add(branch_instr(match_case_bb));
         }
         Type::Sum(st) => {
             let target_sum_type_index = Operand::sti(match_target.safe_clone(), target_machine.int_size);
@@ -190,9 +181,10 @@ fn struct_pattern_match_to_bc(
                 Operand::const_uint(idx as u64, target_machine.int_size),
                 Type::Bool,
             );
-            func.add(branch_if_instr(cond, match_case_bb, next_bb));
 
-            func.set_current_bb(match_case_bb);
+            let bindings = scope.label();
+            scope.add(branch_if_instr(cond, bindings, next_bb));
+            scope.start_label(bindings);
 
             let case_type = ptr_type(
                 st.cases[idx]
@@ -205,18 +197,19 @@ fn struct_pattern_match_to_bc(
                 Operand::const_uint(idx as u64, target_machine.int_size),
                 case_type.clone(),
             );
-            let struct_ptr = func.alias("$struct_ptr", struct_ptr, case_type);
-            add_struct_pattern_bindings(p, struct_ptr, func, target_machine);
+            let struct_ptr = scope.alias("$struct_ptr", struct_ptr, case_type);
+            add_struct_pattern_bindings(p, struct_ptr, scope, target_machine);
+            scope.add(branch_instr(match_case_bb));
         }
         _ => panic!("ICE: Expression is not a valid match pattern"),
     }
 }
 
 fn optional_pattern_match_to_bc(
-    func: &mut ByteCodeFunction,
+    scope: &mut Scope,
     match_target: Operand,
-    match_case_bb: BasicBlockRef,
-    next_bb: BasicBlockRef,
+    match_case_bb: Label,
+    next_bb: Label,
     o: &OptionalPattern,
     target: &Target,
 ) {
@@ -227,9 +220,10 @@ fn optional_pattern_match_to_bc(
         Operand::const_uint(0, target.int_size),
         Type::Bool,
     );
-    func.add(branch_if_instr(cond, match_case_bb, next_bb));
 
-    func.set_current_bb(match_case_bb);
+    let bindings = scope.label();
+    scope.add(branch_if_instr(cond, bindings, next_bb));
+    scope.start_label(bindings);
 
     if o.inner_type.pass_by_value() {
         let data = Operand::member(
@@ -237,22 +231,23 @@ fn optional_pattern_match_to_bc(
             Operand::const_uint(0, target.int_size),
             o.inner_type.clone(),
         );
-        func.alias(&o.binding, data, o.inner_type.clone());
+        scope.alias(&o.binding, data, o.inner_type.clone());
     } else {
         let data = Operand::member_ptr(
             match_target,
             Operand::const_uint(0, target.int_size),
             ptr_type(o.inner_type.clone()),
         );
-        func.alias(&o.binding, data, ptr_type(o.inner_type.clone()));
+        scope.alias(&o.binding, data, ptr_type(o.inner_type.clone()));
     }
+    scope.add(branch_instr(match_case_bb));
 }
 
 fn nil_pattern_match_to_bc(
-    func: &mut ByteCodeFunction,
+    scope: &mut Scope,
     target: Operand,
-    match_case_bb: BasicBlockRef,
-    next_bb: BasicBlockRef,
+    match_case_bb: Label,
+    next_bb: Label,
     target_machine: &Target,
 ) {
     let sti = Operand::sti(target, target_machine.int_size);
@@ -262,40 +257,39 @@ fn nil_pattern_match_to_bc(
         Operand::const_uint(0, target_machine.int_size),
         Type::Bool,
     );
-    func.add(branch_if_instr(cond, next_bb, match_case_bb));
+    scope.add(branch_if_instr(cond, next_bb, match_case_bb));
 }
 
 fn result_pattern_match_to_bc(
     bc_mod: &mut ByteCodeModule,
-    func: &mut ByteCodeFunction,
+    scope: &mut Scope,
     target: Operand,
-    match_end_bb: BasicBlockRef,
-    match_case_bb: BasicBlockRef,
-    next_bb: BasicBlockRef,
+    match_end_bb: Label,
+    match_case_bb: Label,
+    next_bb: Label,
     inner_type: &Type,
     inner_pattern: &Pattern,
     is_ok: bool,
     target_machine: &Target,
 ) {
     let index = if is_ok { 0 } else { 1 };
-    let bind_bb = func.create_basic_block();
+    let bind_bb = scope.label();
 
     let sti = Operand::sti(target.safe_clone(), target_machine.int_size);
     let idx = Operand::const_int(index, target_machine.int_size);
     let cond = Operand::binary(BinaryOperator::Equals, sti, idx.safe_clone(), Type::Bool);
-    func.add(branch_if_instr(cond, bind_bb, next_bb));
+    scope.add(branch_if_instr(cond, bind_bb, next_bb));
 
-    func.set_current_bb(bind_bb);
-    func.add_basic_block(bind_bb);
+    scope.start_label(bind_bb);
     let member = Operand::member_ptr(target, idx, ptr_type(inner_type.clone()));
-    let inner = func.alias(
+    let inner = scope.alias(
         if is_ok { "$ok_inner" } else { "$err_inner" },
         member,
         ptr_type(inner_type.clone()),
     );
     pattern_to_bc(
         bc_mod,
-        func,
+        scope,
         inner_pattern,
         inner,
         match_case_bb,
@@ -305,15 +299,10 @@ fn result_pattern_match_to_bc(
     );
 }
 
-fn array_lit_to_bc(
-    bc_mod: &mut ByteCodeModule,
-    func: &mut ByteCodeFunction,
-    a: &ArrayLiteral,
-    target: &Target,
-) -> Operand {
+fn array_lit_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, a: &ArrayLiteral, target: &Target) -> Operand {
     let mut members = Vec::new();
     for element in a.elements.iter() {
-        let v = expr_to_bc(bc_mod, func, element, target);
+        let v = expr_to_bc(bc_mod, scope, element, target);
         members.push(v);
     }
     Operand::Array {
@@ -324,18 +313,18 @@ fn array_lit_to_bc(
 
 pub fn pattern_to_bc(
     bc_mod: &mut ByteCodeModule,
-    func: &mut ByteCodeFunction,
+    scope: &mut Scope,
     pattern: &Pattern,
     match_target: Operand,
-    match_case_bb: BasicBlockRef,
-    match_end_bb: BasicBlockRef,
-    next_bb: BasicBlockRef,
+    match_case_bb: Label,
+    match_end_bb: Label,
+    next_bb: Label,
     target_machine: &Target,
 ) {
     match pattern {
         Pattern::Literal(Literal::Int(_, v, int_size)) => {
             literal_match_to_bc(
-                func,
+                scope,
                 match_target,
                 Operand::const_int(*v, *int_size),
                 match_case_bb,
@@ -345,7 +334,7 @@ pub fn pattern_to_bc(
 
         Pattern::Literal(Literal::UInt(_, v, int_size)) => {
             literal_match_to_bc(
-                func,
+                scope,
                 match_target,
                 Operand::const_uint(*v, *int_size),
                 match_case_bb,
@@ -355,7 +344,7 @@ pub fn pattern_to_bc(
 
         Pattern::Literal(Literal::Float(_, v, float_size)) => {
             literal_match_to_bc(
-                func,
+                scope,
                 match_target,
                 Operand::const_float(v.parse().expect("ICE: invalid float"), *float_size),
                 match_case_bb,
@@ -364,16 +353,16 @@ pub fn pattern_to_bc(
         }
 
         Pattern::Literal(Literal::Bool(_, v)) => {
-            literal_match_to_bc(func, match_target, Operand::const_bool(*v), match_case_bb, next_bb);
+            literal_match_to_bc(scope, match_target, Operand::const_bool(*v), match_case_bb, next_bb);
         }
 
         Pattern::Literal(Literal::Char(_, v)) => {
-            literal_match_to_bc(func, match_target, Operand::const_char(*v), match_case_bb, next_bb);
+            literal_match_to_bc(scope, match_target, Operand::const_char(*v), match_case_bb, next_bb);
         }
 
         Pattern::Literal(Literal::NullPtr(_, inner_type)) => {
             literal_match_to_bc(
-                func,
+                scope,
                 match_target,
                 Operand::Constant {
                     value: Constant::NullPtr(inner_type.clone()),
@@ -383,26 +372,28 @@ pub fn pattern_to_bc(
             );
         }
 
-        Pattern::Name(nr) => name_pattern_match_to_bc(func, match_target, match_case_bb, next_bb, nr, target_machine),
+        Pattern::Name(nr) => name_pattern_match_to_bc(scope, match_target, match_case_bb, next_bb, nr, target_machine),
 
-        Pattern::Binding(nr) => binding_pattern_match_to_bc(func, match_target, match_case_bb, nr),
+        Pattern::Binding(nr) => binding_pattern_match_to_bc(scope, match_target, match_case_bb, nr),
 
         Pattern::Any(_) => {
-            func.add(branch_instr(match_case_bb));
+            scope.add(branch_instr(match_case_bb));
         }
 
-        Pattern::EmptyArray(_) => empty_array_pattern_to_bc(func, match_target, match_case_bb, next_bb, target_machine),
+        Pattern::EmptyArray(_) => {
+            empty_array_pattern_to_bc(scope, match_target, match_case_bb, next_bb, target_machine)
+        }
         Pattern::Array(ap) => match &match_target.get_type() {
             Type::Array(_) | Type::Slice(_) => {
-                array_pattern_match_to_bc(func, ap, match_target, match_case_bb, next_bb, target_machine);
+                array_pattern_match_to_bc(scope, ap, match_target, match_case_bb, next_bb, target_machine);
             }
             _ => panic!("Internal Compiler Error: Match expression cannot be matched with an array pattern"),
         },
 
         Pattern::Literal(Literal::Array(a)) => {
-            let arr = array_lit_to_bc(bc_mod, func, a, target_machine);
+            let arr = array_lit_to_bc(bc_mod, scope, a, target_machine);
             let cond = Operand::binary(BinaryOperator::Equals, arr, match_target, Type::Bool);
-            func.add(branch_if_instr(cond, match_case_bb, next_bb));
+            scope.add(branch_if_instr(cond, match_case_bb, next_bb));
         }
 
         Pattern::Literal(Literal::String(_, s)) => {
@@ -412,20 +403,22 @@ pub fn pattern_to_bc(
                 match_target,
                 Type::Bool,
             );
-            func.add(branch_if_instr(cond, match_case_bb, next_bb));
+            scope.add(branch_if_instr(cond, match_case_bb, next_bb));
         }
 
-        Pattern::Struct(p) => struct_pattern_match_to_bc(func, match_target, match_case_bb, next_bb, p, target_machine),
+        Pattern::Struct(p) => {
+            struct_pattern_match_to_bc(scope, match_target, match_case_bb, next_bb, p, target_machine)
+        }
 
-        Pattern::Nil(_) => nil_pattern_match_to_bc(func, match_target, match_case_bb, next_bb, target_machine),
+        Pattern::Nil(_) => nil_pattern_match_to_bc(scope, match_target, match_case_bb, next_bb, target_machine),
 
         Pattern::Optional(o) => {
-            optional_pattern_match_to_bc(func, match_target, match_case_bb, next_bb, o, target_machine)
+            optional_pattern_match_to_bc(scope, match_target, match_case_bb, next_bb, o, target_machine)
         }
 
         Pattern::Ok(o) => result_pattern_match_to_bc(
             bc_mod,
-            func,
+            scope,
             match_target,
             match_end_bb,
             match_case_bb,
@@ -438,7 +431,7 @@ pub fn pattern_to_bc(
 
         Pattern::Error(e) => result_pattern_match_to_bc(
             bc_mod,
-            func,
+            scope,
             match_target,
             match_end_bb,
             match_case_bb,

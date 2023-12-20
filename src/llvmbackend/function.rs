@@ -2,6 +2,7 @@ use llvm_sys::core::*;
 use llvm_sys::prelude::*;
 use std::collections::HashMap;
 use std::ffi::CString;
+use std::ptr;
 use std::rc::Rc;
 
 use super::context::Context;
@@ -50,6 +51,25 @@ pub unsafe fn gen_function_ptr(
     ctx.add_function(Rc::new(fi))
 }
 
+unsafe fn gen_scope(
+    ctx: &mut Context,
+    func: &ByteCodeFunction,
+    scope: &Scope,
+    blocks: &HashMap<usize, LLVMBasicBlockRef>,
+) -> CompileResult<()> {
+    for n in &scope.nodes {
+        match n {
+            ScopeNode::Instruction(i) => gen_instruction(ctx, func, i, blocks)?,
+            ScopeNode::Scope(s) => {
+                ctx.push_stack(ptr::null_mut());
+                gen_scope(ctx, func, s, blocks)?;
+                ctx.pop_stack();
+            }
+        }
+    }
+    Ok(())
+}
+
 pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction) -> CompileResult<()> {
     //println!("gen_function {}", func.sig.name);
     let fi = ctx.get_function(&func.sig.name)?;
@@ -90,33 +110,16 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction) -> Compil
     let mut blocks = HashMap::new();
     blocks.insert(0, entry_bb);
 
-    for bb_ref in func.block_order.iter() {
-        let block = func
-            .blocks
-            .get(bb_ref)
-            .ok_or_else(|| code_gen_error(format!("Unknown basic block {}", bb_ref)))?;
-        if block.name != "entry" {
-            let bb_name = CString::new(block.name.as_bytes()).map_err(|_| code_gen_error("Invalid block name"))?;
+    func.toplevel_scope.for_each_instruction(&mut |inst| {
+        if let Instruction::Label { label } = inst {
+            let bb_name = CString::new(label.block_name().as_bytes()).expect("Invalid block name");
             let new_bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, bb_name.as_ptr());
-            blocks.insert(*bb_ref, new_bb);
+            blocks.insert(label.id, new_bb);
         }
-    }
+        true
+    });
 
-    for bb_ref in func.block_order.iter() {
-        let bb = blocks
-            .get(bb_ref)
-            .ok_or_else(|| code_gen_error(format!("Unknown basic block {}", bb_ref)))?;
-        LLVMPositionBuilderAtEnd(ctx.builder, *bb);
-        let block = func
-            .blocks
-            .get(bb_ref)
-            .ok_or_else(|| code_gen_error("Unknown basic block"))?;
-        //println!("gen_block {bb_ref}");
-        for inst in &block.instructions {
-            //print!("{inst}");
-            gen_instruction(ctx, func, inst, &blocks)?;
-        }
-    }
+    gen_scope(ctx, func, &func.toplevel_scope, &blocks)?;
 
     ctx.pop_stack();
     Ok(())

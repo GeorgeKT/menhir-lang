@@ -230,6 +230,9 @@ impl Context {
     }
 
     pub fn verify(&self) -> Result<(), String> {
+        if !self.stack.is_empty() {
+            return Err(format!("Stack is not empty (size {})", self.stack.len()));
+        }
         use libc::c_char;
         use llvm_sys::analysis::*;
         unsafe {

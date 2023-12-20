@@ -66,6 +66,10 @@ pub trait TreePrinter {
     fn print(&self, level: usize);
 }
 
+pub trait TreeFormatter {
+    fn fmt(&self, level: usize, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error>;
+}
+
 use itertools::join;
 use std::collections::HashMap;
 

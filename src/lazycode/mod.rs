@@ -1,10 +1,11 @@
 use std::{collections::HashMap, fmt};
 
 pub use self::compiler::compile_to_byte_code;
-pub use self::function::{BasicBlock, ByteCodeFunction};
-pub use self::instruction::{BasicBlockRef, Instruction};
+pub use self::function::ByteCodeFunction;
+pub use self::instruction::Instruction;
 pub use self::operand::{ByteCodeProperty, CallArg, Constant, Operand};
 pub use self::optimizer::*;
+pub use self::scope::{Scope, ScopeNode};
 
 mod compiler;
 mod consteval;
@@ -13,6 +14,7 @@ mod instruction;
 mod operand;
 mod optimizer;
 mod patterns;
+mod scope;
 
 #[derive(Debug)]
 pub struct ByteCodeModule {
