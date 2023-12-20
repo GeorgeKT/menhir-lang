@@ -44,8 +44,10 @@ mod test {
         let bb2 = func.create_basic_block();
         func.add(Instruction::Branch { block: bb1 });
         func.set_current_bb(bb1);
+        func.add_basic_block(bb1);
         func.add(Instruction::Branch { block: bb2 });
         func.set_current_bb(bb2);
+        func.add_basic_block(bb2);
         func.add(Instruction::Return { value: Operand::Void });
 
         optimize_function(&mut func, OptimizationLevel::Normal);

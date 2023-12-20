@@ -3,7 +3,6 @@ use std::fmt;
 
 use itertools::join;
 
-use super::blockorder::determine_block_order;
 use super::compiler::expr_to_bc;
 use super::ByteCodeModule;
 use super::{
@@ -67,10 +66,6 @@ impl BasicBlock {
 
         self.instructions.push(inst);
     }
-
-    pub fn ends_with_return(&self) -> bool {
-        matches!(self.instructions.last(), Some(Instruction::Return { .. }))
-    }
 }
 
 #[derive(Debug)]
@@ -107,6 +102,7 @@ impl ByteCodeFunction {
         if !external {
             let entry = f.create_basic_block();
             f.set_current_bb(entry);
+            f.add_basic_block(entry);
         }
         f
     }
@@ -146,7 +142,7 @@ impl ByteCodeFunction {
     }
 
     pub fn alias(&mut self, name: &str, value: Operand, typ: Type) -> Operand {
-        let name = self.add_name(name);
+        let name: String = name.into(); //self.add_name(name);
         let var = Operand::Var {
             name: name.clone(),
             typ: typ.clone(),
@@ -157,7 +153,7 @@ impl ByteCodeFunction {
     }
 
     pub fn declare(&mut self, name: &str, init: Option<Operand>, typ: Type) -> Operand {
-        let name = self.add_name(name);
+        let name: String = name.into(); //self.add_name(name);
         let var = Operand::Var {
             name: name.clone(),
             typ: typ.clone(),
@@ -176,6 +172,15 @@ impl ByteCodeFunction {
         let name = bb_name(bb_ref);
         self.blocks.insert(bb_ref, BasicBlock::new(name, bb_ref));
         bb_ref
+    }
+
+    pub fn add_basic_block(&mut self, bb: BasicBlockRef) {
+        self.block_order.push(bb);
+    }
+
+    pub fn remove_basic_block(&mut self, bb: BasicBlockRef) {
+        self.block_order.retain(|b| *b != bb);
+        self.blocks.remove(&bb);
     }
 
     pub fn set_current_bb(&mut self, bb_ref: BasicBlockRef) {
@@ -213,6 +218,10 @@ impl ByteCodeFunction {
         }
     }
 
+    pub fn scope_stack_empty(&self) -> bool {
+        self.scopes.is_empty()
+    }
+
     pub fn add_unwind_calls(&mut self, unwind: &Vec<Expression>) {
         if let Some(s) = self.scopes.last_mut() {
             for c in unwind {
@@ -247,10 +256,6 @@ impl ByteCodeFunction {
                 }
             }
         }
-    }
-
-    pub fn calculate_block_order(&mut self) {
-        determine_block_order(self);
     }
 }
 

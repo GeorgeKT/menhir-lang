@@ -1,0 +1,33 @@
+#ret:42
+
+var destruct_counter = 0
+
+struct Box:
+    ptr: *int
+
+fn ~Box(self):
+    destruct_counter += 1
+    delete self.ptr
+
+
+enum Option:
+    Some{box: Box}
+    Many{a: Box, b: Box, c: Box}
+    None
+
+fn main() -> int:
+    var ret = 0
+    while destruct_counter < 7:
+        let opt = Option::Some{Box{new 6}}
+        match opt:
+            Option::Some{b} => 
+                ret += *b.ptr 
+            Option::Many{a, b, c} => 
+                ret += *a.ptr 
+                ret += *b.ptr 
+                ret += *c.ptr
+            Option::None => 
+                ret += 0
+    return ret
+
+

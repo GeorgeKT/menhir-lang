@@ -45,12 +45,10 @@ pub fn remove_empty_blocks(func: &mut ByteCodeFunction) {
     }
 
     for &(to_replace, _) in &candidates {
-        func.blocks.remove(&to_replace);
+        func.remove_basic_block(to_replace);
     }
 
     for &(to_replace, replacement) in &candidates {
         replace_branch_target(func, to_replace, replacement);
     }
-
-    func.calculate_block_order();
 }

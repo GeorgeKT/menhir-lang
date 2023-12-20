@@ -177,7 +177,6 @@ fn struct_pattern_match_to_bc(
             func.add(branch_instr(match_case_bb));
             func.set_current_bb(match_case_bb);
 
-            func.push_scope();
             add_struct_pattern_bindings(p, match_target, func, target_machine);
         }
         Type::Sum(st) => {
@@ -195,7 +194,6 @@ fn struct_pattern_match_to_bc(
 
             func.set_current_bb(match_case_bb);
 
-            func.push_scope();
             let case_type = ptr_type(
                 st.cases[idx]
                     .typ
@@ -288,8 +286,13 @@ fn result_pattern_match_to_bc(
     func.add(branch_if_instr(cond, bind_bb, next_bb));
 
     func.set_current_bb(bind_bb);
+    func.add_basic_block(bind_bb);
     let member = Operand::member_ptr(target, idx, ptr_type(inner_type.clone()));
-    let inner = func.alias("$result_inner", member, ptr_type(inner_type.clone()));
+    let inner = func.alias(
+        if is_ok { "$ok_inner" } else { "$err_inner" },
+        member,
+        ptr_type(inner_type.clone()),
+    );
     pattern_to_bc(
         bc_mod,
         func,

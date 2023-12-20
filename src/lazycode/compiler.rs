@@ -303,16 +303,19 @@ fn optional_or_to_bc(func: &mut ByteCodeFunction, l: Operand, r: Operand, target
     func.add(branch_if_instr(l_is_valid, store_l_bb, store_r_bb));
 
     func.set_current_bb(store_r_bb);
+    func.add_basic_block(store_r_bb);
     func.add(store_instr(dst.safe_clone(), r));
     func.add(branch_instr(end_bb));
 
     func.set_current_bb(store_l_bb);
+    func.add_basic_block(store_l_bb);
     func.add(store_instr(
         dst.safe_clone(),
         Operand::member(l_var, Operand::const_uint(0, target.int_size), dst_type),
     ));
     func.add(branch_instr(end_bb));
     func.set_current_bb(end_bb);
+    func.add_basic_block(end_bb);
     dst
 }
 
@@ -335,6 +338,7 @@ fn result_or_to_bc(func: &mut ByteCodeFunction, l: Operand, r: Operand, target: 
     );
     func.add(branch_if_instr(l_is_ok, ok_branch, error_branch));
     func.set_current_bb(ok_branch);
+    func.add_basic_block(ok_branch);
     func.add(store_instr(
         dst.safe_clone(),
         Operand::member(l_var.safe_clone(), Operand::const_uint(0, target.int_size), dst_type),
@@ -342,10 +346,12 @@ fn result_or_to_bc(func: &mut ByteCodeFunction, l: Operand, r: Operand, target: 
     func.add(branch_instr(end_bb));
 
     func.set_current_bb(error_branch);
+    func.add_basic_block(error_branch);
     func.add(store_instr(dst.safe_clone(), r));
     func.add(branch_instr(end_bb));
 
     func.set_current_bb(end_bb);
+    func.add_basic_block(end_bb);
     dst
 }
 
@@ -419,9 +425,12 @@ fn while_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, w: &Whi
 
     func.add(branch_instr(cond_bb));
     func.set_current_bb(cond_bb);
+    func.add_basic_block(cond_bb);
+
     let cond = expr_to_bc(bc_mod, func, &w.cond, target);
     func.add(branch_if_instr(cond, body_bb, post_while_bb));
     func.set_current_bb(body_bb);
+    func.add_basic_block(body_bb);
     func.push_scope();
     expr_to_bc(bc_mod, func, &w.body, target);
     let keep_looping = !func.last_instruction_is_return();
@@ -432,6 +441,7 @@ fn while_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, w: &Whi
         func.pop_scope_no_destructors();
     }
     func.set_current_bb(post_while_bb);
+    func.add_basic_block(post_while_bb);
 }
 
 fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLoop, target: &Target) {
@@ -461,11 +471,13 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
 
     func.add(branch_instr(cond_bb));
     func.set_current_bb(cond_bb);
+    func.add_basic_block(cond_bb);
 
     let cmp = Operand::binary(BinaryOperator::LessThan, index.safe_clone(), len, Type::Bool);
     func.add(branch_if_instr(cmp, body_bb, post_for_bb));
 
     func.set_current_bb(body_bb);
+    func.add_basic_block(body_bb);
     let element_type = iterable
         .get_type()
         .get_element_type()
@@ -493,6 +505,7 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, func: &mut ByteCodeFunction, f: &ForLo
     }
 
     func.set_current_bb(post_for_bb);
+    func.add_basic_block(post_for_bb);
     func.pop_scope(bc_mod, target);
 }
 
@@ -512,6 +525,7 @@ fn if_to_bc(
         let false_bb = func.create_basic_block();
         func.add(branch_if_instr(cond, true_bb, false_bb));
         func.set_current_bb(false_bb);
+        func.add_basic_block(false_bb);
         func.push_scope();
         let val = expr_to_bc(bc_mod, func, on_false, target);
         let add_branch = !func.last_instruction_is_return();
@@ -527,6 +541,7 @@ fn if_to_bc(
     }
 
     func.set_current_bb(true_bb);
+    func.add_basic_block(true_bb);
     func.push_scope();
     let val = expr_to_bc(bc_mod, func, &if_expr.on_true, target);
     let add_branch = !func.last_instruction_is_return();
@@ -539,6 +554,7 @@ fn if_to_bc(
     }
 
     func.set_current_bb(end_bb);
+    func.add_basic_block(end_bb);
     dst
 }
 
@@ -640,6 +656,7 @@ fn match_case_body_to_bc(
     target: &Target,
 ) {
     func.set_current_bb(match_case_bb);
+    func.add_basic_block(match_case_bb);
     let val = expr_to_bc(bc_mod, func, body, target);
     let add_branch = !func.last_instruction_is_return();
     if add_branch {
@@ -650,6 +667,7 @@ fn match_case_body_to_bc(
         func.pop_scope_no_destructors();
     }
     func.set_current_bb(next_bb);
+    func.add_basic_block(next_bb);
 }
 
 fn match_case_to_bc(
@@ -721,6 +739,7 @@ fn match_to_bc(
 
     func.add(branch_instr(match_end_bb));
     func.set_current_bb(match_end_bb);
+    func.add_basic_block(match_end_bb);
     func.pop_scope(bc_mod, target);
     dst.safe_clone()
 }
@@ -903,7 +922,8 @@ fn func_to_bc(
         llfunc.pop_scope_no_destructors();
     }
 
-    llfunc.calculate_block_order();
+    assert!(llfunc.scope_stack_empty());
+
     llfunc
 }
 

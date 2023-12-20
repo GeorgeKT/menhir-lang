@@ -6,7 +6,6 @@ pub use self::instruction::{BasicBlockRef, Instruction};
 pub use self::operand::{ByteCodeProperty, CallArg, Constant, Operand};
 pub use self::optimizer::*;
 
-mod blockorder;
 mod compiler;
 mod consteval;
 mod function;

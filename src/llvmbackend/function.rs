@@ -51,6 +51,7 @@ pub unsafe fn gen_function_ptr(
 }
 
 pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction) -> CompileResult<()> {
+    //println!("gen_function {}", func.sig.name);
     let fi = ctx.get_function(&func.sig.name)?;
 
     let entry_bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, cstr!("entry"));
@@ -93,7 +94,7 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction) -> Compil
         let block = func
             .blocks
             .get(bb_ref)
-            .ok_or_else(|| code_gen_error("Unknown basic block"))?;
+            .ok_or_else(|| code_gen_error(format!("Unknown basic block {}", bb_ref)))?;
         if block.name != "entry" {
             let bb_name = CString::new(block.name.as_bytes()).map_err(|_| code_gen_error("Invalid block name"))?;
             let new_bb = LLVMAppendBasicBlockInContext(ctx.context, fi.function, bb_name.as_ptr());
@@ -104,13 +105,15 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction) -> Compil
     for bb_ref in func.block_order.iter() {
         let bb = blocks
             .get(bb_ref)
-            .ok_or_else(|| code_gen_error("Unknown basic block"))?;
+            .ok_or_else(|| code_gen_error(format!("Unknown basic block {}", bb_ref)))?;
         LLVMPositionBuilderAtEnd(ctx.builder, *bb);
         let block = func
             .blocks
             .get(bb_ref)
             .ok_or_else(|| code_gen_error("Unknown basic block"))?;
+        //println!("gen_block {bb_ref}");
         for inst in &block.instructions {
+            //print!("{inst}");
             gen_instruction(ctx, func, inst, &blocks)?;
         }
     }
