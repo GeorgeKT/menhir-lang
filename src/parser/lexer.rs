@@ -407,6 +407,7 @@ mod tests {
     use crate::parser::lexer::Lexer;
     use crate::parser::tokens::*;
     use crate::span::*;
+    use pretty_assertions::assert_eq;
     use std::io::Cursor;
 
     fn tok(kind: TokenKind, sline: usize, soffset: usize, eline: usize, eoffset: usize) -> Token {
@@ -489,7 +490,7 @@ mod tests {
                 tok(TokenKind::Comma, 1, 45, 1, 45),
                 tok(TokenKind::DoubleColon, 1, 47, 1, 48),
                 tok(TokenKind::Dollar, 1, 50, 1, 50),
-                tok(TokenKind::DotDot, 1, 53, 1, 55),
+                tok(TokenKind::DotDot, 1, 52, 1, 53),
                 tok(TokenKind::EOF, 2, 1, 2, 1),
             ]
         );

@@ -277,7 +277,7 @@ mod tests {
         assert!(make_concrete(&ctx, &tm, &generic_type("a"), &Span::default()).unwrap() == Type::Int(IntSize::I32));
         assert!(make_concrete(&ctx, &tm, &generic_type("b"), &Span::default()).unwrap() == Type::Float(FloatSize::F64));
         assert!(make_concrete(&ctx, &tm, &generic_type("c"), &Span::default()).unwrap() == Type::Bool);
-        assert!(make_concrete(&ctx, &tm, &generic_type("d"), &Span::default()).unwrap() == string_type());
+        assert!(make_concrete(&ctx, &tm, &generic_type("d"), &Span::default()).unwrap() == Type::String);
     }
 
     #[test]
@@ -300,7 +300,7 @@ mod tests {
                 func_arg(Type::Bool, false),
                 func_arg(Type::Int(IntSize::I32), false),
             ],
-            string_type(),
+            Type::String,
         );
         let r = fill_in_generics(&ctx, &aa, &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
@@ -329,7 +329,7 @@ mod tests {
                 func_arg(Type::Bool, false),
                 func_arg(Type::Int(IntSize::I32), false),
             ],
-            string_type(),
+            Type::String,
         );
         let r = fill_in_generics(&ctx, &aa, &ga, &mut tm, &Span::default());
         println!("tm: {:?}", tm);
@@ -338,7 +338,7 @@ mod tests {
         assert!(make_concrete(&ctx, &tm, &generic_type("a"), &Span::default()).unwrap() == Type::Int(IntSize::I32));
         assert!(make_concrete(&ctx, &tm, &generic_type("b"), &Span::default()).unwrap() == Type::Float(FloatSize::F64));
         assert!(make_concrete(&ctx, &tm, &generic_type("c"), &Span::default()).unwrap() == Type::Bool);
-        assert!(make_concrete(&ctx, &tm, &generic_type("d"), &Span::default()).unwrap() == string_type());
+        assert!(make_concrete(&ctx, &tm, &generic_type("d"), &Span::default()).unwrap() == Type::String);
     }
 
     #[test]
