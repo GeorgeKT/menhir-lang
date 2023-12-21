@@ -166,7 +166,6 @@ fn add_binding(bc_mod: &mut ByteCodeModule, scope: &mut Scope, b: &Binding, targ
                         Operand::const_uint(idx as u64, target.int_size),
                         ptr_type(b.typ.clone()),
                     ),
-                    b.typ.clone(),
                 );
             }
         }
@@ -265,11 +264,20 @@ fn assign_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, assign: &Assign,
 
         AssignTarget::IndexOperation(iop) => {
             let tgt = expr_to_bc(bc_mod, scope, &iop.target, target);
-            let idx = expr_to_bc(bc_mod, scope, &iop.index_expr, target);
-            scope.add(store_instr(
-                Operand::member_ptr(tgt, idx, ptr_type(iop.typ.clone())),
-                value,
-            ));
+
+            match &iop.index_expr {
+                IndexMode::Index(i) => {
+                    let idx = expr_to_bc(bc_mod, scope, i, target);
+                    scope.add(store_instr(
+                        Operand::member_ptr(tgt, idx, ptr_type(iop.typ.clone())),
+                        value,
+                    ));
+                }
+                IndexMode::Range(_) => {
+                    // Caught in the type checker
+                    panic!("ICE: assigning to a ranged index target is not allowed");
+                }
+            }
         }
     }
 }
@@ -547,16 +555,11 @@ fn return_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, r: &Return, targ
     Operand::Void
 }
 
-fn compiler_call_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, c: &CompilerCall, target: &Target) -> Operand {
+fn compiler_call_to_bc(c: &CompilerCall) -> Operand {
     match c {
         CompilerCall::SizeOf(typ, int_size, _) => Operand::SizeOf {
             typ: typ.clone(),
             int_size: *int_size,
-        },
-        CompilerCall::Slice { data, len, typ, .. } => Operand::Slice {
-            start: Box::new(expr_to_bc(bc_mod, scope, data, target)),
-            len: Box::new(expr_to_bc(bc_mod, scope, len, target)),
-            typ: typ.clone(),
         },
     }
 }
@@ -568,24 +571,21 @@ fn array_to_slice_to_bc(
     target: &Target,
 ) -> Operand {
     let array = expr_to_bc(bc_mod, scope, &ats.inner, target);
-    let array = scope.declare("$array", Some(array), ats.inner.get_type());
+    let array = scope.to_var("$array", array);
     let element_type = array
         .get_type()
         .get_element_type()
         .expect("ICE: Array must have element type");
-    Operand::Slice {
-        start: Box::new(Operand::Property {
+    let range = Operand::Range {
+        start: Box::new(Operand::const_uint(0, target.int_size)),
+        end: Box::new(Operand::Property {
             operand: Box::new(array.safe_clone()),
-            property: ByteCodeProperty::Data,
-            typ: ptr_type(element_type),
-        }),
-        len: Box::new(Operand::Property {
-            operand: Box::new(array),
             property: ByteCodeProperty::Len,
-            typ: Type::UInt(target.int_size),
+            typ: target.native_int_type.clone(),
         }),
-        typ: ats.slice_type.clone(),
-    }
+        typ: Type::Range(target.int_size),
+    };
+    Operand::slice(array, range, slice_type(element_type.clone()))
 }
 
 fn bindings_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, b: &BindingList, target: &Target) -> Operand {
@@ -627,6 +627,7 @@ fn match_case_to_bc(
     let next_bb = scope.label();
 
     scope.scope(|scope| {
+        let non_match_bb = scope.label();
         pattern_to_bc(
             bc_mod,
             scope,
@@ -634,10 +635,12 @@ fn match_case_to_bc(
             match_target,
             match_case_bb,
             match_end_bb,
-            next_bb,
+            non_match_bb,
             target_machine,
         );
         match_case_body_to_bc(bc_mod, scope, body, dst, match_case_bb, match_end_bb, target_machine);
+        scope.start_label(non_match_bb);
+        scope.exit(bc_mod, target_machine, branch_instr(next_bb));
     });
 
     scope.start_label(next_bb);
@@ -645,14 +648,8 @@ fn match_case_to_bc(
 
 fn match_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, m: &MatchExpression, target: &Target) -> Operand {
     let dst = scope.declare("$dst", None, m.typ.clone());
-    let mt_typ = m.target.get_type();
     let mt_expr = expr_to_bc(bc_mod, scope, &m.target, target);
-    let mt = if mt_expr.is_var() {
-        mt_expr
-    } else {
-        scope.alias("$mt", mt_expr, mt_typ)
-    };
-
+    let mt = scope.to_var("$mt", mt_expr);
     let match_end_bb = scope.label();
 
     scope.scope(|scope| {
@@ -718,6 +715,51 @@ fn dereference_to_bc(
         }
     } else {
         panic!("ICE: cannot dereference a {}", inner_typ);
+    }
+}
+
+fn range_to_bc(
+    bc_mod: &mut ByteCodeModule,
+    scope: &mut Scope,
+    r: &Range,
+    indexee: Operand,
+    target: &Target,
+) -> Operand {
+    let start = if let Some(start) = &r.start {
+        expr_to_bc(bc_mod, scope, start, target)
+    } else {
+        Operand::const_uint(0, target.int_size)
+    };
+
+    let end = if let Some(end) = &r.end {
+        expr_to_bc(bc_mod, scope, end, target)
+    } else {
+        Operand::Property {
+            operand: indexee.into(),
+            property: ByteCodeProperty::Len,
+            typ: target.native_uint_type.clone(),
+        }
+    };
+
+    Operand::Range {
+        start: start.into(),
+        end: end.into(),
+        typ: r.typ.clone(),
+    }
+}
+
+fn index_op_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, iop: &IndexOperation, target: &Target) -> Operand {
+    let t = expr_to_bc(bc_mod, scope, &iop.target, target);
+    match &iop.index_expr {
+        IndexMode::Index(i) => {
+            let idx = expr_to_bc(bc_mod, scope, i, target);
+            Operand::member(t, idx, iop.typ.clone())
+        }
+        IndexMode::Range(r) => {
+            let t = scope.to_var("$indexee", t);
+            let r = range_to_bc(bc_mod, scope, r, t.safe_clone(), target);
+            Operand::slice(t, r, iop.typ.clone())
+        }
     }
 }
 
@@ -810,12 +852,8 @@ pub fn expr_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, expr: &Express
                 typ: c.destination_type.clone(),
             }
         }
-        Expression::CompilerCall(c) => compiler_call_to_bc(bc_mod, scope, c, target),
-        Expression::IndexOperation(i) => {
-            let t = expr_to_bc(bc_mod, scope, &i.target, target);
-            let idx = expr_to_bc(bc_mod, scope, &i.index_expr, target);
-            Operand::member(t, idx, i.typ.clone())
-        }
+        Expression::CompilerCall(c) => compiler_call_to_bc(c),
+        Expression::IndexOperation(i) => index_op_to_bc(bc_mod, scope, i, target),
         Expression::Return(r) => return_to_bc(bc_mod, scope, r, target),
         Expression::Void => Operand::Void,
     }

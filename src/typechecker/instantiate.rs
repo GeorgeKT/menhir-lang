@@ -323,6 +323,38 @@ fn substitute_member_access(
     })
 }
 
+fn substitute_index_op(
+    ctx: &TypeCheckerContext,
+    generic_args: &GenericMapping,
+    iop: &IndexOperation,
+) -> CompileResult<IndexOperation> {
+    let target = substitute_expr(ctx, generic_args, &iop.target)?;
+    let index_expr = match &iop.index_expr {
+        IndexMode::Index(i) => IndexMode::Index(substitute_expr(ctx, generic_args, i)?),
+        IndexMode::Range(r) => {
+            let typ = make_concrete(ctx, generic_args, &r.typ, &r.span)?;
+            let start = if let Some(start) = &r.start {
+                Some(substitute_expr(ctx, generic_args, start)?)
+            } else {
+                None
+            };
+
+            let end = if let Some(end) = &r.end {
+                Some(substitute_expr(ctx, generic_args, end)?)
+            } else {
+                None
+            };
+            IndexMode::Range(range(start, end, typ, r.span.clone()))
+        }
+    };
+    Ok(IndexOperation {
+        target,
+        index_expr,
+        span: iop.span.clone(),
+        typ: iop.typ.clone(),
+    })
+}
+
 fn substitute_expr(
     ctx: &TypeCheckerContext,
     generic_args: &GenericMapping,
@@ -472,14 +504,8 @@ fn substitute_expr(
                 }
 
                 AssignTarget::IndexOperation(iop) => {
-                    let target = substitute_expr(ctx, generic_args, &iop.target)?;
-                    let index_expr = substitute_expr(ctx, generic_args, &iop.index_expr)?;
-                    AssignTarget::IndexOperation(IndexOperation {
-                        target,
-                        index_expr,
-                        span: iop.span.clone(),
-                        typ: iop.typ.clone(),
-                    })
+                    let iop = substitute_index_op(ctx, generic_args, iop)?;
+                    AssignTarget::IndexOperation(iop)
                 }
             };
             let r = substitute_expr(ctx, generic_args, &a.right)?;
@@ -527,37 +553,28 @@ fn substitute_expr(
             )))
         }
 
-        Expression::CompilerCall(CompilerCall::Slice { data, len, typ, span }) => {
-            let new_data = substitute_expr(ctx, generic_args, data)?;
-            let new_len = substitute_expr(ctx, generic_args, len)?;
-            let new_type = make_concrete(ctx, generic_args, typ, span)?;
-            Ok(Expression::CompilerCall(CompilerCall::Slice {
-                data: Box::new(new_data),
-                len: Box::new(new_len),
-                typ: new_type,
-                span: span.clone(),
-            }))
-        }
-
-        Expression::IndexOperation(iop) => {
-            let target = substitute_expr(ctx, generic_args, &iop.target)?;
-            let index_expr = substitute_expr(ctx, generic_args, &iop.index_expr)?;
-            Ok(index_op(target, index_expr, iop.span.clone()))
-        }
+        Expression::IndexOperation(iop) => Ok(Expression::IndexOperation(Box::new(substitute_index_op(
+            ctx,
+            generic_args,
+            iop,
+        )?))),
 
         Expression::Return(r) => {
             let e = substitute_expr(ctx, generic_args, &r.expression)?;
             Ok(return_expr(e, r.span.clone()))
         }
+
         Expression::ResultToBool(r) => {
             let e = substitute_expr(ctx, generic_args, r)?;
             Ok(Expression::ResultToBool(Box::new(e)))
         }
+
         Expression::ToOkResult(r) => {
             let typ = make_concrete(ctx, generic_args, &r.result_type, &r.inner.span())?;
             let e = substitute_expr(ctx, generic_args, &r.inner)?;
             Ok(to_ok_result(e, typ, r.span.clone()))
         }
+
         Expression::ToErrResult(r) => {
             let typ = make_concrete(ctx, generic_args, &r.result_type, &r.inner.span())?;
             let e = substitute_expr(ctx, generic_args, &r.inner)?;

@@ -152,8 +152,8 @@ pub enum Operand {
         typ: Type,
     },
     Slice {
-        start: Box<Operand>,
-        len: Box<Operand>,
+        array: Box<Operand>,
+        range: Box<Operand>,
         typ: Type,
     },
     Result {
@@ -176,6 +176,11 @@ pub enum Operand {
         inner: Box<Operand>,
         typ: Type,
     },
+    Range {
+        start: Box<Operand>,
+        end: Box<Operand>,
+        typ: Type,
+    },
     Void,
 }
 
@@ -189,6 +194,10 @@ impl Operand {
             Operand::Constant { value } => Operand::Constant { value: value.clone() },
             _ => panic!("ICE: only var and constant operands can be cloned"),
         }
+    }
+
+    pub fn cloneable(&self) -> bool {
+        matches!(self, Operand::Var { .. } | Operand::Constant { .. })
     }
 
     pub fn const_int(v: i64, int_size: IntSize) -> Operand {
@@ -268,24 +277,16 @@ impl Operand {
         }
     }
 
-    pub fn slice(start: Operand, len: Operand, typ: Type) -> Operand {
+    pub fn slice(array: Operand, range: Operand, typ: Type) -> Operand {
         Operand::Slice {
-            start: Box::new(start),
-            len: Box::new(len),
+            array: Box::new(array),
+            range: Box::new(range),
             typ,
         }
     }
 
     pub fn is_call(&self) -> bool {
         if let Operand::Call { .. } = self {
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn is_var(&self) -> bool {
-        if let Operand::Var { .. } = self {
             true
         } else {
             false
@@ -317,6 +318,7 @@ impl Operand {
             Operand::Null { typ } => typ.clone(),
             Operand::New { typ, .. } => typ.clone(),
             Operand::Void => Type::Void,
+            Operand::Range { typ, .. } => typ.clone(),
         }
     }
 
@@ -359,15 +361,27 @@ impl Operand {
                 }
             }
             Operand::Property { operand, .. } => operand.visit(f),
-            Operand::Slice { start, len, .. } => {
-                start.visit(f);
-                len.visit(f);
+            Operand::Slice { array, range, .. } => {
+                array.visit(f);
+                range.visit(f);
             }
             Operand::Result { inner, .. } => inner.visit(f),
             Operand::Optional { inner: Some(i), .. } => i.visit(f),
             Operand::Cast { inner, .. } => inner.visit(f),
             Operand::New { inner, .. } => inner.visit(f),
-            _ => (),
+            Operand::Range { start, end, .. } => {
+                start.visit(f);
+                end.visit(f);
+            }
+            Operand::Var { .. }
+            | Operand::Constant { .. }
+            | Operand::Enum { .. }
+            | Operand::SizeOf { .. }
+            | Operand::Func { .. }
+            | Operand::Null { .. }
+            | Operand::Sum { .. }
+            | Operand::Optional { .. }
+            | Operand::Void => (),
         }
     }
 }
@@ -424,7 +438,7 @@ impl fmt::Display for Operand {
                 write!(f, "))")
             }
             Operand::Property { operand, property, .. } => write!(f, "({operand}.{property})"),
-            Operand::Slice { start, len, .. } => write!(f, "(slice {start}:{len})"),
+            Operand::Slice { array, range, .. } => write!(f, "(slice {array}[{range}])"),
             Operand::Result { ok, inner, .. } => write!(f, "({} {})", (if *ok { "ok" } else { "error" }), inner),
             Operand::Optional { inner, .. } => {
                 if let Some(op) = inner {
@@ -439,6 +453,10 @@ impl fmt::Display for Operand {
             Operand::Null { .. } => write!(f, "null"),
             Operand::New { inner, .. } => write!(f, "(new {inner})"),
             Operand::Void => write!(f, "void"),
+            Operand::Range { start, end, .. } => {
+                write!(f, "({start}..{end})")?;
+                Ok(())
+            }
         }
     }
 }

@@ -5,10 +5,10 @@ use llvm_sys::LLVMLinkage;
 use llvm_sys::LLVMTypeKind;
 
 use super::context::Context;
-use super::operand::{const_bool, const_char, const_float, const_int, const_uint, copy, gen_operand};
+use super::operand::{const_bool, const_char, const_float, const_int, const_uint, copy};
 use crate::ast::*;
 use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
-use crate::lazycode::{ByteCodeProperty, Constant, Operand};
+use crate::lazycode::{ByteCodeProperty, Constant};
 //use crate::llvmbackend::instructions::type_name;
 
 #[derive(Clone)]
@@ -30,20 +30,16 @@ unsafe fn build_load(
     LLVMBuildLoad2(builder, typ, pointer, name)
 }
 
-fn get_const_usize(op: &Operand) -> CompileResult<usize> {
-    match op {
-        Operand::Constant { value } => match value {
-            Constant::Int(v, _) => Ok(*v as usize),
-            Constant::UInt(v, _) => Ok(*v as usize),
-            _ => code_gen_result("Expected const usize"),
-        },
-        _ => code_gen_result("Expected const usize"),
-    }
-}
-
 impl ValueRef {
     pub fn new(value: LLVMValueRef, typ: Type) -> ValueRef {
         ValueRef { value, typ }
+    }
+
+    pub fn const_uint(ctx: &Context, value: u64) -> ValueRef {
+        ValueRef::new(
+            unsafe { const_uint(ctx, value) },
+            ctx.target_machine.target.native_uint_type.clone(),
+        )
     }
 
     pub unsafe fn from_const(ctx: &Context, cst: &Constant) -> CompileResult<ValueRef> {
@@ -287,7 +283,68 @@ impl ValueRef {
         }
     }
 
-    pub fn get_member_ptr(&self, ctx: &mut Context, index: &Operand) -> CompileResult<ValueRef> {
+    pub fn get_member_ptr_static(&self, ctx: &mut Context, index: usize) -> CompileResult<ValueRef> {
+        let Some(element_type) = self.typ.get_element_type() else {
+            return code_gen_result(format!("Load member not allowed on type {}", self.typ));
+        };
+
+        match &element_type {
+            Type::Struct(st) => unsafe {
+                let self_type = ctx.resolve_type(&element_type)?;
+                Ok(ValueRef::new(
+                    LLVMBuildStructGEP2(
+                        ctx.builder,
+                        self_type,
+                        self.value,
+                        index as c_uint,
+                        cstr!("structmember"),
+                    ),
+                    ptr_type(st.members[index].typ.clone()),
+                ))
+            },
+
+            Type::Sum(st) => unsafe {
+                let self_type = ctx.resolve_type(&element_type)?;
+                let st_data_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 1, cstr!("st_data_ptr"));
+                if let Some(case_type) = &st.cases[index].typ {
+                    let type_to_cast_to = LLVMPointerType(ctx.resolve_type(case_type)?, 0);
+                    Ok(ValueRef::new(
+                        LLVMBuildBitCast(ctx.builder, st_data_ptr, type_to_cast_to, cstr!("st_member_ptr")),
+                        ptr_type(case_type.clone()),
+                    ))
+                } else {
+                    code_gen_result(format!("Cannot get member pointer to {}", st.cases[index].name))
+                }
+            },
+            Type::Result(rt) => unsafe {
+                let self_type = ctx.resolve_type(&element_type)?;
+                let st_data_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 1, cstr!("rt_data_ptr"));
+                let case_type = if index == 0 { &rt.ok_typ } else { &rt.err_typ };
+                let type_to_cast_to = LLVMPointerType(ctx.resolve_type(case_type)?, 0);
+                Ok(ValueRef::new(
+                    LLVMBuildBitCast(ctx.builder, st_data_ptr, type_to_cast_to, cstr!("rt_member_ptr")),
+                    ptr_type(case_type.clone()),
+                ))
+            },
+
+            Type::Range(int_size) => unsafe {
+                let self_type = ctx.resolve_type(&element_type)?;
+                Ok(ValueRef::new(
+                    LLVMBuildStructGEP2(
+                        ctx.builder,
+                        self_type,
+                        self.value,
+                        index as c_uint,
+                        cstr!("rangemember"),
+                    ),
+                    ptr_type(Type::UInt(*int_size)),
+                ))
+            },
+            _ => self.get_member_ptr(ctx, &ValueRef::const_uint(ctx, index as u64)),
+        }
+    }
+
+    pub fn get_member_ptr(&self, ctx: &mut Context, index: &ValueRef) -> CompileResult<ValueRef> {
         let Some(element_type) = self.typ.get_element_type() else {
             return code_gen_result(format!("Load member not allowed on type {}", self.typ));
         };
@@ -299,7 +356,7 @@ impl ValueRef {
             }
 
             Type::Array(at) => unsafe {
-                let mut indices = vec![gen_operand(ctx, index, None)?.load(ctx)?];
+                let mut indices = vec![index.load(ctx)?];
                 Ok(ValueRef::new(
                     LLVMBuildInBoundsGEP2(
                         ctx.builder,
@@ -315,7 +372,7 @@ impl ValueRef {
 
             Type::Slice(st) => unsafe {
                 let data_ptr = self.slice_data_ptr(ctx)?;
-                let mut indices = vec![gen_operand(ctx, index, None)?.load(ctx)?];
+                let mut indices = vec![index.load(ctx)?];
                 let element_ptr = LLVMBuildGEP2(
                     ctx.builder,
                     ctx.resolve_type(&st.element_type)?,
@@ -327,52 +384,8 @@ impl ValueRef {
                 Ok(ValueRef::new(element_ptr, ptr_type(st.element_type.clone())))
             },
 
-            Type::Struct(st) => unsafe {
-                let index = get_const_usize(index)?;
-                let self_type = ctx.resolve_type(&element_type)?;
-                Ok(ValueRef::new(
-                    LLVMBuildStructGEP2(
-                        ctx.builder,
-                        self_type,
-                        self.value,
-                        index as c_uint,
-                        cstr!("structmember"),
-                    ),
-                    ptr_type(st.members[index].typ.clone()),
-                ))
-            },
-
-            Type::Sum(st) => unsafe {
-                let index = get_const_usize(index)?;
-                let self_type = ctx.resolve_type(&element_type)?;
-                let st_data_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 1, cstr!("st_data_ptr"));
-                if let Some(case_type) = &st.cases[index].typ {
-                    let type_to_cast_to = LLVMPointerType(ctx.resolve_type(case_type)?, 0);
-                    Ok(ValueRef::new(
-                        LLVMBuildBitCast(ctx.builder, st_data_ptr, type_to_cast_to, cstr!("st_member_ptr")),
-                        ptr_type(case_type.clone()),
-                    ))
-                } else {
-                    code_gen_result(format!("Cannot get member pointer to {}", st.cases[index].name))
-                }
-            },
-            Type::Result(rt) => unsafe {
-                let index = get_const_usize(index)?;
-                if index > 1 {
-                    return code_gen_result(format!("Invalid result type member index {index}"));
-                }
-
-                let self_type = ctx.resolve_type(&element_type)?;
-                let st_data_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 1, cstr!("rt_data_ptr"));
-                let case_type = if index == 0 { &rt.ok_typ } else { &rt.err_typ };
-                let type_to_cast_to = LLVMPointerType(ctx.resolve_type(case_type)?, 0);
-                Ok(ValueRef::new(
-                    LLVMBuildBitCast(ctx.builder, st_data_ptr, type_to_cast_to, cstr!("rt_member_ptr")),
-                    ptr_type(case_type.clone()),
-                ))
-            },
             _ => unsafe {
-                let index = gen_operand(ctx, index, None)?.load(ctx)?;
+                let index = index.load(ctx)?;
                 let mut indices = vec![index];
                 Ok(ValueRef::new(
                     LLVMBuildGEP2(
@@ -430,9 +443,7 @@ impl ValueRef {
                 )
             },
 
-            (Type::Array(_), ByteCodeProperty::Data) => {
-                self.get_member_ptr(ctx, &Operand::const_uint(0, ctx.int_size()))?
-            }
+            (Type::Array(_), ByteCodeProperty::Data) => self.get_member_ptr_static(ctx, 0)?,
 
             (Type::Sum(_), ByteCodeProperty::SumTypeIndex) => unsafe {
                 let self_type = ctx.resolve_type(element_type)?;
@@ -491,7 +502,7 @@ impl ValueRef {
         }
     }
 
-    unsafe fn slice_data_ptr(&self, ctx: &Context) -> CompileResult<ValueRef> {
+    pub unsafe fn slice_data_ptr(&self, ctx: &Context) -> CompileResult<ValueRef> {
         let Some(inner_type) = self.typ.get_pointer_element_type() else {
             return code_gen_result(format!("Expecting a pointer not a {}", self.typ));
         };
@@ -509,7 +520,7 @@ impl ValueRef {
         Ok(ValueRef::new(vr, ptr_type(ptr_type(element_type))))
     }
 
-    unsafe fn slice_len_ptr(&self, ctx: &Context) -> CompileResult<ValueRef> {
+    pub unsafe fn slice_len_ptr(&self, ctx: &Context) -> CompileResult<ValueRef> {
         let Some(inner_type) = self.typ.get_pointer_element_type() else {
             return code_gen_result(format!("Expecting a pointer not a {}", self.typ));
         };

@@ -55,6 +55,7 @@ pub enum TokenKind {
     Ampersand,
     At,
     Return,
+    DotDot,
     EOF,
 }
 
@@ -112,6 +113,7 @@ impl Display for TokenKind {
             TokenKind::EOF => write!(fmt, "EOF"),
             TokenKind::Ok => write!(fmt, "ok"),
             TokenKind::Error => write!(fmt, "error"),
+            TokenKind::DotDot => write!(fmt, ".."),
         }
     }
 }

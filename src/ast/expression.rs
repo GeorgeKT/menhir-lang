@@ -182,7 +182,6 @@ impl Expression {
             Expression::ToOptional(t) => t.inner.span(),
             Expression::Cast(t) => t.span.clone(),
             Expression::CompilerCall(CompilerCall::SizeOf(_, _, span)) => span.clone(),
-            Expression::CompilerCall(CompilerCall::Slice { span, .. }) => span.clone(),
             Expression::IndexOperation(iop) => iop.span.clone(),
             Expression::Return(r) => r.span.clone(),
             Expression::Void => Span::default(),
@@ -327,7 +326,17 @@ impl Expression {
                     AssignTarget::Dereference(d) => d.inner.visit_mut(op)?,
                     AssignTarget::IndexOperation(iop) => {
                         iop.target.visit_mut(op)?;
-                        iop.index_expr.visit_mut(op)?;
+                        match &mut iop.index_expr {
+                            IndexMode::Index(i) => i.visit_mut(op)?,
+                            IndexMode::Range(r) => {
+                                if let Some(start) = &mut r.start {
+                                    start.visit_mut(op)?;
+                                }
+                                if let Some(end) = &mut r.end {
+                                    end.visit_mut(op)?;
+                                }
+                            }
+                        }
                     }
                     AssignTarget::MemberAccess(ma) => {
                         ma.left.visit_mut(op)?;
@@ -365,12 +374,18 @@ impl Expression {
 
             Expression::IndexOperation(iop) => {
                 iop.target.visit_mut(op)?;
-                iop.index_expr.visit_mut(op)
-            }
-
-            Expression::CompilerCall(CompilerCall::Slice { data, len, .. }) => {
-                data.visit_mut(op)?;
-                len.visit_mut(op)
+                match &mut iop.index_expr {
+                    IndexMode::Index(i) => i.visit_mut(op),
+                    IndexMode::Range(r) => {
+                        if let Some(start) = &mut r.start {
+                            start.visit_mut(op)?;
+                        }
+                        if let Some(end) = &mut r.end {
+                            end.visit_mut(op)?;
+                        }
+                        Ok(())
+                    }
+                }
             }
 
             Expression::Literal(_)
@@ -483,7 +498,17 @@ impl Expression {
                     AssignTarget::Dereference(d) => d.inner.visit(op)?,
                     AssignTarget::IndexOperation(iop) => {
                         iop.target.visit(op)?;
-                        iop.index_expr.visit(op)?;
+                        match &iop.index_expr {
+                            IndexMode::Index(i) => i.visit(op)?,
+                            IndexMode::Range(r) => {
+                                if let Some(start) = &r.start {
+                                    start.visit(op)?;
+                                }
+                                if let Some(end) = &r.end {
+                                    end.visit(op)?;
+                                }
+                            }
+                        }
                     }
                     AssignTarget::MemberAccess(ma) => {
                         ma.left.visit(op)?;
@@ -521,12 +546,18 @@ impl Expression {
 
             Expression::IndexOperation(iop) => {
                 iop.target.visit(op)?;
-                iop.index_expr.visit(op)
-            }
-
-            Expression::CompilerCall(CompilerCall::Slice { data, len, .. }) => {
-                data.visit(op)?;
-                len.visit(op)
+                match &iop.index_expr {
+                    IndexMode::Index(i) => i.visit(op),
+                    IndexMode::Range(r) => {
+                        if let Some(start) = &r.start {
+                            start.visit(op)?;
+                        }
+                        if let Some(end) = &r.end {
+                            end.visit(op)?;
+                        }
+                        Ok(())
+                    }
+                }
             }
 
             Expression::Literal(_)

@@ -2,7 +2,7 @@ use super::symboltable::{FunctionInstance, SymbolTable, VariableInstance, Variab
 use super::target::TargetMachine;
 use super::valueref::ValueRef;
 use super::CodeGenOptions;
-use crate::ast::{IntSize, Type};
+use crate::ast::Type;
 use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
 use llvm_sys::core::*;
 use llvm_sys::prelude::*;
@@ -149,10 +149,6 @@ impl Context {
 
     pub fn native_uint_type(&self) -> CompileResult<LLVMTypeRef> {
         self.resolve_type(&self.target_machine.target.native_uint_type)
-    }
-
-    pub fn int_size(&self) -> IntSize {
-        self.target_machine.target.int_size
     }
 
     pub fn dump_module(&self) {

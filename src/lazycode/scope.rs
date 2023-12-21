@@ -80,12 +80,6 @@ impl Scope {
     }
 
     pub fn add(&mut self, inst: Instruction) {
-        if let Some(ScopeNode::Instruction(last)) = self.nodes.last() {
-            if last.is_terminator() && inst.is_terminator() {
-                panic!("Double terminator");
-                return;
-            }
-        }
         if inst.is_void_store() {
             // Ignore void stores
             return;
@@ -93,8 +87,17 @@ impl Scope {
         self.nodes.push(ScopeNode::Instruction(inst));
     }
 
-    pub fn alias(&mut self, name: &str, value: Operand, typ: Type) -> Operand {
-        let name: String = name.into(); //self.add_name(name);
+    pub fn to_var(&mut self, name: &str, value: Operand) -> Operand {
+        if value.cloneable() {
+            return value;
+        }
+
+        self.alias(name, value)
+    }
+
+    pub fn alias(&mut self, name: &str, value: Operand) -> Operand {
+        let name: String = name.into();
+        let typ = value.get_type();
         let var = Operand::Var {
             name: name.clone(),
             typ: typ.clone(),
@@ -132,6 +135,9 @@ impl Scope {
             }
         }
 
+        self.add(Instruction::Mark {
+            tag: "scope exit".into(),
+        });
         self.add(with);
     }
 

@@ -45,6 +45,7 @@ pub unsafe fn gen_instruction(
     blocks: &HashMap<usize, LLVMBasicBlockRef>,
 ) -> CompileResult<()> {
     match instr {
+        Instruction::Mark { .. } => Ok(()),
         Instruction::Exec { operand } => {
             gen_operand(ctx, operand, None)?;
             Ok(())

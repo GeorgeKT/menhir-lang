@@ -3,7 +3,7 @@ use std::ffi::{c_uint, c_ulonglong};
 use crate::ast::{ptr_type, BinaryOperator, Type, UnaryOperator};
 use crate::compileerror::CompileResult;
 use crate::compileerror::{code_gen_error, code_gen_result};
-use crate::lazycode::{ByteCodeProperty, CallArg, Operand};
+use crate::lazycode::{ByteCodeProperty, CallArg, Constant, Operand};
 #[allow(unused)]
 use crate::llvmbackend::instructions::type_name;
 
@@ -14,6 +14,17 @@ use super::Context;
 use llvm_sys::core::*;
 use llvm_sys::prelude::*;
 use llvm_sys::*;
+
+pub fn get_const_usize(op: &Operand) -> CompileResult<usize> {
+    match op {
+        Operand::Constant { value } => match value {
+            Constant::Int(v, _) => Ok(*v as usize),
+            Constant::UInt(v, _) => Ok(*v as usize),
+            _ => code_gen_result("Expected const usize"),
+        },
+        _ => code_gen_result("Expected const usize"),
+    }
+}
 
 pub unsafe fn const_int(ctx: &Context, v: i64) -> LLVMValueRef {
     LLVMConstInt(
@@ -329,11 +340,11 @@ unsafe fn gen_call(
     }
 }
 
-unsafe fn get_dst(ctx: &mut Context, dst: Option<ValueRef>, typ: &Type) -> CompileResult<ValueRef> {
+unsafe fn get_dst(ctx: &mut Context, name: &str, dst: Option<ValueRef>, typ: &Type) -> CompileResult<ValueRef> {
     if let Some(dst) = dst {
         Ok(dst)
     } else {
-        Ok(ValueRef::new(ctx.stack_alloc("dst", typ)?, ptr_type(typ.clone())))
+        Ok(ValueRef::new(ctx.stack_alloc(name, typ)?, ptr_type(typ.clone())))
     }
 }
 
@@ -343,9 +354,9 @@ unsafe fn gen_seq(
     typ: &Type,
     dst: Option<ValueRef>,
 ) -> CompileResult<ValueRef> {
-    let vr = get_dst(ctx, dst, typ)?;
+    let vr = get_dst(ctx, "seq", dst, typ)?;
     for (idx, m) in members.iter().enumerate() {
-        let mem_ptr = vr.get_member_ptr(ctx, &Operand::const_uint(idx as u64, ctx.int_size()))?;
+        let mem_ptr = vr.get_member_ptr_static(ctx, idx)?;
         gen_operand_dst(ctx, m, &mem_ptr)?;
     }
 
@@ -359,17 +370,17 @@ unsafe fn gen_sum(
     typ: &Type,
     dst: Option<ValueRef>,
 ) -> CompileResult<ValueRef> {
-    let vr = get_dst(ctx, dst, typ)?;
+    let vr = get_dst(ctx, "sum", dst, typ)?;
     vr.set_property(ctx, ByteCodeProperty::SumTypeIndex, variant)?;
     if let Some(inner) = inner {
-        let mem_ptr = vr.get_member_ptr(ctx, &Operand::const_uint(variant as u64, ctx.int_size()))?;
+        let mem_ptr = vr.get_member_ptr_static(ctx, variant)?;
         gen_operand_dst(ctx, inner, &mem_ptr)?;
     }
     Ok(vr)
 }
 
 unsafe fn gen_enum(ctx: &mut Context, variant: usize, typ: &Type, dst: Option<ValueRef>) -> CompileResult<ValueRef> {
-    let vr = get_dst(ctx, dst, typ)?;
+    let vr = get_dst(ctx, "enum", dst, typ)?;
     vr.store(ctx, &ValueRef::new(const_uint(ctx, variant as u64), typ.clone()))?;
     Ok(vr)
 }
@@ -386,10 +397,10 @@ unsafe fn gen_result(
     typ: &Type,
     dst: Option<ValueRef>,
 ) -> CompileResult<ValueRef> {
-    let vr = get_dst(ctx, dst, typ)?;
+    let vr = get_dst(ctx, "result", dst, typ)?;
     let idx = if ok { 0 } else { 1 };
     vr.set_property(ctx, ByteCodeProperty::SumTypeIndex, idx)?;
-    let mem_ptr = vr.get_member_ptr(ctx, &Operand::const_uint(idx as u64, ctx.int_size()))?;
+    let mem_ptr = vr.get_member_ptr_static(ctx, idx)?;
     gen_operand_dst(ctx, inner, &mem_ptr)?;
     Ok(vr)
 }
@@ -400,11 +411,11 @@ unsafe fn gen_optional(
     typ: &Type,
     dst: Option<ValueRef>,
 ) -> CompileResult<ValueRef> {
-    let vr = get_dst(ctx, dst, typ)?;
+    let vr = get_dst(ctx, "opt", dst, typ)?;
     let idx = if inner.is_some() { 0 } else { 1 };
     vr.set_property(ctx, ByteCodeProperty::SumTypeIndex, idx)?;
     if let Some(inner) = inner {
-        let mem_ptr = vr.get_member_ptr(ctx, &Operand::const_uint(idx as u64, ctx.int_size()))?;
+        let mem_ptr = vr.get_member_ptr_static(ctx, idx)?;
         gen_operand_dst(ctx, inner, &mem_ptr)?;
     }
     Ok(vr)
@@ -418,16 +429,43 @@ unsafe fn gen_property(ctx: &mut Context, operand: &Operand, prop: ByteCodePrope
 
 unsafe fn gen_slice(
     ctx: &mut Context,
-    start: &Operand,
-    len: &Operand,
+    array: &Operand,
+    range: &Operand,
     typ: &Type,
     dst: Option<ValueRef>,
 ) -> CompileResult<ValueRef> {
-    let vr = get_dst(ctx, dst, typ)?;
-    let data_ptr = vr.get_member_ptr(ctx, &Operand::const_uint(0, ctx.int_size()))?;
-    gen_operand_dst(ctx, start, &data_ptr)?;
-    let len_ptr = vr.get_member_ptr(ctx, &Operand::const_uint(1, ctx.int_size()))?;
-    gen_operand_dst(ctx, len, &len_ptr)?;
+    let slice = get_dst(ctx, "slice", dst, typ)?;
+    let array = gen_operand(ctx, array, None)?;
+    let range = gen_operand(ctx, range, None)?;
+    let slice_data_ptr = slice.slice_data_ptr(ctx)?;
+    let slice_len_ptr = slice.slice_len_ptr(ctx)?;
+
+    let start = range.get_member_ptr_static(ctx, 0)?;
+    let end = range.get_member_ptr_static(ctx, 1)?;
+    let slice_len = LLVMBuildSub(ctx.builder, end.load(ctx)?, start.load(ctx)?, cstr!("slice_len"));
+
+    slice_len_ptr.store(
+        ctx,
+        &ValueRef::new(slice_len, ctx.target_machine.target.native_uint_type.clone()),
+    )?;
+    let array_member_ptr = array.get_member_ptr(ctx, &start)?;
+    slice_data_ptr.store(ctx, &array_member_ptr)?;
+
+    Ok(slice)
+}
+
+unsafe fn gen_range(
+    ctx: &mut Context,
+    start: &Operand,
+    end: &Operand,
+    typ: &Type,
+    dst: Option<ValueRef>,
+) -> CompileResult<ValueRef> {
+    let vr = get_dst(ctx, "range", dst, typ)?;
+    let start_ptr = vr.get_member_ptr_static(ctx, 0)?;
+    let end_ptr = vr.get_member_ptr_static(ctx, 1)?;
+    gen_operand_dst(ctx, start, &start_ptr)?;
+    gen_operand_dst(ctx, end, &end_ptr)?;
     Ok(vr)
 }
 
@@ -448,12 +486,22 @@ pub unsafe fn gen_operand(ctx: &mut Context, operand: &Operand, dst: Option<Valu
         Operand::Constant { value } => ValueRef::from_const(ctx, value),
         Operand::Member { obj, idx, typ } => {
             let obj = gen_operand(ctx, obj, None)?;
-            let m = obj.get_member_ptr(ctx, idx)?;
+            let m = if let Ok(v) = get_const_usize(idx) {
+                obj.get_member_ptr_static(ctx, v)?
+            } else {
+                let idx = gen_operand(ctx, idx, None)?;
+                obj.get_member_ptr(ctx, &idx)?
+            };
             Ok(ValueRef::new(m.load(ctx)?, typ.clone()))
         }
         Operand::MemberPtr { obj, idx, .. } => {
             let obj = gen_operand(ctx, obj, None)?;
-            Ok(obj.get_member_ptr(ctx, idx)?)
+            if let Ok(v) = get_const_usize(idx) {
+                obj.get_member_ptr_static(ctx, v)
+            } else {
+                let idx = gen_operand(ctx, idx, None)?;
+                obj.get_member_ptr(ctx, &idx)
+            }
         }
         Operand::AddressOf { obj } => gen_operand(ctx, obj, None)?.address_of(),
         Operand::Binary { op, left, right, typ } => gen_binary_op(ctx, *op, left, right, typ),
@@ -476,7 +524,7 @@ pub unsafe fn gen_operand(ctx: &mut Context, operand: &Operand, dst: Option<Valu
         }
         Operand::Call { callee, args, typ, rvo } => gen_call(ctx, callee, args, typ, *rvo, dst),
         Operand::Property { operand, property, .. } => gen_property(ctx, operand, *property),
-        Operand::Slice { start, len, typ } => gen_slice(ctx, start, len, typ, dst),
+        Operand::Slice { array, range, typ } => gen_slice(ctx, array, range, typ, dst),
         Operand::Result { ok, inner, typ } => gen_result(ctx, *ok, inner, typ, dst),
         Operand::Optional { inner, typ } => gen_optional(ctx, inner, typ, dst),
         Operand::Cast { inner, typ } => gen_cast(ctx, inner, typ.clone()),
@@ -493,5 +541,6 @@ pub unsafe fn gen_operand(ctx: &mut Context, operand: &Operand, dst: Option<Valu
             Ok(ValueRef::new(alloc, typ.clone()))
         }
         Operand::Void => Ok(ValueRef::new(std::ptr::null_mut(), Type::Void)),
+        Operand::Range { start, end, typ } => gen_range(ctx, start, end, typ, dst),
     }
 }

@@ -56,7 +56,7 @@ fn name_pattern_match_to_bc(
 }
 
 fn binding_pattern_match_to_bc(scope: &mut Scope, match_target: Operand, match_case_bb: Label, nr: &NameRef) {
-    scope.alias(&nr.name, match_target, nr.typ.clone());
+    scope.alias(&nr.name, match_target);
     scope.add(branch_instr(match_case_bb));
 }
 
@@ -90,6 +90,16 @@ fn array_pattern_match_to_bc(
     next_bb: Label,
     target: &Target,
 ) {
+    let on_true = scope.label();
+    let cond = Operand::binary(
+        BinaryOperator::GreaterThan,
+        Operand::len(seq.safe_clone(), target.int_size),
+        Operand::const_uint(0, target.int_size),
+        Type::Bool,
+    );
+    scope.add(branch_if_instr(cond, on_true, next_bb));
+    scope.start_label(on_true);
+
     let head_type = seq
         .get_type()
         .get_element_type()
@@ -100,34 +110,22 @@ fn array_pattern_match_to_bc(
         head_type.clone(),
     );
 
-    let _head = scope.alias(&ap.head, head, head_type.clone());
+    let _head = scope.alias(&ap.head, head);
 
     let tail_type = slice_type(head_type.clone());
-    let tail_len = Operand::binary(
-        BinaryOperator::Sub,
-        Operand::len(seq.safe_clone(), target.int_size),
-        Operand::const_uint(1, target.int_size),
-        target.native_uint_type.clone(),
-    );
+    let tail_end = Operand::len(seq.safe_clone(), target.int_size);
     let tail = Operand::slice(
-        Operand::member_ptr(
-            seq.safe_clone(),
-            Operand::const_uint(1, target.int_size),
-            ptr_type(head_type),
-        ),
-        tail_len,
+        seq.safe_clone(),
+        Operand::Range {
+            start: Box::new(Operand::const_uint(1, target.int_size)),
+            end: Box::new(tail_end),
+            typ: Type::Range(target.int_size),
+        },
         tail_type.clone(),
     );
 
-    scope.alias(&ap.tail, tail, tail_type);
-
-    let cond = Operand::binary(
-        BinaryOperator::GreaterThan,
-        Operand::len(seq.safe_clone(), target.int_size),
-        Operand::const_uint(0, target.int_size),
-        Type::Bool,
-    );
-    scope.add(branch_if_instr(cond, match_case_bb, next_bb));
+    scope.alias(&ap.tail, tail);
+    scope.add(branch_instr(match_case_bb));
 }
 
 fn add_struct_pattern_bindings(p: &StructPattern, struct_var: Operand, scope: &mut Scope, target: &Target) {
@@ -149,7 +147,7 @@ fn add_struct_pattern_bindings(p: &StructPattern, struct_var: Operand, scope: &m
                 ptr_type(b.typ.clone()),
             )
         };
-        scope.alias(&b.name, member, b.typ.clone());
+        scope.alias(&b.name, member);
     }
 }
 
@@ -197,7 +195,7 @@ fn struct_pattern_match_to_bc(
                 Operand::const_uint(idx as u64, target_machine.int_size),
                 case_type.clone(),
             );
-            let struct_ptr = scope.alias("$struct_ptr", struct_ptr, case_type);
+            let struct_ptr = scope.to_var("$struct_ptr", struct_ptr);
             add_struct_pattern_bindings(p, struct_ptr, scope, target_machine);
             scope.add(branch_instr(match_case_bb));
         }
@@ -231,14 +229,14 @@ fn optional_pattern_match_to_bc(
             Operand::const_uint(0, target.int_size),
             o.inner_type.clone(),
         );
-        scope.alias(&o.binding, data, o.inner_type.clone());
+        scope.alias(&o.binding, data);
     } else {
         let data = Operand::member_ptr(
             match_target,
             Operand::const_uint(0, target.int_size),
             ptr_type(o.inner_type.clone()),
         );
-        scope.alias(&o.binding, data, ptr_type(o.inner_type.clone()));
+        scope.alias(&o.binding, data);
     }
     scope.add(branch_instr(match_case_bb));
 }
@@ -282,11 +280,7 @@ fn result_pattern_match_to_bc(
 
     scope.start_label(bind_bb);
     let member = Operand::member_ptr(target, idx, ptr_type(inner_type.clone()));
-    let inner = scope.alias(
-        if is_ok { "$ok_inner" } else { "$err_inner" },
-        member,
-        ptr_type(inner_type.clone()),
-    );
+    let inner = scope.to_var(if is_ok { "$ok_inner" } else { "$err_inner" }, member);
     pattern_to_bc(
         bc_mod,
         scope,

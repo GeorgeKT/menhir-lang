@@ -1158,22 +1158,25 @@ fn type_check_index_operation(
     target: &Target,
 ) -> CompileResult<Type> {
     let target_type = type_check_expression(ctx, &mut iop.target, None, target)?;
-    let index_type = type_check_expression(ctx, &mut iop.index_expr, None, target)?;
+    let index_type = match &mut iop.index_expr {
+        IndexMode::Index(i) => type_check_expression(ctx, i, None, target)?,
+        IndexMode::Range(r) => type_check_range(ctx, r, target)?,
+    };
+
     match index_type {
-        Type::Int(_) | Type::UInt(_) => (),
+        Type::Int(_) | Type::UInt(_) | Type::Range(_) => (),
         _ => {
             return type_error_result(
                 &iop.span,
                 format!(
-                    "An expression of type {}, cannot be used to index something. Only integers are supported.",
-                    index_type
-                ),
+                "An expression of type {}, cannot be used to index something. Only integers and ranges are supported.",
+                index_type
+            ),
             )
         }
     }
 
     let typ = match target_type {
-        Type::Pointer(inner) => inner.deref().clone(),
         Type::Slice(st) => st.element_type.clone(),
         Type::Array(at) => at.element_type.clone(),
         _ => {
@@ -1184,8 +1187,13 @@ fn type_check_index_operation(
         }
     };
 
-    iop.typ = typ.clone();
-    Ok(typ)
+    if let Type::Range(_) = index_type {
+        iop.typ = slice_type(typ);
+        Ok(iop.typ.clone())
+    } else {
+        iop.typ = typ.clone();
+        Ok(typ)
+    }
 }
 
 fn to_regular_assign(a: &mut Assign) {
@@ -1243,7 +1251,13 @@ fn type_check_assign(ctx: &mut TypeCheckerContext, a: &mut Assign, target: &Targ
             d.typ.clone()
         }
 
-        AssignTarget::IndexOperation(iop) => type_check_index_operation(ctx, iop, target)?,
+        AssignTarget::IndexOperation(iop) => {
+            let typ = type_check_index_operation(ctx, iop, target)?;
+            if let Type::Range(_) = typ {
+                return type_error_result(&iop.span, "Assigning to a ranged indexing target is not allowed");
+            }
+            typ
+        }
     };
 
     type_check_with_conversion(ctx, &mut a.right, &dst_type, target)?;
@@ -1327,38 +1341,13 @@ fn type_check_cast(ctx: &mut TypeCheckerContext, c: &mut TypeCast, target: &Targ
     }
 }
 
-fn type_check_compiler_call(
-    ctx: &mut TypeCheckerContext,
-    cc: &mut CompilerCall,
-    type_hint: Option<&Type>,
-    target: &Target,
-) -> TypeCheckResult {
+fn type_check_compiler_call(ctx: &mut TypeCheckerContext, cc: &mut CompilerCall, target: &Target) -> TypeCheckResult {
     match cc {
         CompilerCall::SizeOf(typ, _, span) => {
             if resolve_type(ctx, typ) == TypeResolved::No {
                 type_error_result(span, format!("Unable to resolve type {}", typ))
             } else {
                 valid(target.native_uint_type.clone())
-            }
-        }
-
-        CompilerCall::Slice { data, len, typ, span } => {
-            let data_type = if let Some(Type::Slice(st)) = type_hint {
-                let data_ptr_type = ptr_type(st.element_type.clone());
-                type_check_expression(ctx, data, Some(&data_ptr_type), target)?
-            } else {
-                type_check_expression(ctx, data, None, target)?
-            };
-
-            type_check_with_conversion(ctx, len, &target.native_uint_type, target)?;
-            if let Type::Pointer(inner) = data_type {
-                *typ = slice_type(inner.deref().clone());
-                valid(typ.clone())
-            } else {
-                type_error_result(
-                    span,
-                    format!("The first argument of @slice, must be a pointer, not a {}", data_type),
-                )
             }
         }
     }
@@ -1398,6 +1387,38 @@ fn type_check_literal(
                 }
             }
         }
+    }
+}
+
+fn type_check_range(ctx: &mut TypeCheckerContext, r: &mut Range, target: &Target) -> CompileResult<Type> {
+    let start_type = if let Some(start) = &mut r.start {
+        type_check_expression(ctx, start, None, target)?
+    } else {
+        target.native_uint_type.clone()
+    };
+
+    let end_type = if let Some(end) = &mut r.end {
+        type_check_expression(ctx, end, None, target)?
+    } else {
+        target.native_uint_type.clone()
+    };
+
+    match (&start_type, &end_type) {
+        (Type::UInt(s), Type::UInt(e)) => {
+            // Take biggest int IntSize
+            r.typ = if s.size_in_bits() > e.size_in_bits() {
+                Type::Range(*s)
+            } else {
+                Type::Range(*e)
+            };
+            Ok(r.typ.clone())
+        }
+        _ => type_error_result(
+            &r.span,
+            format!(
+                "Expecting unsigned integer types for the start and end of a range (got {start_type} and {end_type})"
+            ),
+        ),
     }
 }
 
@@ -1462,7 +1483,7 @@ pub fn type_check_expression(
             }
         }
         Expression::Cast(t) => type_check_cast(ctx, t, target),
-        Expression::CompilerCall(cc) => type_check_compiler_call(ctx, cc, type_hint, target),
+        Expression::CompilerCall(cc) => type_check_compiler_call(ctx, cc, target),
         Expression::IndexOperation(iop) => valid(type_check_index_operation(ctx, iop, target)?),
         Expression::Return(r) => {
             if let Some(return_type) = ctx.get_function_return_type() {

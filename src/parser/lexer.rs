@@ -263,6 +263,7 @@ impl Lexer {
             "::" => Ok(TokenKind::DoubleColon),
             "|" => Ok(TokenKind::Pipe),
             "." => Ok(TokenKind::BinaryOperator(BinaryOperator::Dot)),
+            ".." => Ok(TokenKind::DotDot),
             "&" => Ok(TokenKind::Ampersand),
             _ => parse_error_result(&self.current_single_span(), format!("Invalid operator {}", self.data)),
         }
@@ -451,7 +452,7 @@ mod tests {
 
     #[test]
     fn test_specials() {
-        let mut cursor = Cursor::new("+ - * / % < <= > >= == = != ! || && => -> : , :: $");
+        let mut cursor = Cursor::new("+ - * / % < <= > >= == = != ! || && => -> : , :: $ ..");
         let tokens: Vec<Token> = Lexer::new("")
             .read(&mut cursor)
             .expect("Lexing failed")
@@ -488,6 +489,7 @@ mod tests {
                 tok(TokenKind::Comma, 1, 45, 1, 45),
                 tok(TokenKind::DoubleColon, 1, 47, 1, 48),
                 tok(TokenKind::Dollar, 1, 50, 1, 50),
+                tok(TokenKind::DotDot, 1, 53, 1, 55),
                 tok(TokenKind::EOF, 2, 1, 2, 1),
             ]
         );

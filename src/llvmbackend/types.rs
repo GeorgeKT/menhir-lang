@@ -22,7 +22,7 @@ unsafe fn slice_to_llvm_type(
     slice_type: &SliceType,
 ) -> CompileResult<LLVMTypeRef> {
     let element_type = to_llvm_type(context, target_machine, &slice_type.element_type)?;
-    let mut member_types = vec![
+    let mut member_types = [
         LLVMPointerType(element_type, 0),              // Pointer to data
         native_llvm_int_type(context, target_machine), // Length of string
     ];
@@ -138,10 +138,25 @@ unsafe fn optional_to_llvm_type(
     inner: &Type,
 ) -> CompileResult<LLVMTypeRef> {
     let inner = to_llvm_type(context, target_machine, inner)?;
-    let mut member_types = vec![
+    let mut member_types = [
         native_llvm_int_type(context, target_machine), // nil or not
         inner,
     ];
+    Ok(LLVMStructTypeInContext(
+        context,
+        member_types.as_mut_ptr(),
+        member_types.len() as c_uint,
+        0,
+    ))
+}
+
+unsafe fn range_to_llvm_type(
+    context: LLVMContextRef,
+    target_machine: &TargetMachine,
+    range_int_size: IntSize,
+) -> CompileResult<LLVMTypeRef> {
+    let int_type = to_llvm_type(context, target_machine, &Type::UInt(range_int_size))?;
+    let mut member_types = [int_type, int_type];
     Ok(LLVMStructTypeInContext(
         context,
         member_types.as_mut_ptr(),
@@ -183,6 +198,7 @@ pub unsafe fn to_llvm_type(
         Type::Sum(st) => sum_type_to_llvm_type(context, target_machine, st),
         Type::Optional(ot) => optional_to_llvm_type(context, target_machine, ot),
         Type::Result(rt) => result_type_to_llvm_type(context, target_machine, rt),
+        Type::Range(int_size) => range_to_llvm_type(context, target_machine, *int_size),
         Type::Generic(_) => {
             code_gen_result("Internal Compiler Error: All generic types must have been resolved before code generation")
         }

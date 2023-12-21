@@ -1008,23 +1008,6 @@ fn parse_compiler_call(
             )))
         }
 
-        "slice" => {
-            tq.expect(&TokenKind::OpenParen)?;
-            let arguments =
-                parse_comma_separated_list(tq, &TokenKind::CloseParen, parse_expression, indent_level, target)?;
-            let span = start.expanded(tq.pos());
-            if arguments.len() != 2 {
-                return parse_error_result(&span, "@slice expects two arguments");
-            }
-
-            Ok(Expression::CompilerCall(CompilerCall::Slice {
-                data: Box::new(arguments[0].clone()),
-                len: Box::new(arguments[1].clone()),
-                typ: Type::Unknown,
-                span,
-            }))
-        }
-
         _ => parse_error_result(&name_span, format!("Unknown compiler call {}", name)),
     }
 }
@@ -1035,6 +1018,23 @@ fn parse_return(tq: &mut TokenQueue, start: &Span, indent_level: usize, target: 
     } else {
         let expr = parse_expression(tq, indent_level, target)?;
         Ok(return_expr(expr, start.expanded(tq.pos())))
+    }
+}
+
+fn parse_range(
+    tq: &mut TokenQueue,
+    lhs: Option<Expression>,
+    start: &Span,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Range> {
+    tq.expect(&TokenKind::DotDot)?;
+    if tq.peek().map(|t| is_end_of_expression(t)).unwrap_or(false) {
+        Ok(range(lhs, None, Type::Unknown, start.expanded(tq.pos())))
+    } else {
+        let rhs = parse_expression(tq, indent_level, target)?;
+        let span = start.expanded(rhs.span().end);
+        Ok(range(lhs, Some(rhs), Type::Unknown, span))
     }
 }
 
@@ -1149,7 +1149,18 @@ fn parse_expression_start(
         let next = tq.pop()?;
         match next.kind {
             TokenKind::OpenBracket => {
-                let index_expr = parse_expression(tq, indent_level, target)?;
+                let index_expr = if tq.is_next(&TokenKind::DotDot) {
+                    IndexMode::Range(parse_range(tq, None, &next.span, indent_level, target)?)
+                } else {
+                    let index_expr = parse_expression(tq, indent_level, target)?;
+                    let span = index_expr.span();
+                    if tq.is_next(&TokenKind::DotDot) {
+                        IndexMode::Range(parse_range(tq, Some(index_expr), &span, indent_level, target)?)
+                    } else {
+                        IndexMode::Index(index_expr)
+                    }
+                };
+
                 tq.expect(&TokenKind::CloseBracket)?;
                 let span = lhs.span().expanded(tq.pos());
                 lhs = index_op(lhs, index_expr, span);

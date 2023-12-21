@@ -158,6 +158,7 @@ pub enum Type {
     Int(IntSize),
     UInt(IntSize),
     Float(FloatSize),
+    Range(IntSize),
     Char,
     Bool,
     String,
@@ -568,6 +569,7 @@ impl fmt::Display for Type {
             Type::Interface(i) => write!(f, "interface {}", i.name),
             Type::SelfType => write!(f, "Self"),
             Type::Result(r) => write!(f, "{} ! {}", r.ok_typ, r.err_typ),
+            Type::Range(is) => write!(f, "Range({is})"),
         }
     }
 }

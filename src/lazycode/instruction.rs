@@ -60,6 +60,9 @@ pub enum Instruction {
     Label {
         label: Label,
     },
+    Mark {
+        tag: String,
+    },
 }
 
 impl fmt::Display for Instruction {
@@ -83,7 +86,8 @@ impl fmt::Display for Instruction {
             } => writeln!(f, "  brif {cond} {on_true} {on_false}"),
             Instruction::Return { value } => writeln!(f, "  ret {value}"),
             Instruction::Delete { object } => writeln!(f, "  del {object}"),
-            Instruction::Label { label } => writeln!(f, " {}:", label.id),
+            Instruction::Label { label } => writeln!(f, " {label}:"),
+            Instruction::Mark { tag } => writeln!(f, "  #{tag}"),
         }
     }
 }
@@ -133,26 +137,13 @@ impl Instruction {
             Instruction::Return { value } => value.visit(f),
             Instruction::Delete { object } => object.visit(f),
             Instruction::Alias { value, .. } => value.visit(f),
-            Instruction::Branch { .. } | Instruction::Label { .. } => (),
-        }
-    }
-
-    pub fn is_terminator(&self) -> bool {
-        match self {
-            Instruction::Return { .. } | Instruction::Branch { .. } | Instruction::BranchIf { .. } => true,
-            _ => false,
+            Instruction::Branch { .. } | Instruction::Label { .. } | Instruction::Mark { .. } => (),
         }
     }
 
     pub fn is_void_store(&self) -> bool {
         match self {
-            Instruction::Store { dst, .. } => {
-                if let Operand::Var { typ, .. } = dst {
-                    *typ == Type::Void
-                } else {
-                    false
-                }
-            }
+            Instruction::Store { value, .. } => value.get_type() == Type::Void,
             _ => false,
         }
     }
