@@ -21,11 +21,11 @@ fn find_used_calls_rec(
         }
     };
 
-    func.toplevel_scope
-        .visit_operands(&mut |op: &Operand| match op {
-            Operand::Func { name, .. } => handle_func(&name),
-            _ => (),
-        })
+    func.toplevel_scope.visit_operands(&mut |op: &Operand| {
+        if let Operand::Func { name, .. } = op {
+            handle_func(name)
+        }
+    })
 }
 
 fn find_used_calls(module: &ByteCodeModule, func: &ByteCodeFunction, unused_calls: &mut HashSet<String>) {

@@ -1029,7 +1029,7 @@ fn parse_range(
     target: &Target,
 ) -> CompileResult<Range> {
     tq.expect(&TokenKind::DotDot)?;
-    if tq.peek().map(|t| is_end_of_expression(t)).unwrap_or(false) {
+    if tq.peek().map(is_end_of_expression).unwrap_or(false) {
         Ok(range(lhs, None, Type::Unknown, start.expanded(tq.pos())))
     } else {
         let rhs = parse_expression(tq, indent_level, target)?;

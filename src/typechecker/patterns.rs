@@ -159,7 +159,7 @@ fn type_check_name_pattern(
     target_type: &Type,
     target: &Target,
 ) -> CompileResult<Type> {
-    type_check_name(ctx, nr, Some(&target_type))?;
+    type_check_name(ctx, nr, Some(target_type))?;
     if &nr.typ != target_type && !target_type.is_pointer_to(&nr.typ) {
         return type_error_result(
             &nr.span,

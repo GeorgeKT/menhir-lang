@@ -87,7 +87,7 @@ impl Scope {
         self.nodes.push(ScopeNode::Instruction(inst));
     }
 
-    pub fn to_var(&mut self, name: &str, value: Operand) -> Operand {
+    pub fn make_var(&mut self, name: &str, value: Operand) -> Operand {
         if value.cloneable() {
             return value;
         }
@@ -179,10 +179,7 @@ impl Scope {
     pub fn last_instruction_is_return(&self) -> bool {
         self.nodes
             .last()
-            .map(|i| match i {
-                ScopeNode::Instruction(Instruction::Return { .. }) => true,
-                _ => false,
-            })
+            .map(|i| matches!(i, ScopeNode::Instruction(Instruction::Return { .. })))
             .unwrap_or(false)
     }
 }

@@ -248,10 +248,7 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp, target: 
         }
 
         BinaryOperator::Or => {
-            if left_type.is_optional_of(&right_type) {
-                b.typ = right_type.clone();
-                valid(right_type)
-            } else if left_type.is_result_of(&right_type) {
+            if left_type.is_optional_of(&right_type) || left_type.is_result_of(&right_type) {
                 b.typ = right_type.clone();
                 valid(right_type)
             } else {
@@ -675,7 +672,7 @@ fn type_check_binding(ctx: &mut TypeCheckerContext, b: &mut Binding, target: &Ta
                     );
                 }
 
-                add_struct_bindings(ctx, s, &st, false)?;
+                add_struct_bindings(ctx, s, st, false)?;
             } else {
                 return type_error_result(&b.init.span(), "Expression does not return a struct type");
             }
@@ -1025,13 +1022,13 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
         (MemberAccessType::Call(call), Type::Struct(st)) => {
             let call_name = format!("{}.{}", st.name, call.callee.name);
             call.callee.name = call_name;
-            return replace_by(member_call_to_call(&sma.left, &call));
+            return replace_by(member_call_to_call(&sma.left, call));
         }
 
         (MemberAccessType::Call(call), Type::Sum(st)) => {
             let call_name = format!("{}.{}", st.name, call.callee.name);
             call.callee.name = call_name;
-            return replace_by(member_call_to_call(&sma.left, &call));
+            return replace_by(member_call_to_call(&sma.left, call));
         }
 
         (MemberAccessType::Call(call), Type::Generic(gt)) => (type_check_generic_member_call(ctx, call, gt)?, None),

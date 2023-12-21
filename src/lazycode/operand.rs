@@ -286,11 +286,7 @@ impl Operand {
     }
 
     pub fn is_call(&self) -> bool {
-        if let Operand::Call { .. } = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Operand::Call { .. })
     }
 
     pub fn get_type(&self) -> Type {

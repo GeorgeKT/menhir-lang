@@ -126,7 +126,7 @@ unsafe fn add_metadata(ctx: &mut Context, module_name: &str, desc: &PackageDescr
     Ok(())
 }
 
-pub fn llvm_code_generation<'a>(
+pub fn llvm_code_generation(
     bc_mod: &ByteCodeModule,
     ctx: &mut Context,
     desc: &PackageDescription,
@@ -189,7 +189,7 @@ impl LinkerFlags {
 pub fn link(ctx: &Context, opts: &CodeGenOptions, linker_flags: &LinkerFlags) -> Result<(), String> {
     let obj_file = unsafe { ctx.gen_object_file(opts)? };
 
-    let output_file_path = opts.build_dir.join(format!("{}", opts.output_file_name));
+    let output_file_path = opts.build_dir.join(&opts.output_file_name);
 
     let mut cmd = match opts.output_type {
         OutputType::Binary => {

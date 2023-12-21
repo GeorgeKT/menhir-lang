@@ -571,7 +571,7 @@ fn array_to_slice_to_bc(
     target: &Target,
 ) -> Operand {
     let array = expr_to_bc(bc_mod, scope, &ats.inner, target);
-    let array = scope.to_var("$array", array);
+    let array = scope.make_var("$array", array);
     let element_type = array
         .get_type()
         .get_element_type()
@@ -649,7 +649,7 @@ fn match_case_to_bc(
 fn match_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, m: &MatchExpression, target: &Target) -> Operand {
     let dst = scope.declare("$dst", None, m.typ.clone());
     let mt_expr = expr_to_bc(bc_mod, scope, &m.target, target);
-    let mt = scope.to_var("$mt", mt_expr);
+    let mt = scope.make_var("$mt", mt_expr);
     let match_end_bb = scope.label();
 
     scope.scope(|scope| {
@@ -756,7 +756,7 @@ fn index_op_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, iop: &IndexOpe
             Operand::member(t, idx, iop.typ.clone())
         }
         IndexMode::Range(r) => {
-            let t = scope.to_var("$indexee", t);
+            let t = scope.make_var("$indexee", t);
             let r = range_to_bc(bc_mod, scope, r, t.safe_clone(), target);
             Operand::slice(t, r, iop.typ.clone())
         }

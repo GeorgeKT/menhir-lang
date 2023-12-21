@@ -40,7 +40,7 @@ pub struct FunctionSignature {
     pub rvo: bool,
 }
 
-pub const RVO_RETURN_ARG: &'static str = "$rvo_ret";
+pub const RVO_RETURN_ARG: &str = "$rvo_ret";
 
 impl FunctionSignature {
     pub fn do_rvo(&mut self) {

@@ -125,7 +125,7 @@ impl Package {
         let root = build_options
             .build_directory
             .parent()
-            .ok_or_else(|| format!("Build directory has no parent directory"))?;
+            .ok_or_else(|| "Build directory has no parent directory".to_string())?;
         self.inputs.add(BuildInput::ExportsFile {
             digest: sha256::try_digest(path)
                 .map_err(|e| format!("Failed to calculate digest of {}: {e}", path.display()))?,

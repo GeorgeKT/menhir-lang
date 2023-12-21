@@ -195,7 +195,7 @@ fn struct_pattern_match_to_bc(
                 Operand::const_uint(idx as u64, target_machine.int_size),
                 case_type.clone(),
             );
-            let struct_ptr = scope.to_var("$struct_ptr", struct_ptr);
+            let struct_ptr = scope.make_var("$struct_ptr", struct_ptr);
             add_struct_pattern_bindings(p, struct_ptr, scope, target_machine);
             scope.add(branch_instr(match_case_bb));
         }
@@ -280,7 +280,7 @@ fn result_pattern_match_to_bc(
 
     scope.start_label(bind_bb);
     let member = Operand::member_ptr(target, idx, ptr_type(inner_type.clone()));
-    let inner = scope.to_var(if is_ok { "$ok_inner" } else { "$err_inner" }, member);
+    let inner = scope.make_var(if is_ok { "$ok_inner" } else { "$err_inner" }, member);
     pattern_to_bc(
         bc_mod,
         scope,

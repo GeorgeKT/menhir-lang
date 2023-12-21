@@ -64,7 +64,7 @@ pub unsafe fn gen_instruction(
         }
         Instruction::Store { dst, value } => {
             let dst_var = gen_operand(ctx, dst, None)?;
-            let _value = gen_operand_dst(ctx, value, &dst_var)?;
+            gen_operand_dst(ctx, value, &dst_var)?;
             Ok(())
         }
         Instruction::Branch { to } => {

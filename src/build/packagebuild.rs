@@ -100,12 +100,7 @@ impl PackageData {
     }
 
     fn get_target(&self, target: &str) -> Option<&PackageTarget> {
-        for t in &self.target {
-            if t.name == target {
-                return Some(t);
-            }
-        }
-        None
+        self.target.iter().find(|&t| t.name == target)
     }
 
     fn build_target_and_dependencies(&self, build_options: &BuildOptions, target: &str) -> CompileResult<()> {
@@ -183,13 +178,13 @@ impl PackageData {
             for t in &self.target {
                 if t.output_type == OutputType::Binary {
                     if candidate.is_some() {
-                        return Err(CompileError::Other(format!("Multiple binaries are available, please choose the binary to run using the -t or --target option.")));
+                        return Err(CompileError::Other("Multiple binaries are available, please choose the binary to run using the -t or --target option.".to_string()));
                     }
                     candidate = Some(t);
                 }
             }
 
-            return candidate.ok_or_else(|| CompileError::Other(format!("This package has no binary to run")));
+            candidate.ok_or_else(|| CompileError::Other("This package has no binary to run".to_string()))
         }
     }
 
@@ -253,14 +248,14 @@ impl PackageTarget {
         }
 
         for import_dir in &build_options.import_directories {
-            if self.find_dependency_in_path(dep, &import_dir, pkg, build_options)? {
+            if self.find_dependency_in_path(dep, import_dir, pkg, build_options)? {
                 return Ok(());
             }
         }
 
         if let Ok(import_paths) = env::var("MENHIR_IMPORT_DIRS") {
             for path in import_paths.split(':') {
-                if self.find_dependency_in_path(dep, &Path::new(path), pkg, build_options)? {
+                if self.find_dependency_in_path(dep, Path::new(path), pkg, build_options)? {
                     return Ok(());
                 }
             }
@@ -287,12 +282,10 @@ impl PackageTarget {
 
         let path = if let Some(path) = &self.path {
             path.to_owned()
+        } else if single_file.exists() {
+            single_file
         } else {
-            if single_file.exists() {
-                single_file
-            } else {
-                dir_name
-            }
+            dir_name
         };
 
         let mut pkg = Package::new(&self.name, self.output_type, desc);
@@ -330,11 +323,7 @@ impl PackageTarget {
         drop(bc_dump);
 
         time_operation_mut(build_options.show_timing, 2, "Optimization", || {
-            if build_options.optimize {
-                optimize_module(&mut bc_mod);
-            } else {
-                optimize_module(&mut bc_mod);
-            }
+            optimize_module(&mut bc_mod);
         });
 
         if build_options.dump_flags.contains(&Dump::ByteCode) || build_options.dump_flags.contains(&Dump::All) {
@@ -363,7 +352,7 @@ impl PackageTarget {
         match opts.output_type {
             OutputType::SharedLib | OutputType::StaticLib => {
                 let path = opts.build_dir.join(format!("{}.mhr.exports", self.name));
-                let mut file = File::create(&path)?;
+                let mut file = File::create(path)?;
                 let export_lib = ExportLibrary::new(&pkg, opts.output_type);
                 export_lib.save(&mut file)?;
             }

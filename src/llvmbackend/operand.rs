@@ -350,7 +350,7 @@ unsafe fn get_dst(ctx: &mut Context, name: &str, dst: Option<ValueRef>, typ: &Ty
 
 unsafe fn gen_seq(
     ctx: &mut Context,
-    members: &Vec<Operand>,
+    members: &[Operand],
     typ: &Type,
     dst: Option<ValueRef>,
 ) -> CompileResult<ValueRef> {
