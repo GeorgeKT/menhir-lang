@@ -30,6 +30,9 @@ unsafe fn build_load(
     LLVMBuildLoad2(builder, typ, pointer, name)
 }
 
+const SUM_TYPE_TAG_IDX: u32 = 0;
+const SUM_TYPE_DATA_IDX: u32 = 1;
+
 impl ValueRef {
     pub fn new(value: LLVMValueRef, typ: Type) -> ValueRef {
         ValueRef { value, typ }
@@ -285,7 +288,7 @@ impl ValueRef {
 
     pub fn get_member_ptr_static(&self, ctx: &mut Context, index: usize) -> CompileResult<ValueRef> {
         let Some(element_type) = self.typ.get_element_type() else {
-            return code_gen_result(format!("Load member not allowed on type {}", self.typ));
+            return code_gen_result(format!("Get member not allowed on type {}", self.typ));
         };
 
         match &element_type {
@@ -305,7 +308,13 @@ impl ValueRef {
 
             Type::Sum(st) => unsafe {
                 let self_type = ctx.resolve_type(&element_type)?;
-                let st_data_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 1, cstr!("st_data_ptr"));
+                let st_data_ptr = LLVMBuildStructGEP2(
+                    ctx.builder,
+                    self_type,
+                    self.value,
+                    SUM_TYPE_DATA_IDX,
+                    cstr!("st_data_ptr"),
+                );
                 if let Some(case_type) = &st.cases[index].typ {
                     let type_to_cast_to = LLVMPointerType(ctx.resolve_type(case_type)?, 0);
                     Ok(ValueRef::new(
@@ -318,7 +327,13 @@ impl ValueRef {
             },
             Type::Result(rt) => unsafe {
                 let self_type = ctx.resolve_type(&element_type)?;
-                let st_data_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 1, cstr!("rt_data_ptr"));
+                let st_data_ptr = LLVMBuildStructGEP2(
+                    ctx.builder,
+                    self_type,
+                    self.value,
+                    SUM_TYPE_DATA_IDX,
+                    cstr!("rt_data_ptr"),
+                );
                 let case_type = if index == 0 { &rt.ok_typ } else { &rt.err_typ };
                 let type_to_cast_to = LLVMPointerType(ctx.resolve_type(case_type)?, 0);
                 Ok(ValueRef::new(
@@ -447,7 +462,8 @@ impl ValueRef {
 
             (Type::Sum(_), ByteCodeProperty::SumTypeIndex) => unsafe {
                 let self_type = ctx.resolve_type(element_type)?;
-                let sti_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 0, cstr!("sti_ptr"));
+                let sti_ptr =
+                    LLVMBuildStructGEP2(ctx.builder, self_type, self.value, SUM_TYPE_TAG_IDX, cstr!("sti_ptr"));
                 ValueRef::new(
                     build_load(ctx.builder, ctx.native_uint_type()?, sti_ptr, cstr!("sti")),
                     native_uint_type,
@@ -456,7 +472,8 @@ impl ValueRef {
 
             (Type::Result(_), ByteCodeProperty::SumTypeIndex) => unsafe {
                 let self_type = ctx.resolve_type(element_type)?;
-                let rti_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 0, cstr!("rti_ptr"));
+                let rti_ptr =
+                    LLVMBuildStructGEP2(ctx.builder, self_type, self.value, SUM_TYPE_TAG_IDX, cstr!("rti_ptr"));
                 ValueRef::new(
                     build_load(ctx.builder, ctx.native_uint_type()?, rti_ptr, cstr!("rti")),
                     native_uint_type,
@@ -465,7 +482,8 @@ impl ValueRef {
 
             (Type::Optional(_), ByteCodeProperty::SumTypeIndex) => unsafe {
                 let self_type = ctx.resolve_type(element_type)?;
-                let rti_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 0, cstr!("rti_ptr"));
+                let rti_ptr =
+                    LLVMBuildStructGEP2(ctx.builder, self_type, self.value, SUM_TYPE_TAG_IDX, cstr!("rti_ptr"));
                 ValueRef::new(
                     build_load(ctx.builder, ctx.native_uint_type()?, rti_ptr, cstr!("rti")),
                     native_uint_type,
@@ -482,19 +500,22 @@ impl ValueRef {
         match (element_type, prop) {
             (&Type::Sum(_), ByteCodeProperty::SumTypeIndex) => unsafe {
                 let self_type = ctx.resolve_type(element_type)?;
-                let sti_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 0, cstr!("sti_ptr"));
+                let sti_ptr =
+                    LLVMBuildStructGEP2(ctx.builder, self_type, self.value, SUM_TYPE_TAG_IDX, cstr!("sti_ptr"));
                 LLVMBuildStore(ctx.builder, const_uint(ctx, value as u64), sti_ptr);
                 Ok(())
             },
             (Type::Result(_), ByteCodeProperty::SumTypeIndex) => unsafe {
                 let self_type = ctx.resolve_type(element_type)?;
-                let rti_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 0, cstr!("rti_ptr"));
+                let rti_ptr =
+                    LLVMBuildStructGEP2(ctx.builder, self_type, self.value, SUM_TYPE_TAG_IDX, cstr!("rti_ptr"));
                 LLVMBuildStore(ctx.builder, const_uint(ctx, value as u64), rti_ptr);
                 Ok(())
             },
             (Type::Optional(_), ByteCodeProperty::SumTypeIndex) => unsafe {
                 let self_type = ctx.resolve_type(element_type)?;
-                let sti_ptr = LLVMBuildStructGEP2(ctx.builder, self_type, self.value, 0, cstr!("rti_ptr"));
+                let sti_ptr =
+                    LLVMBuildStructGEP2(ctx.builder, self_type, self.value, SUM_TYPE_TAG_IDX, cstr!("rti_ptr"));
                 LLVMBuildStore(ctx.builder, const_uint(ctx, value as u64), sti_ptr);
                 Ok(())
             },

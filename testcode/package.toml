@@ -79,6 +79,18 @@ name="sum_destructors"
 type="binary"
 
 [[target]]
+name="drop_flags"
+type="binary"
+
+#[[target]]
+#name="result_destructors"
+#type="binary"
+
+#[[target]]
+#name="optional_destructors"
+#type="binary"
+
+[[target]]
 name="nested_destructors"
 type="binary"
 

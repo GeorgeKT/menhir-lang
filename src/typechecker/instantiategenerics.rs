@@ -5,6 +5,7 @@ use crate::ast::*;
 use crate::compileerror::{unknown_name_result, CompileResult};
 use crate::target::Target;
 use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
 
 type FunctionMap = HashMap<String, Function>;
 
@@ -57,10 +58,25 @@ fn resolve_generics(
     target: &Target,
 ) -> CompileResult<()> {
     let mut rg = |e: &Expression| {
-        if let Expression::Call(ref c) = *e {
-            if !c.generic_args.is_empty() {
-                resolve_generic_call(ctx, new_functions, imports, module, c, target)?;
+        match e {
+            Expression::Call(c) => {
+                if !c.generic_args.is_empty() {
+                    resolve_generic_call(ctx, new_functions, imports, module, c, target)?;
+                }
             }
+
+            Expression::CompilerCall(cc) => {
+                let CompilerCall::Drop { destructor_call, .. } = cc.deref() else {
+                    return Ok(());
+                };
+
+                if let Some(ds) = destructor_call {
+                    if !ds.generic_args.is_empty() {
+                        resolve_generic_call(ctx, new_functions, imports, module, ds, target)?;
+                    }
+                }
+            }
+            _ => (),
         }
         Ok(())
     };
@@ -69,10 +85,27 @@ fn resolve_generics(
 
 fn replace_generic_calls(e: &mut Expression) -> CompileResult<()> {
     let mut replace_calls = |e: &mut Expression| {
-        if let Expression::Call(ref mut call) = *e {
-            if !call.generic_args.is_empty() {
-                call.callee.name = new_func_name(&call.callee.name, &call.generic_args);
+        match e {
+            Expression::Call(call) => {
+                if !call.generic_args.is_empty() {
+                    call.callee.name = new_func_name(&call.callee.name, &call.generic_args);
+                }
             }
+
+            Expression::CompilerCall(cc) => {
+                let CompilerCall::Drop {
+                    destructor_call: Some(call),
+                    ..
+                } = cc.deref_mut()
+                else {
+                    return Ok(());
+                };
+
+                if !call.generic_args.is_empty() {
+                    call.callee.name = new_func_name(&call.callee.name, &call.generic_args);
+                }
+            }
+            _ => (),
         }
         Ok(())
     };

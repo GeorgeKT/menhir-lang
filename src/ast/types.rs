@@ -239,6 +239,7 @@ impl Type {
             (&Type::Void, _) => Some(Expression::Block(Box::new(Block {
                 expressions: vec![expr.clone(), Expression::Void],
                 deferred_expressions: Vec::new(),
+                drop_flags: Vec::new(),
                 typ: Type::Void,
                 span: expr.span(),
             }))),

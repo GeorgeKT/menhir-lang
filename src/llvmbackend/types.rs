@@ -43,13 +43,20 @@ unsafe fn array_to_llvm_type(
     Ok(LLVMArrayType(element_type, at.len as c_uint))
 }
 
+unsafe fn create_sum_type(
+    context: LLVMContextRef,
+    target_machine: &TargetMachine,
+    largest_case_type: LLVMTypeRef,
+) -> LLVMTypeRef {
+    let mut member_types = vec![native_llvm_int_type(context, target_machine), largest_case_type];
+    LLVMStructTypeInContext(context, member_types.as_mut_ptr(), member_types.len() as c_uint, 0)
+}
+
 unsafe fn sum_type_to_llvm_type(
     context: LLVMContextRef,
     target_machine: &TargetMachine,
     st: &SumType,
 ) -> CompileResult<LLVMTypeRef> {
-    let mut member_types = vec![native_llvm_int_type(context, target_machine)]; // first entry is the tag
-
     // Calculate the biggest type
     let mut largest_type = ptr::null_mut::<LLVMType>();
     for c in &st.cases {
@@ -64,13 +71,7 @@ unsafe fn sum_type_to_llvm_type(
     }
 
     // Use the largest type, we will cast to the other case types
-    member_types.push(largest_type);
-    Ok(LLVMStructTypeInContext(
-        context,
-        member_types.as_mut_ptr(),
-        member_types.len() as c_uint,
-        0,
-    ))
+    Ok(create_sum_type(context, target_machine, largest_type))
 }
 
 unsafe fn result_type_to_llvm_type(
@@ -78,21 +79,15 @@ unsafe fn result_type_to_llvm_type(
     target_machine: &TargetMachine,
     rt: &ResultType,
 ) -> CompileResult<LLVMTypeRef> {
-    let mut member_types = vec![native_llvm_int_type(context, target_machine)]; // first entry is the tag
     let ok_typ = to_llvm_type(context, target_machine, &rt.ok_typ)?;
     let err_typ = to_llvm_type(context, target_machine, &rt.err_typ)?;
-    if target_machine.size_of_type(ok_typ) > target_machine.size_of_type(err_typ) {
-        member_types.push(ok_typ);
+    let largest = if target_machine.size_of_type(ok_typ) > target_machine.size_of_type(err_typ) {
+        ok_typ
     } else {
-        member_types.push(err_typ);
-    }
+        err_typ
+    };
 
-    Ok(LLVMStructTypeInContext(
-        context,
-        member_types.as_mut_ptr(),
-        member_types.len() as c_uint,
-        0,
-    ))
+    Ok(create_sum_type(context, target_machine, largest))
 }
 
 unsafe fn func_to_llvm_type(
@@ -138,16 +133,7 @@ unsafe fn optional_to_llvm_type(
     inner: &Type,
 ) -> CompileResult<LLVMTypeRef> {
     let inner = to_llvm_type(context, target_machine, inner)?;
-    let mut member_types = [
-        native_llvm_int_type(context, target_machine), // nil or not
-        inner,
-    ];
-    Ok(LLVMStructTypeInContext(
-        context,
-        member_types.as_mut_ptr(),
-        member_types.len() as c_uint,
-        0,
-    ))
+    Ok(create_sum_type(context, target_machine, inner))
 }
 
 unsafe fn range_to_llvm_type(

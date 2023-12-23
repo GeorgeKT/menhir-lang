@@ -1001,11 +1001,14 @@ fn parse_compiler_call(
             let (typ, _) = parse_type(tq, indent_level, target)?;
             tq.expect(&TokenKind::CloseParen)?;
 
-            Ok(Expression::CompilerCall(CompilerCall::SizeOf(
-                typ,
-                target.int_size,
-                start.expanded(tq.pos()),
-            )))
+            Ok(cc_size_of(typ, target.int_size, start.expanded(tq.pos())))
+        }
+
+        "drop" => {
+            tq.expect(&TokenKind::OpenParen)?;
+            let obj = parse_expression(tq, indent_level, target)?;
+            tq.expect(&TokenKind::CloseParen)?;
+            Ok(cc_drop(obj, start.expanded(tq.pos()), None, None))
         }
 
         _ => parse_error_result(&name_span, format!("Unknown compiler call {}", name)),

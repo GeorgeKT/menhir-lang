@@ -119,6 +119,10 @@ fn block_expr_to_bc(
         return op;
     }
     if op.is_call() {
+        if matches!(op, Operand::Void) {
+            println!("blaat");
+            dbg!(&op);
+        }
         scope.add(Instruction::Exec { operand: op });
     }
 
@@ -128,6 +132,10 @@ fn block_expr_to_bc(
 fn block_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, b: &Block, target: &Target) -> Operand {
     for e in &b.deferred_expressions {
         scope.add_unwind_call(e.clone());
+    }
+
+    for df in &b.drop_flags {
+        scope.declare(&df.0, Some(Operand::const_bool(false)), Type::Bool);
     }
 
     let mut ret = Operand::Void;
@@ -555,12 +563,55 @@ fn return_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, r: &Return, targ
     Operand::Void
 }
 
-fn compiler_call_to_bc(c: &CompilerCall) -> Operand {
+fn compiler_call_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, c: &CompilerCall, target: &Target) -> Operand {
     match c {
-        CompilerCall::SizeOf(typ, int_size, _) => Operand::SizeOf {
+        CompilerCall::SizeOf { typ, int_size, .. } => Operand::SizeOf {
             typ: typ.clone(),
             int_size: *int_size,
         },
+        CompilerCall::Drop {
+            obj,
+            destructor_call,
+            drop_flag,
+            ..
+        } => {
+            let Some(ds) = destructor_call else {
+                return Operand::Void;
+            };
+
+            let end = scope.label();
+            scope.scope(|scope| {
+                let obj = expr_to_bc(bc_mod, scope, obj, target);
+                let obj = scope.make_var("$tbd", obj);
+                if let Some(df) = drop_flag {
+                    let dropped = Operand::Var {
+                        name: df.0.clone(),
+                        typ: Type::Bool,
+                    };
+                    let not_dropped = Operand::Unary {
+                        op: UnaryOperator::Not,
+                        inner: Box::new(dropped.safe_clone()),
+                        typ: Type::Bool,
+                    };
+                    let drop_obj = scope.label();
+                    scope.add(branch_if_instr(not_dropped, drop_obj, end));
+                    scope.start_label(drop_obj);
+                    scope.add(store_instr(dropped, Operand::const_bool(true)));
+                }
+
+                let call = Operand::Call {
+                    callee: Box::new(name_ref_to_bc(&ds.callee)),
+                    args: vec![call_arg(obj.safe_clone(), true, obj.get_type())],
+                    typ: Type::Void,
+                    rvo: false,
+                };
+                scope.add(Instruction::Exec { operand: call });
+                scope.exit(bc_mod, target, branch_instr(end));
+            });
+
+            scope.start_label(end);
+            Operand::Void
+        }
     }
 }
 
@@ -852,7 +903,7 @@ pub fn expr_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, expr: &Express
                 typ: c.destination_type.clone(),
             }
         }
-        Expression::CompilerCall(c) => compiler_call_to_bc(c),
+        Expression::CompilerCall(c) => compiler_call_to_bc(bc_mod, scope, c, target),
         Expression::IndexOperation(i) => index_op_to_bc(bc_mod, scope, i, target),
         Expression::Return(r) => return_to_bc(bc_mod, scope, r, target),
         Expression::Void => Operand::Void,

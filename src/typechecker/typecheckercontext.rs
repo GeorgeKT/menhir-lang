@@ -7,6 +7,7 @@ use super::destructors::destructor_name;
 struct Scope {
     symbols: HashMap<String, Symbol>,
     destructor_calls: Vec<Expression>,
+    drop_flags: HashMap<String, DropFlag>,
     function_return_type: Option<Type>,
 }
 
@@ -15,6 +16,7 @@ impl Scope {
         Scope {
             symbols: HashMap::new(),
             destructor_calls: Vec::new(),
+            drop_flags: HashMap::new(),
             function_return_type,
         }
     }
@@ -93,6 +95,7 @@ pub struct TypeCheckerContext<'a> {
     globals: Scope,
     externals: Scope,
     import_resolver: ImportSymbolResolver<'a>,
+    drop_flag_counter: usize,
 }
 
 impl<'a> TypeCheckerContext<'a> {
@@ -102,6 +105,7 @@ impl<'a> TypeCheckerContext<'a> {
             globals: Scope::new(None),
             externals: Scope::new(None),
             import_resolver: isr,
+            drop_flag_counter: 0,
         }
     }
 
@@ -141,17 +145,23 @@ impl<'a> TypeCheckerContext<'a> {
         Ok(Some(ds))
     }
 
-    pub fn get_destructor_call(&self, self_expr: Expression, typ: &Type) -> CompileResult<Option<Expression>> {
+    pub fn get_destructor_call(
+        &self,
+        self_expr: Expression,
+        df: Option<DropFlag>,
+        typ: &Type,
+    ) -> CompileResult<Option<Expression>> {
         let Some(ds) = self.get_destructor(typ)? else {
             return Ok(None);
         };
 
         let call = Call::new(
             NameRef::new(ds.name.clone(), ds.span.clone()),
-            vec![self_expr],
+            vec![self_expr.clone()],
             ds.span.clone(),
         );
-        Ok(Some(Expression::Call(Box::new(call))))
+
+        Ok(Some(cc_drop(self_expr, ds.span.clone(), Some(call), df)))
     }
 
     pub fn add_destructors(&mut self, b: &mut Block) -> CompileResult<()> {
@@ -159,6 +169,7 @@ impl<'a> TypeCheckerContext<'a> {
         for ds in scope.destructor_calls.drain(..).rev() {
             b.deferred_expressions.push(ds);
         }
+        b.drop_flags = scope.drop_flags.values().cloned().collect();
         Ok(())
     }
 
@@ -188,6 +199,37 @@ impl<'a> TypeCheckerContext<'a> {
         self.import_resolver.resolve(name)
     }
 
+    pub fn next_drop_flag(&mut self, var_name: &str) -> DropFlag {
+        let df = DropFlag(format!("$df_{}_{}", var_name, self.drop_flag_counter));
+        self.drop_flag_counter += 1;
+        if let Some(s) = self.stack.last_mut() {
+            s.drop_flags.insert(var_name.into(), df.clone());
+        }
+        df
+    }
+
+    pub fn get_drop_flag(&self, expr: &Expression) -> Option<DropFlag> {
+        let name = match expr {
+            Expression::NameRef(nr) => &nr.name,
+            Expression::AddressOf(aof) => {
+                if let Expression::NameRef(nr) = &aof.inner {
+                    &nr.name
+                } else {
+                    return None;
+                }
+            }
+            _ => return None,
+        };
+
+        for s in self.stack.iter().rev() {
+            if let Some(df) = s.drop_flags.get(name) {
+                return Some(df.clone());
+            }
+        }
+
+        None
+    }
+
     pub fn add(&mut self, symbol: Symbol) -> CompileResult<()> {
         match symbol.symbol_type {
             SymbolType::Normal => {
@@ -195,7 +237,8 @@ impl<'a> TypeCheckerContext<'a> {
                     Expression::NameRef(NameRef::new(symbol.name.clone(), symbol.span.clone())),
                     symbol.span.clone(),
                 );
-                let ds = self.get_destructor_call(param, &symbol.typ)?;
+                let df = self.next_drop_flag(&symbol.name);
+                let ds = self.get_destructor_call(param, Some(df), &symbol.typ)?;
                 if let Some(sf) = self.stack.last_mut() {
                     sf.add(symbol, ds)
                 } else {

@@ -1,0 +1,17 @@
+#ret:42
+
+struct Box:
+    ptr: *int
+
+fn ~Box(self):
+    delete self.ptr
+
+fn main() -> int:
+    let a = Box{new 42}
+    var ret = 0
+    if *a.ptr > 10:
+        ret = *a.ptr
+        @drop(&a)
+    return ret
+    
+

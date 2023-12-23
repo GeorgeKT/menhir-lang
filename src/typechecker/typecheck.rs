@@ -1340,11 +1340,42 @@ fn type_check_cast(ctx: &mut TypeCheckerContext, c: &mut TypeCast, target: &Targ
 
 fn type_check_compiler_call(ctx: &mut TypeCheckerContext, cc: &mut CompilerCall, target: &Target) -> TypeCheckResult {
     match cc {
-        CompilerCall::SizeOf(typ, _, span) => {
+        CompilerCall::SizeOf { typ, span, .. } => {
             if resolve_type(ctx, typ) == TypeResolved::No {
                 type_error_result(span, format!("Unable to resolve type {}", typ))
             } else {
                 valid(target.native_uint_type.clone())
+            }
+        }
+        CompilerCall::Drop {
+            obj,
+            span,
+            destructor_call,
+            drop_flag,
+        } => {
+            let typ = type_check_expression(ctx, obj, None, target)?;
+            let Type::Pointer(inner) = &typ else {
+                return type_error_result(span, format!("@drop calls expect a pointer as argument, got a {typ}"));
+            };
+
+            match destructor_call {
+                Some(ds) => {
+                    type_check_call(ctx, ds, target)?;
+                    valid(Type::Void)
+                }
+                None => {
+                    let df = if let Some(df) = drop_flag {
+                        Some(df.clone())
+                    } else {
+                        ctx.get_drop_flag(obj)
+                    };
+
+                    if let Some(ds) = ctx.get_destructor_call(obj.clone(), df, inner)? {
+                        replace_by(ds)
+                    } else {
+                        valid(Type::Void)
+                    }
+                }
             }
         }
     }

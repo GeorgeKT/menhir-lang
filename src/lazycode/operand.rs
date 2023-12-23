@@ -4,7 +4,7 @@ use itertools::join;
 
 use crate::ast::{array_type, ptr_type, BinaryOperator, FloatSize, IntSize, Type, UnaryOperator};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum ByteCodeProperty {
     Len,
     Data,

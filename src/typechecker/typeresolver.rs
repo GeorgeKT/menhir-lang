@@ -1,6 +1,6 @@
 use super::typecheckercontext::TypeCheckerContext;
 use crate::ast::*;
-use crate::compileerror::{unknown_name_result, CompileResult};
+use crate::compileerror::{type_error_result, unknown_name_result, CompileResult};
 use std::collections::HashSet;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -213,6 +213,8 @@ fn resolve_interface_types(
     Ok(TypeResolved::Yes)
 }
 
+const MAX_SUM_CASES: usize = 16384;
+
 fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: ResolveMode) -> CompileResult<usize> {
     let mut num_resolved = 0;
     for typ in module.types.values_mut() {
@@ -232,6 +234,13 @@ fn resolve_all_types(ctx: &mut TypeCheckerContext, module: &mut Module, mode: Re
             }
 
             TypeDeclaration::Sum(ref mut s) => {
+                if s.cases.len() > MAX_SUM_CASES {
+                    return type_error_result(
+                        &s.span,
+                        format!("Enum type has too many cases, the maximum is {MAX_SUM_CASES}"),
+                    );
+                }
+
                 if resolve_sum_case_types(ctx, s, mode)? == TypeResolved::Yes {
                     ctx.add(Symbol::new(&s.name, &s.typ, false, &s.span, SymbolType::Normal))?;
                     match s.typ {

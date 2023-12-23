@@ -125,13 +125,17 @@ impl Scope {
         let unwind = self.unwind.clone();
         for e in unwind.iter().rev() {
             let op = expr_to_bc(bc_mod, self, e, target);
-            self.add(Instruction::Exec { operand: op });
+            if op.is_call() {
+                self.add(Instruction::Exec { operand: op });
+            }
         }
         if let Instruction::Return { .. } = with {
             let parent_unwind = self.parent_unwind.clone();
             for e in parent_unwind.iter().rev() {
                 let op = expr_to_bc(bc_mod, self, e, target);
-                self.add(Instruction::Exec { operand: op });
+                if op.is_call() {
+                    self.add(Instruction::Exec { operand: op });
+                }
             }
         }
 

@@ -355,6 +355,34 @@ fn substitute_index_op(
     })
 }
 
+fn substitute_compiler_call(
+    ctx: &TypeCheckerContext,
+    generic_args: &GenericMapping,
+    cc: &CompilerCall,
+) -> CompileResult<Expression> {
+    match cc {
+        CompilerCall::SizeOf { typ, int_size, span } => {
+            let new_t = make_concrete(ctx, generic_args, typ, span)?;
+            Ok(cc_size_of(new_t, *int_size, span.clone()))
+        }
+        CompilerCall::Drop {
+            obj,
+            span,
+            destructor_call,
+            drop_flag,
+        } => {
+            let ds = if let Some(ds) = destructor_call {
+                Some(substitute_call(ctx, generic_args, ds)?)
+            } else {
+                None
+            };
+
+            let nobj = substitute_expr(ctx, generic_args, obj)?;
+            Ok(cc_drop(nobj, span.clone(), ds, drop_flag.clone()))
+        }
+    }
+}
+
 fn substitute_expr(
     ctx: &TypeCheckerContext,
     generic_args: &GenericMapping,
@@ -544,14 +572,7 @@ fn substitute_expr(
 
         Expression::Void => Ok(Expression::Void),
 
-        Expression::CompilerCall(CompilerCall::SizeOf(t, int_size, span)) => {
-            let new_t = make_concrete(ctx, generic_args, t, span)?;
-            Ok(Expression::CompilerCall(CompilerCall::SizeOf(
-                new_t,
-                *int_size,
-                span.clone(),
-            )))
-        }
+        Expression::CompilerCall(c) => substitute_compiler_call(ctx, generic_args, c),
 
         Expression::IndexOperation(iop) => Ok(Expression::IndexOperation(Box::new(substitute_index_op(
             ctx,

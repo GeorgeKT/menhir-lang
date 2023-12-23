@@ -29,6 +29,7 @@ fn block(expressions: Vec<Expression>, deferred: Vec<Expression>, span: Span) ->
     let b = Box::new(Block {
         expressions,
         deferred_expressions: deferred,
+        drop_flags: Vec::new(),
         typ: Type::Unknown,
         span,
     });
@@ -43,7 +44,7 @@ fn get_member_destructor_calls(
     for (idx, member) in sd.members.iter().enumerate() {
         let sfm = address_of(self_member_access(&member.name, idx, &member.span), member.span.clone());
 
-        if let Some(call) = ctx.get_destructor_call(sfm, &member.typ)? {
+        if let Some(call) = ctx.get_destructor_call(sfm, None, &member.typ)? {
             destructor_calls.push(call);
             break;
         }
@@ -112,7 +113,7 @@ fn generate_sum_case_destructor(
     let mut bindings = Vec::new();
     for sm in &sd.members {
         let param = name_expr(&sm.name, c.span.clone());
-        if let Some(ds) = ctx.get_destructor_call(param, &sm.typ)? {
+        if let Some(ds) = ctx.get_destructor_call(param, None, &sm.typ)? {
             destructors.push(ds);
             bindings.push(StructPatternBinding {
                 name: sm.name.clone(),
@@ -237,7 +238,7 @@ pub fn create_destructors(ctx: &TypeCheckerContext, module: &mut Module) -> Comp
                 return type_error_result(&d.inner.span(), "Expecting a pointer type in a delete expression");
             };
 
-            let Some(dc) = ctx.get_destructor_call(name_expr("$del", d.span.clone()), &et)? else {
+            let Some(dc) = ctx.get_destructor_call(name_expr("$del", d.span.clone()), None, &et)? else {
                 return Ok(());
             };
 
