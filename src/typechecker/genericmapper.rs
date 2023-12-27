@@ -118,10 +118,10 @@ pub fn fill_in_generics(
                 }
 
                 let nt = fill_in_generics(ctx, &aa.typ, &ga.typ, known_types, span)?;
-                new_members.push(struct_member(&aa.name, nt));
+                new_members.push(struct_member(aa.name.clone(), nt));
             }
 
-            Ok(struct_type(&actual_st.name, new_members))
+            Ok(struct_type(actual_st.name.clone(), new_members))
         }
 
         (Type::Sum(generic_st), Type::Sum(actual_st)) => {

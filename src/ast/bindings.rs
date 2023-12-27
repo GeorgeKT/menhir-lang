@@ -18,6 +18,15 @@ pub struct Binding {
     pub span: Span,
 }
 
+impl Binding {
+    pub fn name(&self) -> &str {
+        match &self.binding_type {
+            BindingType::Name(n) => n,
+            BindingType::Struct(_) => "struct binding",
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct GlobalBinding {
     pub mutable: bool,
@@ -41,38 +50,43 @@ pub struct BindingExpression {
     pub span: Span,
 }
 
-pub fn name_binding(name: String, init: Expression, mutable: bool, span: Span) -> Binding {
+pub fn name_binding(name: String, init: Expression, mutable: bool, typ: Type, span: Span) -> Binding {
     Binding {
         mutable,
         binding_type: BindingType::Name(name),
         init,
-        typ: Type::Unknown,
+        typ,
         span,
     }
 }
 
-pub fn binding(bt: BindingType, init: Expression, mutable: bool, span: Span) -> Binding {
+pub fn binding(bt: BindingType, init: Expression, mutable: bool, typ: Type, span: Span) -> Binding {
     Binding {
         mutable,
         binding_type: bt,
         init,
-        typ: Type::Unknown,
+        typ,
         span,
     }
 }
 
-pub fn global_binding(name: String, init: Expression, mutable: bool, span: Span) -> GlobalBinding {
+pub fn global_binding(name: String, init: Expression, mutable: bool, typ: Type, span: Span) -> GlobalBinding {
     GlobalBinding {
         mutable,
         name,
         init,
-        typ: Type::Unknown,
+        typ,
         span,
     }
 }
 
 pub fn bindings(bindings: Vec<Binding>, span: Span) -> Expression {
     Expression::Bindings(Box::new(BindingList { bindings, span }))
+}
+
+pub fn binding_expr(name: &str, value: Expression, mutable: bool, span: Span) -> Expression {
+    let nb = name_binding(name.into(), value, mutable, Type::Unknown, span.clone());
+    bindings(vec![nb], span)
 }
 
 impl TreePrinter for Binding {

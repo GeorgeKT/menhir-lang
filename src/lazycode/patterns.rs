@@ -104,11 +104,19 @@ fn array_pattern_match_to_bc(
         .get_type()
         .get_element_type()
         .expect("Invalid array type");
-    let head = Operand::member(
-        seq.safe_clone(),
-        Operand::const_uint(0, target.int_size),
-        head_type.clone(),
-    );
+    let head = if head_type.pass_by_value() {
+        Operand::member(
+            seq.safe_clone(),
+            Operand::const_uint(0, target.int_size),
+            head_type.clone(),
+        )
+    } else {
+        Operand::member_ptr(
+            seq.safe_clone(),
+            Operand::const_uint(0, target.int_size),
+            ptr_type(head_type.clone()),
+        )
+    };
 
     let _head = scope.alias(&ap.head, head);
 
@@ -144,7 +152,11 @@ fn add_struct_pattern_bindings(p: &StructPattern, struct_var: Operand, scope: &m
             Operand::member_ptr(
                 struct_var.safe_clone(),
                 Operand::const_uint(idx as u64, target.int_size),
-                ptr_type(b.typ.clone()),
+                if b.mode == StructPatternBindingMode::Value {
+                    ptr_type(b.typ.clone())
+                } else {
+                    b.typ.clone()
+                },
             )
         };
         scope.alias(&b.name, member);
@@ -203,6 +215,13 @@ fn struct_pattern_match_to_bc(
     }
 }
 
+pub const OPTIONAL_PATTERN_MATCH_IDX: u64 = 0;
+pub const NIL_PATTERN_MATCH_IDX: u64 = 1;
+pub const OPTIONAL_DATA_IDX: u64 = 1;
+
+pub const RESULT_OK_PATTERN_MATCH_IDX: u64 = 0;
+pub const RESULT_ERR_PATTERN_MATCH_IDX: u64 = 1;
+
 fn optional_pattern_match_to_bc(
     scope: &mut Scope,
     match_target: Operand,
@@ -215,7 +234,7 @@ fn optional_pattern_match_to_bc(
     let cond = Operand::binary(
         BinaryOperator::Equals,
         sti,
-        Operand::const_uint(0, target.int_size),
+        Operand::const_uint(OPTIONAL_PATTERN_MATCH_IDX, target.int_size),
         Type::Bool,
     );
 
@@ -226,14 +245,14 @@ fn optional_pattern_match_to_bc(
     if o.inner_type.pass_by_value() {
         let data = Operand::member(
             match_target,
-            Operand::const_uint(0, target.int_size),
+            Operand::const_uint(OPTIONAL_DATA_IDX, target.int_size),
             o.inner_type.clone(),
         );
         scope.alias(&o.binding, data);
     } else {
         let data = Operand::member_ptr(
             match_target,
-            Operand::const_uint(0, target.int_size),
+            Operand::const_uint(OPTIONAL_DATA_IDX, target.int_size),
             ptr_type(o.inner_type.clone()),
         );
         scope.alias(&o.binding, data);
@@ -252,7 +271,7 @@ fn nil_pattern_match_to_bc(
     let cond = Operand::binary(
         BinaryOperator::Equals,
         sti,
-        Operand::const_uint(0, target_machine.int_size),
+        Operand::const_uint(NIL_PATTERN_MATCH_IDX, target_machine.int_size),
         Type::Bool,
     );
     scope.add(branch_if_instr(cond, next_bb, match_case_bb));
@@ -270,16 +289,24 @@ fn result_pattern_match_to_bc(
     is_ok: bool,
     target_machine: &Target,
 ) {
-    let index = if is_ok { 0 } else { 1 };
+    let index = if is_ok {
+        RESULT_OK_PATTERN_MATCH_IDX
+    } else {
+        RESULT_ERR_PATTERN_MATCH_IDX
+    };
     let bind_bb = scope.label();
 
     let sti = Operand::sti(target.safe_clone(), target_machine.int_size);
-    let idx = Operand::const_int(index, target_machine.int_size);
+    let idx = Operand::const_uint(index, target_machine.int_size);
     let cond = Operand::binary(BinaryOperator::Equals, sti, idx.safe_clone(), Type::Bool);
     scope.add(branch_if_instr(cond, bind_bb, next_bb));
 
     scope.start_label(bind_bb);
-    let member = Operand::member_ptr(target, idx, ptr_type(inner_type.clone()));
+    let member = if inner_type.pass_by_value() {
+        Operand::member(target, idx, inner_type.clone())
+    } else {
+        Operand::member_ptr(target, idx, ptr_type(inner_type.clone()))
+    };
     let inner = scope.make_var(if is_ok { "$ok_inner" } else { "$err_inner" }, member);
     pattern_to_bc(
         bc_mod,

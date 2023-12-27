@@ -59,8 +59,26 @@ pub struct StructMember {
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct StructType {
-    pub name: String,
+    pub name: Option<String>,
     pub members: Vec<StructMember>,
+}
+
+impl StructType {
+    pub fn get_name(&self) -> &str {
+        match &self.name {
+            Some(name) => &name,
+            None => "<anonymous>",
+        }
+    }
+
+    pub fn get_member_type_and_index(&self, name: &str) -> Option<(Type, usize)> {
+        for (idx, m) in self.members.iter().enumerate() {
+            if m.name == name {
+                return Some((m.typ.clone(), idx));
+            }
+        }
+        None
+    }
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
@@ -215,7 +233,9 @@ impl Type {
                 Some(array_to_slice(expr.clone(), expr.span()))
             }
 
-            (Type::Optional(inner), _) if *inner.deref() == *from_type => Some(to_optional(expr.clone(), self.clone())),
+            (Type::Optional(inner), _) if *inner.deref() == *from_type => {
+                Some(to_optional(expr.clone(), self.clone(), expr.span()))
+            }
 
             (Type::Result(rt), _) => {
                 if rt.ok_typ == rt.err_typ {
@@ -265,6 +285,8 @@ impl Type {
             (Type::Array(at), Type::Slice(st)) => at.element_type == st.element_type,
             (_, Type::Optional(inner)) => inner.deref() == self,
             (_, Type::Result(rt)) => &rt.ok_typ == self || &rt.err_typ == self,
+            (Type::Optional(_), Type::Bool) => true,
+            (Type::Result(_), Type::Bool) => true,
             _ => false,
         }
     }
@@ -398,7 +420,7 @@ impl Type {
 
     pub fn name(&self) -> String {
         match *self {
-            Type::Struct(ref st) => st.name.clone(),
+            Type::Struct(ref st) => st.get_name().into(),
             Type::Sum(ref st) => st.name.clone(),
             Type::Enum(ref st) => st.name.clone(),
             Type::Interface(ref i) => i.name.clone(),
@@ -409,7 +431,14 @@ impl Type {
     pub fn pass_by_value(&self) -> bool {
         matches!(
             self,
-            Type::Int(_) | Type::UInt(_) | Type::Float(_) | Type::Char | Type::Bool | Type::Pointer(_) | Type::Enum(_)
+            Type::Int(_)
+                | Type::UInt(_)
+                | Type::Float(_)
+                | Type::Char
+                | Type::Bool
+                | Type::Pointer(_)
+                | Type::Enum(_)
+                | Type::Generic(_)
         )
     }
 
@@ -448,10 +477,10 @@ pub fn slice_type(element_type: Type) -> Type {
 
 pub fn string_type_representation(native_int_size: IntSize) -> StructType {
     StructType {
-        name: "string".into(),
+        name: Some("string".into()),
         members: vec![
-            struct_member("data", ptr_type(Type::UInt(IntSize::I8))),
-            struct_member("len", Type::UInt(native_int_size)),
+            struct_member("data".into(), ptr_type(Type::UInt(IntSize::I8))),
+            struct_member("len".into(), Type::UInt(native_int_size)),
         ],
     }
 }
@@ -474,11 +503,8 @@ pub fn enum_type(name: &str, cases: Vec<String>) -> Type {
     }))
 }
 
-pub fn struct_type(name: &str, members: Vec<StructMember>) -> Type {
-    Type::Struct(Rc::new(StructType {
-        name: name.into(),
-        members,
-    }))
+pub fn struct_type(name: Option<String>, members: Vec<StructMember>) -> Type {
+    Type::Struct(Rc::new(StructType { name, members }))
 }
 
 pub fn ptr_type(inner: Type) -> Type {
@@ -504,8 +530,8 @@ pub fn generic_type_with_constraints(constraints: Vec<Type>) -> Type {
     Type::Generic(Rc::new(GenericType::Restricted(constraints)))
 }
 
-pub fn struct_member(name: &str, typ: Type) -> StructMember {
-    StructMember { name: name.into(), typ }
+pub fn struct_member(name: String, typ: Type) -> StructMember {
+    StructMember { name, typ }
 }
 
 /*
@@ -558,10 +584,10 @@ impl fmt::Display for Type {
             Type::Generic(g) => write!(f, "${}", g),
             Type::Func(ft) => write!(f, "({}) -> {}", join(ft.args.iter(), ", "), ft.return_type),
             Type::Struct(st) => {
-                if st.name.is_empty() {
-                    write!(f, "{{{}}}", join(st.members.iter(), ", "))
+                if let Some(name) = &st.name {
+                    write!(f, "{}", name)
                 } else {
-                    write!(f, "{}", st.name)
+                    write!(f, "{{{}}}", join(st.members.iter(), ", "))
                 }
             }
             Type::Sum(st) => write!(f, "{}", st.name),
@@ -577,11 +603,7 @@ impl fmt::Display for Type {
 
 impl fmt::Display for StructMember {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        if self.name.is_empty() {
-            write!(f, "{}", self.typ)
-        } else {
-            write!(f, "{}: {}", self.name, self.typ)
-        }
+        write!(f, "{}: {}", self.name, self.typ)
     }
 }
 

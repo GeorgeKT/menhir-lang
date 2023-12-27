@@ -20,7 +20,7 @@ impl ByteCodeFunction {
         ByteCodeFunction {
             sig: sig.clone(),
             external,
-            toplevel_scope: Scope::new(sig),
+            toplevel_scope: Scope::new(sig, true),
         }
     }
 }

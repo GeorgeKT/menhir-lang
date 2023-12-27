@@ -1,12 +1,16 @@
 use crate::ast::*;
 use crate::span::Span;
 use serde_derive::{Deserialize, Serialize};
-use std::error::Error;
+use std::{
+    error::Error,
+    ops::{Deref, DerefMut},
+};
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct ToOptional {
     pub inner: Expression,
     pub optional_type: Type,
+    pub span: Span,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
@@ -77,10 +81,11 @@ pub enum Expression {
     Void,
 }
 
-pub fn to_optional(e: Expression, typ: Type) -> Expression {
+pub fn to_optional(e: Expression, typ: Type, span: Span) -> Expression {
     Expression::ToOptional(Box::new(ToOptional {
         inner: e,
         optional_type: typ,
+        span,
     }))
 }
 
@@ -170,7 +175,7 @@ impl Expression {
             Expression::StructInitializer(si) => si.span.clone(),
             Expression::MemberAccess(sma) => sma.span.clone(),
             Expression::New(n) => n.span.clone(),
-            Expression::Delete(d) => d.span.clone(),
+            Expression::Delete(d) => d.span(),
             Expression::ArrayToSlice(a) => a.inner.span(),
             Expression::AddressOf(a) => a.span.clone(),
             Expression::Dereference(d) => d.span.clone(),
@@ -278,20 +283,14 @@ impl Expression {
                 Ok(())
             }
 
-            Expression::Block(b) => {
-                for e in &mut b.expressions {
-                    e.visit_mut(op)?;
-                }
-                for e in &mut b.deferred_expressions {
-                    e.visit_mut(op)?;
-                }
-                Ok(())
-            }
+            Expression::Block(b) => b.visit_mut(op),
 
             Expression::New(n) => n.inner.visit_mut(op),
 
-            Expression::Delete(d) => d.inner.visit_mut(op),
-
+            Expression::Delete(d) => match d.deref_mut() {
+                DeleteExpression::Delete { inner, .. } => inner.visit_mut(op),
+                DeleteExpression::BlockWithDestructor { block, .. } => block.visit_mut(op),
+            },
             Expression::ArrayToSlice(ats) => ats.inner.visit_mut(op),
 
             Expression::Return(r) => r.expression.visit_mut(op),
@@ -307,7 +306,7 @@ impl Expression {
 
             Expression::StructInitializer(si) => {
                 for e in &mut si.member_initializers {
-                    e.visit_mut(op)?;
+                    e.initializer.visit_mut(op)?;
                 }
                 Ok(())
             }
@@ -450,19 +449,14 @@ impl Expression {
                 Ok(())
             }
 
-            Expression::Block(b) => {
-                for e in &b.expressions {
-                    e.visit(op)?;
-                }
-                for e in &b.deferred_expressions {
-                    e.visit(op)?;
-                }
-                Ok(())
-            }
+            Expression::Block(b) => b.visit(op),
 
             Expression::New(n) => n.inner.visit(op),
 
-            Expression::Delete(d) => d.inner.visit(op),
+            Expression::Delete(d) => match d.deref() {
+                DeleteExpression::Delete { inner, .. } => inner.visit(op),
+                DeleteExpression::BlockWithDestructor { block, .. } => block.visit(op),
+            },
 
             Expression::ArrayToSlice(ats) => ats.inner.visit(op),
 
@@ -479,7 +473,7 @@ impl Expression {
 
             Expression::StructInitializer(si) => {
                 for e in &si.member_initializers {
-                    e.visit(op)?;
+                    e.initializer.visit(op)?;
                 }
                 Ok(())
             }

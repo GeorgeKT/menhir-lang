@@ -1,7 +1,9 @@
+use std::{ops::Deref, rc::Rc};
+
 use crate::{
     ast::{
         slice_type, ArrayPattern, EmptyArrayPattern, ErrorPattern, Expression, Literal, NameRef, OkPattern,
-        OptionalPattern, Pattern, StructPattern, SumTypeCaseIndexOf, Symbol, SymbolType, Type,
+        OptionalPattern, Pattern, ResultType, StructPattern, SumTypeCaseIndexOf, Symbol, SymbolType, Type,
     },
     compileerror::{type_error_result, unknown_name, CompileResult},
     span::Span,
@@ -273,16 +275,27 @@ fn type_check_optional_pattern(
     target_is_mutable: bool,
     target: &Target,
 ) -> CompileResult<Type> {
-    if !target_type.is_optional() {
+    // Allow matching through pointer to optional
+    let inner_type = match target_type {
+        Type::Pointer(pt) => {
+            if let Type::Optional(t) = pt.deref() {
+                Some(t.deref().clone())
+            } else {
+                None
+            }
+        }
+        Type::Optional(t) => Some(t.deref().clone()),
+        _ => None,
+    };
+
+    let Some(inner_type) = inner_type else {
         return type_error_result(
             &o.span,
             format!("Cannot match type {} to optional pattern", target_type),
         );
-    }
+    };
 
-    o.inner_type = target_type
-        .get_element_type()
-        .expect("Optional type expected");
+    o.inner_type = inner_type;
     ctx.enter_scope(None);
     ctx.add(Symbol::new(
         &o.binding,
@@ -296,6 +309,22 @@ fn type_check_optional_pattern(
     Ok(ct)
 }
 
+fn get_result_type(typ: &Type) -> Option<Rc<ResultType>> {
+    match typ {
+        Type::Pointer(pt) => {
+            if let Type::Result(rt) = pt.deref() {
+                Some(rt.clone())
+            } else {
+                None
+            }
+        }
+
+        Type::Result(rt) => Some(rt.clone()),
+
+        _ => None,
+    }
+}
+
 fn type_check_ok_pattern_match(
     ctx: &mut TypeCheckerContext,
     ok: &mut OkPattern,
@@ -305,15 +334,16 @@ fn type_check_ok_pattern_match(
     target_is_mutable: bool,
     target: &Target,
 ) -> CompileResult<Type> {
-    let Type::Result(rt) = target_type else {
+    let Some(rt) = get_result_type(target_type) else {
         return type_error_result(&ok.span, format!("Cannot match type {} to result type", target_type));
     };
 
+    let target_inner_type = rt.ok_typ.clone();
     let e_type = type_check_pattern_match(
         ctx,
         &mut ok.inner,
         e,
-        &rt.ok_typ,
+        &target_inner_type,
         return_type,
         target_is_mutable,
         target,
@@ -331,15 +361,16 @@ fn type_check_error_pattern_match(
     target_is_mutable: bool,
     target: &Target,
 ) -> CompileResult<Type> {
-    let Type::Result(rt) = target_type else {
+    let Some(rt) = get_result_type(target_type) else {
         return type_error_result(&err.span, format!("Cannot match type {} to result type", target_type));
     };
 
+    let inner_target_type = rt.err_typ.clone();
     let e_type = type_check_pattern_match(
         ctx,
         &mut err.inner,
         e,
-        &rt.err_typ,
+        &inner_target_type,
         return_type,
         target_is_mutable,
         target,

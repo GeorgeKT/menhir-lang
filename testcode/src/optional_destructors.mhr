@@ -12,7 +12,7 @@ fn ~Box(self):
 fn main() -> int:
     var ret = 0
     while destruct_counter < 7:
-        let opt = ?Box{new 6}
+        let opt: ?Box = ?Box{new 6}
         match opt:
             ?b => 
                 ret += *b.ptr 

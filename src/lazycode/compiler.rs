@@ -4,9 +4,9 @@ use super::consteval::expr_to_const;
 use super::function::ByteCodeFunction;
 use super::instruction::{branch_if_instr, branch_instr, ret_instr, store_instr, Instruction, Label};
 use super::operand::{call_arg, ByteCodeProperty, CallArg, Operand};
-use super::patterns::pattern_to_bc;
+use super::patterns::{pattern_to_bc, RESULT_OK_PATTERN_MATCH_IDX};
 use super::scope::Scope;
-use super::ByteCodeModule;
+use super::{ByteCodeModule, OPTIONAL_DATA_IDX};
 use crate::ast::*;
 use crate::build::Package;
 use crate::compileerror::{type_error_result, CompileResult};
@@ -35,10 +35,17 @@ fn literal_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, lit: &Literal, 
     }
 }
 
-fn name_ref_to_bc(nr: &NameRef) -> Operand {
-    let add_name_ref = |nr: &NameRef| Operand::Var {
-        name: nr.name.clone(),
-        typ: nr.typ.clone(),
+fn name_ref_to_bc(scope: &Scope, nr: &NameRef) -> Operand {
+    let add_name_ref = |nr: &NameRef| {
+        if let Some(var) = scope.get_var(&nr.name) {
+            var.safe_clone()
+        } else {
+            // Probably a global
+            Operand::Var {
+                name: nr.name.clone(),
+                typ: nr.typ.clone(),
+            }
+        }
     };
 
     match &nr.typ {
@@ -80,7 +87,7 @@ fn call_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, call: &Call, targe
         panic!("ICE: Callee must have a function type");
     };
 
-    let callee = name_ref_to_bc(&call.callee);
+    let callee = name_ref_to_bc(scope, &call.callee);
     let mut args: Vec<CallArg> = call
         .args
         .iter()
@@ -119,10 +126,6 @@ fn block_expr_to_bc(
         return op;
     }
     if op.is_call() {
-        if matches!(op, Operand::Void) {
-            println!("blaat");
-            dbg!(&op);
-        }
         scope.add(Instruction::Exec { operand: op });
     }
 
@@ -169,11 +172,19 @@ fn add_binding(bc_mod: &mut ByteCodeModule, scope: &mut Scope, b: &Binding, targ
             for (idx, b) in sp.bindings.iter().enumerate() {
                 scope.alias(
                     &b.name,
-                    Operand::member_ptr(
-                        init_var.safe_clone(),
-                        Operand::const_uint(idx as u64, target.int_size),
-                        ptr_type(b.typ.clone()),
-                    ),
+                    if b.typ.pass_by_value() && b.mode == StructPatternBindingMode::Value {
+                        Operand::member(
+                            init_var.safe_clone(),
+                            Operand::const_uint(idx as u64, target.int_size),
+                            b.typ.clone(),
+                        )
+                    } else {
+                        Operand::member_ptr(
+                            init_var.safe_clone(),
+                            Operand::const_uint(idx as u64, target.int_size),
+                            ptr_type(b.typ.clone()),
+                        )
+                    },
                 );
             }
         }
@@ -196,7 +207,7 @@ fn member_access_to_bc(
     let obj = expr_to_bc(bc_mod, scope, &ma.left, target);
     match &ma.right {
         MemberAccessType::Call(call) => {
-            let callee = name_ref_to_bc(&call.callee);
+            let callee = name_ref_to_bc(scope, &call.callee);
             let Type::Func(ft) = call.callee_type() else {
                 panic!("ICE: Callee must have a function type");
             };
@@ -222,9 +233,9 @@ fn member_access_to_bc(
         MemberAccessType::Name(field) => {
             let idx = Operand::const_uint(field.index as u64, target.int_size);
             if field.typ.pass_by_value() && field_access_mode != FieldAccessMode::Pointer {
-                Operand::member(obj, idx, ma.typ.clone())
+                Operand::member(obj, idx, field.typ.clone())
             } else {
-                Operand::member_ptr(obj, idx, ptr_type(ma.typ.clone()))
+                Operand::member_ptr(obj, idx, ptr_type(field.typ.clone()))
             }
         }
         MemberAccessType::Property(prop) => Operand::Property {
@@ -325,7 +336,7 @@ fn optional_or_to_bc(scope: &mut Scope, l: Operand, r: Operand, target: &Target)
     scope.start_label(store_l_bb);
     scope.add(store_instr(
         dst.safe_clone(),
-        Operand::member(l_var, Operand::const_uint(0, target.int_size), dst_type),
+        Operand::member(l_var, Operand::const_uint(OPTIONAL_DATA_IDX, target.int_size), dst_type),
     ));
     scope.add(branch_instr(end_bb));
     scope.start_label(end_bb);
@@ -346,7 +357,7 @@ fn result_or_to_bc(scope: &mut Scope, l: Operand, r: Operand, target: &Target) -
     let l_is_ok = Operand::binary(
         BinaryOperator::Equals,
         sti,
-        Operand::const_int(0, target.int_size),
+        Operand::const_uint(RESULT_OK_PATTERN_MATCH_IDX, target.int_size),
         Type::Bool,
     );
     scope.add(branch_if_instr(l_is_ok, ok_branch, error_branch));
@@ -391,7 +402,7 @@ fn struct_initializer_to_bc(
             let members = si
                 .member_initializers
                 .iter()
-                .map(|e| expr_to_bc(bc_mod, scope, e, target))
+                .map(|mi| expr_to_bc(bc_mod, scope, &mi.initializer, target))
                 .collect();
             Operand::Struct {
                 members,
@@ -400,12 +411,16 @@ fn struct_initializer_to_bc(
         }
         Type::Sum(st) => {
             let idx = st
-                .index_of(&si.struct_name)
+                .index_of(
+                    si.struct_name
+                        .as_ref()
+                        .expect("ICE: Case variant with struct type must have a name"),
+                )
                 .expect("ICE: Cannot determine sum type case");
             let members = si
                 .member_initializers
                 .iter()
-                .map(|e| expr_to_bc(bc_mod, scope, e, target))
+                .map(|mi| expr_to_bc(bc_mod, scope, &mi.initializer, target))
                 .collect();
             Operand::Sum {
                 variant: idx,
@@ -448,7 +463,7 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, f: &ForLoop, target
     let end_bb = scope.label();
     scope.scope(|scope| {
         let iterable = expr_to_bc(bc_mod, scope, &f.iterable, target);
-        let iterable = scope.declare("$iterable", Some(iterable), f.iterable.get_type());
+        let iterable = scope.alias("$iterable", iterable);
         let index = scope.declare(
             "$index",
             Some(Operand::const_uint(0, target.int_size)),
@@ -463,8 +478,6 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, f: &ForLoop, target
                 typ: target.native_uint_type.clone(),
             }
         };
-
-        let loop_var = scope.declare(&f.loop_variable, None, f.loop_variable_type.clone());
 
         let cond_bb = scope.label();
         let body_bb = scope.label();
@@ -481,8 +494,18 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, f: &ForLoop, target
                 .get_type()
                 .get_element_type()
                 .expect("ICE: element type expected");
-            let lv = Operand::member(iterable, index.safe_clone(), element_type);
-            scope.add(store_instr(loop_var, lv));
+
+            if element_type.pass_by_value() {
+                scope.alias(
+                    &f.loop_variable,
+                    Operand::member(iterable, index.safe_clone(), element_type),
+                )
+            } else {
+                scope.alias(
+                    &f.loop_variable,
+                    Operand::member_ptr(iterable, index.safe_clone(), ptr_type(element_type)),
+                )
+            };
 
             expr_to_bc(bc_mod, scope, &f.body, target);
             let keep_looping = !scope.last_instruction_is_return();
@@ -600,7 +623,7 @@ fn compiler_call_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, c: &Compi
                 }
 
                 let call = Operand::Call {
-                    callee: Box::new(name_ref_to_bc(&ds.callee)),
+                    callee: Box::new(name_ref_to_bc(scope, &ds.callee)),
                     args: vec![call_arg(obj.safe_clone(), true, obj.get_type())],
                     typ: Type::Void,
                     rvo: false,
@@ -725,8 +748,20 @@ fn match_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, m: &MatchExpressi
 }
 
 fn delete_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, d: &DeleteExpression, target: &Target) {
-    let object = expr_to_bc(bc_mod, scope, &d.inner, target);
-    scope.add(Instruction::Delete { object });
+    match d {
+        DeleteExpression::Delete { inner, .. } => {
+            let object = expr_to_bc(bc_mod, scope, &inner, target);
+            scope.add(Instruction::Delete { object });
+        }
+        DeleteExpression::BlockWithDestructor { block, .. } => {
+            let end = scope.label();
+            scope.scope(|scope| {
+                block_to_bc(bc_mod, scope, block, target);
+                scope.exit(bc_mod, target, branch_instr(end));
+            });
+            scope.start_label(end);
+        }
+    }
 }
 
 fn address_of_to_bc(
@@ -821,7 +856,7 @@ pub fn expr_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, expr: &Express
         Expression::BinaryOp(bop) => binary_op_to_bc(bc_mod, scope, bop, target),
         Expression::Block(b) => block_to_bc(bc_mod, scope, b, target),
         Expression::Call(c) => call_to_bc(bc_mod, scope, c, target),
-        Expression::NameRef(nr) => name_ref_to_bc(nr),
+        Expression::NameRef(nr) => name_ref_to_bc(scope, nr),
         Expression::Match(m) => match_to_bc(bc_mod, scope, m, target),
         Expression::If(i) => if_to_bc(bc_mod, scope, i, target),
         Expression::Lambda(l) => lambda_to_bc(bc_mod, l, target),

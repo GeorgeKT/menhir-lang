@@ -82,16 +82,24 @@ type="binary"
 name="drop_flags"
 type="binary"
 
-#[[target]]
-#name="result_destructors"
-#type="binary"
+[[target]]
+name="result_destructors"
+type="binary"
 
-#[[target]]
-#name="optional_destructors"
-#type="binary"
+[[target]]
+name="optional_destructors"
+type="binary"
+
+[[target]]
+name="array_destructors"
+type="binary"
 
 [[target]]
 name="nested_destructors"
+type="binary"
+
+[[target]]
+name="anonymous_struct_destructors"
 type="binary"
 
 [[target]]

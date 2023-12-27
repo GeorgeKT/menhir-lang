@@ -123,10 +123,10 @@ fn make_concrete_type(ctx: &TypeCheckerContext, mapping: &GenericMapping, generi
         Type::Struct(st) => {
             let mut members = Vec::new();
             for m in &st.members {
-                members.push(struct_member(&m.name, make_concrete_type(ctx, mapping, &m.typ)?));
+                members.push(struct_member(m.name.clone(), make_concrete_type(ctx, mapping, &m.typ)?));
             }
 
-            struct_type(&st.name, members)
+            struct_type(st.name.clone(), members)
         }
 
         Type::Sum(st) => {
@@ -175,13 +175,15 @@ fn substitute_bindings(
     let mut bindings = Vec::with_capacity(lb.len());
     for b in lb {
         let binding_expr = substitute_expr(ctx, generic_args, &b.init)?;
+        let typ = make_concrete(ctx, generic_args, &b.typ, &b.span)?;
         let new_binding = match &b.binding_type {
-            BindingType::Name(name) => name_binding(name.clone(), binding_expr, b.mutable, b.span.clone()),
+            BindingType::Name(name) => name_binding(name.clone(), binding_expr, b.mutable, typ, b.span.clone()),
 
             BindingType::Struct(s) => binding(
                 BindingType::Struct(substitute_struct_pattern(ctx, generic_args, s)?),
                 binding_expr,
                 b.mutable,
+                typ,
                 b.span.clone(),
             ),
         };
@@ -204,12 +206,8 @@ fn substitute_struct_pattern(
         });
     }
 
-    Ok(struct_pattern(
-        &p.name,
-        bindings,
-        make_concrete(ctx, generic_args, &p.typ, &p.span)?,
-        p.span.clone(),
-    ))
+    let sp_typ = make_concrete(ctx, generic_args, &p.typ, &p.span)?;
+    Ok(struct_pattern(&p.name, bindings, sp_typ, p.span.clone()))
 }
 
 fn substitute_pattern(ctx: &TypeCheckerContext, generic_args: &GenericMapping, p: &Pattern) -> CompileResult<Pattern> {
@@ -383,6 +381,34 @@ fn substitute_compiler_call(
     }
 }
 
+fn substitute_block(ctx: &TypeCheckerContext, generic_args: &GenericMapping, b: &Block) -> CompileResult<Block> {
+    let mut new_expressions = Vec::with_capacity(b.expressions.len());
+    for e in &b.expressions {
+        new_expressions.push(substitute_expr(ctx, generic_args, e)?);
+    }
+    let mut new_block = Block {
+        expressions: Vec::new(),
+        drop_flags: b.drop_flags.clone(),
+        deferred_expressions: Vec::new(),
+        typ: make_concrete(ctx, generic_args, &b.typ, &b.span)?,
+        span: b.span.clone(),
+    };
+
+    for e in &b.expressions {
+        new_block
+            .expressions
+            .push(substitute_expr(ctx, generic_args, e)?);
+    }
+
+    for e in &b.deferred_expressions {
+        new_block
+            .deferred_expressions
+            .push(substitute_expr(ctx, generic_args, e)?);
+    }
+
+    Ok(new_block)
+}
+
 fn substitute_expr(
     ctx: &TypeCheckerContext,
     generic_args: &GenericMapping,
@@ -455,11 +481,8 @@ fn substitute_expr(
         }
 
         Expression::Block(b) => {
-            let mut new_expressions = Vec::with_capacity(b.expressions.len());
-            for e in &b.expressions {
-                new_expressions.push(substitute_expr(ctx, generic_args, e)?);
-            }
-            Ok(block(new_expressions, b.span.clone()))
+            let b = substitute_block(ctx, generic_args, b)?;
+            Ok(Expression::Block(Box::new(b)))
         }
 
         Expression::Literal(lit) => Ok(Expression::Literal(lit.clone())),
@@ -468,13 +491,17 @@ fn substitute_expr(
 
         Expression::StructInitializer(si) => {
             let mut nmi = Vec::with_capacity(si.member_initializers.len());
-            for e in &si.member_initializers {
-                let new_e = substitute_expr(ctx, generic_args, e)?;
-                nmi.push(new_e);
+            for mi in &si.member_initializers {
+                let new_e = substitute_expr(ctx, generic_args, &mi.initializer)?;
+                nmi.push(StructMemberInitializer {
+                    name: mi.name.clone(),
+                    initializer: new_e,
+                    member_idx: mi.member_idx,
+                });
             }
 
             Ok(Expression::StructInitializer(struct_initializer(
-                &si.struct_name,
+                si.struct_name.clone(),
                 nmi,
                 si.span.clone(),
             )))
@@ -494,10 +521,19 @@ fn substitute_expr(
             ))
         }
 
-        Expression::Delete(n) => {
-            let inner = substitute_expr(ctx, generic_args, &n.inner)?;
-            Ok(delete(inner, n.span.clone()))
-        }
+        Expression::Delete(d) => match d.deref() {
+            DeleteExpression::Delete { inner, span } => {
+                let inner = substitute_expr(ctx, generic_args, inner)?;
+                Ok(delete(inner, span.clone()))
+            }
+            DeleteExpression::BlockWithDestructor { block, span } => {
+                let b = substitute_block(ctx, generic_args, block)?;
+                Ok(Expression::Delete(Box::new(DeleteExpression::BlockWithDestructor {
+                    block: b,
+                    span: span.clone(),
+                })))
+            }
+        },
 
         Expression::ArrayToSlice(ats) => {
             let inner = substitute_expr(ctx, generic_args, &ats.inner)?;
@@ -558,7 +594,7 @@ fn substitute_expr(
 
         Expression::ToOptional(t) => {
             let inner = substitute_expr(ctx, generic_args, &t.inner)?;
-            Ok(to_optional(inner, t.optional_type.clone()))
+            Ok(to_optional(inner, t.optional_type.clone(), t.span.clone()))
         }
 
         Expression::Cast(t) => {

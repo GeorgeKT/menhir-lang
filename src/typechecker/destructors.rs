@@ -1,10 +1,9 @@
-use std::mem;
-
 use crate::ast::*;
-use crate::compileerror::{type_error, type_error_result, CompileResult};
+use crate::compileerror::{type_error_result, CompileResult};
 use crate::span::Span;
+use crate::target::Target;
 
-use super::typecheckercontext::TypeCheckerContext;
+use super::typecheckercontext::{DestructorToCreate, TypeCheckerContext};
 
 pub fn destructor_name(type_name: &str) -> String {
     let mut name = type_name.to_string();
@@ -16,34 +15,36 @@ pub fn destructor_name(type_name: &str) -> String {
     }
 }
 
-fn self_member_access(name: &str, member_idx: usize, span: &Span) -> Expression {
-    Expression::MemberAccess(Box::new(MemberAccess {
-        left: name_expr("self", span.clone()),
-        right: MemberAccessType::Name(field(name, member_idx)),
-        span: span.clone(),
-        typ: Type::Unknown,
-    }))
+fn self_member_access(name: &str, member_idx: usize) -> Expression {
+    address_of(
+        Expression::MemberAccess(Box::new(MemberAccess {
+            left: name_expr("self", Span::default()),
+            right: MemberAccessType::Name(field(name, member_idx)),
+            span: Span::default(),
+            typ: Type::Unknown,
+        })),
+        Span::Internal,
+    )
 }
 
-fn block(expressions: Vec<Expression>, deferred: Vec<Expression>, span: Span) -> Expression {
+fn block(expressions: Vec<Expression>, deferred: Vec<Expression>) -> Expression {
     let b = Box::new(Block {
         expressions,
         deferred_expressions: deferred,
         drop_flags: Vec::new(),
         typ: Type::Unknown,
-        span,
+        span: Span::default(),
     });
     Expression::Block(b)
 }
 
 fn get_member_destructor_calls(
-    sd: &StructDeclaration,
+    sd: &StructType,
     destructor_calls: &mut Vec<Expression>,
-    ctx: &TypeCheckerContext,
+    ctx: &mut TypeCheckerContext,
 ) -> CompileResult<()> {
     for (idx, member) in sd.members.iter().enumerate() {
-        let sfm = address_of(self_member_access(&member.name, idx, &member.span), member.span.clone());
-
+        let sfm = self_member_access(&member.name, idx);
         if let Some(call) = ctx.get_destructor_call(sfm, None, &member.typ)? {
             destructor_calls.push(call);
             break;
@@ -52,26 +53,27 @@ fn get_member_destructor_calls(
     Ok(())
 }
 
-fn create_destructor(name: &str, body: Expression, span: &Span, module: &mut Module) {
-    let ds_name = destructor_name(name);
+fn create_destructor(name: &str, typ: &Type, body: Expression, module: &mut Module) {
+    let span = Span::default();
     let sig = FunctionSignature {
-        name: ds_name.clone(),
+        name: name.into(),
         return_type: Type::Void,
-        args: vec![Argument::new(
-            "self",
-            ptr_type(unresolved_type(name, Vec::new())),
-            true,
-            span.clone(),
-        )],
+        args: vec![Argument::new("self", ptr_type(typ.clone()), true, span.clone())],
         span: span.clone(),
         typ: Type::Unknown,
         rvo: false,
     };
     let func = Function::new(sig, true, body, span.clone());
-    module.functions.insert(ds_name, func);
+    //func.print(0);
+    module.functions.insert(name.into(), func);
 }
 
-fn destructor_for_struct(sd: &StructDeclaration, ctx: &TypeCheckerContext, module: &mut Module) -> CompileResult<()> {
+fn destructor_for_struct(
+    dtc: &DestructorToCreate,
+    sd: &StructType,
+    ctx: &mut TypeCheckerContext,
+    module: &mut Module,
+) -> CompileResult<()> {
     let mut destructor_calls = Vec::new();
     get_member_destructor_calls(sd, &mut destructor_calls, ctx)?;
 
@@ -79,50 +81,26 @@ fn destructor_for_struct(sd: &StructDeclaration, ctx: &TypeCheckerContext, modul
         return Ok(());
     }
 
-    if let Some(sym) = ctx.get_destructor(&sd.typ)? {
-        let func = module
-            .functions
-            .get_mut(&sym.name)
-            .ok_or_else(|| type_error(&sym.span, format!("Cannot find destructor {}", sym.name)))?;
-        if let Expression::Block(b) = &mut func.expression {
-            for call in destructor_calls.into_iter().rev() {
-                b.deferred_expressions.push(call);
-            }
-        } else {
-            let e = mem::replace(&mut func.expression, Expression::Void);
-            func.expression = block(vec![e], destructor_calls.into_iter().rev().collect(), sd.span.clone());
-        }
-        func.type_checked = false; // Force a new type check
-    } else {
-        let b = block(destructor_calls.into_iter().rev().collect(), vec![], sd.span.clone());
-        create_destructor(&sd.name, b, &sd.span, module);
-    }
-
+    let b = block(destructor_calls.into_iter().rev().collect(), vec![]);
+    create_destructor(&dtc.name, &dtc.typ, b, module);
     Ok(())
 }
 
-fn generate_sum_case_destructor(
-    c: &SumTypeCaseDeclaration,
-    ctx: &TypeCheckerContext,
-) -> CompileResult<Option<MatchCase>> {
-    let Some(sd) = &c.data else {
+fn generate_sum_case_destructor(c: &SumTypeCase, ctx: &mut TypeCheckerContext) -> CompileResult<Option<MatchCase>> {
+    let Some(Type::Struct(sd)) = &c.typ else {
         return Ok(None);
     };
 
     let mut destructors = Vec::new();
     let mut bindings = Vec::new();
     for sm in &sd.members {
-        let param = name_expr(&sm.name, c.span.clone());
+        let param = name_expr(&sm.name, Span::default());
         if let Some(ds) = ctx.get_destructor_call(param, None, &sm.typ)? {
             destructors.push(ds);
             bindings.push(StructPatternBinding {
                 name: sm.name.clone(),
                 typ: Type::Unknown,
-                mode: if sm.typ.pass_by_value() {
-                    StructPatternBindingMode::Value
-                } else {
-                    StructPatternBindingMode::Pointer
-                },
+                mode: StructPatternBindingMode::Pointer,
             })
         }
     }
@@ -135,16 +113,16 @@ fn generate_sum_case_destructor(
         name: c.name.clone(),
         bindings,
         typ: Type::Unknown,
-        span: c.span.clone(),
+        span: Span::default(),
     });
-    let to_execute = block(destructors, vec![], c.span.clone());
-    Ok(Some(match_case(pattern, to_execute, c.span.clone())))
+    let to_execute = block(destructors, vec![]);
+    Ok(Some(match_case(pattern, to_execute, Span::default())))
 }
 
 fn generate_sum_destructor_match(
-    st: &SumTypeDeclaration,
+    st: &SumType,
     target: Expression,
-    ctx: &TypeCheckerContext,
+    ctx: &mut TypeCheckerContext,
 ) -> CompileResult<Option<Expression>> {
     let mut cases = Vec::new();
     for c in &st.cases {
@@ -159,9 +137,9 @@ fn generate_sum_destructor_match(
 
     if cases.len() != st.cases.len() {
         cases.push(match_case(
-            Pattern::Any(st.span.clone()),
+            Pattern::Any(Span::default()),
             Expression::Void,
-            st.span.clone(),
+            Span::default(),
         ));
     }
 
@@ -169,91 +147,172 @@ fn generate_sum_destructor_match(
         target,
         cases,
         typ: Type::Unknown,
-        span: st.span.clone(),
+        span: Span::default(),
     }))))
 }
 
-fn destructor_for_sum(st: &SumTypeDeclaration, ctx: &TypeCheckerContext, module: &mut Module) -> CompileResult<()> {
-    let target = name_expr("self", st.span.clone());
+fn destructor_for_sum(
+    dtc: &DestructorToCreate,
+    st: &SumType,
+    ctx: &mut TypeCheckerContext,
+    module: &mut Module,
+) -> CompileResult<()> {
+    let target = name_expr("self", Span::default());
     let Some(match_expr) = generate_sum_destructor_match(st, target, ctx)? else {
-        return Ok(());
+        return type_error_result(
+            &Span::Internal,
+            format!("Cannot generate destructor for sum type {}", st.name),
+        );
     };
 
-    if let Some(sym) = ctx.get_destructor(&st.typ)? {
-        let func = module
-            .functions
-            .get_mut(&sym.name)
-            .ok_or_else(|| type_error(&sym.span, format!("Cannot find destructor {}", sym.name)))?;
-        if let Expression::Block(b) = &mut func.expression {
-            b.deferred_expressions.push(match_expr);
-        } else {
-            let e = mem::replace(&mut func.expression, Expression::Void);
-            func.expression = block(vec![e], vec![match_expr], st.span.clone());
-        }
-        func.type_checked = false; // Force a new type check
-    } else {
-        let b = block(vec![match_expr], vec![], st.span.clone());
-        create_destructor(&st.name, b, &st.span, module);
-    }
-
+    let b = block(vec![match_expr], vec![]);
+    create_destructor(&dtc.name, &dtc.typ, b, module);
     Ok(())
 }
 
-fn let_expr(name: &str, value: Expression, span: Span) -> Expression {
-    Expression::Bindings(Box::new(BindingList {
-        bindings: vec![Binding {
-            mutable: false,
-            binding_type: BindingType::Name(name.into()),
-            init: value,
-            typ: Type::Unknown,
-            span: span.clone(),
-        }],
-        span,
-    }))
+fn destructor_for_optional(
+    dtc: &DestructorToCreate,
+    inner_typ: &Type,
+    ctx: &mut TypeCheckerContext,
+    module: &mut Module,
+) -> CompileResult<()> {
+    let target = name_expr("self", Span::default());
+    let mut cases = Vec::new();
+
+    let pattern = Pattern::Optional(OptionalPattern {
+        binding: "$inner".into(),
+        span: Span::default(),
+        inner_type: inner_typ.clone(),
+    });
+
+    let Some(ds) = ctx.get_destructor_call(
+        address_of(name_expr("$inner", Span::Internal), Span::Internal),
+        None,
+        inner_typ,
+    )?
+    else {
+        return type_error_result(&Span::default(), format!("Missing destructor for {inner_typ}"));
+    };
+
+    cases.push(match_case(pattern, ds, Span::Internal));
+    cases.push(match_case(
+        Pattern::Any(Span::Internal),
+        Expression::Void,
+        Span::default(),
+    ));
+
+    let m = Expression::Match(Box::new(MatchExpression {
+        target,
+        cases,
+        typ: Type::Unknown,
+        span: Span::default(),
+    }));
+
+    create_destructor(&dtc.name, &dtc.typ, block(vec![m], vec![]), module);
+    Ok(())
 }
 
-pub fn create_destructors(ctx: &TypeCheckerContext, module: &mut Module) -> CompileResult<()> {
-    let types = module.types.clone(); // Clone to avoid having to borrow module immutable and
-                                      // mutable at the same time
-    for td in types.values() {
-        match td {
-            TypeDeclaration::Interface(_) => (),
-            TypeDeclaration::Struct(sd) => destructor_for_struct(sd, ctx, module)?,
-            TypeDeclaration::Sum(st) => destructor_for_sum(st, ctx, module)?,
-        }
+fn destructor_for_result(
+    dtc: &DestructorToCreate,
+    rt: &ResultType,
+    ctx: &mut TypeCheckerContext,
+    module: &mut Module,
+) -> CompileResult<()> {
+    let target = name_expr("self", Span::default());
+    let mut cases = Vec::new();
+
+    if let Some(ds) = ctx.get_destructor_call(
+        address_of(name_expr("$ok", Span::Internal), Span::Internal),
+        None,
+        &rt.ok_typ,
+    )? {
+        let ok_pattern = Pattern::Ok(OkPattern {
+            inner: Box::new(name_pattern("$ok", Span::Internal)),
+            span: Span::Internal,
+            inner_type: ptr_type(rt.ok_typ.clone()),
+        });
+        cases.push(match_case(ok_pattern, ds, Span::Internal));
     }
 
-    for func in module.functions.values_mut() {
-        if func.sig.typ.is_generic() {
-            continue;
+    if let Some(ds) = ctx.get_destructor_call(
+        address_of(name_expr("$error", Span::Internal), Span::Internal),
+        None,
+        &rt.err_typ,
+    )? {
+        let err_pattern = Pattern::Error(ErrorPattern {
+            inner: Box::new(name_pattern("$error", Span::Internal)),
+            span: Span::Internal,
+            inner_type: ptr_type(rt.err_typ.clone()),
+        });
+        cases.push(match_case(err_pattern, ds, Span::Internal));
+    }
+
+    if cases.is_empty() {
+        return type_error_result(
+            &Span::Internal,
+            format!("Cannot generate destructor for result type {}", dtc.typ),
+        );
+    }
+
+    if cases.len() < 2 {
+        cases.push(match_case(
+            Pattern::Any(Span::Internal),
+            Expression::Void,
+            Span::Internal,
+        ));
+    }
+
+    let m = Expression::Match(Box::new(MatchExpression {
+        target,
+        cases,
+        typ: Type::Unknown,
+        span: Span::default(),
+    }));
+
+    create_destructor(&dtc.name, &dtc.typ, block(vec![m], vec![]), module);
+    Ok(())
+}
+
+fn destructor_for_array(
+    dtc: &DestructorToCreate,
+    at: &ArrayType,
+    ctx: &mut TypeCheckerContext,
+    module: &mut Module,
+    target: &Target,
+) -> CompileResult<()> {
+    let mut ds_calls = Vec::new();
+    for i in 0..at.len {
+        let iop = address_of(
+            index_op(
+                name_expr("self", Span::Internal),
+                IndexMode::Index(uint_expr(i as u64, Span::Internal, target.int_size)),
+                Span::Internal,
+            ),
+            Span::Internal,
+        );
+        let Some(ds) = ctx.get_destructor_call(iop, None, &at.element_type)? else {
+            return type_error_result(
+                &Span::Internal,
+                format!("Cannot generate destructor for array of type {}", at.element_type),
+            );
+        };
+        ds_calls.push(ds);
+    }
+
+    create_destructor(&dtc.name, &dtc.typ, block(ds_calls, vec![]), module);
+    Ok(())
+}
+
+pub fn create_destructors(ctx: &mut TypeCheckerContext, module: &mut Module, target: &Target) -> CompileResult<()> {
+    for ds in ctx.get_destructors_to_create().iter() {
+        match &ds.typ {
+            Type::Struct(st) => destructor_for_struct(ds, st, ctx, module)?,
+            Type::Sum(st) => destructor_for_sum(ds, st, ctx, module)?,
+            Type::Optional(ot) => destructor_for_optional(ds, ot, ctx, module)?,
+            Type::Result(rt) => destructor_for_result(ds, rt, ctx, module)?,
+            Type::Array(et) => destructor_for_array(ds, et, ctx, module, target)?,
+            _ => (),
         }
-
-        let mut recheck_types = false;
-        func.expression.visit_mut(&mut |e| {
-            let Expression::Delete(d) = e else {
-                return Ok(());
-            };
-
-            let Some(et) = d.inner.get_type().get_pointer_element_type().cloned() else {
-                return type_error_result(&d.inner.span(), "Expecting a pointer type in a delete expression");
-            };
-
-            let Some(dc) = ctx.get_destructor_call(name_expr("$del", d.span.clone()), None, &et)? else {
-                return Ok(());
-            };
-
-            let binding = let_expr("$del", d.inner.clone(), d.inner.span());
-            let new_del = Expression::Delete(Box::new(DeleteExpression {
-                inner: name_expr("$del", d.span.clone()),
-                span: d.span.clone(),
-            }));
-
-            let b = block(vec![binding, dc, new_del], vec![], d.span.clone());
-            *e = b;
-            recheck_types = true;
-            Ok(())
-        })?;
-        func.type_checked = recheck_types;
     }
 
     //module.print(0);

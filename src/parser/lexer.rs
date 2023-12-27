@@ -314,7 +314,9 @@ impl Lexer {
         if c == '"' {
             let s = std::mem::take(&mut self.data);
             let mut span = self.current_span();
-            span.end.offset += 1; // Need to include the quote
+            if let Span::File { end, .. } = &mut span {
+                end.offset += 1; // Need to include the quote
+            }
             self.add(TokenKind::StringLiteral(s), span);
             self.escape_code = false;
             self.state = LexState::Idle;
@@ -326,7 +328,10 @@ impl Lexer {
         self.in_string_or_char_literal(c, '\'');
         if c == '\'' {
             let mut span = self.current_span();
-            span.end.offset += 1; // Need to include the single quote
+            if let Span::File { end, .. } = &mut span {
+                end.offset += 1; // Need to include the single quote
+            }
+
             if self.data.len() != 1 {
                 return parse_error_result(&span, "Invalid char literal");
             }

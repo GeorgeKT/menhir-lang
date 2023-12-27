@@ -1,0 +1,19 @@
+#ret:50
+
+var destructor_counter = 0
+
+struct Box:
+    ptr: *int
+
+fn ~Box(self):
+    destructor_counter += *self.ptr
+    delete self.ptr
+
+
+fn main() -> int:
+    let arr = [Box{new 8}, Box{new 5}, Box{new 9}, Box{new 3}]
+    var sum = 0
+    for a in arr:
+        sum += *a.ptr 
+    sum + destructor_counter
+    

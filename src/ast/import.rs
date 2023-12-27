@@ -29,14 +29,14 @@ impl fmt::Display for ImportName {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub enum SymbolType {
     Normal,
     Global,
     External,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Symbol {
     pub name: String,
     pub typ: Type,
@@ -45,24 +45,26 @@ pub struct Symbol {
     pub symbol_type: SymbolType,
 }
 
+pub type SymbolPtr = Rc<Symbol>;
+
 impl Symbol {
-    pub fn new(name: &str, typ: &Type, mutable: bool, span: &Span, symbol_type: SymbolType) -> Symbol {
-        Symbol {
+    pub fn new(name: &str, typ: &Type, mutable: bool, span: &Span, symbol_type: SymbolType) -> SymbolPtr {
+        Rc::new(Symbol {
             name: name.into(),
             typ: typ.clone(),
             mutable,
             span: span.clone(),
             symbol_type,
-        }
+        })
     }
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct Import {
     pub namespace: String,
-    pub symbols: HashMap<String, Symbol>,
+    pub symbols: HashMap<String, SymbolPtr>,
     pub generics: HashMap<String, Function>,
-    pub imported_symbols: HashMap<String, Symbol>,
+    pub imported_symbols: HashMap<String, SymbolPtr>,
 }
 
 impl Import {
@@ -75,8 +77,8 @@ impl Import {
         }
     }
 
-    pub fn resolve(&self, name: &str, allow_imported_symbols: bool) -> Option<Symbol> {
-        let resolve = |symbols: &HashMap<String, Symbol>| {
+    pub fn resolve(&self, name: &str, allow_imported_symbols: bool) -> Option<SymbolPtr> {
+        let resolve = |symbols: &HashMap<String, SymbolPtr>| {
             if let Some(s) = symbols.get(name) {
                 return Some(s.clone());
             }

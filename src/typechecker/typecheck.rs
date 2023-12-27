@@ -51,14 +51,16 @@ fn convert_type(
     }
 
     let mut converted = false;
-    if let Some(new_expression) = dst_type.convert(src_type, expr)? {
-        *expr = new_expression;
-        converted = true;
-    }
-
     if let Expression::Literal(lit) = expr {
         if let Some(new_lit) = lit.try_convert(dst_type) {
             *lit = new_lit;
+            converted = true;
+        }
+    }
+
+    if !converted {
+        if let Some(new_expression) = dst_type.convert(src_type, expr)? {
+            *expr = new_expression;
             converted = true;
         }
     }
@@ -85,8 +87,15 @@ fn convert_type(
 }
 
 fn try_result_to_match(inner: Expression, span: Span) -> Expression {
+    let typ = inner.get_type();
     let b = bindings(
-        vec![binding(BindingType::Name("$try".into()), inner, false, span.clone())],
+        vec![binding(
+            BindingType::Name("$try".into()),
+            inner,
+            false,
+            typ,
+            span.clone(),
+        )],
         span.clone(),
     );
     let match_cases = vec![
@@ -102,7 +111,7 @@ fn try_result_to_match(inner: Expression, span: Span) -> Expression {
         ),
     ];
     let match_expr = match_expression(name_expr("$try", span.clone()), match_cases, span.clone());
-    block(vec![b, match_expr], span)
+    block_expr(vec![b, match_expr], span)
 }
 
 fn try_optional_to_match(inner: Expression, span: Span) -> Expression {
@@ -172,7 +181,7 @@ pub fn type_check_with_conversion(
     expected_type: &Type,
     target: &Target,
 ) -> CompileResult<Type> {
-    let typ = type_check_expression(ctx, e, None, target)?;
+    let typ = type_check_expression(ctx, e, Some(expected_type), target)?;
     if ends_with_early_return(e) {
         Ok(expected_type.clone())
     } else {
@@ -363,7 +372,7 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call, target: &Target) 
         .resolve(&c.callee.name)
         .ok_or_else(|| unknown_name(&c.callee.span, format!("Unknown call {}", c.callee.name)))?;
 
-    c.callee.name = resolved.name;
+    c.callee.name = resolved.name.clone();
     c.callee.typ = resolved.typ.clone();
     if let Type::Func(ft) = &resolved.typ {
         if ft.args.len() != c.args.len() {
@@ -570,15 +579,14 @@ pub fn type_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint
     let resolved = ctx
         .resolve(&nr.name)
         .ok_or_else(|| unknown_name(&nr.span, format!("Unknown name {}", nr.name)))?;
-    nr.name = resolved.name;
-
+    nr.name = resolved.name.clone();
     if let Some(typ) = type_hint {
         if resolved.typ == Type::Unknown {
             return unknown_type_result(&nr.name, typ);
         }
 
         if resolved.typ == *typ {
-            nr.typ = resolved.typ;
+            nr.typ = resolved.typ.clone();
             return valid(nr.typ.clone());
         }
 
@@ -606,11 +614,11 @@ pub fn type_check_name(ctx: &mut TypeCheckerContext, nr: &mut NameRef, type_hint
                 valid(nr.typ.clone())
             }
         } else {
-            nr.typ = resolved.typ;
+            nr.typ = resolved.typ.clone();
             valid(nr.typ.clone())
         }
     } else {
-        nr.typ = resolved.typ;
+        nr.typ = resolved.typ.clone();
         valid(nr.typ.clone())
     }
 }
@@ -650,7 +658,15 @@ pub fn add_struct_bindings(
 }
 
 fn type_check_binding(ctx: &mut TypeCheckerContext, b: &mut Binding, target: &Target) -> TypeCheckResult {
-    b.typ = type_check_expression(ctx, &mut b.init, None, target)?;
+    if b.typ != Type::Unknown {
+        if resolve_type(ctx, &mut b.typ) == TypeResolved::No {
+            return type_error_result(&b.span, format!("Cannot resolve type of binding {}", b.name()));
+        }
+
+        type_check_with_conversion(ctx, &mut b.init, &b.typ, target)?;
+    } else {
+        b.typ = type_check_expression(ctx, &mut b.init, None, target)?;
+    }
 
     match &mut b.binding_type {
         BindingType::Name(name) => {
@@ -778,8 +794,8 @@ fn type_check_struct_members_in_initializer(
         return type_error_result(
             &si.span,
             format!(
-                "Type {} has {} members, but attempting to initialize {} members",
-                si.struct_name,
+                "Type {} has {} members, but initializing {} members",
+                st.get_name(),
                 st.members.len(),
                 si.member_initializers.len()
             ),
@@ -788,25 +804,35 @@ fn type_check_struct_members_in_initializer(
 
     let mut new_members = Vec::with_capacity(st.members.len());
 
-    for (idx, (member, mi)) in st
-        .members
-        .iter()
-        .zip(si.member_initializers.iter_mut())
-        .enumerate()
-    {
-        let t = type_check_expression(ctx, mi, Some(&member.typ), target)?;
-        let expected_type = if member.typ.is_generic() {
-            fill_in_generics(ctx, &t, &member.typ, &mut si.generic_args, &mi.span())?
+    for (idx, mi) in si.member_initializers.iter_mut().enumerate() {
+        let expected_type = if let Some(name) = &mi.name {
+            let (typ, idx) = st.get_member_type_and_index(&name).ok_or_else(|| {
+                type_error(
+                    &mi.initializer.span(),
+                    format!("Struct {} has no member {name}", st.get_name()),
+                )
+            })?;
+            mi.member_idx = idx;
+            typ
         } else {
-            member.typ.clone()
+            mi.member_idx = idx;
+            st.members[idx].typ.clone()
+        };
+
+        let t = type_check_expression(ctx, &mut mi.initializer, Some(&expected_type), target)?;
+
+        let expected_type = if expected_type.is_generic() {
+            fill_in_generics(ctx, &t, &expected_type, &mut si.generic_args, &mi.initializer.span())?
+        } else {
+            expected_type
         };
 
         if t != expected_type {
-            if let Some(new_mi) = expected_type.convert(&t, mi)? {
-                *mi = new_mi;
+            if let Some(new_mi) = expected_type.convert(&t, &mut mi.initializer)? {
+                mi.initializer = new_mi;
             } else {
                 return type_error_result(
-                    &mi.span(),
+                    &mi.initializer.span(),
                     format!(
                         "Attempting to initialize member {} with type '{}', expecting an expression of type '{}'",
                         idx, t, expected_type
@@ -815,10 +841,17 @@ fn type_check_struct_members_in_initializer(
             }
         }
 
-        new_members.push(struct_member(&member.name, expected_type));
+        if let Some(name) = &mi.name {
+            new_members.push(struct_member(name.clone(), expected_type));
+        } else {
+            new_members.push(struct_member(st.members[idx].name.clone(), expected_type));
+        }
     }
 
-    Ok(struct_type(&st.name, new_members))
+    si.member_initializers
+        .sort_by(|a, b| a.member_idx.cmp(&b.member_idx));
+
+    Ok(struct_type(si.struct_name.clone(), new_members))
 }
 
 fn type_check_anonymous_struct_initializer(
@@ -827,11 +860,15 @@ fn type_check_anonymous_struct_initializer(
     target: &Target,
 ) -> TypeCheckResult {
     let mut new_members = Vec::with_capacity(si.member_initializers.len());
-    for mi in &mut si.member_initializers {
-        let t = type_check_expression(ctx, mi, None, target)?;
-        new_members.push(struct_member("", t));
+    for (idx, mi) in si.member_initializers.iter_mut().enumerate() {
+        let t = type_check_expression(ctx, &mut mi.initializer, None, target)?;
+        if let Some(name) = &mi.name {
+            new_members.push(struct_member(name.clone(), t));
+        } else {
+            new_members.push(struct_member(format!("_{idx}"), t));
+        }
     }
-    si.typ = struct_type("", new_members);
+    si.typ = struct_type(None, new_members);
     valid(si.typ.clone())
 }
 
@@ -840,24 +877,27 @@ fn type_check_struct_initializer(
     si: &mut StructInitializer,
     target: &Target,
 ) -> TypeCheckResult {
-    if si.struct_name.is_empty() {
+    let name = if let Some(name) = &si.struct_name {
+        name.clone()
+    } else {
         return type_check_anonymous_struct_initializer(ctx, si, target);
-    }
+    };
 
     let resolved = ctx
-        .resolve(&si.struct_name)
-        .ok_or_else(|| unknown_name(&si.span, format!("Unknown struct {}", si.struct_name)))?;
-    si.struct_name = resolved.name;
+        .resolve(&name)
+        .ok_or_else(|| unknown_name(&si.span, format!("Unknown struct {}", name)))?;
+    si.struct_name = Some(resolved.name.clone());
+    si.typ = resolved.typ.clone();
     match &resolved.typ {
         Type::Struct(st) => {
             si.typ = type_check_struct_members_in_initializer(ctx, st, si, target)?;
             valid(si.typ.clone())
         }
         Type::Sum(st) => {
-            let idx = st.index_of(&si.struct_name).ok_or_else(|| {
+            let idx = st.index_of(&resolved.name).ok_or_else(|| {
                 type_error(
                     &si.span,
-                    format!("Cannot determine index of sum type case {}", si.struct_name),
+                    format!("Cannot determine index of sum type case {}", resolved.name),
                 )
             })?;
             let mut sum_type_cases = Vec::with_capacity(st.cases.len());
@@ -885,7 +925,7 @@ fn type_check_struct_initializer(
             valid(Type::String)
         }
 
-        _ => type_error_result(&si.span, format!("{} is not a struct", si.struct_name)),
+        _ => type_error_result(&si.span, format!("{} is not a struct", resolved.name)),
     }
 }
 
@@ -893,7 +933,7 @@ fn find_member_type(members: &[StructMember], member_name: &str, span: &Span) ->
     members
         .iter()
         .enumerate()
-        .find(|&(_, m)| m.name == *member_name)
+        .find(|&(_, m)| m.name == member_name)
         .map(|(idx, m)| (idx, m.typ.clone()))
         .ok_or_else(|| unknown_name(span, format!("Unknown struct member {}", member_name)))
 }
@@ -963,8 +1003,8 @@ fn to_static_function_call(ctx: &mut TypeCheckerContext, sma: &MemberAccess) -> 
             let call_name = format!("{}.{}", nr.name, call.callee.name);
             if let Some(rn) = ctx.resolve(&call_name) {
                 if let Type::Func(_) = &rn.typ {
-                    let name_span = nr.span.expanded(call.callee.span.end);
-                    let full_span = name_span.expanded(call.span.end);
+                    let name_span = Span::merge(&nr.span, &call.callee.span);
+                    let full_span = Span::merge(&name_span, &call.span);
                     return Some(Call::new(
                         NameRef::new(call_name, name_span),
                         call.args.clone(),
@@ -1020,7 +1060,10 @@ fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess
         }
 
         (MemberAccessType::Call(call), Type::Struct(st)) => {
-            let call_name = format!("{}.{}", st.name, call.callee.name);
+            let Some(name) = &st.name else {
+                return type_error_result(&call.span, "Calling member of anonymous struct is not possible");
+            };
+            let call_name = format!("{}.{}", name, call.callee.name);
             call.callee.name = call_name;
             return replace_by(member_call_to_call(&sma.left, call));
         }
@@ -1096,16 +1139,36 @@ fn type_check_delete(
     type_hint: Option<&Type>,
     target: &Target,
 ) -> TypeCheckResult {
-    let typ = type_check_expression(ctx, &mut d.inner, type_hint, target)?;
-    match typ {
-        Type::Pointer(_) => valid(Type::Void),
-        _ => type_error_result(
-            &d.span,
-            format!(
-                "delete expression expects a pointer argument, argument has type {}",
-                typ
-            ),
-        ),
+    match d {
+        DeleteExpression::Delete { inner, span } => {
+            let inner_typ = type_check_expression(ctx, inner, type_hint, target)?;
+            let Type::Pointer(typ) = &inner_typ else {
+                return type_error_result(
+                    span,
+                    format!(
+                        "delete expression expects a pointer argument, argument has type {}",
+                        inner_typ
+                    ),
+                );
+            };
+
+            let Some(dc) = ctx.get_destructor_call(name_expr("$del", span.clone()), None, typ)? else {
+                return valid(Type::Void);
+            };
+
+            let binding = binding_expr("$del", inner.clone(), false, inner.span());
+            let new_del = Expression::Delete(Box::new(DeleteExpression::Delete {
+                inner: name_expr("$del", span.clone()),
+                span: span.clone(),
+            }));
+
+            let b = block(vec![binding, dc, new_del], Span::default());
+            replace_by(Expression::Delete(Box::new(DeleteExpression::BlockWithDestructor {
+                span: span.clone(),
+                block: b,
+            })))
+        }
+        DeleteExpression::BlockWithDestructor { block, .. } => type_check_block(ctx, block, None, target),
     }
 }
 
@@ -1173,15 +1236,22 @@ fn type_check_index_operation(
         }
     }
 
-    let typ = match target_type {
+    let index_not_allowed = || {
+        type_error_result(
+            &iop.span,
+            format!("Cannot an index an expression of type {}", target_type),
+        )
+    };
+
+    let typ = match &target_type {
         Type::Slice(st) => st.element_type.clone(),
         Type::Array(at) => at.element_type.clone(),
-        _ => {
-            return type_error_result(
-                &iop.span,
-                format!("Cannot an index an expression of type {}", target_type),
-            )
-        }
+        Type::Pointer(pt) => match pt.deref() {
+            Type::Slice(st) => st.element_type.clone(),
+            Type::Array(at) => at.element_type.clone(),
+            _ => return index_not_allowed(),
+        },
+        _ => return index_not_allowed(),
     };
 
     if let Type::Range(_) = index_type {
@@ -1303,12 +1373,13 @@ fn type_check_for(ctx: &mut TypeCheckerContext, f: &mut ForLoop, target: &Target
             f.loop_variable_type = element_type.clone();
             ctx.add(Symbol::new(
                 &f.loop_variable,
-                &element_type,
+                &f.loop_variable_type,
                 false,
                 &f.span,
                 SymbolType::Normal,
             ))?;
             type_check_expression(ctx, &mut f.body, None, target)?;
+            ctx.exit_scope();
             valid(Type::Void)
         }
         _ => type_error_result(&f.span, format!("Cannot iterate over expressions of type {}", typ)),
@@ -1450,6 +1521,109 @@ fn type_check_range(ctx: &mut TypeCheckerContext, r: &mut Range, target: &Target
     }
 }
 
+fn type_check_to_optional(ctx: &mut TypeCheckerContext, t: &mut ToOptional, target: &Target) -> TypeCheckResult {
+    if t.optional_type.is_unknown() {
+        let typ = type_check_expression(ctx, &mut t.inner, None, target)?;
+        t.optional_type = optional_type(typ);
+        return valid(t.optional_type.clone());
+    }
+
+    let Type::Optional(it) = &t.optional_type else {
+        return type_error_result(&t.inner.span(), "Expecting optional type");
+    };
+    let typ = type_check_expression(ctx, &mut t.inner, Some(it), target)?;
+    if !t.optional_type.is_optional_of(&typ) {
+        type_error_result(&t.inner.span(), format!("Expecting an expression of type '{}' ", it))
+    } else {
+        valid(t.optional_type.clone())
+    }
+}
+
+fn type_check_to_ok_result(
+    ctx: &mut TypeCheckerContext,
+    e: &mut ToOkResult,
+    type_hint: Option<&Type>,
+    target: &Target,
+) -> TypeCheckResult {
+    if e.result_type.is_unknown() {
+        let typ = type_check_expression(ctx, &mut e.inner, None, target)?;
+        if let Some(Type::Result(ert)) = type_hint {
+            if ert.ok_typ == typ {
+                e.result_type = Type::Result(ert.clone());
+                return valid(e.result_type.clone());
+            } else {
+                return type_error_result(
+                    &e.inner.span(),
+                    format!(
+                        "Expecting {} for the ok type of a result, but found {}",
+                        ert.ok_typ, typ
+                    ),
+                );
+            }
+        } else {
+            return type_error_result(
+                &e.inner.span(),
+                "Cannot infer error type of result type, please provide a type hint",
+            );
+        }
+    }
+
+    let Type::Result(rt) = &e.result_type else {
+        return type_error_result(&e.inner.span(), "Expecting result type");
+    };
+    let ok_typ = type_check_expression(ctx, &mut e.inner, Some(&rt.ok_typ), target)?;
+    if ok_typ != rt.ok_typ {
+        type_error_result(
+            &e.inner.span(),
+            format!("Expecting an expression of type '{}' ", e.result_type),
+        )
+    } else {
+        valid(e.result_type.clone())
+    }
+}
+
+fn type_check_to_err_result(
+    ctx: &mut TypeCheckerContext,
+    e: &mut ToErrResult,
+    type_hint: Option<&Type>,
+    target: &Target,
+) -> TypeCheckResult {
+    if e.result_type.is_unknown() {
+        let typ = type_check_expression(ctx, &mut e.inner, None, target)?;
+        if let Some(Type::Result(ert)) = type_hint {
+            if ert.err_typ == typ {
+                e.result_type = Type::Result(ert.clone());
+                return valid(e.result_type.clone());
+            } else {
+                return type_error_result(
+                    &e.inner.span(),
+                    format!(
+                        "Expecting {} for the error type of a result, but found {}",
+                        ert.err_typ, typ
+                    ),
+                );
+            }
+        } else {
+            return type_error_result(
+                &e.inner.span(),
+                "Cannot infer ok type of result type, please provide a type hint",
+            );
+        }
+    }
+    let Type::Result(rt) = &e.result_type else {
+        return type_error_result(&e.inner.span(), "Expecting result type");
+    };
+    let err_typ = type_check_expression(ctx, &mut e.inner, Some(&rt.err_typ), target)?;
+    if err_typ != rt.err_typ {
+        type_error_result(
+            &e.inner.span(),
+            format!("Expecting an expression of type '{}' ", e.result_type),
+        )
+    } else {
+        valid(e.result_type.clone())
+    }
+}
+
 pub fn type_check_expression(
     ctx: &mut TypeCheckerContext,
     e: &mut Expression,
@@ -1499,17 +1673,7 @@ pub fn type_check_expression(
                 valid(Type::Bool)
             }
         }
-        Expression::ToOptional(t) => {
-            let Type::Optional(it) = &t.optional_type else {
-                return type_error_result(&t.inner.span(), "Expecting optional type");
-            };
-            let typ = type_check_expression(ctx, &mut t.inner, Some(it), target)?;
-            if !t.optional_type.is_optional_of(&typ) {
-                type_error_result(&t.inner.span(), format!("Expecting an expression of type '{}' ", it))
-            } else {
-                valid(t.optional_type.clone())
-            }
-        }
+        Expression::ToOptional(t) => type_check_to_optional(ctx, t, target),
         Expression::Cast(t) => type_check_cast(ctx, t, target),
         Expression::CompilerCall(cc) => type_check_compiler_call(ctx, cc, target),
         Expression::IndexOperation(iop) => valid(type_check_index_operation(ctx, iop, target)?),
@@ -1529,34 +1693,8 @@ pub fn type_check_expression(
                 valid(Type::Bool)
             }
         }
-        Expression::ToOkResult(e) => {
-            let Type::Result(rt) = &e.result_type else {
-                return type_error_result(&e.inner.span(), "Expecting result type");
-            };
-            let ok_typ = type_check_expression(ctx, &mut e.inner, Some(&rt.ok_typ), target)?;
-            if ok_typ != rt.ok_typ {
-                type_error_result(
-                    &e.inner.span(),
-                    format!("Expecting an expression of type '{}' ", e.result_type),
-                )
-            } else {
-                valid(e.result_type.clone())
-            }
-        }
-        Expression::ToErrResult(e) => {
-            let Type::Result(rt) = &e.result_type else {
-                return type_error_result(&e.inner.span(), "Expecting result type");
-            };
-            let err_typ = type_check_expression(ctx, &mut e.inner, Some(&rt.err_typ), target)?;
-            if err_typ != rt.err_typ {
-                type_error_result(
-                    &e.inner.span(),
-                    format!("Expecting an expression of type '{}' ", e.result_type),
-                )
-            } else {
-                valid(e.result_type.clone())
-            }
-        }
+        Expression::ToOkResult(e) => type_check_to_ok_result(ctx, e, type_hint, target),
+        Expression::ToErrResult(e) => type_check_to_err_result(ctx, e, type_hint, target),
     };
 
     match type_check_result {
@@ -1569,6 +1707,22 @@ pub fn type_check_expression(
     }
 }
 
+fn type_check_global_binding(
+    ctx: &mut TypeCheckerContext,
+    b: &mut GlobalBinding,
+    target: &Target,
+) -> CompileResult<()> {
+    if b.typ != Type::Unknown {
+        if resolve_type(ctx, &mut b.typ) == TypeResolved::No {
+            return type_error_result(&b.span, format!("Cannot resolve type of binding {}", b.name));
+        }
+        type_check_with_conversion(ctx, &mut b.init, &b.typ, target)?;
+    } else {
+        b.typ = type_check_expression(ctx, &mut b.init, None, target)?;
+    }
+    Ok(())
+}
+
 pub fn type_check_module(module: &mut Module, target: &Target, imports: &ImportMap) -> CompileResult<()> {
     let mut destructors_added = false;
     loop {
@@ -1576,16 +1730,14 @@ pub fn type_check_module(module: &mut Module, target: &Target, imports: &ImportM
         resolve_types(&mut ctx, module)?;
 
         for global in module.globals.values_mut() {
-            if global.typ == Type::Unknown {
-                global.typ = type_check_expression(&mut ctx, &mut global.init, None, target)?;
-                ctx.add(Symbol::new(
-                    &global.name,
-                    &global.typ,
-                    global.mutable,
-                    &global.span,
-                    SymbolType::Global,
-                ))?;
-            }
+            type_check_global_binding(&mut ctx, global, target)?;
+            ctx.add(Symbol::new(
+                &global.name,
+                &global.typ,
+                global.mutable,
+                &global.span,
+                SymbolType::Global,
+            ))?;
         }
 
         for f in module.functions.values_mut() {
@@ -1599,7 +1751,7 @@ pub fn type_check_module(module: &mut Module, target: &Target, imports: &ImportM
         // As long as we are adding new generic functions, we need to type check the module again
         if count == module.functions.len() {
             if !destructors_added {
-                create_destructors(&ctx, module)?;
+                create_destructors(&mut ctx, module, target)?;
                 destructors_added = true;
                 //module.print(0);
             }

@@ -35,17 +35,28 @@ pub fn struct_declaration(name: &str, members: Vec<StructMemberDeclaration>, spa
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
+pub struct StructMemberInitializer {
+    pub name: Option<String>,
+    pub initializer: Expression,
+    pub member_idx: usize,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct StructInitializer {
-    pub struct_name: String,
-    pub member_initializers: Vec<Expression>,
+    pub struct_name: Option<String>,
+    pub member_initializers: Vec<StructMemberInitializer>,
     pub span: Span,
     pub typ: Type,
     pub generic_args: GenericMapping,
 }
 
-pub fn struct_initializer(struct_name: &str, member_initializers: Vec<Expression>, span: Span) -> StructInitializer {
+pub fn struct_initializer(
+    struct_name: Option<String>,
+    member_initializers: Vec<StructMemberInitializer>,
+    span: Span,
+) -> StructInitializer {
     StructInitializer {
-        struct_name: struct_name.into(),
+        struct_name,
         member_initializers,
         span,
         typ: Type::Unknown,
@@ -66,9 +77,22 @@ impl TreePrinter for StructDeclaration {
 impl TreePrinter for StructInitializer {
     fn print(&self, level: usize) {
         let p = prefix(level);
-        println!("{}struct initializer {} ({})", p, self.struct_name, self.span);
-        for m in &self.member_initializers {
-            m.print(level + 1)
+        println!(
+            "{}struct initializer {} ({})",
+            p,
+            self.struct_name
+                .as_ref()
+                .map(|s| &s[..])
+                .unwrap_or_else(|| "<anonymous>"),
+            self.span
+        );
+        for mi in &self.member_initializers {
+            if let Some(name) = &mi.name {
+                println!("{} {} (idx: {}):", p, name, mi.member_idx);
+            } else {
+                println!("{} {}:", p, mi.member_idx);
+            }
+            mi.initializer.print(level + 2);
         }
     }
 }

@@ -1,6 +1,6 @@
 use super::tokens::{Token, TokenKind};
 use crate::ast::{AssignOperator, BinaryOperator};
-use crate::compileerror::{parse_error_result, CompileError, CompileResult, ErrorData};
+use crate::compileerror::{parse_error, parse_error_result, CompileError, CompileResult, ErrorData};
 use crate::span::{Pos, Span};
 use std::collections::VecDeque;
 
@@ -38,10 +38,23 @@ impl TokenQueue {
 
     pub fn pop(&mut self) -> CompileResult<Token> {
         if let Some(tok) = self.tokens.pop_front() {
-            self.last_pos = tok.span.end;
+            self.last_pos = tok.span.end();
             Ok(tok)
         } else {
             parse_error_result(&Span::default(), "Unexpected end of file")
+        }
+    }
+
+    pub fn pop_if(&mut self, pred: impl Fn(&Token) -> bool) -> CompileResult<Option<Token>> {
+        let matches = self
+            .peek()
+            .map(|t| pred(t))
+            .ok_or_else(|| parse_error(&Span::default(), "Unexpected end of file"))?;
+
+        if matches {
+            self.pop().map(|t| Some(t))
+        } else {
+            Ok(None)
         }
     }
 

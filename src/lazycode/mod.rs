@@ -5,6 +5,7 @@ pub use self::function::ByteCodeFunction;
 pub use self::instruction::Instruction;
 pub use self::operand::{ByteCodeProperty, CallArg, Constant, Operand};
 pub use self::optimizer::*;
+pub use self::patterns::OPTIONAL_DATA_IDX;
 pub use self::scope::{Scope, ScopeNode};
 
 mod compiler;

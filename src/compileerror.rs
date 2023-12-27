@@ -91,34 +91,35 @@ pub fn print_message(msg: &str, span: &Span) {
         s.repeat(count)
     }
 
+    let Span::File { file, start, end } = span else {
+        println!("{}", red.apply_to(msg));
+        return;
+    };
+
     let prefix = "| ";
     println!("{}: {}", span, red.apply_to(msg));
-    if let Ok(file) = File::open(&span.file) {
-        let start_line = if span.start.line >= 4 { span.start.line - 4 } else { 0 };
+    if let Ok(file) = File::open(file) {
+        let start_line = if start.line >= 4 { start.line - 4 } else { 0 };
         let reader = io::BufReader::new(file);
 
         for (idx, line) in reader.lines().enumerate().skip(start_line) {
             let line = line.unwrap();
             let line_idx = idx + 1;
             println!("{:>4} {}{}", line_idx, prefix, line);
-            if line_idx == span.start.line {
-                let end = if line_idx == span.end.line {
-                    span.end.offset
-                } else {
-                    line.len()
-                };
-                let carets = repeat_string("^", end - span.start.offset + 1);
-                let whitespace = repeat_string(" ", span.start.offset - 1);
+            if line_idx == start.line {
+                let end = if line_idx == end.line { end.offset } else { line.len() };
+                let carets = repeat_string("^", end - start.offset + 1);
+                let whitespace = repeat_string(" ", start.offset - 1);
                 println!("     {}{}{}", prefix, whitespace, red.apply_to(carets));
-            } else if line_idx == span.end.line {
-                let carets = repeat_string("^", span.end.offset);
+            } else if line_idx == end.line {
+                let carets = repeat_string("^", end.offset);
                 println!("     {}{}", prefix, red.apply_to(carets));
-            } else if line_idx > span.start.line && line_idx < span.end.line && !line.is_empty() {
+            } else if line_idx > start.line && line_idx < end.line && !line.is_empty() {
                 let carets = repeat_string("^", line.len());
                 println!("     {}{}", prefix, red.apply_to(carets));
             }
 
-            if line_idx >= span.end.line + 3 {
+            if line_idx >= end.line + 3 {
                 break;
             }
         }
@@ -126,6 +127,10 @@ pub fn print_message(msg: &str, span: &Span) {
 }
 
 pub type CompileResult<T> = Result<T, CompileError>;
+
+pub fn parse_error<Msg: Into<String>>(span: &Span, msg: Msg) -> CompileError {
+    CompileError::Parse(ErrorData::new(span, msg.into()))
+}
 
 pub fn parse_error_result<T, Msg: Into<String>>(span: &Span, msg: Msg) -> CompileResult<T> {
     Err(CompileError::Parse(ErrorData::new(span, msg.into())))

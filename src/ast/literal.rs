@@ -3,6 +3,8 @@ use crate::span::Span;
 use serde_derive::{Deserialize, Serialize};
 use std::ops::Deref;
 
+use super::Expression;
+
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Literal {
     Int(Span, i64, IntSize),
@@ -104,6 +106,10 @@ impl Literal {
             _ => None,
         }
     }
+}
+
+pub fn uint_expr(v: u64, span: Span, int_size: IntSize) -> Expression {
+    Expression::Literal(Literal::UInt(span, v, int_size))
 }
 
 impl TreePrinter for Literal {

@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use libc::{c_char, c_uint};
 use llvm_sys::core::*;
 use llvm_sys::prelude::*;
@@ -8,6 +10,7 @@ use super::context::Context;
 use super::operand::{const_bool, const_char, const_float, const_int, const_uint, copy};
 use crate::ast::*;
 use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
+use crate::lazycode::OPTIONAL_DATA_IDX;
 use crate::lazycode::{ByteCodeProperty, Constant};
 //use crate::llvmbackend::instructions::type_name;
 
@@ -340,6 +343,15 @@ impl ValueRef {
                     LLVMBuildBitCast(ctx.builder, st_data_ptr, type_to_cast_to, cstr!("rt_member_ptr")),
                     ptr_type(case_type.clone()),
                 ))
+            },
+
+            Type::Optional(ot) => unsafe {
+                let self_type = ctx.resolve_type(&element_type)?;
+                let opt_data_ptr =
+                    LLVMBuildStructGEP2(ctx.builder, self_type, self.value, index as u32, cstr!("opt_data_ptr"));
+
+                assert!(index == OPTIONAL_DATA_IDX as usize);
+                Ok(ValueRef::new(opt_data_ptr, ptr_type(ot.deref().clone())))
             },
 
             Type::Range(int_size) => unsafe {

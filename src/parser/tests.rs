@@ -673,10 +673,18 @@ Point{6, 7}
     assert_eq!(
         e,
         Expression::StructInitializer(struct_initializer(
-            "Point",
+            Some("Point".into()),
             vec![
-                number(6, span(2, 7, 2, 7), &target),
-                number(7, span(2, 10, 2, 10), &target),
+                StructMemberInitializer {
+                    name: None,
+                    initializer: number(6, span(2, 7, 2, 7), &target),
+                    member_idx: 0,
+                },
+                StructMemberInitializer {
+                    name: None,
+                    initializer: number(7, span(2, 10, 2, 10), &target),
+                    member_idx: 0
+                }
             ],
             span(2, 1, 2, 11)
         ))
@@ -695,10 +703,18 @@ fn test_anonymous_struct_initializer() {
     assert_eq!(
         e,
         Expression::StructInitializer(struct_initializer(
-            "",
+            None,
             vec![
-                number(6, span(2, 2, 2, 2), &target),
-                number(7, span(2, 5, 2, 5), &target),
+                StructMemberInitializer {
+                    name: None,
+                    initializer: number(6, span(2, 2, 2, 2), &target),
+                    member_idx: 0
+                },
+                StructMemberInitializer {
+                    name: None,
+                    initializer: number(7, span(2, 5, 2, 5), &target),
+                    member_idx: 0
+                },
             ],
             span(2, 1, 2, 6)
         ))
@@ -900,14 +916,14 @@ fn test_block() {
     );
     assert_eq!(
         e,
-        block(
+        block_expr(
             vec![
                 name_ref("a", span(2, 2, 2, 2)),
                 name_ref("b", span(2, 5, 2, 5)),
                 name_ref("c", span(2, 8, 2, 8)),
                 number(7, span(2, 11, 2, 11), &target),
             ],
-            span(2, 2, 2, 11)
+            span(2, 1, 2, 11)
         )
     )
 }

@@ -1,11 +1,16 @@
 use crate::ast::*;
 use crate::compileerror::*;
+use crate::span::Span;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::hash_map::{Entry, HashMap};
+use std::hash::Hash;
+use std::hash::Hasher;
 
 use super::destructors::destructor_name;
 
+#[derive(Debug)]
 struct Scope {
-    symbols: HashMap<String, Symbol>,
+    symbols: HashMap<String, SymbolPtr>,
     destructor_calls: Vec<Expression>,
     drop_flags: HashMap<String, DropFlag>,
     function_return_type: Option<Type>,
@@ -21,11 +26,11 @@ impl Scope {
         }
     }
 
-    pub fn update(&mut self, symbol: Symbol) {
+    pub fn update(&mut self, symbol: SymbolPtr) {
         self.symbols.insert(symbol.name.clone(), symbol);
     }
 
-    fn resolve(&self, name: &str) -> Option<Symbol> {
+    fn resolve(&self, name: &str) -> Option<SymbolPtr> {
         let name_with_double_colons = format!("::{}", name);
         for (symbol_name, symbol) in &self.symbols {
             if symbol_name == name || symbol_name.ends_with(&name_with_double_colons) {
@@ -36,7 +41,7 @@ impl Scope {
         None
     }
 
-    fn add(&mut self, symbol: Symbol, destructor: Option<Expression>) -> CompileResult<()> {
+    fn add(&mut self, symbol: SymbolPtr, destructor: Option<Expression>) -> CompileResult<()> {
         match self.symbols.entry(symbol.name.clone()) {
             Entry::Occupied(e) => {
                 let value = e.get();
@@ -73,7 +78,7 @@ pub enum ImportSymbolResolver<'a> {
 }
 
 impl<'a> ImportSymbolResolver<'a> {
-    pub fn resolve(&self, name: &str) -> Option<Symbol> {
+    pub fn resolve(&self, name: &str) -> Option<SymbolPtr> {
         match *self {
             ImportSymbolResolver::ImportMap(imports) => {
                 for import in imports.values() {
@@ -90,12 +95,41 @@ impl<'a> ImportSymbolResolver<'a> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct DestructorToCreate {
+    pub name: String,
+    pub typ: Type,
+    pub destructor_type: Type,
+}
+
+fn destructor_name_for_type(typ: &Type) -> String {
+    let def_name = || {
+        let mut s = DefaultHasher::new();
+        typ.hash(&mut s);
+        let h = s.finish();
+        format!("$destructor-{h:x}")
+    };
+    match typ {
+        Type::Struct(st) => {
+            if let Some(name) = &st.name {
+                destructor_name(name)
+            } else {
+                def_name()
+            }
+        }
+        Type::Sum(st) => destructor_name(&st.name),
+
+        _ => def_name(),
+    }
+}
+
 pub struct TypeCheckerContext<'a> {
     stack: Vec<Scope>,
     globals: Scope,
     externals: Scope,
     import_resolver: ImportSymbolResolver<'a>,
     drop_flag_counter: usize,
+    destructors_to_create: HashMap<String, DestructorToCreate>,
 }
 
 impl<'a> TypeCheckerContext<'a> {
@@ -106,10 +140,11 @@ impl<'a> TypeCheckerContext<'a> {
             externals: Scope::new(None),
             import_resolver: isr,
             drop_flag_counter: 0,
+            destructors_to_create: HashMap::new(),
         }
     }
 
-    pub fn update(&mut self, symbol: Symbol) {
+    pub fn update(&mut self, symbol: SymbolPtr) {
         self.stack.last_mut().expect("Empty stack").update(symbol)
     }
 
@@ -117,36 +152,85 @@ impl<'a> TypeCheckerContext<'a> {
         self.stack.push(Scope::new(function_return_type));
     }
 
-    pub fn get_destructor(&self, typ: &Type) -> CompileResult<Option<Symbol>> {
-        let name = match typ {
-            Type::Struct(st) => st.name.clone(),
-            Type::Sum(et) => et.name.clone(),
-            _ => {
-                return Ok(None);
-            }
-        };
+    pub fn get_destructors_to_create(&self) -> Vec<DestructorToCreate> {
+        self.destructors_to_create.values().cloned().collect()
+    }
 
-        let destructor_name = destructor_name(&name);
-        let Some(ds) = self.resolve(&destructor_name) else {
-            return Ok(None);
-        };
-
-        if let Type::Func(ft) = &ds.typ {
-            if ft.return_type != Type::Void || ft.args.len() != 1 {
-                return type_error_result(
-                    &ds.span,
-                    "Destructors must not return anything and only have self as argument",
-                );
-            }
-        } else {
-            return type_error_result(&ds.span, "Destructor must be a function");
+    fn destructor_needed(&self, typ: &Type) -> bool {
+        let name = destructor_name_for_type(typ);
+        if let Some(_) = self.resolve(&name) {
+            return true;
         }
 
-        Ok(Some(ds))
+        match typ {
+            Type::Array(at) => self.destructor_needed(&at.element_type),
+            Type::Struct(s) => {
+                for m in &s.members {
+                    // If a member has a destructor, this one needs one too
+                    if self.destructor_needed(&m.typ) {
+                        return true;
+                    }
+                }
+                false
+            }
+            Type::Sum(st) => {
+                for c in &st.cases {
+                    if let Some(ct) = &c.typ {
+                        if self.destructor_needed(ct) {
+                            return true;
+                        }
+                    }
+                }
+                false
+            }
+            Type::Optional(ot) => self.destructor_needed(ot),
+            Type::Result(rt) => self.destructor_needed(&rt.ok_typ) || self.destructor_needed(&rt.err_typ),
+            _ => false,
+        }
+    }
+
+    pub fn get_destructor(&mut self, typ: &Type) -> CompileResult<Option<SymbolPtr>> {
+        let name = destructor_name_for_type(typ);
+        if let Some(ds) = self.resolve(&name) {
+            if let Type::Func(ft) = &ds.typ {
+                if ft.return_type != Type::Void || ft.args.len() != 1 {
+                    return type_error_result(
+                        &ds.span,
+                        "Destructors must not return anything and only have self as argument",
+                    );
+                }
+            } else {
+                return type_error_result(&ds.span, "Destructor must be a function");
+            }
+
+            Ok(Some(ds))
+        } else if self.destructor_needed(typ) {
+            let ds_to_create = DestructorToCreate {
+                name: name.clone(),
+                typ: typ.clone(),
+                destructor_type: func_type(vec![func_arg(ptr_type(typ.clone()), true)], Type::Void),
+            };
+
+            let sym = Symbol::new(
+                &name,
+                &ds_to_create.destructor_type,
+                false,
+                &Span::Internal,
+                SymbolType::Global,
+            );
+
+            self.destructors_to_create
+                .insert(name.clone(), ds_to_create);
+
+            self.globals.add(sym.clone(), None)?;
+            Ok(Some(sym))
+        } else {
+            Ok(None)
+        }
     }
 
     pub fn get_destructor_call(
-        &self,
+        &mut self,
         self_expr: Expression,
         df: Option<DropFlag>,
         typ: &Type,
@@ -177,7 +261,7 @@ impl<'a> TypeCheckerContext<'a> {
         self.stack.pop();
     }
 
-    pub fn resolve(&self, name: &str) -> Option<Symbol> {
+    pub fn resolve(&self, name: &str) -> Option<SymbolPtr> {
         for sf in self.stack.iter().rev() {
             if let Some(s) = sf.resolve(name) {
                 return Some(s);
@@ -202,10 +286,13 @@ impl<'a> TypeCheckerContext<'a> {
     pub fn next_drop_flag(&mut self, var_name: &str) -> DropFlag {
         let df = DropFlag(format!("$df_{}_{}", var_name, self.drop_flag_counter));
         self.drop_flag_counter += 1;
+        df
+    }
+
+    pub fn add_drop_flag(&mut self, var_name: &str, df: DropFlag) {
         if let Some(s) = self.stack.last_mut() {
             s.drop_flags.insert(var_name.into(), df.clone());
         }
-        df
     }
 
     pub fn get_drop_flag(&self, expr: &Expression) -> Option<DropFlag> {
@@ -230,7 +317,7 @@ impl<'a> TypeCheckerContext<'a> {
         None
     }
 
-    pub fn add(&mut self, symbol: Symbol) -> CompileResult<()> {
+    pub fn add(&mut self, symbol: SymbolPtr) -> CompileResult<()> {
         match symbol.symbol_type {
             SymbolType::Normal => {
                 let param = address_of(
@@ -238,7 +325,11 @@ impl<'a> TypeCheckerContext<'a> {
                     symbol.span.clone(),
                 );
                 let df = self.next_drop_flag(&symbol.name);
-                let ds = self.get_destructor_call(param, Some(df), &symbol.typ)?;
+                let ds = self.get_destructor_call(param, Some(df.clone()), &symbol.typ)?;
+                if ds.is_some() {
+                    self.add_drop_flag(&symbol.name, df);
+                }
+
                 if let Some(sf) = self.stack.last_mut() {
                     sf.add(symbol, ds)
                 } else {

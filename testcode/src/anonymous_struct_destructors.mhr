@@ -1,0 +1,16 @@
+#ret: 42
+
+var destruct_counter = 0
+
+struct Box:
+    ptr: *int
+
+fn ~Box(self):
+    destruct_counter += *self.ptr
+    delete self.ptr
+
+fn main() -> int:
+    let a = {name: "blaat", b: Box{new 42}}
+    @drop(&a)
+    return destruct_counter
+

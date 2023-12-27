@@ -3,7 +3,7 @@ use std::ffi::{c_uint, c_ulonglong};
 use crate::ast::{ptr_type, BinaryOperator, Type, UnaryOperator};
 use crate::compileerror::CompileResult;
 use crate::compileerror::{code_gen_error, code_gen_result};
-use crate::lazycode::{ByteCodeProperty, CallArg, Constant, Operand};
+use crate::lazycode::{ByteCodeProperty, CallArg, Constant, Operand, OPTIONAL_DATA_IDX};
 #[allow(unused)]
 use crate::llvmbackend::instructions::type_name;
 
@@ -415,7 +415,7 @@ unsafe fn gen_optional(
     let idx = if inner.is_some() { 0 } else { 1 };
     vr.set_property(ctx, ByteCodeProperty::SumTypeIndex, idx)?;
     if let Some(inner) = inner {
-        let mem_ptr = vr.get_member_ptr_static(ctx, idx)?;
+        let mem_ptr = vr.get_member_ptr_static(ctx, OPTIONAL_DATA_IDX as usize)?;
         gen_operand_dst(ctx, inner, &mem_ptr)?;
     }
     Ok(vr)

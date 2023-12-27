@@ -48,15 +48,14 @@ impl Default for Pos {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct Span {
-    pub file: String,
-    pub start: Pos,
-    pub end: Pos,
+pub enum Span {
+    File { file: String, start: Pos, end: Pos },
+    Internal,
 }
 
 impl Span {
     pub fn new(file: &str, start: Pos, end: Pos) -> Span {
-        Span {
+        Span::File {
             file: file.into(),
             start,
             end,
@@ -64,32 +63,58 @@ impl Span {
     }
 
     pub fn single(file: &str, start: Pos) -> Span {
-        Span {
+        Span::File {
             file: file.into(),
             start,
             end: start,
         }
     }
 
+    pub fn end(&self) -> Pos {
+        if let Span::File { end, .. } = self {
+            *end
+        } else {
+            Pos::default()
+        }
+    }
+
     pub fn merge(a: &Span, b: &Span) -> Span {
-        let s = if a.start < b.start { a.start } else { b.start };
-        let e = if a.end >= b.end { a.end } else { b.end };
-        Span::new(&a.file, s, e)
+        match (a, b) {
+            (
+                Span::File { file, start, end },
+                Span::File {
+                    start: b_start,
+                    end: b_end,
+                    ..
+                },
+            ) => {
+                let s = if start < b_start { start } else { b_start };
+                let e = if end >= b_end { end } else { b_end };
+                Span::new(&file, *s, *e)
+            }
+            _ => Span::Internal,
+        }
     }
 
     pub fn expanded(&self, new_end: Pos) -> Span {
-        Span::new(&self.file, self.start, new_end)
+        match self {
+            Span::File { file, start, .. } => Span::new(file, *start, new_end),
+            Span::Internal => Span::Internal,
+        }
     }
 }
 
 impl Default for Span {
     fn default() -> Self {
-        Span::single("", Pos::default())
+        Span::Internal
     }
 }
 
 impl fmt::Display for Span {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{}:{} -> {}", self.file, self.start, self.end)
+        match self {
+            Span::File { file, start, end } => write!(f, "{}:{} -> {}", file, start, end),
+            Span::Internal => write!(f, "internal"),
+        }
     }
 }

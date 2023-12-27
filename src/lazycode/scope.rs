@@ -4,29 +4,7 @@ use crate::{
 };
 
 use super::{compiler::expr_to_bc, instruction::Label, ByteCodeModule, Instruction, Operand};
-
-/*
-#[derive(Debug)]
-pub struct ScopePath {
-    path: Vec<(BasicBlockRef, usize)>,
-}
-
-impl ScopePath {
-    fn parent(&self) -> Option<ScopePath> {
-        if self.path.len() <= 1 {
-            None
-        } else {
-            let parent_len = self.path.len() - 1;
-            Some(ScopePath{
-                path: self.path.iter().take(parent_len).cloned().collect(),
-            })
-        }
-    }
-
-    fn p
-}
-
-*/
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum ScopeNode {
@@ -41,16 +19,30 @@ pub struct Scope {
     parent_unwind: Vec<Expression>,
     label_counter: usize,
     sig: FunctionSignature,
+    vars: HashMap<String, Operand>,
 }
 
 impl Scope {
-    pub fn new(sig: FunctionSignature) -> Self {
+    pub fn new(sig: FunctionSignature, toplevel: bool) -> Self {
+        let mut vars = HashMap::new();
+        if toplevel {
+            for arg in &sig.args {
+                vars.insert(
+                    arg.name.clone(),
+                    Operand::Var {
+                        name: arg.name.clone(),
+                        typ: arg.typ.clone(),
+                    },
+                );
+            }
+        }
         Scope {
             sig,
             nodes: Vec::new(),
             unwind: Vec::new(),
             parent_unwind: Vec::new(),
             label_counter: 1,
+            vars,
         }
     }
     pub fn add_unwind_call(&mut self, e: Expression) {
@@ -103,6 +95,7 @@ impl Scope {
             typ: typ.clone(),
         };
 
+        self.vars.insert(name.clone(), var.safe_clone());
         self.add(Instruction::Alias { name, value, typ });
         var
     }
@@ -114,11 +107,16 @@ impl Scope {
             typ: typ.clone(),
         };
 
+        self.vars.insert(name.clone(), var.safe_clone());
         // Ignore void types
         if typ != Type::Void {
             self.add(Instruction::Declare { name, init, typ });
         }
         var
+    }
+
+    pub fn get_var(&self, name: &str) -> Option<&Operand> {
+        self.vars.get(name)
     }
 
     pub fn exit(&mut self, bc_mod: &mut ByteCodeModule, target: &Target, with: Instruction) {
@@ -149,7 +147,7 @@ impl Scope {
     where
         F: FnOnce(&mut Scope),
     {
-        let mut scope = Scope::new(self.sig.clone());
+        let mut scope = Scope::new(self.sig.clone(), false);
         scope.label_counter = self.label_counter;
         scope.parent_unwind = self.parent_unwind.clone();
         scope.parent_unwind.extend(self.unwind.iter().cloned());

@@ -1,6 +1,6 @@
 use super::{
-    prefix, Call, Expression, ExternalFunction, Function, GlobalBinding, Import, ImportName, Symbol, SymbolType,
-    TreePrinter, TypeDeclaration,
+    prefix, Call, Expression, ExternalFunction, Function, GlobalBinding, Import, ImportName, Symbol, SymbolPtr,
+    SymbolType, TreePrinter, TypeDeclaration,
 };
 use crate::compileerror::CompileResult;
 use std::collections::{HashMap, HashSet};
@@ -32,7 +32,7 @@ impl Module {
         !self.functions.contains_key(&call.callee.name) && !self.externals.contains_key(&call.callee.name)
     }
 
-    fn get_imported_symbols(&self) -> HashMap<String, Symbol> {
+    fn get_imported_symbols(&self) -> HashMap<String, SymbolPtr> {
         let mut symbols = HashMap::new();
         for func in self.functions.values() {
             let mut find_imported_calls = |e: &Expression| -> CompileResult<()> {

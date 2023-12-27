@@ -36,6 +36,15 @@ fn resolve_type_helper(ctx: &TypeCheckerContext, typ: &Type) -> (Option<Type>, T
             }
         }
 
+        Type::Optional(inner) => {
+            let r = resolve_type_helper(ctx, inner);
+            if let (Some(typ), TypeResolved::Yes) = r {
+                (Some(optional_type(typ)), TypeResolved::Yes)
+            } else {
+                r
+            }
+        }
+
         Type::Result(rt) => {
             let mut dst = ResultType {
                 ok_typ: rt.ok_typ.clone(),
@@ -56,7 +65,10 @@ fn resolve_type_helper(ctx: &TypeCheckerContext, typ: &Type) -> (Option<Type>, T
                 .resolve(name)
                 .map(|r| {
                     if let Type::Interface(_) = r.typ {
-                        (Some(generic_type_with_constraints(vec![r.typ])), TypeResolved::Yes)
+                        (
+                            Some(generic_type_with_constraints(vec![r.typ.clone()])),
+                            TypeResolved::Yes,
+                        )
                     } else {
                         (None, TypeResolved::Yes)
                     }
@@ -141,10 +153,10 @@ fn resolve_struct_member_types(
             }
         }
 
-        member_types.push(struct_member(&m.name, m.typ.clone()));
+        member_types.push(struct_member(m.name.clone(), m.typ.clone()));
     }
 
-    sd.typ = struct_type(&sd.name, member_types);
+    sd.typ = struct_type(Some(sd.name.clone()), member_types);
     Ok(TypeResolved::Yes)
 }
 
@@ -160,6 +172,7 @@ fn resolve_sum_case_types(
     let mut case_types = Vec::with_capacity(st.cases.len());
     for c in &mut st.cases {
         if let Some(sd) = &mut c.data {
+            sd.name = c.name.clone();
             if resolve_struct_member_types(ctx, sd, mode)? == TypeResolved::No {
                 return Ok(TypeResolved::No);
             } else {
