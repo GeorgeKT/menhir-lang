@@ -1,11 +1,14 @@
 use crate::lazycode::ByteCodeModule;
 
+mod emptyblocks;
 mod unusedfunctions;
 
+use self::emptyblocks::eliminate_empty_blocks;
 use self::unusedfunctions::eliminate_unused_functions;
 
 pub fn optimize_module(module: &mut ByteCodeModule) {
     eliminate_unused_functions(module);
+    eliminate_empty_blocks(module);
 }
 
 #[cfg(test)]
