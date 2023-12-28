@@ -5,8 +5,8 @@ enum Option:
 
 fn unwrap_or(opt: Option, default: int) -> int:
     match opt:
-        Option::Some{i} => i
+        Option::Some{v} => v
         Option::None => default
 
 fn main() -> int:
-    unwrap_or(Option::Some{5}, 1) + unwrap_or(Option::None, 1)
+    unwrap_or(Option::Some{v: 5}, 1) + unwrap_or(Option::None, 1)

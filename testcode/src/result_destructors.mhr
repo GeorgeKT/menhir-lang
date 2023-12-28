@@ -12,10 +12,10 @@ fn ~Box(self):
 fn main() -> int:
     var ret = 0
     while destruct_counter < 7:
-        let opt: Box ! int = ok Box{new 6}
+        let opt: Box ! int = ok Box{ptr: new 6}
         match opt:
-            ok v => 
-                ret += *v.ptr 
+            ok Box{ptr} => 
+                ret += *ptr 
             error x => 
                 ret -= x
     return ret

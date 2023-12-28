@@ -13,11 +13,11 @@ fn increment(var foo: *Foo):
         Foo::Full{*n} =>
             *n = *n + 1
         Foo::Empty =>
-            *foo = Foo::Full{20}
+            *foo = Foo::Full{n: 20}
 
 fn main() -> int:
     let f = Foo::Empty
     increment(&f)
-    let g = Foo::Full{21}
+    let g = Foo::Full{n: 21}
     increment(&g)
     value_of(f) + value_of(g)

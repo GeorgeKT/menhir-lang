@@ -19,5 +19,5 @@ fn foo(x: $(Product + Sum)) -> int:
     x.product() + x.sum()
 
 fn main() -> int:
-    let p = Point{7, 8}
+    let p = Point{x: 7, y: 8}
     foo(p)

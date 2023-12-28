@@ -12,6 +12,6 @@ fn ~Box(self):
 fn main() -> int:
     var ret = 0
     while destruct_counter < 10:
-        let b = Box{new 5}
+        let b = Box{ptr: new 5}
         ret += *b.ptr
     return ret 

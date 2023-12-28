@@ -629,19 +629,19 @@ pub fn add_struct_bindings(
     struct_type: &StructType,
     mutable: bool,
 ) -> CompileResult<()> {
-    for (binding, member) in b.bindings.iter_mut().zip(struct_type.members.iter()) {
-        if binding.name == "_" {
-            continue;
-        }
+    for binding in b.bindings.iter_mut() {
+        let (member_type, _) = struct_type
+            .get_member_type_and_index(&binding.name)
+            .ok_or_else(|| type_error(&b.span, format!("Struct has no member named {}", binding.name)))?;
 
         let mutable = match binding.mode {
             StructPatternBindingMode::Value => {
-                binding.typ = member.typ.clone();
+                binding.typ = member_type;
                 false
             }
 
             StructPatternBindingMode::Pointer => {
-                binding.typ = ptr_type(member.typ.clone());
+                binding.typ = ptr_type(member_type);
                 mutable
             }
         };
@@ -804,20 +804,14 @@ fn type_check_struct_members_in_initializer(
 
     let mut new_members = Vec::with_capacity(st.members.len());
 
-    for (idx, mi) in si.member_initializers.iter_mut().enumerate() {
-        let expected_type = if let Some(name) = &mi.name {
-            let (typ, idx) = st.get_member_type_and_index(&name).ok_or_else(|| {
-                type_error(
-                    &mi.initializer.span(),
-                    format!("Struct {} has no member {name}", st.get_name()),
-                )
-            })?;
-            mi.member_idx = idx;
-            typ
-        } else {
-            mi.member_idx = idx;
-            st.members[idx].typ.clone()
-        };
+    for mi in si.member_initializers.iter_mut() {
+        let (expected_type, idx) = st.get_member_type_and_index(&mi.name).ok_or_else(|| {
+            type_error(
+                &mi.initializer.span(),
+                format!("Struct {} has no member {}", st.get_name(), mi.name),
+            )
+        })?;
+        mi.member_idx = idx;
 
         let t = type_check_expression(ctx, &mut mi.initializer, Some(&expected_type), target)?;
 
@@ -841,11 +835,7 @@ fn type_check_struct_members_in_initializer(
             }
         }
 
-        if let Some(name) = &mi.name {
-            new_members.push(struct_member(name.clone(), expected_type));
-        } else {
-            new_members.push(struct_member(st.members[idx].name.clone(), expected_type));
-        }
+        new_members.push(struct_member(mi.name.clone(), expected_type));
     }
 
     si.member_initializers
@@ -860,13 +850,9 @@ fn type_check_anonymous_struct_initializer(
     target: &Target,
 ) -> TypeCheckResult {
     let mut new_members = Vec::with_capacity(si.member_initializers.len());
-    for (idx, mi) in si.member_initializers.iter_mut().enumerate() {
+    for mi in si.member_initializers.iter_mut() {
         let t = type_check_expression(ctx, &mut mi.initializer, None, target)?;
-        if let Some(name) = &mi.name {
-            new_members.push(struct_member(name.clone(), t));
-        } else {
-            new_members.push(struct_member(format!("_{idx}"), t));
-        }
+        new_members.push(struct_member(mi.name.clone(), t));
     }
     si.typ = struct_type(None, new_members);
     valid(si.typ.clone())

@@ -666,7 +666,7 @@ fn test_struct_initializer() {
     let target = Target::new(IntSize::I32, "");
     let e = th_expr(
         r#"
-Point{6, 7}
+Point{x: 6, y: 7}
 "#,
         &target,
     );
@@ -676,17 +676,17 @@ Point{6, 7}
             Some("Point".into()),
             vec![
                 StructMemberInitializer {
-                    name: None,
-                    initializer: number(6, span(2, 7, 2, 7), &target),
+                    name: "x".into(),
+                    initializer: number(6, span(2, 10, 2, 10), &target),
                     member_idx: 0,
                 },
                 StructMemberInitializer {
-                    name: None,
-                    initializer: number(7, span(2, 10, 2, 10), &target),
+                    name: "y".into(),
+                    initializer: number(7, span(2, 16, 2, 16), &target),
                     member_idx: 0
                 }
             ],
-            span(2, 1, 2, 11)
+            span(2, 1, 2, 17)
         ))
     )
 }
@@ -696,7 +696,7 @@ fn test_anonymous_struct_initializer() {
     let target = Target::new(IntSize::I32, "");
     let e = th_expr(
         r#"
-{6, 7}
+{x: 6, y: 7}
 "#,
         &target,
     );
@@ -706,17 +706,17 @@ fn test_anonymous_struct_initializer() {
             None,
             vec![
                 StructMemberInitializer {
-                    name: None,
-                    initializer: number(6, span(2, 2, 2, 2), &target),
+                    name: "x".into(),
+                    initializer: number(6, span(2, 5, 2, 5), &target),
                     member_idx: 0
                 },
                 StructMemberInitializer {
-                    name: None,
-                    initializer: number(7, span(2, 5, 2, 5), &target),
+                    name: "y".into(),
+                    initializer: number(7, span(2, 11, 2, 11), &target),
                     member_idx: 0
                 },
             ],
-            span(2, 1, 2, 6)
+            span(2, 1, 2, 12)
         ))
     )
 }

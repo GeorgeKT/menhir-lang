@@ -6,7 +6,7 @@ struct Fail:
 
 fn subtract_10(x: int) -> int ! Fail:
     if x < 10: 
-        return Fail{"x is too small"}
+        return Fail{msg: "x is too small"}
     return x - 10
 
 # fn subtract_20(x: int) -> int ! Fail: 

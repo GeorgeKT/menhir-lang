@@ -5,8 +5,8 @@ enum Option:
 
 fn unwrap_or(opt: Option<$a>, def: $a) -> $a:
     match opt:
-        Some{i} => i
+        Some{value} => value
         None => def
 
 fn main() -> int:
-    unwrap_or(None, 9) + unwrap_or(Some{7}, 9)
+    unwrap_or(None, 9) + unwrap_or(Some{value: 7}, 9)

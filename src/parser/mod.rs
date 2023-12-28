@@ -364,34 +364,15 @@ fn parse_optional_type(tq: &mut TokenQueue, indent_level: usize, target: &Target
 fn parse_struct_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<(Type, Span)> {
     let start = tq.expect(&TokenKind::OpenCurly)?.span;
     let mut members = Vec::new();
-    let mut using_member_names = false;
-    let mut idx = 0;
     while !tq.is_next(&TokenKind::CloseCurly) {
-        if tq
-            .peek()
-            .map(|t| matches!(&t.kind, TokenKind::Identifier(_)))
-            .unwrap_or(false)
-            && tq.is_next_at(1, &TokenKind::Colon)
-        {
-            using_member_names = true;
-            let (name, _) = tq.expect_identifier()?;
-            tq.expect(&TokenKind::Colon)?;
-            let (t, _) = parse_type(tq, indent_level, target)?;
-            members.push(struct_member(name, t));
-        } else if using_member_names {
-            return parse_error_result(
-                &start.expanded(tq.pos()),
-                "If one member of a struct type is named all members must be named",
-            );
-        } else {
-            let (t, _) = parse_type(tq, indent_level, target)?;
-            members.push(struct_member(format!("_{idx}"), t));
-        }
+        let (name, _) = tq.expect_identifier()?;
+        tq.expect(&TokenKind::Colon)?;
+        let (t, _) = parse_type(tq, indent_level, target)?;
+        members.push(struct_member(name, t));
 
         if !tq.is_next(&TokenKind::CloseCurly) {
             tq.expect(&TokenKind::Comma)?;
         }
-        idx += 1;
     }
     tq.expect(&TokenKind::CloseCurly)?;
     let span = start.expanded(tq.pos());
@@ -867,36 +848,15 @@ fn parse_struct_initializer(
     };
 
     let mut expressions = Vec::new();
-    let mut using_member_names = false;
     while !tq.is_next(&TokenKind::CloseCurly) {
-        if tq
-            .peek()
-            .map(|t| matches!(&t.kind, TokenKind::Identifier(_)))
-            .unwrap_or(false)
-            && tq.is_next_at(1, &TokenKind::Colon)
-        {
-            using_member_names = true;
-            let (name, _) = tq.expect_identifier()?;
-            tq.expect(&TokenKind::Colon)?;
-            let e = parse_expression(tq, indent_level, target)?;
-            expressions.push(StructMemberInitializer {
-                name: Some(name),
-                initializer: e,
-                member_idx: 0,
-            });
-        } else if using_member_names {
-            return parse_error_result(
-                &span.expanded(tq.pos()),
-                "When initializing one struct member by name, all members must be initialized by name",
-            );
-        } else {
-            let e = parse_expression(tq, indent_level, target)?;
-            expressions.push(StructMemberInitializer {
-                name: None,
-                initializer: e,
-                member_idx: 0,
-            });
-        }
+        let (name, _) = tq.expect_identifier()?;
+        tq.expect(&TokenKind::Colon)?;
+        let e = parse_expression(tq, indent_level, target)?;
+        expressions.push(StructMemberInitializer {
+            name,
+            initializer: e,
+            member_idx: 0,
+        });
 
         if !tq.is_next(&TokenKind::CloseCurly) {
             tq.expect(&TokenKind::Comma)?;

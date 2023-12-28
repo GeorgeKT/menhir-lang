@@ -36,7 +36,7 @@ pub fn struct_declaration(name: &str, members: Vec<StructMemberDeclaration>, spa
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct StructMemberInitializer {
-    pub name: Option<String>,
+    pub name: String,
     pub initializer: Expression,
     pub member_idx: usize,
 }
@@ -87,11 +87,7 @@ impl TreePrinter for StructInitializer {
             self.span
         );
         for mi in &self.member_initializers {
-            if let Some(name) = &mi.name {
-                println!("{} {} (idx: {}):", p, name, mi.member_idx);
-            } else {
-                println!("{} {}:", p, mi.member_idx);
-            }
+            println!("{} {} (idx: {}):", p, mi.name, mi.member_idx);
             mi.initializer.print(level + 2);
         }
     }

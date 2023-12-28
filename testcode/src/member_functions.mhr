@@ -7,5 +7,5 @@ fn Foo.add(self, num: int) -> int:
 
 
 fn main() -> int:
-    let f = Foo{7}
+    let f = Foo{bar: 7}
     f.add(4)

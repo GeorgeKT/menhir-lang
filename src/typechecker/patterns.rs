@@ -39,20 +39,9 @@ fn type_check_struct_pattern(
             let case = &st.cases[idx];
             match &case.typ {
                 Some(Type::Struct(s)) => {
-                    if s.members.len() != p.bindings.len() {
-                        type_error_result(
-                            &p.span,
-                            format!(
-                                "Wrong number of bindings in pattern match (expecting {}, found {})",
-                                s.members.len(),
-                                p.bindings.len()
-                            ),
-                        )
-                    } else {
-                        add_struct_bindings(ctx, p, s, target_is_mutable)?;
-                        p.typ = Type::Sum(st.clone());
-                        Ok(())
-                    }
+                    add_struct_bindings(ctx, p, s, target_is_mutable)?;
+                    p.typ = Type::Sum(st.clone());
+                    Ok(())
                 }
                 _ => type_error_result(
                     &p.span,

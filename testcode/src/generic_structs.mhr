@@ -4,4 +4,4 @@ struct Pair{first: $a, second: $b}
 fn add(p: Pair<$a, $a>) -> $a:
     p.first + p.second
 
-fn main() -> int: add(Pair{4, 14})
+fn main() -> int: add(Pair{first: 4, second: 14})

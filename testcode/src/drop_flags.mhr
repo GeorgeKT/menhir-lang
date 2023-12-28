@@ -7,7 +7,7 @@ fn ~Box(self):
     delete self.ptr
 
 fn main() -> int:
-    let a = Box{new 42}
+    let a = Box{ptr: new 42}
     var ret = 0
     if *a.ptr > 10:
         ret = *a.ptr

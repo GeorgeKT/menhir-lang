@@ -5,14 +5,14 @@ enum PairOrSingle:
 
 fn pair_or_single(a: int, b: int) -> PairOrSingle:
     if a != b:
-        Pair{a, b}
+        Pair{first: a, second: b}
     else
-        Single{a}
+        Single{first: a}
 
 fn value_of(v: PairOrSingle) -> int:
     match v:
-        Pair{a, b} => a + b
-        Single{a} => a
+        Pair{first, second} => first + second 
+        Single{first} => first
 
 fn main() -> int:
     value_of(pair_or_single(4, 5)) + value_of(pair_or_single(3, 3))

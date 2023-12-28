@@ -7,7 +7,7 @@ fn dot(a: Vec2D, b: Vec2D) -> int:
     a.x * b.x + a.y * b.y
 
 fn add(a: Vec2D, b: Vec2D) -> Vec2D:
-    Vec2D{a.x + b.x, a.y + b.y}
+    Vec2D{x: a.x + b.x, y: a.y + b.y}
 
 fn main() -> int:
-    dot(Vec2D{4, 5}, add(Vec2D{3, 4}, Vec2D{2, 2}))
+    dot(Vec2D{x: 4, y: 5}, add(Vec2D{x: 3, y: 4}, Vec2D{x: 2, y: 2}))

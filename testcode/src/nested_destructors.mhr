@@ -15,7 +15,7 @@ struct Outer:
 fn main() -> int:
     var ret = 0
     while destruct_counter < 7: 
-        let i = Outer{Inner{new 6}}
+        let i = Outer{inner: Inner{ptr: new 6}}
         ret += *i.inner.ptr 
     return ret
         

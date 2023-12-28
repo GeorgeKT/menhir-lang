@@ -11,7 +11,7 @@ fn ~Box(self):
 
 
 fn main() -> int:
-    let arr = [Box{new 8}, Box{new 5}, Box{new 9}, Box{new 3}]
+    let arr = [Box{ptr: new 8}, Box{ptr: new 5}, Box{ptr: new 9}, Box{ptr: new 3}]
     var sum = 0
     for a in arr:
         sum += *a.ptr 

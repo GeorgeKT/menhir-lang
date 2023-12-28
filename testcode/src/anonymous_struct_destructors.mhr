@@ -10,7 +10,7 @@ fn ~Box(self):
     delete self.ptr
 
 fn main() -> int:
-    let a = {name: "blaat", b: Box{new 42}}
+    let a = {name: "blaat", b: Box{ptr: new 42}}
     @drop(&a)
     return destruct_counter
 

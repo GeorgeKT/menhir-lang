@@ -71,7 +71,10 @@ impl TokenQueue {
             if tok.kind == *kind {
                 Ok(tok)
             } else {
-                parse_error_result(&tok.span, format!("Unexpected token {}, expecting {}", tok.kind, kind))
+                parse_error_result(
+                    &tok.span,
+                    format!("Unexpected token '{}', expecting '{}'", tok.kind, kind),
+                )
             }
         })
     }

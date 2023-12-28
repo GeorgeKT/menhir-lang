@@ -1,6 +1,6 @@
 #ret:9
-fn make_pair(a: int, b: int) -> {int, int}:
-    {a, b}
+fn make_pair(a: int, b: int) -> {left: int, right: int}:
+    {left: a, right: b}
 
 fn main() -> int:
     let {left, right} = make_pair(4, 5)

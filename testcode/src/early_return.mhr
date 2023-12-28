@@ -11,11 +11,11 @@ fn ~Box(self):
 
 fn run() -> int:
     var x = 77
-    let a = Box{new 7}
+    let a = Box{ptr: new 7}
     while x < 100:
-        let b = Box{new 8}
+        let b = Box{ptr: new 8}
         if x > 42:
-            let c = Box{new 8}
+            let c = Box{ptr: new 8}
             return 42
         x += 1
     x
