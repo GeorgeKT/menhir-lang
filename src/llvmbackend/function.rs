@@ -96,7 +96,7 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction) -> Compil
                         // and use that instead
                         let argcopy = LLVMBuildAlloca(ctx.builder, ctx.resolve_type(&arg.typ)?, cstr!("argcopy"));
                         LLVMBuildStore(ctx.builder, var, argcopy);
-                        ctx.set_variable(&arg.name, ValueRef::new(argcopy, ptr_type(arg.typ.clone())))?;
+                        ctx.set_variable(&arg.name, ValueRef::allocated(argcopy, ptr_type(arg.typ.clone())))?;
                     } else {
                         ctx.set_variable(&arg.name, ValueRef::new(var, arg.typ.clone()))?;
                     }

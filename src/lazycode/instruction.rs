@@ -93,11 +93,16 @@ impl fmt::Display for Instruction {
 }
 
 pub fn ret_instr(value: Operand) -> Instruction {
-    if let Operand::Var { typ: Type::Void, .. } = &value {
-        // Ignore void variables
-        Instruction::Return { value: Operand::Void }
-    } else {
-        Instruction::Return { value }
+    match &value {
+        Operand::VarPtr { typ, .. } | Operand::Var { typ, .. } => {
+            if typ == &Type::Void || typ.is_pointer_to(&Type::Void) {
+                Instruction::Return { value: Operand::Void }
+            } else {
+                Instruction::Return { value }
+            }
+        }
+
+        _ => Instruction::Return { value },
     }
 }
 

@@ -13,6 +13,7 @@ use crate::compileerror::{
 use crate::span::Span;
 use crate::target::Target;
 use std::ops::Deref;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub enum TypeCheckAction {
@@ -230,6 +231,22 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp, target: 
     let left_type = type_check_expression(ctx, &mut b.left, None, target)?;
     let right_type = type_check_expression(ctx, &mut b.right, None, target)?;
     if left_type.is_generic() || right_type.is_generic() {
+        return valid(left_type);
+    }
+
+    if left_type.is_pointer() {
+        if !matches!(&b.operator, BinaryOperator::Add | BinaryOperator::Sub) {
+            return type_error_result(
+                &b.span,
+                format!("Cannot do pointer arithmetic with operator {}", b.operator),
+            );
+        }
+
+        if !matches!(&right_type, Type::Int(_) | Type::UInt(_)) {
+            return type_error_result(&b.span, format!("Cannot do pointer arithmetic with type {right_type}"));
+        }
+
+        b.typ = left_type.clone();
         return valid(left_type);
     }
 
@@ -1204,10 +1221,7 @@ fn type_check_index_operation(
     target: &Target,
 ) -> CompileResult<Type> {
     let target_type = type_check_expression(ctx, &mut iop.target, None, target)?;
-    let index_type = match &mut iop.index_expr {
-        IndexMode::Index(i) => type_check_expression(ctx, i, None, target)?,
-        IndexMode::Range(r) => type_check_range(ctx, r, target)?,
-    };
+    let index_type = type_check_expression(ctx, &mut iop.index_expr, None, target)?;
 
     match index_type {
         Type::Int(_) | Type::UInt(_) | Type::Range(_) => (),
@@ -1222,12 +1236,8 @@ fn type_check_index_operation(
         }
     }
 
-    let index_not_allowed = || {
-        type_error_result(
-            &iop.span,
-            format!("Cannot an index an expression of type {}", target_type),
-        )
-    };
+    let index_not_allowed =
+        || type_error_result(&iop.span, format!("Cannot index an expression of type {}", target_type));
 
     let typ = match &target_type {
         Type::Slice(st) => st.element_type.clone(),
@@ -1235,7 +1245,7 @@ fn type_check_index_operation(
         Type::Pointer(pt) => match pt.deref() {
             Type::Slice(st) => st.element_type.clone(),
             Type::Array(at) => at.element_type.clone(),
-            _ => return index_not_allowed(),
+            pt => pt.clone(),
         },
         _ => return index_not_allowed(),
     };
@@ -1347,6 +1357,31 @@ fn type_check_while(ctx: &mut TypeCheckerContext, w: &mut WhileLoop, target: &Ta
 fn type_check_for(ctx: &mut TypeCheckerContext, f: &mut ForLoop, target: &Target) -> TypeCheckResult {
     let typ = type_check_expression(ctx, &mut f.iterable, None, target)?;
     match typ {
+        Type::Range(it) => {
+            let Expression::Range(r) = &f.iterable else {
+                panic!("Expecting range expression here");
+            };
+
+            if r.start.is_none() || r.end.is_none() {
+                return type_error_result(
+                    &r.span,
+                    "Range start and end must be provided if the range is used in a for loop",
+                );
+            }
+
+            ctx.enter_scope(None);
+            f.loop_variable_type = it.deref().clone();
+            ctx.add(Symbol::new(
+                &f.loop_variable,
+                &f.loop_variable_type,
+                false,
+                &f.span,
+                SymbolType::Normal,
+            ))?;
+            type_check_expression(ctx, &mut f.body, None, target)?;
+            ctx.exit_scope();
+            valid(Type::Void)
+        }
         // Iterable
         Type::String | Type::Array(_) | Type::Slice(_) => {
             ctx.enter_scope(None);
@@ -1475,15 +1510,15 @@ fn type_check_literal(
     }
 }
 
-fn type_check_range(ctx: &mut TypeCheckerContext, r: &mut Range, target: &Target) -> CompileResult<Type> {
+fn type_check_range(ctx: &mut TypeCheckerContext, r: &mut Range, target: &Target) -> TypeCheckResult {
     let start_type = if let Some(start) = &mut r.start {
-        type_check_expression(ctx, start, None, target)?
+        type_check_expression(ctx, start, Some(&target.native_int_type), target)?
     } else {
         target.native_uint_type.clone()
     };
 
     let end_type = if let Some(end) = &mut r.end {
-        type_check_expression(ctx, end, None, target)?
+        type_check_expression(ctx, end, Some(&start_type), target)?
     } else {
         target.native_uint_type.clone()
     };
@@ -1492,11 +1527,20 @@ fn type_check_range(ctx: &mut TypeCheckerContext, r: &mut Range, target: &Target
         (Type::UInt(s), Type::UInt(e)) => {
             // Take biggest int IntSize
             r.typ = if s.size_in_bits() > e.size_in_bits() {
-                Type::Range(*s)
+                Type::Range(Rc::new(Type::UInt(*s)))
             } else {
-                Type::Range(*e)
+                Type::Range(Rc::new(Type::UInt(*e)))
             };
-            Ok(r.typ.clone())
+            valid(r.typ.clone())
+        }
+        (Type::Int(s), Type::Int(e)) => {
+            // Take biggest int IntSize
+            r.typ = if s.size_in_bits() > e.size_in_bits() {
+                Type::Range(Rc::new(Type::Int(*s)))
+            } else {
+                Type::Range(Rc::new(Type::Int(*e)))
+            };
+            valid(r.typ.clone())
         }
         _ => type_error_result(
             &r.span,
@@ -1681,6 +1725,7 @@ pub fn type_check_expression(
         }
         Expression::ToOkResult(e) => type_check_to_ok_result(ctx, e, type_hint, target),
         Expression::ToErrResult(e) => type_check_to_err_result(ctx, e, type_hint, target),
+        Expression::Range(r) => type_check_range(ctx, r, target),
     };
 
     match type_check_result {
@@ -1709,27 +1754,44 @@ fn type_check_global_binding(
     Ok(())
 }
 
+fn type_check<F>(errors: &mut Vec<CompileError>, mut fun: F)
+where
+    F: FnMut() -> CompileResult<()>,
+{
+    if let Err(e) = fun() {
+        errors.push(e)
+    }
+}
+
 pub fn type_check_module(module: &mut Module, target: &Target, imports: &ImportMap) -> CompileResult<()> {
     let mut destructors_added = false;
     loop {
+        let mut errors = Vec::new();
         let mut ctx = TypeCheckerContext::new(ImportSymbolResolver::ImportMap(imports));
-        resolve_types(&mut ctx, module)?;
+        type_check(&mut errors, || resolve_types(&mut ctx, module));
 
         for global in module.globals.values_mut() {
-            type_check_global_binding(&mut ctx, global, target)?;
-            ctx.add(Symbol::new(
-                &global.name,
-                &global.typ,
-                global.mutable,
-                &global.span,
-                SymbolType::Global,
-            ))?;
+            type_check(&mut errors, || {
+                type_check_global_binding(&mut ctx, global, target)?;
+                ctx.add(Symbol::new(
+                    &global.name,
+                    &global.typ,
+                    global.mutable,
+                    &global.span,
+                    SymbolType::Global,
+                ))?;
+                Ok(())
+            });
         }
 
         for f in module.functions.values_mut() {
             if !f.type_checked {
-                type_check_function(&mut ctx, f, target)?;
+                type_check(&mut errors, || type_check_function(&mut ctx, f, target))
             }
+        }
+
+        if !errors.is_empty() {
+            return CompileResult::Err(CompileError::Many(errors));
         }
 
         let count = module.functions.len();

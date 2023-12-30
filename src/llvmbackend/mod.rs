@@ -109,7 +109,7 @@ unsafe fn gen_global(ctx: &mut Context, glob_name: &str, glob_value: &Constant) 
     let glob = LLVMAddGlobal(ctx.module, ctx.resolve_type(&v.typ)?, name.as_ptr());
     LLVMSetLinkage(glob, LLVMLinkage::LLVMExternalLinkage);
     LLVMSetInitializer(glob, v.value);
-    ctx.set_variable(glob_name, ValueRef::new(glob, ptr_type(v.typ)))
+    ctx.set_variable(glob_name, ValueRef::allocated(glob, ptr_type(v.typ)))
 }
 
 unsafe fn add_metadata(ctx: &mut Context, module_name: &str, desc: &PackageDescription) -> CompileResult<()> {

@@ -327,24 +327,7 @@ fn substitute_index_op(
     iop: &IndexOperation,
 ) -> CompileResult<IndexOperation> {
     let target = substitute_expr(ctx, generic_args, &iop.target)?;
-    let index_expr = match &iop.index_expr {
-        IndexMode::Index(i) => IndexMode::Index(substitute_expr(ctx, generic_args, i)?),
-        IndexMode::Range(r) => {
-            let typ = make_concrete(ctx, generic_args, &r.typ, &r.span)?;
-            let start = if let Some(start) = &r.start {
-                Some(substitute_expr(ctx, generic_args, start)?)
-            } else {
-                None
-            };
-
-            let end = if let Some(end) = &r.end {
-                Some(substitute_expr(ctx, generic_args, end)?)
-            } else {
-                None
-            };
-            IndexMode::Range(range(start, end, typ, r.span.clone()))
-        }
-    };
+    let index_expr = substitute_expr(ctx, generic_args, &iop.index_expr)?;
     Ok(IndexOperation {
         target,
         index_expr,
@@ -636,6 +619,21 @@ fn substitute_expr(
             let typ = make_concrete(ctx, generic_args, &r.result_type, &r.inner.span())?;
             let e = substitute_expr(ctx, generic_args, &r.inner)?;
             Ok(to_err_result(e, typ, r.span.clone()))
+        }
+        Expression::Range(r) => {
+            let typ = make_concrete(ctx, generic_args, &r.typ, &r.span)?;
+            let start = if let Some(start) = &r.start {
+                Some(substitute_expr(ctx, generic_args, start)?)
+            } else {
+                None
+            };
+
+            let end = if let Some(end) = &r.end {
+                Some(substitute_expr(ctx, generic_args, end)?)
+            } else {
+                None
+            };
+            Ok(range(start, end, typ, r.span.clone()))
         }
     }
 }

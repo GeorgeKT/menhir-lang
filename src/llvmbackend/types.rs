@@ -139,9 +139,9 @@ unsafe fn optional_to_llvm_type(
 unsafe fn range_to_llvm_type(
     context: LLVMContextRef,
     target_machine: &TargetMachine,
-    range_int_size: IntSize,
+    range_int_type: &Type,
 ) -> CompileResult<LLVMTypeRef> {
-    let int_type = to_llvm_type(context, target_machine, &Type::UInt(range_int_size))?;
+    let int_type = to_llvm_type(context, target_machine, range_int_type)?;
     let mut member_types = [int_type, int_type];
     Ok(LLVMStructTypeInContext(
         context,
@@ -184,7 +184,7 @@ pub unsafe fn to_llvm_type(
         Type::Sum(st) => sum_type_to_llvm_type(context, target_machine, st),
         Type::Optional(ot) => optional_to_llvm_type(context, target_machine, ot),
         Type::Result(rt) => result_type_to_llvm_type(context, target_machine, rt),
-        Type::Range(int_size) => range_to_llvm_type(context, target_machine, *int_size),
+        Type::Range(int_type) => range_to_llvm_type(context, target_machine, int_type),
         Type::Generic(_) => {
             code_gen_result("Internal Compiler Error: All generic types must have been resolved before code generation")
         }

@@ -6,6 +6,7 @@ pub use self::instruction::Instruction;
 pub use self::operand::{ByteCodeProperty, CallArg, Constant, Operand};
 pub use self::optimizer::*;
 pub use self::patterns::OPTIONAL_DATA_IDX;
+use self::scope::StackPtr;
 pub use self::scope::{Scope, ScopeNode};
 
 mod compiler;
@@ -23,6 +24,7 @@ pub struct ByteCodeModule {
     pub functions: HashMap<String, ByteCodeFunction>,
     pub imported_functions: Vec<ByteCodeFunction>,
     pub globals: HashMap<String, Constant>,
+    pub stack: StackPtr,
 }
 
 impl ByteCodeModule {

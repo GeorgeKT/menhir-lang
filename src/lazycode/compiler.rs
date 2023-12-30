@@ -1,11 +1,13 @@
 use std::collections::HashMap;
+use std::ops::Deref;
+use std::rc::Rc;
 
 use super::consteval::expr_to_const;
 use super::function::ByteCodeFunction;
 use super::instruction::{branch_if_instr, branch_instr, ret_instr, store_instr, Instruction, Label};
 use super::operand::{call_arg, ByteCodeProperty, CallArg, Operand};
 use super::patterns::{pattern_to_bc, RESULT_OK_PATTERN_MATCH_IDX};
-use super::scope::Scope;
+use super::scope::{Scope, Stack};
 use super::{ByteCodeModule, OPTIONAL_DATA_IDX};
 use crate::ast::*;
 use crate::build::Package;
@@ -38,13 +40,9 @@ fn literal_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, lit: &Literal, 
 fn name_ref_to_bc(scope: &Scope, nr: &NameRef) -> Operand {
     let add_name_ref = |nr: &NameRef| {
         if let Some(var) = scope.get_var(&nr.name) {
-            var.safe_clone()
+            var
         } else {
-            // Probably a global
-            Operand::Var {
-                name: nr.name.clone(),
-                typ: nr.typ.clone(),
-            }
+            panic!("ICE: Unknown name {}", nr.name);
         }
     };
 
@@ -257,9 +255,9 @@ fn assign_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, assign: &Assign,
     match &assign.left {
         AssignTarget::Var(nr) => {
             scope.add(store_instr(
-                Operand::Var {
+                Operand::VarPtr {
                     name: nr.name.clone(),
-                    typ: nr.typ.clone(),
+                    typ: nr.typ.ptr_of(),
                 },
                 value,
             ));
@@ -272,31 +270,16 @@ fn assign_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, assign: &Assign,
 
         AssignTarget::Dereference(d) => {
             let inner = expr_to_bc(bc_mod, scope, &d.inner, target);
-            scope.add(store_instr(
-                /*Operand::Dereference {
-                    inner: Box::new(inner),
-                    typ: d.typ.clone(),
-                },*/
-                inner, value,
-            ));
+            scope.add(store_instr(inner, value));
         }
 
         AssignTarget::IndexOperation(iop) => {
             let tgt = expr_to_bc(bc_mod, scope, &iop.target, target);
-
-            match &iop.index_expr {
-                IndexMode::Index(i) => {
-                    let idx = expr_to_bc(bc_mod, scope, i, target);
-                    scope.add(store_instr(
-                        Operand::member_ptr(tgt, idx, ptr_type(iop.typ.clone())),
-                        value,
-                    ));
-                }
-                IndexMode::Range(_) => {
-                    // Caught in the type checker
-                    panic!("ICE: assigning to a ranged index target is not allowed");
-                }
-            }
+            let idx = expr_to_bc(bc_mod, scope, &iop.index_expr, target);
+            scope.add(store_instr(
+                Operand::member_ptr(tgt, idx, ptr_type(iop.typ.clone())),
+                value,
+            ));
         }
     }
 }
@@ -340,7 +323,7 @@ fn optional_or_to_bc(scope: &mut Scope, l: Operand, r: Operand, target: &Target)
     ));
     scope.add(branch_instr(end_bb));
     scope.start_label(end_bb);
-    dst
+    dst.make_var()
 }
 
 fn result_or_to_bc(scope: &mut Scope, l: Operand, r: Operand, target: &Target) -> Operand {
@@ -373,7 +356,7 @@ fn result_or_to_bc(scope: &mut Scope, l: Operand, r: Operand, target: &Target) -
     scope.add(branch_instr(end_bb));
 
     scope.start_label(end_bb);
-    dst
+    dst.make_var()
 }
 
 fn binary_op_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, bop: &BinaryOp, target: &Target) -> Operand {
@@ -459,16 +442,85 @@ fn while_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, w: &WhileLoop, ta
     scope.start_label(post_while_bb);
 }
 
-fn for_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, f: &ForLoop, target: &Target) {
+fn for_range_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, f: &ForLoop, target: &Target) {
     let end_bb = scope.label();
     scope.scope(|scope| {
         let iterable = expr_to_bc(bc_mod, scope, &f.iterable, target);
         let iterable = scope.alias("$iterable", iterable);
-        let index = scope.declare(
+        let Type::Range(it) = iterable.get_type() else {
+            panic!("ICE: expecting range type");
+        };
+
+        let index_ptr = scope.declare(
+            &f.loop_variable,
+            Some(Operand::member(
+                iterable.safe_clone(),
+                Operand::const_uint(0, target.int_size),
+                it.deref().clone(),
+            )),
+            it.deref().clone(),
+        );
+        let index = index_ptr.make_var();
+
+        let len = Operand::member(
+            iterable.safe_clone(),
+            Operand::const_uint(1, target.int_size),
+            it.deref().clone(),
+        );
+
+        let cond_bb = scope.label();
+        let body_bb = scope.label();
+        let post_for_bb = scope.label();
+        scope.add(branch_instr(cond_bb));
+        scope.start_label(cond_bb);
+
+        let cmp = Operand::binary(BinaryOperator::LessThan, index.safe_clone(), len, Type::Bool);
+        scope.add(branch_if_instr(cmp, body_bb, post_for_bb));
+
+        scope.scope(|scope| {
+            scope.start_label(body_bb);
+            expr_to_bc(bc_mod, scope, &f.body, target);
+            let keep_looping = !scope.last_instruction_is_return();
+            if keep_looping {
+                scope.add(store_instr(
+                    index_ptr.safe_clone(),
+                    Operand::binary(
+                        BinaryOperator::Add,
+                        index.safe_clone(),
+                        match it.deref() {
+                            Type::Int(is) => Operand::const_int(1, *is),
+                            Type::UInt(is) => Operand::const_uint(1, *is),
+                            _ => panic!("ICE: Expecting int type for loop iterations"),
+                        },
+                        it.deref().clone(),
+                    ),
+                ));
+                scope.exit(bc_mod, target, branch_instr(cond_bb));
+            }
+        });
+
+        scope.start_label(post_for_bb);
+        scope.exit(bc_mod, target, branch_instr(end_bb));
+    });
+    scope.start_label(end_bb);
+}
+
+fn for_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, f: &ForLoop, target: &Target) {
+    if matches!(f.iterable.get_type(), Type::Range(_)) {
+        return for_range_to_bc(bc_mod, scope, f, target);
+    }
+
+    let end_bb = scope.label();
+    scope.scope(|scope| {
+        let iterable = expr_to_bc(bc_mod, scope, &f.iterable, target);
+        let iterable = scope.alias("$iterable", iterable);
+        let index_ptr = scope.declare(
             "$index",
             Some(Operand::const_uint(0, target.int_size)),
             Type::UInt(target.int_size),
         );
+        let index = index_ptr.make_var();
+
         let len = if let Type::Array(at) = iterable.get_type() {
             Operand::const_uint(at.len as u64, target.int_size)
         } else {
@@ -490,28 +542,23 @@ fn for_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, f: &ForLoop, target
 
         scope.scope(|scope| {
             scope.start_label(body_bb);
-            let element_type = iterable
-                .get_type()
-                .get_element_type()
-                .expect("ICE: element type expected");
-
-            if element_type.pass_by_value() {
+            if f.loop_variable_type.pass_by_value() {
                 scope.alias(
                     &f.loop_variable,
-                    Operand::member(iterable, index.safe_clone(), element_type),
-                )
+                    Operand::member(iterable, index.safe_clone(), f.loop_variable_type.clone()),
+                );
             } else {
                 scope.alias(
                     &f.loop_variable,
-                    Operand::member_ptr(iterable, index.safe_clone(), ptr_type(element_type)),
-                )
-            };
+                    Operand::member_ptr(iterable, index.safe_clone(), f.loop_variable_type.ptr_of()),
+                );
+            }
 
             expr_to_bc(bc_mod, scope, &f.body, target);
             let keep_looping = !scope.last_instruction_is_return();
             if keep_looping {
                 scope.add(store_instr(
-                    index.safe_clone(),
+                    index_ptr.safe_clone(),
                     Operand::binary(
                         BinaryOperator::Add,
                         index.safe_clone(),
@@ -563,7 +610,7 @@ fn if_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, if_expr: &IfExpressi
     });
 
     scope.start_label(end_bb);
-    dst
+    dst.make_var()
 }
 
 fn lambda_to_bc(bc_mod: &mut ByteCodeModule, l: &Lambda, target: &Target) -> Operand {
@@ -607,13 +654,13 @@ fn compiler_call_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, c: &Compi
                 let obj = expr_to_bc(bc_mod, scope, obj, target);
                 let obj = scope.make_var("$tbd", obj);
                 if let Some(df) = drop_flag {
-                    let dropped = Operand::Var {
+                    let dropped = Operand::VarPtr {
                         name: df.0.clone(),
-                        typ: Type::Bool,
+                        typ: Type::Bool.ptr_of(),
                     };
                     let not_dropped = Operand::Unary {
                         op: UnaryOperator::Not,
-                        inner: Box::new(dropped.safe_clone()),
+                        inner: Box::new(dropped.make_var()),
                         typ: Type::Bool,
                     };
                     let drop_obj = scope.label();
@@ -646,10 +693,6 @@ fn array_to_slice_to_bc(
 ) -> Operand {
     let array = expr_to_bc(bc_mod, scope, &ats.inner, target);
     let array = scope.make_var("$array", array);
-    let element_type = array
-        .get_type()
-        .get_element_type()
-        .expect("ICE: Array must have element type");
     let range = Operand::Range {
         start: Box::new(Operand::const_uint(0, target.int_size)),
         end: Box::new(Operand::Property {
@@ -657,9 +700,9 @@ fn array_to_slice_to_bc(
             property: ByteCodeProperty::Len,
             typ: target.native_int_type.clone(),
         }),
-        typ: Type::Range(target.int_size),
+        typ: Type::Range(Rc::new(Type::UInt(target.int_size))),
     };
-    Operand::slice(array, range, slice_type(element_type.clone()))
+    Operand::slice(array, range, ats.slice_type.clone())
 }
 
 fn bindings_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, b: &BindingList, target: &Target) -> Operand {
@@ -744,7 +787,7 @@ fn match_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, m: &MatchExpressi
     });
 
     scope.start_label(match_end_bb);
-    dst.safe_clone()
+    dst.make_var()
 }
 
 fn delete_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, d: &DeleteExpression, target: &Target) {
@@ -771,14 +814,14 @@ fn address_of_to_bc(
     target: &Target,
 ) -> Operand {
     let inner = expr_to_bc(bc_mod, scope, &a.inner, target);
-    if let Operand::Member { obj, idx, typ } = inner {
-        Operand::MemberPtr {
+    match inner {
+        Operand::Member { obj, idx, typ } => Operand::MemberPtr {
             obj,
             idx,
             typ: ptr_type(typ),
-        }
-    } else {
-        Operand::AddressOf { obj: Box::new(inner) }
+        },
+        Operand::VarPtr { .. } | Operand::Var { .. } => inner,
+        _ => Operand::AddressOf { obj: Box::new(inner) },
     }
 }
 
@@ -808,7 +851,7 @@ fn range_to_bc(
     bc_mod: &mut ByteCodeModule,
     scope: &mut Scope,
     r: &Range,
-    indexee: Operand,
+    indexee: Option<Operand>,
     target: &Target,
 ) -> Operand {
     let start = if let Some(start) = &r.start {
@@ -819,12 +862,14 @@ fn range_to_bc(
 
     let end = if let Some(end) = &r.end {
         expr_to_bc(bc_mod, scope, end, target)
-    } else {
+    } else if let Some(indexee) = indexee {
         Operand::Property {
             operand: indexee.into(),
             property: ByteCodeProperty::Len,
             typ: target.native_uint_type.clone(),
         }
+    } else {
+        panic!("Missing indexee in range"); // Should have been caught in the typechecker
     };
 
     Operand::Range {
@@ -837,14 +882,14 @@ fn range_to_bc(
 fn index_op_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, iop: &IndexOperation, target: &Target) -> Operand {
     let t = expr_to_bc(bc_mod, scope, &iop.target, target);
     match &iop.index_expr {
-        IndexMode::Index(i) => {
+        Expression::Range(r) => {
+            let t = scope.make_var("$indexee", t);
+            let r = range_to_bc(bc_mod, scope, r, Some(t.safe_clone()), target);
+            Operand::slice(t, r, iop.typ.clone())
+        }
+        i => {
             let idx = expr_to_bc(bc_mod, scope, i, target);
             Operand::member(t, idx, iop.typ.clone())
-        }
-        IndexMode::Range(r) => {
-            let t = scope.make_var("$indexee", t);
-            let r = range_to_bc(bc_mod, scope, r, t.safe_clone(), target);
-            Operand::slice(t, r, iop.typ.clone())
         }
     }
 }
@@ -942,6 +987,7 @@ pub fn expr_to_bc(bc_mod: &mut ByteCodeModule, scope: &mut Scope, expr: &Express
         Expression::IndexOperation(i) => index_op_to_bc(bc_mod, scope, i, target),
         Expression::Return(r) => return_to_bc(bc_mod, scope, r, target),
         Expression::Void => Operand::Void,
+        Expression::Range(r) => range_to_bc(bc_mod, scope, r, None, target),
     }
 }
 
@@ -951,22 +997,21 @@ fn func_to_bc(
     expression: &Expression,
     target: &Target,
 ) -> ByteCodeFunction {
-    let mut llfunc = ByteCodeFunction::new(sig, false);
-    let ret = expr_to_bc(bc_mod, &mut llfunc.toplevel_scope, expression, target);
+    let mut func = ByteCodeFunction::new(sig, false, bc_mod.stack.clone());
+    let ret = expr_to_bc(bc_mod, &mut func.toplevel_scope, expression, target);
     // Pop final scope before returning
-    if !llfunc.toplevel_scope.last_instruction_is_return() {
-        if llfunc.sig.rvo {
-            let rvo_var = llfunc.toplevel_scope.rvo_var();
-            llfunc.toplevel_scope.add(store_instr(rvo_var, ret));
-            llfunc
-                .toplevel_scope
+    if !func.toplevel_scope.last_instruction_is_return() {
+        if func.sig.rvo {
+            let rvo_var = func.toplevel_scope.rvo_var();
+            func.toplevel_scope.add(store_instr(rvo_var, ret));
+            func.toplevel_scope
                 .exit(bc_mod, target, ret_instr(Operand::Void));
         } else {
-            llfunc.toplevel_scope.exit(bc_mod, target, ret_instr(ret));
+            func.toplevel_scope.exit(bc_mod, target, ret_instr(ret));
         }
     }
 
-    llfunc
+    func
 }
 
 fn add_imported_functions(bc_mod: &mut ByteCodeModule, import: &Import) {
@@ -977,7 +1022,7 @@ fn add_imported_functions(bc_mod: &mut ByteCodeModule, import: &Import) {
             }
             bc_mod
                 .imported_functions
-                .push(ByteCodeFunction::new(&s, true));
+                .push(ByteCodeFunction::new(&s, true, bc_mod.stack.clone()));
         }
     }
 }
@@ -988,18 +1033,27 @@ pub fn compile_to_byte_code(pkg: &Package, target: &Target) -> CompileResult<Byt
         functions: HashMap::new(),
         globals: HashMap::new(),
         imported_functions: Vec::new(),
+        stack: Stack::new(),
     };
 
     for md in pkg.modules.values() {
         for func in md.externals.values() {
-            ll_mod
-                .functions
-                .insert(func.sig.name.clone(), ByteCodeFunction::new(&func.sig, true));
+            ll_mod.functions.insert(
+                func.sig.name.clone(),
+                ByteCodeFunction::new(&func.sig, true, ll_mod.stack.clone()),
+            );
         }
 
         for global in md.globals.values() {
             if let Some(cst) = expr_to_const(&global.init) {
                 ll_mod.globals.insert(global.name.clone(), cst);
+                ll_mod.stack.borrow_mut().add(
+                    &global.name,
+                    Operand::VarPtr {
+                        name: global.name.clone(),
+                        typ: global.typ.ptr_of(),
+                    },
+                )
             } else {
                 return type_error_result(
                     &global.span,

@@ -224,6 +224,24 @@ impl Lexer {
     fn number(&mut self, c: char) -> CompileResult<()> {
         if c.is_numeric() || c == '.' || c == 'e' {
             self.data.push(c);
+            if self.data.ends_with("..") {
+                // Ranged expression
+                let num = self.data[0..self.data.len() - 2].to_string();
+                let span = Span::new(
+                    &self.file_name,
+                    self.token_start_pos,
+                    Pos::new(self.pos.line, self.pos.offset - 2),
+                );
+                self.add(TokenKind::Number(num), span);
+                let dd_span = Span::new(
+                    &self.file_name,
+                    Pos::new(self.pos.line, self.pos.offset - 1),
+                    Pos::new(self.pos.line, self.pos.offset),
+                );
+                self.add(TokenKind::DotDot, dd_span);
+                self.data.clear();
+                self.state = LexState::Idle;
+            }
             Ok(())
         } else {
             self.state = LexState::Idle;

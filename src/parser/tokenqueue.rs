@@ -4,6 +4,7 @@ use crate::compileerror::{parse_error, parse_error_result, CompileError, Compile
 use crate::span::{Pos, Span};
 use std::collections::VecDeque;
 
+#[derive(Debug)]
 pub struct TokenQueue {
     tokens: VecDeque<Token>,
     last_pos: Pos,

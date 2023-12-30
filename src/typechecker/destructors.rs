@@ -55,10 +55,12 @@ fn get_member_destructor_calls(
 
 fn create_destructor(name: &str, typ: &Type, body: Expression, module: &mut Module) {
     let span = Span::default();
+    let self_type = ptr_type(typ.clone());
+
     let sig = FunctionSignature {
         name: name.into(),
         return_type: Type::Void,
-        args: vec![Argument::new("self", ptr_type(typ.clone()), true, span.clone())],
+        args: vec![Argument::new("self", self_type, true, span.clone())],
         span: span.clone(),
         typ: Type::Unknown,
         rvo: false,
@@ -285,7 +287,7 @@ fn destructor_for_array(
         let iop = address_of(
             index_op(
                 name_expr("self", Span::Internal),
-                IndexMode::Index(uint_expr(i as u64, Span::Internal, target.int_size)),
+                uint_expr(i as u64, Span::Internal, target.int_size),
                 Span::Internal,
             ),
             Span::Internal,

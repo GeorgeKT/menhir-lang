@@ -3,7 +3,6 @@ use super::operand::gen_operand;
 use super::operand::gen_operand_dst;
 use super::symboltable::FunctionInstance;
 use super::valueref::ValueRef;
-use crate::ast::ptr_type;
 use crate::ast::FunctionSignature;
 use crate::ast::Type;
 use crate::compileerror::code_gen_error;
@@ -26,7 +25,7 @@ pub unsafe fn type_name(typ: LLVMTypeRef) -> String {
 unsafe fn add_variable(ctx: &mut Context, name: &str, vr: ValueRef, typ: &Type) -> CompileResult<()> {
     if typ.is_function() {
         let fi = Rc::new(FunctionInstance {
-            function: vr.load(ctx)?,
+            function: vr.load(ctx)?.value,
             name: name.into(),
             sig: FunctionSignature::from_type(name, typ)
                 .ok_or_else(|| code_gen_error(format!("Cannot generate function signature for {name}")))?,
@@ -51,7 +50,7 @@ pub unsafe fn gen_instruction(
             Ok(())
         }
         Instruction::Declare { name, init, typ } => {
-            let vr = ValueRef::new(ctx.stack_alloc(name, typ)?, ptr_type(typ.clone()));
+            let vr = ctx.stack_alloc(name, typ)?;
             if let Some(init) = init {
                 gen_operand_dst(ctx, init, &vr)?;
             }
@@ -80,7 +79,7 @@ pub unsafe fn gen_instruction(
             let on_true_bb = blocks.get(&on_true.id).expect("Unknown basic block");
             let on_false_bb = blocks.get(&on_false.id).expect("Unknown basic block");
             let cond = gen_operand(ctx, cond, None)?;
-            LLVMBuildCondBr(ctx.builder, cond.load(ctx)?, *on_true_bb, *on_false_bb);
+            LLVMBuildCondBr(ctx.builder, cond.value, *on_true_bb, *on_false_bb);
             Ok(())
         }
         Instruction::Return { value } => {
@@ -88,7 +87,7 @@ pub unsafe fn gen_instruction(
             if val.typ == Type::Void || func.sig.rvo {
                 LLVMBuildRetVoid(ctx.builder);
             } else {
-                LLVMBuildRet(ctx.builder, val.load(ctx)?);
+                LLVMBuildRet(ctx.builder, val.value);
             }
             Ok(())
         }

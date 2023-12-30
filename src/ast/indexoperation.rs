@@ -2,23 +2,15 @@ use crate::ast::{prefix, Expression, TreePrinter, Type};
 use crate::span::Span;
 use serde_derive::{Deserialize, Serialize};
 
-use super::Range;
-
-#[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
-pub enum IndexMode {
-    Index(Expression),
-    Range(Range),
-}
-
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct IndexOperation {
     pub target: Expression,
-    pub index_expr: IndexMode,
+    pub index_expr: Expression,
     pub span: Span,
     pub typ: Type,
 }
 
-pub fn index_op(target: Expression, index_expr: IndexMode, span: Span) -> Expression {
+pub fn index_op(target: Expression, index_expr: Expression, span: Span) -> Expression {
     Expression::IndexOperation(Box::new(IndexOperation {
         target,
         index_expr,
@@ -34,9 +26,6 @@ impl TreePrinter for IndexOperation {
         println!("{} target:", p);
         self.target.print(level + 2);
         println!("{} index:", p);
-        match &self.index_expr {
-            IndexMode::Index(i) => i.print(level + 2),
-            IndexMode::Range(r) => r.print(level + 2),
-        }
+        self.index_expr.print(level + 2);
     }
 }

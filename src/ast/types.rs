@@ -176,7 +176,7 @@ pub enum Type {
     Int(IntSize),
     UInt(IntSize),
     Float(FloatSize),
-    Range(IntSize),
+    Range(Rc<Type>),
     Char,
     Bool,
     String,
@@ -287,6 +287,9 @@ impl Type {
             (_, Type::Result(rt)) => &rt.ok_typ == self || &rt.err_typ == self,
             (Type::Optional(_), Type::Bool) => true,
             (Type::Result(_), Type::Bool) => true,
+            (Type::Pointer(_), Type::Pointer(to)) => {
+                matches!(to.deref(), Type::Void)
+            }
             _ => false,
         }
     }

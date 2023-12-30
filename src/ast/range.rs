@@ -14,8 +14,8 @@ pub struct Range {
     pub typ: Type,
 }
 
-pub fn range(start: Option<Expression>, end: Option<Expression>, typ: Type, span: Span) -> Range {
-    Range { start, end, span, typ }
+pub fn range(start: Option<Expression>, end: Option<Expression>, typ: Type, span: Span) -> Expression {
+    Expression::Range(Box::new(Range { start, end, span, typ }))
 }
 
 impl TreePrinter for Range {

@@ -84,6 +84,10 @@ pub enum Operand {
         name: String,
         typ: Type,
     },
+    VarPtr {
+        name: String,
+        typ: Type,
+    },
     Constant {
         value: Constant,
     },
@@ -191,13 +195,30 @@ impl Operand {
                 name: name.clone(),
                 typ: typ.clone(),
             },
+            Operand::VarPtr { name, typ } => Operand::VarPtr {
+                name: name.clone(),
+                typ: typ.clone(),
+            },
             Operand::Constant { value } => Operand::Constant { value: value.clone() },
             _ => panic!("ICE: only var and constant operands can be cloned"),
         }
     }
 
+    pub fn make_var(&self) -> Operand {
+        match self {
+            Operand::VarPtr { name, typ } => Operand::Var {
+                name: name.clone(),
+                typ: typ.clone(),
+            },
+            _ => panic!("ICE: only varptr can be converted to a var"),
+        }
+    }
+
     pub fn cloneable(&self) -> bool {
-        matches!(self, Operand::Var { .. } | Operand::Constant { .. })
+        matches!(
+            self,
+            Operand::Var { .. } | Operand::VarPtr { .. } | Operand::Constant { .. }
+        )
     }
 
     pub fn const_int(v: i64, int_size: IntSize) -> Operand {
@@ -292,6 +313,7 @@ impl Operand {
     pub fn get_type(&self) -> Type {
         match self {
             Operand::Var { typ, .. } => typ.clone(),
+            Operand::VarPtr { typ, .. } => typ.clone(),
             Operand::Constant { value } => value.get_type(),
             Operand::Member { typ, .. } => typ.clone(),
             Operand::MemberPtr { typ, .. } => typ.clone(),
@@ -370,6 +392,7 @@ impl Operand {
                 end.visit(f);
             }
             Operand::Var { .. }
+            | Operand::VarPtr { .. }
             | Operand::Constant { .. }
             | Operand::Enum { .. }
             | Operand::SizeOf { .. }
@@ -385,7 +408,8 @@ impl Operand {
 impl fmt::Display for Operand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Operand::Var { name, typ } => write!(f, "({name}: {typ})"),
+            Operand::Var { name, typ } => write!(f, "(var {name}: {typ})"),
+            Operand::VarPtr { name, typ } => write!(f, "(varptr {name}: {typ})"),
             Operand::Constant { value } => write!(f, "{value}"),
             Operand::Member { obj, idx, .. } => write!(f, "{obj}.{idx}"),
             Operand::MemberPtr { obj, idx, .. } => write!(f, "&{obj}.{idx}"),

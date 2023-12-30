@@ -15,7 +15,7 @@ use std::path::Path;
 use std::rc::Rc;
 
 use crate::ast::*;
-use crate::compileerror::{parse_error_result, CompileResult};
+use crate::compileerror::{parse_error_result, CompileError, CompileResult};
 use crate::span::Span;
 use crate::target::Target;
 use crate::timer::time_operation;
@@ -1044,7 +1044,7 @@ fn parse_range(
     start: &Span,
     indent_level: usize,
     target: &Target,
-) -> CompileResult<Range> {
+) -> CompileResult<Expression> {
     tq.expect(&TokenKind::DotDot)?;
     if tq.peek().map(is_end_of_expression).unwrap_or(false) {
         Ok(range(lhs, None, Type::Unknown, start.expanded(tq.pos())))
@@ -1179,15 +1179,9 @@ fn parse_expression_start(
         match next.kind {
             TokenKind::OpenBracket => {
                 let index_expr = if tq.is_next(&TokenKind::DotDot) {
-                    IndexMode::Range(parse_range(tq, None, &next.span, indent_level, target)?)
+                    parse_range(tq, None, &next.span, indent_level, target)?
                 } else {
-                    let index_expr = parse_expression(tq, indent_level, target)?;
-                    let span = index_expr.span();
-                    if tq.is_next(&TokenKind::DotDot) {
-                        IndexMode::Range(parse_range(tq, Some(index_expr), &span, indent_level, target)?)
-                    } else {
-                        IndexMode::Index(index_expr)
-                    }
+                    parse_expression(tq, indent_level, target)?
                 };
 
                 tq.expect(&TokenKind::CloseBracket)?;
@@ -1225,6 +1219,9 @@ pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize, target: &Targe
     let e_start = parse_expression_start(tq, tok, indent_level, target)?;
     if tq.is_next_binary_operator() {
         parse_binary_op_rhs(tq, e_start, indent_level, target)
+    } else if tq.is_next(&TokenKind::DotDot) {
+        let start = e_start.span();
+        parse_range(tq, Some(e_start), &start, indent_level, target)
     } else {
         Ok(e_start)
     }
@@ -1321,6 +1318,119 @@ fn parse_import_name(tq: &mut TokenQueue) -> CompileResult<ImportName> {
     Ok(ImportName::new(namespace, span))
 }
 
+fn add_function(module: &mut Module, func: Function) -> CompileResult<()> {
+    if module.functions.contains_key(&func.sig.name) {
+        return parse_error_result(&func.span, format!("Function {} redefined", func.sig.name));
+    }
+    module.functions.insert(func.sig.name.clone(), func);
+    Ok(())
+}
+
+fn parse_top_level(
+    tq: &mut TokenQueue,
+    module: &mut Module,
+    indent_level: &mut usize,
+    namespace: &str,
+    target: &Target,
+) -> CompileResult<()> {
+    let tok = tq.pop()?;
+    match tok.kind {
+        TokenKind::Indent(level) => {
+            *indent_level = level;
+        }
+
+        TokenKind::Interface => {
+            parse_interface(module, tq, namespace, &tok.span, *indent_level, target)?;
+        }
+
+        TokenKind::Let => {
+            parse_global_bindings(module, tq, false, *indent_level, namespace, target)?;
+        }
+
+        TokenKind::Var => {
+            parse_global_bindings(module, tq, true, *indent_level, namespace, target)?;
+        }
+
+        TokenKind::Struct => {
+            let mut sd = parse_struct_declaration(tq, namespace, *indent_level, target)?;
+            sd.span = Span::merge(&tok.span, &sd.span);
+            if module.types.contains_key(&sd.name) {
+                return parse_error_result(&sd.span, format!("Type {} redefined", sd.name));
+            }
+            module
+                .types
+                .insert(sd.name.clone(), TypeDeclaration::Struct(sd));
+        }
+
+        TokenKind::Enum => {
+            let st = parse_sum_type(tq, namespace, &tok.span, *indent_level, target)?;
+            if module.types.contains_key(&st.name) {
+                return parse_error_result(&st.span, format!("Type {} redefined", st.name));
+            }
+            module
+                .types
+                .insert(st.name.clone(), TypeDeclaration::Sum(st));
+        }
+
+        TokenKind::Type => {
+            panic!("NYI");
+        }
+
+        TokenKind::Extern => {
+            let ext_func = parse_external_function(tq, &tok.span, *indent_level, target)?;
+            if module.externals.contains_key(&ext_func.sig.name) {
+                return parse_error_result(
+                    &ext_func.span,
+                    format!("External function {} redefined", ext_func.sig.name),
+                );
+            }
+            module.externals.insert(ext_func.sig.name.clone(), ext_func);
+        }
+
+        TokenKind::Import => loop {
+            let import = parse_import_name(tq)?;
+            module.import_names.insert(import);
+            if tq.is_next(&TokenKind::Comma) {
+                tq.pop()?;
+            } else {
+                break;
+            }
+        },
+
+        TokenKind::Func => {
+            let func = parse_function_declaration(tq, namespace, &tok.span, *indent_level, target)?;
+            add_function(module, func)?;
+        }
+
+        _ => {
+            return parse_error_result(
+                &tok.span,
+                format!(
+                    "Expected import, fn, let, var, extern, type, struct, enum or interface found token {}",
+                    tok
+                ),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn skip_until_next_top_level_declaration(tq: &mut TokenQueue) -> CompileResult<()> {
+    while !tq.is_next(&TokenKind::EOF) {
+        if let Some(tok) = tq.peek() {
+            if let TokenKind::Indent(0) = &tok.kind {
+                break;
+            }
+        } else {
+            break;
+        }
+
+        tq.pop()?;
+    }
+
+    Ok(())
+}
+
 fn parse_module<Input: Read>(
     module: &mut Module,
     input: &mut Input,
@@ -1329,99 +1439,23 @@ fn parse_module<Input: Read>(
     target: &Target,
 ) -> CompileResult<()> {
     let mut tq = Lexer::new(file_name).read(input)?;
-
-    let add_function = |module: &mut Module, func: Function| -> CompileResult<()> {
-        if module.functions.contains_key(&func.sig.name) {
-            return parse_error_result(&func.span, format!("Function {} redefined", func.sig.name));
-        }
-        module.functions.insert(func.sig.name.clone(), func);
-        Ok(())
-    };
-
+    let mut errors = Vec::new();
     let mut indent_level = 0;
     while !tq.is_next(&TokenKind::EOF) {
-        let tok = tq.pop()?;
-        match tok.kind {
-            TokenKind::Indent(level) => {
-                indent_level = level;
-            }
-
-            TokenKind::Interface => {
-                parse_interface(module, &mut tq, namespace, &tok.span, indent_level, target)?;
-            }
-
-            TokenKind::Let => {
-                parse_global_bindings(module, &mut tq, false, indent_level, namespace, target)?;
-            }
-
-            TokenKind::Var => {
-                parse_global_bindings(module, &mut tq, true, indent_level, namespace, target)?;
-            }
-
-            TokenKind::Struct => {
-                let mut sd = parse_struct_declaration(&mut tq, namespace, indent_level, target)?;
-                sd.span = Span::merge(&tok.span, &sd.span);
-                if module.types.contains_key(&sd.name) {
-                    return parse_error_result(&sd.span, format!("Type {} redefined", sd.name));
-                }
-                module
-                    .types
-                    .insert(sd.name.clone(), TypeDeclaration::Struct(sd));
-            }
-
-            TokenKind::Enum => {
-                let st = parse_sum_type(&mut tq, namespace, &tok.span, indent_level, target)?;
-                if module.types.contains_key(&st.name) {
-                    return parse_error_result(&st.span, format!("Type {} redefined", st.name));
-                }
-                module
-                    .types
-                    .insert(st.name.clone(), TypeDeclaration::Sum(st));
-            }
-
-            TokenKind::Type => {
-                panic!("NYI");
-            }
-
-            TokenKind::Extern => {
-                let ext_func = parse_external_function(&mut tq, &tok.span, indent_level, target)?;
-                if module.externals.contains_key(&ext_func.sig.name) {
-                    return parse_error_result(
-                        &ext_func.span,
-                        format!("External function {} redefined", ext_func.sig.name),
-                    );
-                }
-                module.externals.insert(ext_func.sig.name.clone(), ext_func);
-            }
-
-            TokenKind::Import => loop {
-                let import = parse_import_name(&mut tq)?;
-                module.import_names.insert(import);
-                if tq.is_next(&TokenKind::Comma) {
-                    tq.pop()?;
-                } else {
-                    break;
-                }
-            },
-
-            TokenKind::Func => {
-                let func = parse_function_declaration(&mut tq, namespace, &tok.span, indent_level, target)?;
-                add_function(module, func)?;
-            }
-
-            _ => {
-                return parse_error_result(
-                    &tok.span,
-                    format!(
-                        "Expected import, fn, let, var, extern, type, struct, enum or interface found token {}",
-                        tok
-                    ),
-                );
+        if let Err(e) = parse_top_level(&mut tq, module, &mut indent_level, namespace, target) {
+            errors.push(e);
+            if let Err(e) = skip_until_next_top_level_declaration(&mut tq) {
+                errors.push(e);
+                break;
             }
         }
     }
 
-    Ok(())
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        CompileResult::Err(CompileError::Many(errors))
+    }
 }
 
 pub fn parse_file(file_path: &Path, namespace: &str, target: &Target, show_timing: bool) -> CompileResult<Module> {

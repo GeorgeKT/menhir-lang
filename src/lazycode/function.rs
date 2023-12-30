@@ -2,7 +2,7 @@ use std::fmt;
 
 use itertools::join;
 
-use super::scope::Scope;
+use super::scope::{Scope, StackPtr};
 use crate::ast::{FunctionSignature, TreeFormatter};
 
 #[derive(Debug)]
@@ -13,14 +13,14 @@ pub struct ByteCodeFunction {
 }
 
 impl ByteCodeFunction {
-    pub fn new(sig: &FunctionSignature, external: bool) -> ByteCodeFunction {
+    pub fn new(sig: &FunctionSignature, external: bool, stack: StackPtr) -> ByteCodeFunction {
         let mut sig = sig.clone();
         sig.do_rvo();
 
         ByteCodeFunction {
             sig: sig.clone(),
             external,
-            toplevel_scope: Scope::new(sig, true),
+            toplevel_scope: Scope::new(sig, true, stack),
         }
     }
 }

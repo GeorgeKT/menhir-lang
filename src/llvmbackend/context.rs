@@ -54,7 +54,7 @@ impl Context {
     }
 
     pub fn set_variable(&mut self, name: &str, vr: ValueRef) -> CompileResult<()> {
-        if let Ok(vi) = self.get_variable(name) {
+        if let Some(vi) = self.get_variable(name) {
             vi.store(self, &vr)?;
             Ok(())
         } else {
@@ -75,7 +75,7 @@ impl Context {
         Ok(())
     }
 
-    pub fn stack_alloc(&mut self, name: &str, typ: &Type) -> CompileResult<LLVMValueRef> {
+    pub fn stack_alloc(&mut self, name: &str, typ: &Type) -> CompileResult<ValueRef> {
         unsafe {
             let mut llvm_type = self.resolve_type(typ)?;
             if let Type::Func(_) = typ {
@@ -90,17 +90,17 @@ impl Context {
             let name = CString::new(name).expect("Invalid string");
             let alloc = LLVMBuildAlloca(self.builder, llvm_type, name.as_ptr());
             LLVMPositionBuilderAtEnd(self.builder, current_bb); // Position the builder where it was before
-            Ok(alloc)
+            Ok(ValueRef::allocated(alloc, typ.ptr_of()))
         }
     }
 
-    pub fn get_variable(&self, name: &str) -> CompileResult<VariableInstancePtr> {
+    pub fn get_variable(&self, name: &str) -> Option<VariableInstancePtr> {
         for sf in self.stack.iter().rev() {
             if let Some(v) = sf.symbols.get_variable(name) {
-                return Ok(v.clone());
+                return Some(v.clone());
             }
         }
-        code_gen_result(format!("Unknown variable {name}"))
+        None
     }
 
     pub fn add_function(&mut self, f: Rc<FunctionInstance>) -> CompileResult<()> {

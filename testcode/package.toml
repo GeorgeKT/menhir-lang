@@ -268,3 +268,7 @@ name="errors"
 type="binary"
 depends=["common"]
 
+
+[[target]]
+name="pointers"
+type="binary"

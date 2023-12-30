@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::ast::{
     ptr_type, slice_type, ArrayLiteral, ArrayPattern, BinaryOperator, Literal, NameRef, OptionalPattern, Pattern,
     StructPattern, StructPatternBindingMode, SumTypeCaseIndexOf, Type,
@@ -127,7 +129,7 @@ fn array_pattern_match_to_bc(
         Operand::Range {
             start: Box::new(Operand::const_uint(1, target.int_size)),
             end: Box::new(tail_end),
-            typ: Type::Range(target.int_size),
+            typ: Type::Range(Rc::new(Type::UInt(target.int_size))),
         },
         tail_type.clone(),
     );

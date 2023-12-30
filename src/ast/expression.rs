@@ -78,6 +78,7 @@ pub enum Expression {
     CompilerCall(Box<CompilerCall>),
     IndexOperation(Box<IndexOperation>),
     Return(Box<Return>),
+    Range(Box<Range>),
     Void,
 }
 
@@ -193,6 +194,7 @@ impl Expression {
             Expression::ResultToBool(r) => r.span(),
             Expression::ToOkResult(r) => r.inner.span(),
             Expression::ToErrResult(r) => r.inner.span(),
+            Expression::Range(r) => r.span.clone(),
         }
     }
 
@@ -230,6 +232,7 @@ impl Expression {
             Expression::ResultToBool(_) => Type::Bool,
             Expression::ToOkResult(r) => r.result_type.clone(),
             Expression::ToErrResult(r) => r.result_type.clone(),
+            Expression::Range(r) => r.typ.clone(),
         }
     }
 
@@ -325,17 +328,7 @@ impl Expression {
                     AssignTarget::Dereference(d) => d.inner.visit_mut(op)?,
                     AssignTarget::IndexOperation(iop) => {
                         iop.target.visit_mut(op)?;
-                        match &mut iop.index_expr {
-                            IndexMode::Index(i) => i.visit_mut(op)?,
-                            IndexMode::Range(r) => {
-                                if let Some(start) = &mut r.start {
-                                    start.visit_mut(op)?;
-                                }
-                                if let Some(end) = &mut r.end {
-                                    end.visit_mut(op)?;
-                                }
-                            }
-                        }
+                        iop.index_expr.visit_mut(op)?;
                     }
                     AssignTarget::MemberAccess(ma) => {
                         ma.left.visit_mut(op)?;
@@ -373,18 +366,8 @@ impl Expression {
 
             Expression::IndexOperation(iop) => {
                 iop.target.visit_mut(op)?;
-                match &mut iop.index_expr {
-                    IndexMode::Index(i) => i.visit_mut(op),
-                    IndexMode::Range(r) => {
-                        if let Some(start) = &mut r.start {
-                            start.visit_mut(op)?;
-                        }
-                        if let Some(end) = &mut r.end {
-                            end.visit_mut(op)?;
-                        }
-                        Ok(())
-                    }
-                }
+                iop.index_expr.visit_mut(op)?;
+                Ok(())
             }
 
             Expression::Literal(_)
@@ -396,6 +379,15 @@ impl Expression {
             Expression::ResultToBool(r) => r.visit_mut(op),
             Expression::ToOkResult(r) => r.inner.visit_mut(op),
             Expression::ToErrResult(r) => r.inner.visit_mut(op),
+            Expression::Range(r) => {
+                if let Some(start) = &mut r.start {
+                    start.visit_mut(op)?;
+                }
+                if let Some(end) = &mut r.end {
+                    end.visit_mut(op)?;
+                }
+                Ok(())
+            }
         }
     }
 
@@ -492,17 +484,7 @@ impl Expression {
                     AssignTarget::Dereference(d) => d.inner.visit(op)?,
                     AssignTarget::IndexOperation(iop) => {
                         iop.target.visit(op)?;
-                        match &iop.index_expr {
-                            IndexMode::Index(i) => i.visit(op)?,
-                            IndexMode::Range(r) => {
-                                if let Some(start) = &r.start {
-                                    start.visit(op)?;
-                                }
-                                if let Some(end) = &r.end {
-                                    end.visit(op)?;
-                                }
-                            }
-                        }
+                        iop.index_expr.visit(op)?;
                     }
                     AssignTarget::MemberAccess(ma) => {
                         ma.left.visit(op)?;
@@ -540,18 +522,8 @@ impl Expression {
 
             Expression::IndexOperation(iop) => {
                 iop.target.visit(op)?;
-                match &iop.index_expr {
-                    IndexMode::Index(i) => i.visit(op),
-                    IndexMode::Range(r) => {
-                        if let Some(start) = &r.start {
-                            start.visit(op)?;
-                        }
-                        if let Some(end) = &r.end {
-                            end.visit(op)?;
-                        }
-                        Ok(())
-                    }
-                }
+                iop.index_expr.visit(op)?;
+                Ok(())
             }
 
             Expression::Literal(_)
@@ -563,6 +535,15 @@ impl Expression {
             Expression::ResultToBool(r) => r.visit(op),
             Expression::ToOkResult(r) => r.inner.visit(op),
             Expression::ToErrResult(r) => r.inner.visit(op),
+            Expression::Range(r) => {
+                if let Some(start) = &r.start {
+                    start.visit(op)?;
+                }
+                if let Some(end) = &r.end {
+                    end.visit(op)?;
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -641,6 +622,19 @@ impl TreePrinter for Expression {
             Expression::ToErrResult(r) => {
                 println!("{}err", p);
                 r.inner.print(level + 1)
+            }
+            Expression::Range(r) => {
+                println!("{}range", p);
+                if let Some(start) = &r.start {
+                    start.print(level + 1);
+                } else {
+                    println!("{} no start", p);
+                }
+                if let Some(end) = &r.end {
+                    end.print(level + 1);
+                } else {
+                    println!("{} no end", p);
+                }
             }
         }
     }
