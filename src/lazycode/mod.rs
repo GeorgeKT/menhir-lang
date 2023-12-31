@@ -6,8 +6,8 @@ pub use self::instruction::Instruction;
 pub use self::operand::{ByteCodeProperty, CallArg, Constant, Operand};
 pub use self::optimizer::*;
 pub use self::patterns::OPTIONAL_DATA_IDX;
-use self::scope::StackPtr;
 pub use self::scope::{Scope, ScopeNode};
+use self::stack::StackPtr;
 
 mod compiler;
 mod consteval;
@@ -17,6 +17,7 @@ mod operand;
 mod optimizer;
 mod patterns;
 mod scope;
+mod stack;
 
 #[derive(Debug)]
 pub struct ByteCodeModule {

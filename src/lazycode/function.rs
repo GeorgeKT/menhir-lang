@@ -2,7 +2,8 @@ use std::fmt;
 
 use itertools::join;
 
-use super::scope::{Scope, StackPtr};
+use super::scope::Scope;
+use super::stack::StackPtr;
 use crate::ast::{FunctionSignature, TreeFormatter};
 
 #[derive(Debug)]
@@ -20,7 +21,7 @@ impl ByteCodeFunction {
         ByteCodeFunction {
             sig: sig.clone(),
             external,
-            toplevel_scope: Scope::new(sig, true, stack),
+            toplevel_scope: Scope::new(sig, stack),
         }
     }
 }

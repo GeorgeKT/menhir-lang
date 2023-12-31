@@ -7,7 +7,8 @@ use super::function::ByteCodeFunction;
 use super::instruction::{branch_if_instr, branch_instr, ret_instr, store_instr, Instruction, Label};
 use super::operand::{call_arg, ByteCodeProperty, CallArg, Operand};
 use super::patterns::{pattern_to_bc, RESULT_OK_PATTERN_MATCH_IDX};
-use super::scope::{Scope, Stack};
+use super::scope::Scope;
+use super::stack::Stack;
 use super::{ByteCodeModule, OPTIONAL_DATA_IDX};
 use crate::ast::*;
 use crate::build::Package;
@@ -998,6 +999,20 @@ fn func_to_bc(
     target: &Target,
 ) -> ByteCodeFunction {
     let mut func = ByteCodeFunction::new(sig, false, bc_mod.stack.clone());
+    {
+        let mut s = bc_mod.stack.borrow_mut();
+        s.push();
+        for arg in &sig.args {
+            s.add(
+                &arg.name,
+                Operand::Var {
+                    name: arg.name.clone(),
+                    typ: arg.typ.clone(),
+                },
+            );
+        }
+    }
+
     let ret = expr_to_bc(bc_mod, &mut func.toplevel_scope, expression, target);
     // Pop final scope before returning
     if !func.toplevel_scope.last_instruction_is_return() {
@@ -1010,6 +1025,8 @@ fn func_to_bc(
             func.toplevel_scope.exit(bc_mod, target, ret_instr(ret));
         }
     }
+
+    bc_mod.stack.borrow_mut().pop();
 
     func
 }
