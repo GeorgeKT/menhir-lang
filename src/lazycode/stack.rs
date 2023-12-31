@@ -2,6 +2,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use crate::compileerror::CompileResult;
+
 use super::Operand;
 
 #[derive(Default, Debug)]
@@ -37,12 +39,12 @@ impl Stack {
             .map(|f| f.vars.insert(name.into(), var));
     }
 
-    pub fn get(&self, name: &str) -> Option<Operand> {
+    pub fn get(&self, name: &str) -> CompileResult<Option<Operand>> {
         for f in self.frames.iter().rev() {
             if let Some(var) = f.vars.get(name) {
-                return Some(var.safe_clone());
+                return Ok(Some(var.safe_clone()?));
             }
         }
-        None
+        Ok(None)
     }
 }

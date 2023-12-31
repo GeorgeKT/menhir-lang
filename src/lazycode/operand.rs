@@ -2,7 +2,10 @@ use std::fmt;
 
 use itertools::join;
 
-use crate::ast::{array_type, ptr_type, BinaryOperator, FloatSize, IntSize, Type, UnaryOperator};
+use crate::{
+    ast::{array_type, ptr_type, BinaryOperator, FloatSize, IntSize, Type, UnaryOperator},
+    compileerror::{code_gen_result, CompileResult},
+};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum ByteCodeProperty {
@@ -189,28 +192,28 @@ pub enum Operand {
 }
 
 impl Operand {
-    pub fn safe_clone(&self) -> Operand {
+    pub fn safe_clone(&self) -> CompileResult<Operand> {
         match self {
-            Operand::Var { name, typ } => Operand::Var {
+            Operand::Var { name, typ } => Ok(Operand::Var {
                 name: name.clone(),
                 typ: typ.clone(),
-            },
-            Operand::VarPtr { name, typ } => Operand::VarPtr {
+            }),
+            Operand::VarPtr { name, typ } => Ok(Operand::VarPtr {
                 name: name.clone(),
                 typ: typ.clone(),
-            },
-            Operand::Constant { value } => Operand::Constant { value: value.clone() },
-            _ => panic!("ICE: only var and constant operands can be cloned"),
+            }),
+            Operand::Constant { value } => Ok(Operand::Constant { value: value.clone() }),
+            _ => code_gen_result("Only var and constant operands can be cloned"),
         }
     }
 
-    pub fn make_var(&self) -> Operand {
+    pub fn make_var(&self) -> CompileResult<Operand> {
         match self {
-            Operand::VarPtr { name, typ } => Operand::Var {
+            Operand::VarPtr { name, typ } => Ok(Operand::Var {
                 name: name.clone(),
                 typ: typ.clone(),
-            },
-            _ => panic!("ICE: only varptr can be converted to a var"),
+            }),
+            _ => code_gen_result("ICE: only varptr can be converted to a var"),
         }
     }
 

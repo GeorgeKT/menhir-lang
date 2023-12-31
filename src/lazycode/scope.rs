@@ -1,5 +1,6 @@
 use crate::{
     ast::{prefix, Expression, FunctionSignature, TreeFormatter, Type, RVO_RETURN_ARG},
+    compileerror::CompileResult,
     target::Target,
 };
 
@@ -67,15 +68,15 @@ impl Scope {
         self.nodes.push(ScopeNode::Instruction(inst));
     }
 
-    pub fn make_var(&mut self, name: &str, value: Operand) -> Operand {
+    pub fn make_var(&mut self, name: &str, value: Operand) -> CompileResult<Operand> {
         if value.cloneable() {
-            return value;
+            return Ok(value);
         }
 
         self.alias(name, value)
     }
 
-    pub fn alias(&mut self, name: &str, value: Operand) -> Operand {
+    pub fn alias(&mut self, name: &str, value: Operand) -> CompileResult<Operand> {
         let name: String = name.into();
         let typ = value.get_type();
         let var = Operand::Var {
@@ -83,42 +84,42 @@ impl Scope {
             typ: typ.clone(),
         };
 
-        self.stack.borrow_mut().add(&name, var.safe_clone());
+        self.stack.borrow_mut().add(&name, var.safe_clone()?);
 
         self.add(Instruction::Alias { name, value, typ });
-        var
+        Ok(var)
     }
 
-    pub fn declare(&mut self, name: &str, init: Option<Operand>, typ: Type) -> Operand {
+    pub fn declare(&mut self, name: &str, init: Option<Operand>, typ: Type) -> CompileResult<Operand> {
         let name: String = name.into(); //self.add_name(name);
         let var = Operand::VarPtr {
             name: name.clone(),
             typ: typ.ptr_of(),
         };
 
-        self.stack.borrow_mut().add(&name, var.safe_clone());
+        self.stack.borrow_mut().add(&name, var.safe_clone()?);
         // Ignore void types
         if typ != Type::Void {
             self.add(Instruction::Declare { name, init, typ });
         }
-        var
+        Ok(var)
     }
 
-    pub fn get_var(&self, name: &str) -> Option<Operand> {
-        match self.stack.borrow().get(name) {
+    pub fn get_var(&self, name: &str) -> CompileResult<Option<Operand>> {
+        Ok(match self.stack.borrow().get(name)? {
             Some(Operand::VarPtr { name, typ }) => Some(Operand::Var {
                 name: name.clone(),
                 typ: typ.clone(),
             }),
-            Some(v) => Some(v.safe_clone()),
+            Some(v) => Some(v.safe_clone()?),
             None => None,
-        }
+        })
     }
 
-    pub fn exit(&mut self, bc_mod: &mut ByteCodeModule, target: &Target, with: Instruction) {
+    pub fn exit(&mut self, bc_mod: &mut ByteCodeModule, target: &Target, with: Instruction) -> CompileResult<()> {
         let unwind = self.unwind.clone();
         for e in unwind.iter().rev() {
-            let op = expr_to_bc(bc_mod, self, e, target);
+            let op = expr_to_bc(bc_mod, self, e, target)?;
             if op.is_call() {
                 self.add(Instruction::Exec { operand: op });
             }
@@ -126,7 +127,7 @@ impl Scope {
         if let Instruction::Return { .. } = with {
             let parent_unwind = self.parent_unwind.clone();
             for e in parent_unwind.iter().rev() {
-                let op = expr_to_bc(bc_mod, self, e, target);
+                let op = expr_to_bc(bc_mod, self, e, target)?;
                 if op.is_call() {
                     self.add(Instruction::Exec { operand: op });
                 }
@@ -137,21 +138,23 @@ impl Scope {
             tag: "scope exit".into(),
         });
         self.add(with);
+        Ok(())
     }
 
-    pub fn scope<F>(&mut self, f: F)
+    pub fn scope<F>(&mut self, f: F) -> CompileResult<()>
     where
-        F: FnOnce(&mut Scope),
+        F: FnOnce(&mut Scope) -> CompileResult<()>,
     {
         let mut scope = Scope::new(self.sig.clone(), self.stack.clone());
         self.stack.borrow_mut().push();
         scope.label_counter = self.label_counter;
         scope.parent_unwind = self.parent_unwind.clone();
         scope.parent_unwind.extend(self.unwind.iter().cloned());
-        f(&mut scope);
+        f(&mut scope)?;
         self.label_counter = scope.label_counter;
         self.nodes.push(ScopeNode::Scope(scope));
         self.stack.borrow_mut().pop();
+        Ok(())
     }
 
     pub fn visit_operands<Func: FnMut(&Operand)>(&self, f: &mut Func) {
