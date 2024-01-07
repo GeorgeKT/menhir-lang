@@ -1512,15 +1512,15 @@ fn type_check_literal(
 
 fn type_check_range(ctx: &mut TypeCheckerContext, r: &mut Range, target: &Target) -> TypeCheckResult {
     let start_type = if let Some(start) = &mut r.start {
-        type_check_expression(ctx, start, Some(&target.native_int_type), target)?
+        type_check_expression(ctx, start, None, target)?
     } else {
-        target.native_uint_type.clone()
+        target.native_int_type.clone()
     };
 
     let end_type = if let Some(end) = &mut r.end {
-        type_check_expression(ctx, end, Some(&start_type), target)?
+        type_check_expression(ctx, end, None, target)?
     } else {
-        target.native_uint_type.clone()
+        target.native_int_type.clone()
     };
 
     match (&start_type, &end_type) {
@@ -1542,11 +1542,65 @@ fn type_check_range(ctx: &mut TypeCheckerContext, r: &mut Range, target: &Target
             };
             valid(r.typ.clone())
         }
+        (Type::Int(s), Type::UInt(e)) => {
+            let is = if s.size_in_bits() > e.size_in_bits() { *s } else { *e };
+            let Some(start) = &mut r.start else {
+                r.typ = range_type(Type::UInt(is));
+                return valid(r.typ.clone());
+            };
+
+            let Some(end) = &mut r.end else {
+                r.typ = range_type(Type::Int(is));
+                return valid(r.typ.clone());
+            };
+
+            if let Ok(_typ) = type_check_with_conversion(ctx, end, &Type::Int(is), target) {
+                r.typ = range_type(Type::Int(is));
+                valid(r.typ.clone())
+            } else if let Ok(_typ) = type_check_with_conversion(ctx, start, &Type::UInt(is), target) {
+                r.typ = range_type(Type::UInt(is));
+                valid(r.typ.clone())
+            } else {
+                type_error_result(
+                    &r.span,
+                    format!(
+                        "Range start and must have the same integer type, start has {} and end has {}",
+                        start_type, end_type
+                    ),
+                )
+            }
+        }
+        (Type::UInt(s), Type::Int(e)) => {
+            let is = if s.size_in_bits() > e.size_in_bits() { *s } else { *e };
+            let Some(start) = &mut r.start else {
+                r.typ = range_type(Type::Int(is));
+                return valid(r.typ.clone());
+            };
+
+            let Some(end) = &mut r.end else {
+                r.typ = range_type(Type::UInt(is));
+                return valid(r.typ.clone());
+            };
+
+            if let Ok(_typ) = type_check_with_conversion(ctx, end, &Type::UInt(is), target) {
+                r.typ = range_type(Type::UInt(is));
+                valid(r.typ.clone())
+            } else if let Ok(_typ) = type_check_with_conversion(ctx, start, &Type::Int(is), target) {
+                r.typ = range_type(Type::Int(is));
+                valid(r.typ.clone())
+            } else {
+                type_error_result(
+                    &r.span,
+                    format!(
+                        "Range start and must have the same integer type, start has {} and end has {}",
+                        start_type, end_type
+                    ),
+                )
+            }
+        }
         _ => type_error_result(
             &r.span,
-            format!(
-                "Expecting unsigned integer types for the start and end of a range (got {start_type} and {end_type})"
-            ),
+            format!("Invalid types for the start and end of a range (got {start_type} and {end_type})"),
         ),
     }
 }

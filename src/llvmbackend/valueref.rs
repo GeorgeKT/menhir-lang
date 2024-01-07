@@ -479,13 +479,9 @@ impl ValueRef {
 
             (Type::Slice(st), ByteCodeProperty::Data) => unsafe {
                 let data_ptr = self.slice_data_ptr(ctx)?;
+                let et = data_ptr.get_element_type(ctx)?;
                 ValueRef::new(
-                    build_load(
-                        ctx.builder,
-                        ctx.resolve_type(&st.element_type)?,
-                        data_ptr.value,
-                        cstr!("data"),
-                    ),
+                    build_load(ctx.builder, et, data_ptr.value, cstr!("data")),
                     st.element_type.ptr_of(),
                 )
             },

@@ -563,6 +563,10 @@ pub fn interface_type(name: &str, generic_args: Vec<Type>, functions: Vec<Functi
     }))
 }
 
+pub fn range_type(inner: Type) -> Type {
+    Type::Range(Rc::new(inner))
+}
+
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
