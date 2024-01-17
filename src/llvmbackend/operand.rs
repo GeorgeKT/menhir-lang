@@ -392,7 +392,7 @@ unsafe fn gen_cast(ctx: &mut Context, src: &Operand, typ: Type) -> CompileResult
             LLVMBuildBitCast(ctx.builder, operand.value, ctx.resolve_type(&typ)?, cstr!("ptr_cast"))
         }
 
-        (&Type::Bool, &Type::Pointer(_)) => LLVMBuildIsNull(ctx.builder, operand.value, cstr!("isnt_null")),
+        (&Type::Bool, &Type::Pointer(_)) => LLVMBuildIsNotNull(ctx.builder, operand.value, cstr!("isnt_null")),
 
         _ => {
             return code_gen_result(format!(

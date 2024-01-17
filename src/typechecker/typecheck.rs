@@ -1484,8 +1484,8 @@ fn type_check_literal(
 
         Literal::NullPtr(span, typ) => {
             if let Some(Type::Pointer(inner_type)) = type_hint {
-                *typ = inner_type.deref().clone();
-                valid(ptr_type(typ.clone()))
+                *typ = inner_type.ptr_of();
+                valid(typ.clone())
             } else if *typ != Type::Unknown {
                 type_error_result(span, "Unable to determine type of null expression")
             } else {
