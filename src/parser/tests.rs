@@ -632,6 +632,7 @@ struct Point:
                 struct_member_declaration("x", target.native_int_type.clone(), span(3, 5, 3, 10)),
                 struct_member_declaration("y", target.native_int_type.clone(), span(4, 5, 4, 10)),
             ],
+            vec![],
             span(2, 1, 4, 10)
         ))
     )
@@ -656,6 +657,7 @@ struct Point:
                 struct_member_declaration("x", generic_type("a"), span(3, 5, 3, 9)),
                 struct_member_declaration("y", generic_type("b"), span(4, 5, 4, 9)),
             ],
+            vec![],
             span(2, 1, 4, 9)
         ))
     )
@@ -790,6 +792,7 @@ enum Option:
                 sum_type_case_decl("test::Option::Some", None, span(3, 5, 3, 8)),
                 sum_type_case_decl("test::Option::None", None, span(4, 5, 4, 8)),
             ],
+            vec![],
             span(2, 1, 4, 8)
         ))
     )
@@ -822,6 +825,7 @@ enum Foo:
                             struct_member_declaration("x", target.native_int_type.clone(), span(3, 9, 3, 14)),
                             struct_member_declaration("y", target.native_int_type.clone(), span(3, 17, 3, 22)),
                         ],
+                        vec![],
                         span(3, 5, 3, 23)
                     )),
                     span(3, 5, 3, 23)
@@ -832,11 +836,13 @@ enum Foo:
                     Some(struct_declaration(
                         "Foo::Baz",
                         vec![struct_member_declaration("bla", Type::Bool, span(5, 9, 5, 17)),],
+                        vec![],
                         span(5, 5, 5, 18)
                     )),
                     span(5, 5, 5, 18)
                 ),
             ],
+            vec![],
             span(2, 1, 5, 18)
         ))
     )
@@ -847,7 +853,7 @@ fn test_generic_type_declaration() {
     let target = Target::new(IntSize::I32, "");
     let md = th_mod(
         r#"
-struct Point:
+struct Point implements Foo:
     x: $a
     y: $b
 
@@ -863,6 +869,7 @@ fn foo(p: Point<int>) -> int: 7
                 struct_member_declaration("x", generic_type("a"), span(3, 5, 3, 9)),
                 struct_member_declaration("y", generic_type("b"), span(4, 5, 4, 9)),
             ],
+            vec![],
             span(2, 1, 4, 9)
         ))
     );

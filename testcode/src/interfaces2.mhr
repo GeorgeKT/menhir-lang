@@ -5,7 +5,8 @@ interface Product:
 interface Sum:
     fn sum(self) -> int
 
-struct Point:
+
+struct Point implements Product, Sum:
     x: int
     y: int
 

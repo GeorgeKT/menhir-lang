@@ -189,6 +189,7 @@ impl Lexer {
             "return" => TokenKind::Return,
             "ok" => TokenKind::Ok,
             "error" => TokenKind::Error,
+            "implements" => TokenKind::Implements,
             _ => TokenKind::Identifier(std::mem::take(&mut self.data)),
         };
 

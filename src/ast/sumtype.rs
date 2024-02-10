@@ -22,14 +22,21 @@ pub fn sum_type_case_decl(name: &str, data: Option<StructDeclaration>, span: Spa
 pub struct SumTypeDeclaration {
     pub name: String,
     pub cases: Vec<SumTypeCaseDeclaration>,
+    pub implements: Vec<(Type, Span)>,
     pub span: Span,
     pub typ: Type,
 }
 
-pub fn sum_type_decl(name: &str, cases: Vec<SumTypeCaseDeclaration>, span: Span) -> SumTypeDeclaration {
+pub fn sum_type_decl(
+    name: &str,
+    cases: Vec<SumTypeCaseDeclaration>,
+    implements: Vec<(Type, Span)>,
+    span: Span,
+) -> SumTypeDeclaration {
     SumTypeDeclaration {
         name: name.into(),
         cases,
+        implements,
         span,
         typ: Type::Unknown,
     }

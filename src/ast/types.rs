@@ -23,6 +23,7 @@ pub trait SumTypeCaseIndexOf {
 pub struct SumType {
     pub name: String,
     pub cases: Vec<SumTypeCase>,
+    pub implements: Vec<Type>,
 }
 
 impl SumTypeCaseIndexOf for SumType {
@@ -39,6 +40,7 @@ impl SumTypeCaseIndexOf for SumType {
 pub struct EnumType {
     pub name: String,
     pub cases: Vec<String>,
+    pub implements: Vec<Type>,
 }
 
 impl SumTypeCaseIndexOf for EnumType {
@@ -61,6 +63,7 @@ pub struct StructMember {
 pub struct StructType {
     pub name: Option<String>,
     pub members: Vec<StructMember>,
+    pub implements: Vec<Type>,
 }
 
 impl StructType {
@@ -460,6 +463,15 @@ impl Type {
     pub fn ptr_of(&self) -> Type {
         Type::Pointer(Rc::new(self.clone()))
     }
+
+    pub fn implements_interface(&self, interface: &Type) -> bool {
+        match self {
+            Type::Struct(st) => st.implements.contains(interface),
+            Type::Sum(st) => st.implements.contains(interface),
+            Type::Enum(et) => et.implements.contains(interface),
+            _ => false,
+        }
+    }
 }
 
 pub fn func_type(args: Vec<FuncArg>, ret: Type) -> Type {
@@ -485,6 +497,7 @@ pub fn string_type_representation(native_int_size: IntSize) -> StructType {
             struct_member("data".into(), ptr_type(Type::UInt(IntSize::I8))),
             struct_member("len".into(), Type::UInt(native_int_size)),
         ],
+        implements: Vec::new(),
     }
 }
 
@@ -492,22 +505,28 @@ pub fn sum_type_case(name: &str, typ: Option<Type>) -> SumTypeCase {
     SumTypeCase { name: name.into(), typ }
 }
 
-pub fn sum_type(name: &str, cases: Vec<SumTypeCase>) -> Type {
+pub fn sum_type(name: &str, cases: Vec<SumTypeCase>, implements: Vec<Type>) -> Type {
     Type::Sum(Rc::new(SumType {
         name: name.into(),
         cases,
+        implements,
     }))
 }
 
-pub fn enum_type(name: &str, cases: Vec<String>) -> Type {
+pub fn enum_type(name: &str, cases: Vec<String>, implements: Vec<Type>) -> Type {
     Type::Enum(Rc::new(EnumType {
         name: name.into(),
         cases,
+        implements,
     }))
 }
 
-pub fn struct_type(name: Option<String>, members: Vec<StructMember>) -> Type {
-    Type::Struct(Rc::new(StructType { name, members }))
+pub fn struct_type(name: Option<String>, members: Vec<StructMember>, implements: Vec<Type>) -> Type {
+    Type::Struct(Rc::new(StructType {
+        name,
+        members,
+        implements,
+    }))
 }
 
 pub fn ptr_type(inner: Type) -> Type {

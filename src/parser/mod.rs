@@ -376,7 +376,7 @@ fn parse_struct_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) 
     }
     tq.expect(&TokenKind::CloseCurly)?;
     let span = start.expanded(tq.pos());
-    Ok((struct_type(None, members), span))
+    Ok((struct_type(None, members, Vec::new()), span))
 }
 
 fn parse_primitive_type(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<(Type, Span)> {
@@ -769,7 +769,12 @@ fn parse_sum_type(
     target: &Target,
 ) -> CompileResult<SumTypeDeclaration> {
     let (sum_type_name, _) = tq.expect_identifier()?;
-    tq.expect(&TokenKind::Colon)?;
+    let implements = if let Some(_) = tq.pop_if(|t| t.kind == TokenKind::Implements)? {
+        parse_implements_list(tq, indent_level, target)?
+    } else {
+        tq.expect(&TokenKind::Colon)?;
+        Vec::new()
+    };
 
     let parse_sum_type_case = |tq: &mut TokenQueue, indent_level: usize, target: &Target| {
         if tq.is_next_at(1, &TokenKind::OpenCurly) {
@@ -788,6 +793,7 @@ fn parse_sum_type(
     Ok(sum_type_decl(
         &namespaced(namespace, &sum_type_name),
         cases,
+        implements,
         span.expanded(tq.pos()),
     ))
 }
@@ -798,6 +804,14 @@ fn namespaced(namespace: &str, name: &str) -> String {
     } else {
         format!("{}::{}", namespace, name)
     }
+}
+
+fn parse_implements_list(
+    tq: &mut TokenQueue,
+    indent_level: usize,
+    target: &Target,
+) -> CompileResult<Vec<(Type, Span)>> {
+    parse_comma_separated_list(tq, &TokenKind::Colon, parse_type, indent_level, target)
 }
 
 fn parse_struct_declaration(
@@ -819,17 +833,29 @@ fn parse_struct_declaration(
         ))
     };
 
-    let members = if tq.is_next(&TokenKind::OpenCurly) {
+    let (members, implements) = if tq.is_next(&TokenKind::OpenCurly) {
         tq.expect(&TokenKind::OpenCurly)?;
-        parse_comma_separated_list(tq, &TokenKind::CloseCurly, parse_struct_member, indent_level, target)?
+        (
+            parse_comma_separated_list(tq, &TokenKind::CloseCurly, parse_struct_member, indent_level, target)?,
+            Vec::new(),
+        )
     } else {
-        tq.expect(&TokenKind::Colon)?;
-        parse_indented_block(tq, indent_level, parse_struct_member, target)?
+        let implements = if let Some(_) = tq.pop_if(|t| t.kind == TokenKind::Implements)? {
+            parse_implements_list(tq, indent_level, target)?
+        } else {
+            tq.expect(&TokenKind::Colon)?;
+            Vec::new()
+        };
+        (
+            parse_indented_block(tq, indent_level, parse_struct_member, target)?,
+            implements,
+        )
     };
 
     Ok(struct_declaration(
         &namespaced(namespace, &name),
         members,
+        implements,
         span.expanded(tq.pos()),
     ))
 }

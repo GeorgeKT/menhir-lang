@@ -1,6 +1,7 @@
 use super::typecheckercontext::TypeCheckerContext;
 use crate::ast::*;
 use crate::compileerror::{type_error_result, unknown_name_result, CompileResult};
+use crate::span::Span;
 use std::collections::HashSet;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -156,7 +157,32 @@ fn resolve_struct_member_types(
         member_types.push(struct_member(m.name.clone(), m.typ.clone()));
     }
 
-    sd.typ = struct_type(Some(sd.name.clone()), member_types);
+    if resolve_implements_list(ctx, &mut sd.implements, mode)? == TypeResolved::No {
+        return Ok(TypeResolved::No);
+    }
+
+    let implements = sd.implements.iter().map(|(t, _)| t.clone()).collect();
+    sd.typ = struct_type(Some(sd.name.clone()), member_types, implements);
+    Ok(TypeResolved::Yes)
+}
+
+fn resolve_implements_list(
+    ctx: &mut TypeCheckerContext,
+    il: &mut Vec<(Type, Span)>,
+    mode: ResolveMode,
+) -> CompileResult<TypeResolved> {
+    for (typ, span) in il {
+        if resolve_type(ctx, typ) == TypeResolved::No {
+            if mode == ResolveMode::Lazy {
+                return Ok(TypeResolved::No);
+            } else {
+                return unknown_name_result(span, format!("Unknown interface {}", typ));
+            }
+        } else if !matches!(typ, Type::Interface(_)) {
+            return type_error_result(span, format!("Type {typ} is not an interface"));
+        }
+    }
+
     Ok(TypeResolved::Yes)
 }
 
@@ -183,11 +209,16 @@ fn resolve_sum_case_types(
         }
     }
 
+    if resolve_implements_list(ctx, &mut st.implements, mode)? == TypeResolved::No && mode == ResolveMode::Lazy {
+        return Ok(TypeResolved::No);
+    }
+
+    let implements = st.implements.iter().map(|(t, _)| t.clone()).collect();
     if case_types.iter().all(|ct| ct.typ.is_none()) {
         let case_names: Vec<String> = st.cases.iter().map(|c| c.name.clone()).collect();
-        st.typ = enum_type(&st.name, case_names);
+        st.typ = enum_type(&st.name, case_names, implements);
     } else {
-        st.typ = sum_type(&st.name, case_types);
+        st.typ = sum_type(&st.name, case_types, implements);
     }
 
     Ok(TypeResolved::Yes)

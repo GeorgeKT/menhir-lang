@@ -858,7 +858,7 @@ fn type_check_struct_members_in_initializer(
     si.member_initializers
         .sort_by(|a, b| a.member_idx.cmp(&b.member_idx));
 
-    Ok(struct_type(si.struct_name.clone(), new_members))
+    Ok(struct_type(si.struct_name.clone(), new_members, st.implements.clone()))
 }
 
 fn type_check_anonymous_struct_initializer(
@@ -871,7 +871,7 @@ fn type_check_anonymous_struct_initializer(
         let t = type_check_expression(ctx, &mut mi.initializer, None, target)?;
         new_members.push(struct_member(mi.name.clone(), t));
     }
-    si.typ = struct_type(None, new_members);
+    si.typ = struct_type(None, new_members, Vec::new());
     valid(si.typ.clone())
 }
 
@@ -917,7 +917,7 @@ fn type_check_struct_initializer(
                 sum_type_cases.push(sum_type_case(&case.name, typ))
             }
 
-            si.typ = sum_type(&st.name, sum_type_cases);
+            si.typ = sum_type(&st.name, sum_type_cases, st.implements.clone());
             valid(si.typ.clone())
         }
 
@@ -1001,23 +1001,24 @@ fn type_check_generic_member_call(
 }
 
 fn to_static_function_call(ctx: &mut TypeCheckerContext, sma: &MemberAccess) -> Option<Call> {
-    if let Expression::NameRef(nr) = &sma.left {
-        if let MemberAccessType::Call(call) = &sma.right {
-            let call_name = format!("{}.{}", nr.name, call.callee.name);
-            if let Some(rn) = ctx.resolve(&call_name) {
-                if let Type::Func(_) = &rn.typ {
-                    let name_span = Span::merge(&nr.span, &call.callee.span);
-                    let full_span = Span::merge(&name_span, &call.span);
-                    return Some(Call::new(
-                        NameRef::new(call_name, name_span),
-                        call.args.clone(),
-                        full_span,
-                    ));
-                }
-            }
-        }
-    }
-    None
+    let (Expression::NameRef(nr), MemberAccessType::Call(call)) = (&sma.left, &sma.right) else {
+        return None;
+    };
+    let call_name = format!("{}.{}", nr.name, call.callee.name);
+    let Some(rn) = ctx.resolve(&call_name) else {
+        return None;
+    };
+    let Type::Func(_) = &rn.typ else {
+        return None;
+    };
+
+    let name_span = Span::merge(&nr.span, &call.callee.span);
+    let full_span = Span::merge(&name_span, &call.span);
+    Some(Call::new(
+        NameRef::new(call_name, name_span),
+        call.args.clone(),
+        full_span,
+    ))
 }
 
 fn type_check_member_access(ctx: &mut TypeCheckerContext, sma: &mut MemberAccess, target: &Target) -> TypeCheckResult {
@@ -1817,6 +1818,93 @@ where
     }
 }
 
+fn matches_function_signature(
+    expected: &Type,
+    actual: &Type,
+    concrete_type: &Type,
+    method_name: &str,
+) -> Result<(), String> {
+    fn type_matches(expected: &Type, actual: &Type, concrete_type: &Type) -> bool {
+        match (expected, actual) {
+            (Type::Pointer(e), Type::Pointer(a)) | (Type::Optional(e), Type::Optional(a)) => {
+                type_matches(e, a, concrete_type)
+            }
+            (Type::Array(e), Type::Array(a)) => type_matches(&e.element_type, &a.element_type, concrete_type),
+            (Type::Slice(e), Type::Slice(a)) => type_matches(&e.element_type, &a.element_type, concrete_type),
+            _ => *expected == *actual || (*expected == Type::SelfType && *actual == *concrete_type),
+        }
+    }
+
+    match (expected, actual) {
+        (Type::Func(e), Type::Func(a)) => {
+            if e.args.len() != a.args.len() {
+                return Err(format!("Argument count mismatch for method {}", method_name));
+            }
+
+            if !type_matches(&e.return_type, &a.return_type, concrete_type) {
+                return Err(format!("Return types do not match on method {}", method_name));
+            }
+
+            for (idx, (e_arg, a_arg)) in e.args.iter().zip(a.args.iter()).enumerate() {
+                if !type_matches(&e_arg.typ, &a_arg.typ, concrete_type) {
+                    return Err(format!(
+                        "The type of argument {} does not match on method {}.",
+                        idx, method_name
+                    ));
+                }
+            }
+
+            Ok(())
+        }
+
+        _ => Err(format!(
+            "Cannot match function signatures of {} and {} types",
+            expected, actual
+        )),
+    }
+}
+
+fn implements_interface(ctx: &TypeCheckerContext, concrete_type: &Type, interface: &Type) -> Result<(), String> {
+    let it = if let Type::Interface(it) = interface {
+        it
+    } else {
+        return Err(format!("{} is not an interface type", interface.name()));
+    };
+
+    let concrete_type_name = concrete_type.name();
+    for func in &it.functions {
+        let r = ctx
+            .resolve(&format!("{}.{}", concrete_type_name, func.name))
+            .ok_or_else(|| format!("No method {} found on type {}", func.name, concrete_type_name))?;
+
+        matches_function_signature(&func.typ, &r.typ, concrete_type, &func.name)?;
+    }
+
+    Ok(())
+}
+
+fn type_check_implements(module: &Module, ctx: &TypeCheckerContext, errors: &mut Vec<CompileError>) {
+    for t in module.types.values() {
+        match t {
+            TypeDeclaration::Interface(_) => (),
+            TypeDeclaration::Struct(sd) => {
+                for (impls, span) in &sd.implements {
+                    if let Err(e) = implements_interface(ctx, &sd.typ, impls) {
+                        errors.push(type_error(span, e));
+                    }
+                }
+            }
+            TypeDeclaration::Sum(st) => {
+                for (impls, span) in &st.implements {
+                    if let Err(e) = implements_interface(ctx, &st.typ, impls) {
+                        errors.push(type_error(span, e));
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub fn type_check_module(module: &mut Module, target: &Target, imports: &ImportMap) -> CompileResult<()> {
     let mut destructors_added = false;
     loop {
@@ -1859,6 +1947,11 @@ pub fn type_check_module(module: &mut Module, target: &Target, imports: &ImportM
             }
 
             if count == module.functions.len() {
+                // Final step, check if types implement the things they say they do
+                type_check_implements(module, &ctx, &mut errors);
+                if !errors.is_empty() {
+                    return CompileResult::Err(CompileError::Many(errors));
+                }
                 break;
             }
         }

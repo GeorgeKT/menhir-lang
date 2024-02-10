@@ -272,3 +272,8 @@ depends=["common"]
 [[target]]
 name="pointers"
 type="binary"
+
+[[target]]
+name="format"
+type="binary"
+depends=["common"]

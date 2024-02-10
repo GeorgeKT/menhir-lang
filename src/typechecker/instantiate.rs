@@ -4,86 +4,20 @@ use crate::compileerror::{type_error, CompileResult};
 use crate::span::Span;
 use std::ops::Deref;
 
-fn matches_function_signature(
-    expected: &Type,
-    actual: &Type,
-    concrete_type: &Type,
-    method_name: &str,
-) -> Result<(), String> {
-    fn type_matches(expected: &Type, actual: &Type, concrete_type: &Type) -> bool {
-        match (expected, actual) {
-            (Type::Pointer(e), Type::Pointer(a)) | (Type::Optional(e), Type::Optional(a)) => {
-                type_matches(e, a, concrete_type)
-            }
-            (Type::Array(e), Type::Array(a)) => type_matches(&e.element_type, &a.element_type, concrete_type),
-            (Type::Slice(e), Type::Slice(a)) => type_matches(&e.element_type, &a.element_type, concrete_type),
-            _ => *expected == *actual || (*expected == Type::SelfType && *actual == *concrete_type),
-        }
-    }
-
-    match (expected, actual) {
-        (Type::Func(e), Type::Func(a)) => {
-            if e.args.len() != a.args.len() {
-                return Err(format!("Argument count mismatch for method {}", method_name));
-            }
-
-            if !type_matches(&e.return_type, &a.return_type, concrete_type) {
-                return Err(format!("Return types do not match on method {}", method_name));
-            }
-
-            for (idx, (e_arg, a_arg)) in e.args.iter().zip(a.args.iter()).enumerate() {
-                if !type_matches(&e_arg.typ, &a_arg.typ, concrete_type) {
-                    return Err(format!(
-                        "The type of argument {} does not match on method {}.",
-                        idx, method_name
-                    ));
-                }
-            }
-
-            Ok(())
-        }
-
-        _ => Err(format!(
-            "Cannot match function signatures of {} and {} types",
-            expected, actual
-        )),
-    }
-}
-
-fn satisfies_interface(ctx: &TypeCheckerContext, concrete_type: &Type, interface: &Type) -> Result<(), String> {
-    let it = if let Type::Interface(it) = interface {
-        it
-    } else {
-        return Err(format!("{} is not an interface type", interface.name()));
-    };
-
-    let concrete_type_name = concrete_type.name();
-    for func in &it.functions {
-        let r = ctx
-            .resolve(&format!("{}.{}", concrete_type_name, func.name))
-            .ok_or_else(|| format!("No method {} found on type {}", func.name, concrete_type_name))?;
-
-        matches_function_signature(&func.typ, &r.typ, concrete_type, &func.name)?;
-    }
-
-    Ok(())
-}
-
-fn check_interface_constraints(ctx: &TypeCheckerContext, generic: &Type, concrete: &Type) -> Result<Type, String> {
+fn check_interface_constraints(generic: &Type, concrete: &Type) -> Result<Type, String> {
     match generic {
         Type::Generic(gt) => match gt.deref() {
             GenericType::Any(_) => Ok(concrete.clone()),
 
             GenericType::Restricted(interfaces) => {
                 for interface in interfaces {
-                    satisfies_interface(ctx, concrete, interface).map_err(|msg| {
-                        format!(
-                            "Type {} does not implement the interface {}: {}",
+                    if !concrete.implements_interface(interface) {
+                        return Err(format!(
+                            "Type {} does not implement the interface {}",
                             concrete.name(),
                             interface.name(),
-                            msg
-                        )
-                    })?;
+                        ));
+                    }
                 }
 
                 Ok(concrete.clone())
@@ -100,7 +34,7 @@ fn make_concrete_type(ctx: &TypeCheckerContext, mapping: &GenericMapping, generi
     }
 
     if let Some(concrete) = mapping.get(generic) {
-        return check_interface_constraints(ctx, generic, concrete);
+        return check_interface_constraints(generic, concrete);
     }
 
     let typ = match generic {
@@ -126,7 +60,11 @@ fn make_concrete_type(ctx: &TypeCheckerContext, mapping: &GenericMapping, generi
                 members.push(struct_member(m.name.clone(), make_concrete_type(ctx, mapping, &m.typ)?));
             }
 
-            struct_type(st.name.clone(), members)
+            let mut implements = Vec::new();
+            for m in &st.implements {
+                implements.push(make_concrete_type(ctx, mapping, m)?);
+            }
+            struct_type(st.name.clone(), members, implements)
         }
 
         Type::Sum(st) => {
@@ -140,7 +78,11 @@ fn make_concrete_type(ctx: &TypeCheckerContext, mapping: &GenericMapping, generi
                 cases.push(sum_type_case(&c.name, case_typ));
             }
 
-            sum_type(&st.name, cases)
+            let mut implements = Vec::new();
+            for m in &st.implements {
+                implements.push(make_concrete_type(ctx, mapping, m)?);
+            }
+            sum_type(&st.name, cases, implements)
         }
 
         Type::Pointer(inner) => ptr_type(make_concrete_type(ctx, mapping, inner)?),

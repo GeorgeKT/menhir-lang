@@ -1,0 +1,8 @@
+#ret:42
+import common::print
+
+fn main() -> int:
+    let v = 42
+    print("The answer is ${v}")
+    v
+    

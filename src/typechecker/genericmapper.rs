@@ -121,7 +121,20 @@ pub fn fill_in_generics(
                 new_members.push(struct_member(aa.name.clone(), nt));
             }
 
-            Ok(struct_type(actual_st.name.clone(), new_members))
+            if generic_st.implements.len() != actual_st.implements.len() {
+                return map_err();
+            }
+
+            let mut implements = Vec::with_capacity(generic_st.implements.len());
+            for (gi, ai) in generic_st
+                .implements
+                .iter()
+                .zip(actual_st.implements.iter())
+            {
+                let nt = fill_in_generics(ctx, ai, gi, known_types, span)?;
+                implements.push(nt);
+            }
+            Ok(struct_type(actual_st.name.clone(), new_members, implements))
         }
 
         (Type::Sum(generic_st), Type::Sum(actual_st)) => {
@@ -141,7 +154,20 @@ pub fn fill_in_generics(
                 }
             }
 
-            Ok(sum_type(&actual_st.name, new_cases))
+            if generic_st.implements.len() != actual_st.implements.len() {
+                return map_err();
+            }
+
+            let mut implements = Vec::with_capacity(generic_st.implements.len());
+            for (gi, ai) in generic_st
+                .implements
+                .iter()
+                .zip(actual_st.implements.iter())
+            {
+                let nt = fill_in_generics(ctx, ai, gi, known_types, span)?;
+                implements.push(nt);
+            }
+            Ok(sum_type(&actual_st.name, new_cases, implements))
         }
 
         (Type::Pointer(generic_inner), Type::Pointer(actual_inner)) => {

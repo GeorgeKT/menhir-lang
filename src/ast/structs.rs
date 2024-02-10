@@ -21,14 +21,21 @@ pub fn struct_member_declaration(name: &str, typ: Type, span: Span) -> StructMem
 pub struct StructDeclaration {
     pub name: String,
     pub members: Vec<StructMemberDeclaration>,
+    pub implements: Vec<(Type, Span)>,
     pub span: Span,
     pub typ: Type,
 }
 
-pub fn struct_declaration(name: &str, members: Vec<StructMemberDeclaration>, span: Span) -> StructDeclaration {
+pub fn struct_declaration(
+    name: &str,
+    members: Vec<StructMemberDeclaration>,
+    implements: Vec<(Type, Span)>,
+    span: Span,
+) -> StructDeclaration {
     StructDeclaration {
         name: name.into(),
         members,
+        implements,
         span,
         typ: Type::Unknown,
     }

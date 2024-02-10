@@ -41,6 +41,7 @@ pub enum TokenKind {
     Type,
     Struct,
     Enum,
+    Implements,
     Tilde,
     New,
     Delete,
@@ -114,6 +115,7 @@ impl Display for TokenKind {
             TokenKind::Ok => write!(fmt, "ok"),
             TokenKind::Error => write!(fmt, "error"),
             TokenKind::DotDot => write!(fmt, ".."),
+            TokenKind::Implements => write!(fmt, "implements"),
         }
     }
 }

@@ -2,7 +2,7 @@
 interface Sum:
     fn sum(self) -> int
 
-struct Point:
+struct Point implements Sum:
     x: int
     y: int
 
