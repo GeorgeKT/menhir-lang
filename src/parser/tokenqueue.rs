@@ -49,11 +49,11 @@ impl TokenQueue {
     pub fn pop_if(&mut self, pred: impl Fn(&Token) -> bool) -> CompileResult<Option<Token>> {
         let matches = self
             .peek()
-            .map(|t| pred(t))
+            .map(pred)
             .ok_or_else(|| parse_error(&Span::default(), "Unexpected end of file"))?;
 
         if matches {
-            self.pop().map(|t| Some(t))
+            self.pop().map(Some)
         } else {
             Ok(None)
         }

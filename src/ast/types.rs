@@ -69,7 +69,7 @@ pub struct StructType {
 impl StructType {
     pub fn get_name(&self) -> &str {
         match &self.name {
-            Some(name) => &name,
+            Some(name) => name,
             None => "<anonymous>",
         }
     }
@@ -172,6 +172,7 @@ pub struct ResultType {
     pub err_typ: Type,
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub enum Type {
     Void,

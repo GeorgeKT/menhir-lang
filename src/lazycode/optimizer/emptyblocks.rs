@@ -18,7 +18,7 @@ fn find_empty_blocks_in_scope(scope: &Scope, empty_blocks: &mut HashMap<Label, L
         match n {
             ScopeNode::Instruction(Instruction::Label { label }) => {
                 instruction_count = 0;
-                current_label = Some(label.clone());
+                current_label = Some(*label);
             }
 
             ScopeNode::Instruction(Instruction::Branch { to }) => {

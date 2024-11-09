@@ -55,7 +55,7 @@ fn number_to_literal(
     for int_size in &int_sizes {
         let lim = if force_unsigned {
             if int_size.size_in_bits() == 64 {
-                u64::max_value()
+                u64::MAX
             } else {
                 2u64.pow(int_size.size_in_bits()) - 1
             }
@@ -556,7 +556,7 @@ fn parse_function_declaration(
     let colon = tq.expect(&TokenKind::Colon)?;
 
     let expr = parse_block(tq, &colon.span, indent_level, target)?;
-    let func_span = Span::merge(&span, &expr.span());
+    let func_span = Span::merge(span, &expr.span());
     Ok(Function::new(signature, true, expr, func_span))
 }
 
@@ -769,7 +769,7 @@ fn parse_sum_type(
     target: &Target,
 ) -> CompileResult<SumTypeDeclaration> {
     let (sum_type_name, _) = tq.expect_identifier()?;
-    let implements = if let Some(_) = tq.pop_if(|t| t.kind == TokenKind::Implements)? {
+    let implements = if (tq.pop_if(|t| t.kind == TokenKind::Implements)?).is_some() {
         parse_implements_list(tq, indent_level, target)?
     } else {
         tq.expect(&TokenKind::Colon)?;
@@ -840,7 +840,7 @@ fn parse_struct_declaration(
             Vec::new(),
         )
     } else {
-        let implements = if let Some(_) = tq.pop_if(|t| t.kind == TokenKind::Implements)? {
+        let implements = if (tq.pop_if(|t| t.kind == TokenKind::Implements)?).is_some() {
             parse_implements_list(tq, indent_level, target)?
         } else {
             tq.expect(&TokenKind::Colon)?;
@@ -1076,7 +1076,7 @@ fn parse_range(
         Ok(range(lhs, None, Type::Unknown, start.expanded(tq.pos())))
     } else {
         let rhs = parse_expression(tq, indent_level, target)?;
-        let span = Span::merge(&start, &rhs.span());
+        let span = Span::merge(start, &rhs.span());
         Ok(range(lhs, Some(rhs), Type::Unknown, span))
     }
 }
@@ -1254,7 +1254,7 @@ pub fn parse_expression(tq: &mut TokenQueue, indent_level: usize, target: &Targe
 }
 
 fn parse_type_of_binding(tq: &mut TokenQueue, indent_level: usize, target: &Target) -> CompileResult<Type> {
-    if let Some(_) = tq.pop_if(|t| t.kind == TokenKind::Colon)? {
+    if (tq.pop_if(|t| t.kind == TokenKind::Colon)?).is_some() {
         parse_type(tq, indent_level, target).map(|(t, _)| t)
     } else {
         Ok(Type::Unknown)

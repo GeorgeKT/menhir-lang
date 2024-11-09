@@ -48,8 +48,10 @@ impl Default for Pos {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum Span {
     File { file: String, start: Pos, end: Pos },
+    #[default]
     Internal,
 }
 
@@ -90,7 +92,7 @@ impl Span {
             ) => {
                 let s = if start < b_start { start } else { b_start };
                 let e = if end >= b_end { end } else { b_end };
-                Span::new(&file, *s, *e)
+                Span::new(file, *s, *e)
             }
             _ => Span::Internal,
         }
@@ -104,11 +106,6 @@ impl Span {
     }
 }
 
-impl Default for Span {
-    fn default() -> Self {
-        Span::Internal
-    }
-}
 
 impl fmt::Display for Span {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {

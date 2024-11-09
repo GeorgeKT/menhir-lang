@@ -365,12 +365,12 @@ fn resolve_generic_args_in_call(
     loop {
         arg_types.clear();
         for (arg, expected_arg_type) in c.args.iter_mut().zip(ft.args.iter()) {
-            let expected_arg_type = make_concrete(ctx, &c.generic_args, &expected_arg_type.typ, &arg.span())?;
+            let expected_arg_type = make_concrete(&c.generic_args, &expected_arg_type.typ, &arg.span())?;
             let arg_type = type_check_expression(ctx, arg, Some(&expected_arg_type), target)?;
-            let arg_type = make_concrete(ctx, &c.generic_args, &arg_type, &arg.span())?;
+            let arg_type = make_concrete(&c.generic_args, &arg_type, &arg.span())?;
 
             if expected_arg_type.is_generic() {
-                fill_in_generics(ctx, &arg_type, &expected_arg_type, &mut c.generic_args, &arg.span())?;
+                fill_in_generics(&arg_type, &expected_arg_type, &mut c.generic_args, &arg.span())?;
             }
             arg_types.push(arg_type);
         }
@@ -406,14 +406,14 @@ fn type_check_call(ctx: &mut TypeCheckerContext, c: &mut Call, target: &Target) 
 
         let arg_types = resolve_generic_args_in_call(ctx, ft, c, target)?;
         for (idx, arg) in c.args.iter_mut().enumerate() {
-            let expected_arg_type = make_concrete(ctx, &c.generic_args, &ft.args[idx].typ, &arg.span())?;
+            let expected_arg_type = make_concrete(&c.generic_args, &ft.args[idx].typ, &arg.span())?;
             let arg_type = &arg_types[idx];
             convert_type(ctx, &expected_arg_type, arg_type, arg, target)?;
         }
 
         if ft.return_type.is_generic() {
-            c.return_type = make_concrete(ctx, &c.generic_args, &ft.return_type, &c.span)?;
-            c.function_type = make_concrete(ctx, &c.generic_args, &resolved.typ, &c.span)?;
+            c.return_type = make_concrete(&c.generic_args, &ft.return_type, &c.span)?;
+            c.function_type = make_concrete(&c.generic_args, &resolved.typ, &c.span)?;
             return valid(c.return_type.clone());
         }
         c.return_type = ft.return_type.clone();
@@ -833,13 +833,13 @@ fn type_check_struct_members_in_initializer(
         let t = type_check_expression(ctx, &mut mi.initializer, Some(&expected_type), target)?;
 
         let expected_type = if expected_type.is_generic() {
-            fill_in_generics(ctx, &t, &expected_type, &mut si.generic_args, &mi.initializer.span())?
+            fill_in_generics(&t, &expected_type, &mut si.generic_args, &mi.initializer.span())?
         } else {
             expected_type
         };
 
         if t != expected_type {
-            if let Some(new_mi) = expected_type.convert(&t, &mut mi.initializer)? {
+            if let Some(new_mi) = expected_type.convert(&t, &mi.initializer)? {
                 mi.initializer = new_mi;
             } else {
                 return type_error_result(
@@ -1005,9 +1005,7 @@ fn to_static_function_call(ctx: &mut TypeCheckerContext, sma: &MemberAccess) -> 
         return None;
     };
     let call_name = format!("{}.{}", nr.name, call.callee.name);
-    let Some(rn) = ctx.resolve(&call_name) else {
-        return None;
-    };
+    let rn = ctx.resolve(&call_name)?;
     let Type::Func(_) = &rn.typ else {
         return None;
     };

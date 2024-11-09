@@ -158,7 +158,7 @@ impl<'a> TypeCheckerContext<'a> {
 
     fn destructor_needed(&self, typ: &Type) -> bool {
         let name = destructor_name_for_type(typ);
-        if let Some(_) = self.resolve(&name) {
+        if self.resolve(&name).is_some() {
             return true;
         }
 

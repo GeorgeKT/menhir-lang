@@ -430,7 +430,7 @@ unsafe fn gen_function_arg(ctx: &mut Context, arg: &CallArg) -> CompileResult<Va
 unsafe fn gen_call(
     ctx: &mut Context,
     callee: &Operand,
-    args: &Vec<CallArg>,
+    args: &[CallArg],
     typ: &Type,
     rvo: bool,
     dst: Option<ValueRef>,

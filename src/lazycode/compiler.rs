@@ -861,7 +861,7 @@ fn delete_to_bc(
 ) -> CompileResult<()> {
     match d {
         DeleteExpression::Delete { inner, .. } => {
-            let object = expr_to_bc(bc_mod, scope, &inner, target)?;
+            let object = expr_to_bc(bc_mod, scope, inner, target)?;
             scope.add(Instruction::Delete { object });
         }
         DeleteExpression::BlockWithDestructor { block, .. } => {
