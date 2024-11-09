@@ -853,7 +853,7 @@ fn test_generic_type_declaration() {
     let target = Target::new(IntSize::I32, "");
     let md = th_mod(
         r#"
-struct Point implements Foo:
+struct Point:
     x: $a
     y: $b
 
