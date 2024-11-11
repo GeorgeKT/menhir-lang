@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use crate::compileerror::CompileResult;
@@ -8,7 +8,7 @@ use super::Operand;
 
 #[derive(Default, Debug)]
 pub struct StackFrame {
-    vars: HashMap<String, Operand>,
+    vars: BTreeMap<String, Operand>,
 }
 
 #[derive(Debug)]

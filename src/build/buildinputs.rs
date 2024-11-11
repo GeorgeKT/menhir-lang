@@ -12,7 +12,7 @@ pub struct BuildFlags {
     pub target: String,
 }
 
-#[derive(Serialize, Deserialize, Hash, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Hash, PartialEq, Eq)]
 pub enum BuildInput {
     SourceFile {
         path: PathBuf,

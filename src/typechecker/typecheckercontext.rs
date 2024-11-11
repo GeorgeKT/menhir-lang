@@ -1,8 +1,8 @@
 use crate::ast::*;
 use crate::compileerror::*;
 use crate::span::Span;
+use std::collections::btree_map::{BTreeMap, Entry};
 use std::collections::hash_map::DefaultHasher;
-use std::collections::hash_map::{Entry, HashMap};
 use std::hash::Hash;
 use std::hash::Hasher;
 
@@ -10,18 +10,18 @@ use super::destructors::destructor_name;
 
 #[derive(Debug)]
 struct Scope {
-    symbols: HashMap<String, SymbolPtr>,
+    symbols: BTreeMap<String, SymbolPtr>,
     destructor_calls: Vec<Expression>,
-    drop_flags: HashMap<String, DropFlag>,
+    drop_flags: BTreeMap<String, DropFlag>,
     function_return_type: Option<Type>,
 }
 
 impl Scope {
     pub fn new(function_return_type: Option<Type>) -> Scope {
         Scope {
-            symbols: HashMap::new(),
+            symbols: BTreeMap::new(),
             destructor_calls: Vec::new(),
-            drop_flags: HashMap::new(),
+            drop_flags: BTreeMap::new(),
             function_return_type,
         }
     }
@@ -129,7 +129,7 @@ pub struct TypeCheckerContext<'a> {
     externals: Scope,
     import_resolver: ImportSymbolResolver<'a>,
     drop_flag_counter: usize,
-    destructors_to_create: HashMap<String, DestructorToCreate>,
+    destructors_to_create: BTreeMap<String, DestructorToCreate>,
 }
 
 impl<'a> TypeCheckerContext<'a> {
@@ -140,7 +140,7 @@ impl<'a> TypeCheckerContext<'a> {
             externals: Scope::new(None),
             import_resolver: isr,
             drop_flag_counter: 0,
-            destructors_to_create: HashMap::new(),
+            destructors_to_create: BTreeMap::new(),
         }
     }
 

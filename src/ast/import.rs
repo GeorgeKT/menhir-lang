@@ -3,7 +3,7 @@ use crate::ast::Function;
 use crate::span::Span;
 use itertools::join;
 use serde_derive::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
 
@@ -62,23 +62,23 @@ impl Symbol {
 #[derive(Serialize, Deserialize)]
 pub struct Import {
     pub namespace: String,
-    pub symbols: HashMap<String, SymbolPtr>,
-    pub generics: HashMap<String, Function>,
-    pub imported_symbols: HashMap<String, SymbolPtr>,
+    pub symbols: BTreeMap<String, SymbolPtr>,
+    pub generics: BTreeMap<String, Function>,
+    pub imported_symbols: BTreeMap<String, SymbolPtr>,
 }
 
 impl Import {
     pub fn new(namespace: String) -> Import {
         Import {
             namespace,
-            symbols: HashMap::new(),
-            generics: HashMap::new(),
-            imported_symbols: HashMap::new(),
+            symbols: BTreeMap::new(),
+            generics: BTreeMap::new(),
+            imported_symbols: BTreeMap::new(),
         }
     }
 
     pub fn resolve(&self, name: &str, allow_imported_symbols: bool) -> Option<SymbolPtr> {
-        let resolve = |symbols: &HashMap<String, SymbolPtr>| {
+        let resolve = |symbols: &BTreeMap<String, SymbolPtr>| {
             if let Some(s) = symbols.get(name) {
                 return Some(s.clone());
             }
@@ -119,4 +119,4 @@ impl fmt::Display for Import {
     }
 }
 
-pub type ImportMap = HashMap<String, Rc<Import>>;
+pub type ImportMap = BTreeMap<String, Rc<Import>>;

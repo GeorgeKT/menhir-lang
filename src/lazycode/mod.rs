@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt};
+use std::{collections::BTreeMap, fmt};
 
 pub use self::compiler::compile_to_byte_code;
 pub use self::function::ByteCodeFunction;
@@ -22,9 +22,9 @@ mod stack;
 #[derive(Debug)]
 pub struct ByteCodeModule {
     pub name: String,
-    pub functions: HashMap<String, ByteCodeFunction>,
+    pub functions: BTreeMap<String, ByteCodeFunction>,
     pub imported_functions: Vec<ByteCodeFunction>,
-    pub globals: HashMap<String, Constant>,
+    pub globals: BTreeMap<String, Constant>,
     pub stack: StackPtr,
 }
 

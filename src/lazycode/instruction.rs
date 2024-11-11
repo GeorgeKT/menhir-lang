@@ -3,7 +3,7 @@ use crate::ast::Type;
 use super::operand::Operand;
 use std::fmt;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Label {
     pub id: usize,
 }

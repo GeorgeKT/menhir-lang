@@ -1,5 +1,5 @@
 use llvm_sys::prelude::*;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use crate::ast::FunctionSignature;
@@ -38,15 +38,15 @@ impl VariableInstance {
 pub type VariableInstancePtr = Rc<VariableInstance>;
 
 pub struct SymbolTable {
-    vars: HashMap<String, VariableInstancePtr>,
-    funcs: HashMap<String, Rc<FunctionInstance>>,
+    vars: BTreeMap<String, VariableInstancePtr>,
+    funcs: BTreeMap<String, Rc<FunctionInstance>>,
 }
 
 impl SymbolTable {
     pub fn new() -> SymbolTable {
         SymbolTable {
-            vars: HashMap::new(),
-            funcs: HashMap::new(),
+            vars: BTreeMap::new(),
+            funcs: BTreeMap::new(),
         }
     }
 

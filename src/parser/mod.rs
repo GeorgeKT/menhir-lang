@@ -274,18 +274,18 @@ fn parse_generic_arg_list(tq: &mut TokenQueue, indent_level: usize, target: &Tar
 
 fn to_primitive(name: &str, target: &Target) -> Option<Type> {
     match name {
-        "int8" => Some(Type::Int(IntSize::I8)),
-        "int16" => Some(Type::Int(IntSize::I16)),
-        "int32" => Some(Type::Int(IntSize::I32)),
-        "int64" => Some(Type::Int(IntSize::I64)),
+        "int8" | "i8" => Some(Type::Int(IntSize::I8)),
+        "int16" | "i16" => Some(Type::Int(IntSize::I16)),
+        "int32" | "i32" => Some(Type::Int(IntSize::I32)),
+        "int64" | "i64" => Some(Type::Int(IntSize::I64)),
         "int" => Some(target.native_int_type.clone()),
-        "uint8" => Some(Type::UInt(IntSize::I8)),
-        "uint16" => Some(Type::UInt(IntSize::I16)),
-        "uint32" => Some(Type::UInt(IntSize::I32)),
-        "uint64" => Some(Type::UInt(IntSize::I64)),
+        "uint8" | "u8" => Some(Type::UInt(IntSize::I8)),
+        "uint16" | "u16" => Some(Type::UInt(IntSize::I16)),
+        "uint32" | "u32" => Some(Type::UInt(IntSize::I32)),
+        "uint64" | "u64" => Some(Type::UInt(IntSize::I64)),
         "uint" => Some(target.native_uint_type.clone()),
-        "float" | "float32" => Some(Type::Float(FloatSize::F32)),
-        "double" | "float64" => Some(Type::Float(FloatSize::F64)),
+        "float" | "float32" | "f32" => Some(Type::Float(FloatSize::F32)),
+        "double" | "float64" | "f64" => Some(Type::Float(FloatSize::F64)),
         "string" => Some(Type::String),
         "bool" => Some(Type::Bool),
         "char" => Some(Type::Char),
@@ -860,6 +860,16 @@ fn parse_struct_declaration(
     ))
 }
 
+fn with_ignore_indents<T>(
+    tq: &mut TokenQueue,
+    mut op: impl FnMut(&mut TokenQueue) -> CompileResult<T>,
+) -> CompileResult<T> {
+    tq.set_ignore_indents(true);
+    let ret = op(tq);
+    tq.set_ignore_indents(false);
+    ret
+}
+
 fn parse_struct_initializer(
     tq: &mut TokenQueue,
     name: Option<NameRef>,
@@ -873,23 +883,26 @@ fn parse_struct_initializer(
         open_curly.span
     };
 
-    let mut expressions = Vec::new();
-    while !tq.is_next(&TokenKind::CloseCurly) {
-        let (name, _) = tq.expect_identifier()?;
-        tq.expect(&TokenKind::Colon)?;
-        let e = parse_expression(tq, indent_level, target)?;
-        expressions.push(StructMemberInitializer {
-            name,
-            initializer: e,
-            member_idx: 0,
-        });
+    let expressions = with_ignore_indents(tq, |tq: &mut TokenQueue| {
+        let mut expressions = Vec::new();
+        while !tq.is_next(&TokenKind::CloseCurly) {
+            let (name, _) = tq.expect_identifier()?;
+            tq.expect(&TokenKind::Colon)?;
+            let e = parse_expression(tq, indent_level, target)?;
+            expressions.push(StructMemberInitializer {
+                name,
+                initializer: e,
+                member_idx: 0,
+            });
 
-        if !tq.is_next(&TokenKind::CloseCurly) {
-            tq.expect(&TokenKind::Comma)?;
+            if !tq.is_next(&TokenKind::CloseCurly) {
+                tq.expect(&TokenKind::Comma)?;
+            }
         }
-    }
+        tq.expect(&TokenKind::CloseCurly)?;
+        Ok(expressions)
+    })?;
 
-    tq.expect(&TokenKind::CloseCurly)?;
     Ok(Expression::StructInitializer(struct_initializer(
         name.map(|nr| nr.name),
         expressions,

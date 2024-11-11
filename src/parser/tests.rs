@@ -668,7 +668,10 @@ fn test_struct_initializer() {
     let target = Target::new(IntSize::I32, "");
     let e = th_expr(
         r#"
-Point{x: 6, y: 7}
+Point{
+    x: 6, 
+    y: 7,
+}
 "#,
         &target,
     );
@@ -679,16 +682,16 @@ Point{x: 6, y: 7}
             vec![
                 StructMemberInitializer {
                     name: "x".into(),
-                    initializer: number(6, span(2, 10, 2, 10), &target),
+                    initializer: number(6, span(3, 8, 3, 8), &target),
                     member_idx: 0,
                 },
                 StructMemberInitializer {
                     name: "y".into(),
-                    initializer: number(7, span(2, 16, 2, 16), &target),
+                    initializer: number(7, span(4, 8, 4, 8), &target),
                     member_idx: 0
                 }
             ],
-            span(2, 1, 2, 17)
+            span(2, 1, 5, 1)
         ))
     )
 }

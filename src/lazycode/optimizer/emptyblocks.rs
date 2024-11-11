@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::lazycode::{instruction::Label, ByteCodeFunction, ByteCodeModule, Instruction, Scope, ScopeNode};
 
-fn add_empty_block(empty_blocks: &mut HashMap<Label, Label>, from: Label, to: Label) {
+fn add_empty_block(empty_blocks: &mut BTreeMap<Label, Label>, from: Label, to: Label) {
     empty_blocks.insert(from, to);
     for (_, e_to) in empty_blocks.iter_mut() {
         if *e_to == from {
@@ -11,7 +11,7 @@ fn add_empty_block(empty_blocks: &mut HashMap<Label, Label>, from: Label, to: La
     }
 }
 
-fn find_empty_blocks_in_scope(scope: &Scope, empty_blocks: &mut HashMap<Label, Label>) {
+fn find_empty_blocks_in_scope(scope: &Scope, empty_blocks: &mut BTreeMap<Label, Label>) {
     let mut current_label = None;
     let mut instruction_count = 0;
     for n in &scope.nodes {
@@ -54,7 +54,7 @@ fn find_empty_blocks_in_scope(scope: &Scope, empty_blocks: &mut HashMap<Label, L
     }
 }
 
-fn eliminate_empty_blocks_in_scope(scope: &mut Scope, empty_blocks: &HashMap<Label, Label>) -> usize {
+fn eliminate_empty_blocks_in_scope(scope: &mut Scope, empty_blocks: &BTreeMap<Label, Label>) -> usize {
     let mut eliminate = false;
     let mut scope_instructions = 0;
     scope.nodes.retain_mut(|node| match node {
@@ -113,7 +113,7 @@ fn eliminate_empty_blocks_in_scope(scope: &mut Scope, empty_blocks: &HashMap<Lab
 }
 
 fn eliminate_empty_blocks_in_func(func: &mut ByteCodeFunction) {
-    let mut empty_blocks = HashMap::new();
+    let mut empty_blocks = BTreeMap::new();
     find_empty_blocks_in_scope(&func.toplevel_scope, &mut empty_blocks);
     eliminate_empty_blocks_in_scope(&mut func.toplevel_scope, &empty_blocks);
 }

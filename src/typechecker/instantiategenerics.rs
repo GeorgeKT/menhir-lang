@@ -4,10 +4,10 @@ use super::typecheckercontext::{ImportSymbolResolver, TypeCheckerContext};
 use crate::ast::*;
 use crate::compileerror::{unknown_name_result, CompileResult};
 use crate::target::Target;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 
-type FunctionMap = HashMap<String, Function>;
+type FunctionMap = BTreeMap<String, Function>;
 
 fn do_instantiation(
     ctx: &mut TypeCheckerContext,

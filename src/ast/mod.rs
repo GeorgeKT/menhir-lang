@@ -73,9 +73,9 @@ pub trait TreeFormatter {
 }
 
 use itertools::join;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
-pub type GenericMapping = HashMap<Type, Type>;
+pub type GenericMapping = BTreeMap<Type, Type>;
 
 pub fn new_func_name(func_name: &str, generic_args: &GenericMapping) -> String {
     format!("{}<{}>", func_name, join(generic_args.values(), ","))

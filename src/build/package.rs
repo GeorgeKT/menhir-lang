@@ -1,5 +1,5 @@
 use either::Either;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Read;
@@ -8,17 +8,17 @@ use std::rc::Rc;
 
 use super::{output_file_name, BuildInput, BuildInputs, BuildOptions, ExportLibrary, PackageDescription};
 use crate::ast::{prefix, Import, ImportMap, Module, TreePrinter};
-use crate::compileerror::{type_error, CompileError, CompileResult};
+use crate::compileerror::{type_error, type_error_result, CompileError, CompileResult};
 use crate::llvmbackend::{LinkerFlags, OutputType};
 use crate::parser::parse_file;
 use crate::span::Span;
 use crate::target::Target;
 use crate::typechecker::type_check_module;
 
-type MissingImportsMap = HashMap<String, Span>;
+type MissingImportsMap = BTreeMap<String, Span>;
 
 pub struct ImportData {
-    pub imports: HashMap<String, Rc<Import>>,
+    pub imports: BTreeMap<String, Rc<Import>>,
     pub libraries: Vec<ExportLibrary>,
 }
 
@@ -37,7 +37,7 @@ impl ImportData {
         None
     }
 
-    fn resolve_module_imports(&self, module: &Module) -> Either<ImportMap, MissingImportsMap> {
+    fn resolve_module_imports(&self, module: &Module) -> CompileResult<Either<ImportMap, MissingImportsMap>> {
         let mut missing = MissingImportsMap::new();
         let mut imports = ImportMap::new();
         // Try to resolve all the imports
@@ -47,6 +47,10 @@ impl ImportData {
                 continue;
             }
 
+            if import == module.name {
+                return type_error_result(&import_name.span, "A module cannot import it self");
+            }
+
             if let Some(i) = self.find_import(&import) {
                 imports.insert(import, i.clone());
             } else {
@@ -54,17 +58,17 @@ impl ImportData {
             }
         }
 
-        if missing.is_empty() {
+        Ok(if missing.is_empty() {
             Either::Left(imports)
         } else {
             Either::Right(missing)
-        }
+        })
     }
 }
 
 pub struct Package {
     pub name: String,
-    pub modules: HashMap<String, Module>,
+    pub modules: BTreeMap<String, Module>,
     pub inputs: BuildInputs,
     pub import_data: ImportData,
     pub linker_flags: LinkerFlags,
@@ -75,7 +79,7 @@ impl Package {
     pub fn new(name: &str, output_type: OutputType, desc: &PackageDescription) -> Package {
         Package {
             name: name.into(),
-            modules: HashMap::new(),
+            modules: BTreeMap::new(),
             inputs: BuildInputs {
                 description: desc.clone(),
                 ..Default::default()
@@ -262,28 +266,45 @@ impl Package {
     pub fn type_check(&mut self, target: &Target) -> CompileResult<()> {
         let mut count = 0;
         while count < self.modules.len() {
+            //println!("============start=========");
             let count_at_start = count;
             let mut all_missing_imports = MissingImportsMap::new();
 
             for module in self.modules.values_mut() {
+                //println!(">> {}: {}", module.name, module.type_checked);
                 if module.type_checked {
                     continue;
                 }
 
-                match self.import_data.resolve_module_imports(module) {
+                match self.import_data.resolve_module_imports(module)? {
                     Either::Left(imports) => {
+                        /*    println!(
+                            "Found imports for {}: {}",
+                            module.name,
+                            itertools::join(imports.keys(), ", ")
+                        );*/
                         type_check_module(module, target, &imports)?;
+                        // println!("Module {} type checked", module.name);
                         self.import_data
                             .imports
                             .insert(module.name.clone(), Rc::new(module.get_exported_symbols()));
                         count += 1;
                     }
 
-                    Either::Right(mut missing) => {
-                        all_missing_imports.extend(missing.drain());
+                    Either::Right(missing) => {
+                        /* println!(
+                            "Missing imports for {}: {}",
+                            module.name,
+                            itertools::join(missing.keys(), ", ")
+                        );
+                        */
+                        all_missing_imports.extend(missing.into_iter());
                     }
                 }
             }
+
+            // println!("============end=========");
+            // println!("Progress: {count_at_start} -> {count}");
 
             if count_at_start == count {
                 let errors = all_missing_imports

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::ops::Deref;
 use std::rc::Rc;
 
@@ -1126,8 +1126,8 @@ fn add_imported_functions(bc_mod: &mut ByteCodeModule, import: &Import) {
 pub fn compile_to_byte_code(pkg: &Package, target: &Target) -> CompileResult<ByteCodeModule> {
     let mut ll_mod = ByteCodeModule {
         name: pkg.name.clone(),
-        functions: HashMap::new(),
-        globals: HashMap::new(),
+        functions: BTreeMap::new(),
+        globals: BTreeMap::new(),
         imported_functions: Vec::new(),
         stack: Stack::new(),
     };

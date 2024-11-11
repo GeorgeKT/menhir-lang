@@ -1782,7 +1782,16 @@ pub fn type_check_expression(
     };
 
     match type_check_result {
-        Ok(TypeCheckAction::Valid(typ)) => Ok(typ),
+        Ok(TypeCheckAction::Valid(typ)) => {
+            if !typ.is_valid() {
+                return type_error_result(
+                    &e.span(),
+                    format!("The type {} is not a valid type for this expression", typ),
+                );
+            } else {
+                Ok(typ)
+            }
+        }
         Ok(TypeCheckAction::ReplaceBy(expr)) => {
             *e = expr;
             type_check_expression(ctx, e, type_hint, target)

@@ -10,7 +10,7 @@ use crate::compileerror::CompileResult;
 use crate::lazycode::*;
 use llvm_sys::core::*;
 use llvm_sys::prelude::*;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 #[allow(unused)]
@@ -41,7 +41,7 @@ pub unsafe fn gen_instruction(
     ctx: &mut Context,
     func: &ByteCodeFunction,
     instr: &Instruction,
-    blocks: &HashMap<usize, LLVMBasicBlockRef>,
+    blocks: &BTreeMap<usize, LLVMBasicBlockRef>,
 ) -> CompileResult<()> {
     match instr {
         Instruction::Mark { .. } => Ok(()),

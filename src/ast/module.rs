@@ -3,14 +3,14 @@ use super::{
     SymbolType, TreePrinter, TypeDeclaration,
 };
 use crate::compileerror::CompileResult;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 pub struct Module {
     pub name: String,
-    pub globals: HashMap<String, GlobalBinding>,
-    pub functions: HashMap<String, Function>,
-    pub externals: HashMap<String, ExternalFunction>,
-    pub types: HashMap<String, TypeDeclaration>,
+    pub globals: BTreeMap<String, GlobalBinding>,
+    pub functions: BTreeMap<String, Function>,
+    pub externals: BTreeMap<String, ExternalFunction>,
+    pub types: BTreeMap<String, TypeDeclaration>,
     pub import_names: HashSet<ImportName>,
     pub type_checked: bool,
 }
@@ -19,10 +19,10 @@ impl Module {
     pub fn new(name: &str) -> Module {
         Module {
             name: name.into(),
-            globals: HashMap::new(),
-            functions: HashMap::new(),
-            externals: HashMap::new(),
-            types: HashMap::new(),
+            globals: BTreeMap::new(),
+            functions: BTreeMap::new(),
+            externals: BTreeMap::new(),
+            types: BTreeMap::new(),
             import_names: HashSet::new(),
             type_checked: false,
         }
@@ -32,8 +32,8 @@ impl Module {
         !self.functions.contains_key(&call.callee.name) && !self.externals.contains_key(&call.callee.name)
     }
 
-    fn get_imported_symbols(&self) -> HashMap<String, SymbolPtr> {
-        let mut symbols = HashMap::new();
+    fn get_imported_symbols(&self) -> BTreeMap<String, SymbolPtr> {
+        let mut symbols = BTreeMap::new();
         for func in self.functions.values() {
             let mut find_imported_calls = |e: &Expression| -> CompileResult<()> {
                 match *e {

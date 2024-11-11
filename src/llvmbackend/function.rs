@@ -1,6 +1,6 @@
 use llvm_sys::core::*;
 use llvm_sys::prelude::*;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::ptr;
 use std::rc::Rc;
@@ -55,7 +55,7 @@ unsafe fn gen_scope(
     ctx: &mut Context,
     func: &ByteCodeFunction,
     scope: &Scope,
-    blocks: &HashMap<usize, LLVMBasicBlockRef>,
+    blocks: &BTreeMap<usize, LLVMBasicBlockRef>,
 ) -> CompileResult<()> {
     for n in &scope.nodes {
         match n {
@@ -107,7 +107,7 @@ pub unsafe fn gen_function(ctx: &mut Context, func: &ByteCodeFunction) -> Compil
         }
     }
 
-    let mut blocks = HashMap::new();
+    let mut blocks = BTreeMap::new();
     blocks.insert(0, entry_bb);
 
     func.toplevel_scope.for_each_instruction(&mut |inst| {

@@ -5,6 +5,7 @@ use crate::target::Target;
 use itertools::free::join;
 use serde_derive::{Deserialize, Serialize};
 use std::fmt;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::Deref;
 use std::rc::Rc;
 
@@ -199,6 +200,22 @@ pub enum Type {
     Result(Rc<ResultType>),
 }
 
+impl PartialOrd for Type {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Type {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let mut ha = DefaultHasher::new();
+        let mut hb = DefaultHasher::new();
+        self.hash(&mut ha);
+        other.hash(&mut hb);
+        ha.finish().cmp(&hb.finish())
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct TypeAlias {
     pub name: String,
@@ -207,6 +224,21 @@ pub struct TypeAlias {
 }
 
 impl Type {
+    pub fn is_valid(&self) -> bool {
+        match self {
+            Type::Result(rt) => rt.ok_typ != rt.err_typ && rt.ok_typ != Type::Void && rt.err_typ != Type::Void,
+            Type::Optional(ot) => **ot != Type::Void,
+            Type::Array(at) => at.element_type != Type::Void,
+            Type::Slice(st) => st.element_type != Type::Void,
+            Type::Unknown => false,
+            _ => true,
+        }
+    }
+
+    pub fn is_valid_member_or_arg_type(&self) -> bool {
+        self.is_valid() && *self != Type::Void
+    }
+
     pub fn is_sequence(&self) -> bool {
         matches!(*self, Type::Array(_) | Type::Slice(_) | Type::String)
     }

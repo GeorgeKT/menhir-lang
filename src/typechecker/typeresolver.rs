@@ -118,6 +118,10 @@ fn resolve_function_args_and_ret_type(
         return unknown_name_result(&sig.span, format!("Unknown function return type {}", sig.return_type));
     }
 
+    if !sig.return_type.is_valid() {
+        return type_error_result(&sig.span, format!("The type {} is not a valid type", sig.return_type));
+    }
+
     let mut args = Vec::with_capacity(sig.args.len());
     for ref mut arg in &mut sig.args {
         if resolve_type(ctx, &mut arg.typ) == TypeResolved::No {
@@ -126,6 +130,13 @@ fn resolve_function_args_and_ret_type(
             } else {
                 return unknown_name_result(&arg.span, format!("Unknown function argument type {}", arg.typ));
             }
+        }
+
+        if !arg.typ.is_valid_member_or_arg_type() {
+            return type_error_result(
+                &arg.span,
+                format!("The type {} is not a valid function argument type", arg.typ),
+            );
         }
 
         args.push(func_arg(arg.typ.clone(), arg.mutable));
@@ -154,6 +165,9 @@ fn resolve_struct_member_types(
             }
         }
 
+        if !m.typ.is_valid_member_or_arg_type() {
+            return type_error_result(&m.span, format!("The type {} is not a valid struct member type", m.typ));
+        }
         member_types.push(struct_member(m.name.clone(), m.typ.clone()));
     }
 

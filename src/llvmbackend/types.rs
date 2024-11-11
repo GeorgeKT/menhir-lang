@@ -6,6 +6,7 @@ use std::ptr;
 
 use super::target::TargetMachine;
 use crate::ast::*;
+use crate::compileerror::CompileError::CodeGeneration;
 use crate::compileerror::{code_gen_result, CompileResult};
 
 unsafe fn string_to_llvm_type(context: LLVMContextRef, target_machine: &TargetMachine) -> CompileResult<LLVMTypeRef> {
@@ -79,15 +80,33 @@ unsafe fn result_type_to_llvm_type(
     target_machine: &TargetMachine,
     rt: &ResultType,
 ) -> CompileResult<LLVMTypeRef> {
-    let ok_typ = to_llvm_type(context, target_machine, &rt.ok_typ)?;
-    let err_typ = to_llvm_type(context, target_machine, &rt.err_typ)?;
-    let largest = if target_machine.size_of_type(ok_typ) > target_machine.size_of_type(err_typ) {
-        ok_typ
-    } else {
-        err_typ
-    };
+    match (&rt.ok_typ, &rt.err_typ) {
+        (Type::Void, Type::Void) => Err(CodeGeneration(format!(
+            "Type void ! void has no runtime size and cannot be used"
+        ))),
 
-    Ok(create_sum_type(context, target_machine, largest))
+        (Type::Void, _) => {
+            let err_typ = to_llvm_type(context, target_machine, &rt.err_typ)?;
+            Ok(create_sum_type(context, target_machine, err_typ))
+        }
+
+        (_, Type::Void) => {
+            let ok_typ = to_llvm_type(context, target_machine, &rt.ok_typ)?;
+            Ok(create_sum_type(context, target_machine, ok_typ))
+        }
+
+        (_, _) => {
+            let ok_typ = to_llvm_type(context, target_machine, &rt.ok_typ)?;
+            let err_typ = to_llvm_type(context, target_machine, &rt.err_typ)?;
+            let largest = if target_machine.size_of_type(ok_typ) > target_machine.size_of_type(err_typ) {
+                ok_typ
+            } else {
+                err_typ
+            };
+
+            Ok(create_sum_type(context, target_machine, largest))
+        }
+    }
 }
 
 unsafe fn func_to_llvm_type(
