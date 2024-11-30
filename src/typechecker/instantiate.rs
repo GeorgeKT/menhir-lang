@@ -564,6 +564,7 @@ fn substitute_expr(
             };
             Ok(range(start, end, typ, r.span.clone()))
         }
+        Expression::Enclosed(e) => substitute_expr(ctx, generic_args, e),
     }
 }
 

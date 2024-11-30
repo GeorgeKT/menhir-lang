@@ -171,7 +171,11 @@ unsafe fn range_to_llvm_type(
 }
 
 pub unsafe fn native_llvm_int_type(context: LLVMContextRef, target_machine: &TargetMachine) -> LLVMTypeRef {
-    match target_machine.target.int_size {
+    llvm_int_type(context, target_machine.target.int_size)
+}
+
+pub unsafe fn llvm_int_type(context: LLVMContextRef, int_size: IntSize) -> LLVMTypeRef {
+    match int_size {
         IntSize::I8 => LLVMInt8TypeInContext(context),
         IntSize::I16 => LLVMInt16TypeInContext(context),
         IntSize::I32 => LLVMInt32TypeInContext(context),

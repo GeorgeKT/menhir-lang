@@ -101,6 +101,11 @@ fn test_binary_ops() {
         (BinaryOperator::LessThanEquals, "<="),
         (BinaryOperator::Or, "||"),
         (BinaryOperator::And, "&&"),
+        (BinaryOperator::BitwiseOr, "|"),
+        (BinaryOperator::BitwiseAnd, "&"),
+        (BinaryOperator::BitwiseXor, "^"),
+        (BinaryOperator::LeftShift, "<<"),
+        (BinaryOperator::RightShift, ">>"),
     ];
 
     for &(op, op_txt) in &ops {
@@ -242,13 +247,13 @@ fn test_precedence_6() {
         bin_op(
             BinaryOperator::Mul,
             name_ref("a", span(1, 1, 1, 1)),
-            bin_op_with_precedence(
+            Expression::Enclosed(Box::new(bin_op_with_precedence(
                 BinaryOperator::Add,
                 name_ref("b", span(1, 6, 1, 6)),
                 name_ref("c", span(1, 10, 1, 10)),
                 span(1, 6, 1, 10),
                 TOP_PRECEDENCE
-            ),
+            ))),
             span(1, 1, 1, 10),
         )
     );
@@ -347,6 +352,26 @@ fn test_precedence_10() {
     println!("s3:");
     s3.print(0);
     assert_eq!(e, s3);
+}
+
+#[test]
+fn test_precedence_11() {
+    let target = Target::new(IntSize::I32, "");
+    let e = th_expr("(a & b) as u8", &target);
+    assert_eq!(
+        e,
+        type_cast(
+            Expression::Enclosed(Box::new(bin_op_with_precedence(
+                BinaryOperator::BitwiseAnd,
+                name_ref("a", span(1, 2, 1, 2)),
+                name_ref("b", span(1, 6, 1, 6)),
+                span(1, 2, 1, 6),
+                TOP_PRECEDENCE
+            ))),
+            Type::UInt(IntSize::I8),
+            span(1, 2, 1, 13)
+        )
+    );
 }
 
 #[test]
@@ -546,10 +571,10 @@ fn test_external_function() {
     let md = th_mod("extern fn foo() -> int", &target);
     assert_eq!(
         *md.externals.get("foo").unwrap(),
-        ExternalFunction::new(
-            sig("foo", target.native_int_type.clone(), Vec::new(), span(1, 11, 1, 22)),
-            span(1, 1, 1, 22)
-        )
+        External::Function {
+            sig: sig("foo", target.native_int_type.clone(), Vec::new(), span(1, 11, 1, 22)),
+            span: span(1, 1, 1, 22)
+        }
     )
 }
 
@@ -926,7 +951,7 @@ fn test_block() {
     );
     assert_eq!(
         e,
-        block_expr(
+        Expression::Enclosed(Box::new(block_expr(
             vec![
                 name_ref("a", span(2, 2, 2, 2)),
                 name_ref("b", span(2, 5, 2, 5)),
@@ -934,7 +959,7 @@ fn test_block() {
                 number(7, span(2, 11, 2, 11), &target),
             ],
             span(2, 1, 2, 11)
-        )
+        )))
     )
 }
 

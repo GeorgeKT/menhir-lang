@@ -352,15 +352,25 @@ pub fn resolve_types(ctx: &mut TypeCheckerContext, module: &mut Module) -> Compi
         ))?;
     }
 
-    for f in module.externals.values_mut() {
-        resolve_function_args_and_ret_type(ctx, &mut f.sig, ResolveMode::Forced)?;
-        ctx.add(Symbol::new(
-            &f.sig.name,
-            &f.sig.typ,
-            false,
-            &f.sig.span,
-            SymbolType::Normal,
-        ))?;
+    for ext in module.externals.values_mut() {
+        match ext {
+            External::Function { sig, .. } => {
+                resolve_function_args_and_ret_type(ctx, sig, ResolveMode::Forced)?;
+                ctx.add(Symbol::new(&sig.name, &sig.typ, false, &sig.span, SymbolType::Normal))?;
+            }
+            External::Variable {
+                typ,
+                name,
+                mutable,
+                span,
+                ..
+            } => {
+                if resolve_type(ctx, typ) == TypeResolved::No {
+                    return type_error_result(span, format!("Cannot resolve type {} of external {}", typ, name));
+                }
+                ctx.add(Symbol::new(name, typ, *mutable, span, SymbolType::External))?;
+            }
+        }
     }
 
     Ok(())

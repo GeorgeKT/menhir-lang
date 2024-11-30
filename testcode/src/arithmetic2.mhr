@@ -1,5 +1,8 @@
-#ret:24
+#ret:15
 fn main() -> int:
-    let x = 7
-    let y = 9
-    (x + y) * 3 / 2
+    let x = 0xFF000000
+    let y = x >> 16
+    let z = y | 0x000000FF
+    let a = z & 0x000000FF
+    let b = a ^ 0x00000F00
+    b & 0x0F

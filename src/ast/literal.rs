@@ -47,9 +47,8 @@ impl Literal {
     pub fn try_convert(&self, typ: &Type) -> Option<Literal> {
         match (self, typ) {
             (&Literal::Int(ref span, value, _), &Type::Int(int_size)) => {
-                let target_bit_size = int_size.size_in_bits();
-                let target_min = -(2i64.pow(target_bit_size - 1));
-                let target_max = (2u64.pow(target_bit_size - 1) - 1) as i64;
+                let target_min = int_size.min_signed();
+                let target_max = int_size.max_signed();
                 if value >= target_min && value <= target_max {
                     Some(Literal::Int(span.clone(), value, int_size))
                 } else {
@@ -58,8 +57,7 @@ impl Literal {
             }
 
             (&Literal::Int(ref span, value, _), &Type::UInt(int_size)) => {
-                let target_bit_size = int_size.size_in_bits();
-                if value >= 0 && (value as u64) < 2u64.pow(target_bit_size - 1) - 1 {
+                if value >= 0 && (value as u64) <= int_size.max_unsigned() {
                     Some(Literal::UInt(span.clone(), value as u64, int_size))
                 } else {
                     None
@@ -67,8 +65,7 @@ impl Literal {
             }
 
             (&Literal::UInt(ref span, value, _), &Type::Int(int_size)) => {
-                let target_bit_size = int_size.size_in_bits();
-                if value < 2u64.pow(target_bit_size) {
+                if value <= int_size.max_signed() as u64 {
                     Some(Literal::Int(span.clone(), value as i64, int_size))
                 } else {
                     None
@@ -76,8 +73,7 @@ impl Literal {
             }
 
             (&Literal::UInt(ref span, value, _), &Type::UInt(int_size)) => {
-                let target_bit_size = int_size.size_in_bits();
-                if value < 2u64.pow(target_bit_size) {
+                if value <= int_size.max_unsigned() {
                     Some(Literal::UInt(span.clone(), value, int_size))
                 } else {
                     None

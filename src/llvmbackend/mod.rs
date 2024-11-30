@@ -36,9 +36,11 @@ use self::function::{gen_function, gen_function_sig};
 pub use self::target::TargetMachine;
 use self::valueref::ValueRef;
 use crate::ast::ptr_type;
+use crate::ast::External;
+use crate::ast::Type;
 use crate::build::PackageDescription;
 use crate::compileerror::{code_gen_error, CompileResult};
-use crate::lazycode::{ByteCodeModule, Constant};
+use crate::lazycode::{ByteCodeModule, Constant, Global};
 use serde_derive::{Deserialize, Serialize};
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, Default, PartialEq, Eq)]
@@ -103,13 +105,27 @@ pub fn llvm_shutdown() {
     }
 }
 
-unsafe fn gen_global(ctx: &mut Context, glob_name: &str, glob_value: &Constant) -> CompileResult<()> {
-    let v = ValueRef::const_global(ctx, glob_value)?;
+unsafe fn gen_global(ctx: &mut Context, glob_name: &str, global: &Global) -> CompileResult<()> {
+    let v = ValueRef::const_global(ctx, &global.value)?;
     let name = CString::new(glob_name.as_bytes()).map_err(|_| code_gen_error("Invalid string"))?;
     let glob = LLVMAddGlobal(ctx.module, ctx.resolve_type(&v.typ)?, name.as_ptr());
     LLVMSetLinkage(glob, LLVMLinkage::LLVMExternalLinkage);
     LLVMSetInitializer(glob, v.value);
+    if global.thread_local {
+        LLVMSetThreadLocal(glob, 1);
+    }
     ctx.set_variable(glob_name, ValueRef::allocated(glob, ptr_type(v.typ)))
+}
+
+unsafe fn gen_global_var(ctx: &mut Context, glob_name: &str, typ: &Type, thread_local: bool) -> CompileResult<()> {
+    let name = CString::new(glob_name.as_bytes()).map_err(|_| code_gen_error("Invalid string"))?;
+    let glob = LLVMAddGlobal(ctx.module, ctx.resolve_type(typ)?, name.as_ptr());
+    LLVMSetLinkage(glob, LLVMLinkage::LLVMExternalLinkage);
+    if thread_local {
+        LLVMSetThreadLocal(glob, 1);
+    }
+    ctx.set_variable(glob_name, ValueRef::allocated(glob, typ.ptr_of()))?;
+    Ok(())
 }
 
 unsafe fn add_metadata(ctx: &mut Context, module_name: &str, desc: &PackageDescription) -> CompileResult<()> {
@@ -121,7 +137,10 @@ unsafe fn add_metadata(ctx: &mut Context, module_name: &str, desc: &PackageDescr
     gen_global(
         ctx,
         &format!("__MENHIR_{}_BUILD_INFO__", module_name),
-        &Constant::String(metadata),
+        &Global {
+            value: Constant::String(metadata),
+            thread_local: false,
+        },
     )?;
     Ok(())
 }
@@ -133,11 +152,25 @@ pub fn llvm_code_generation(
 ) -> CompileResult<()> {
     unsafe {
         for func in &bc_mod.imported_functions {
-            gen_function_sig(ctx, &func.sig, None)?;
+            if !bc_mod.functions.contains_key(&func.sig.name) {
+                gen_function_sig(ctx, &func.sig, None)?;
+            }
         }
 
         for (glob_name, glob_val) in &bc_mod.globals {
             gen_global(ctx, glob_name, glob_val)?;
+        }
+
+        for ext in bc_mod.external_vars.values() {
+            if let External::Variable {
+                name,
+                typ,
+                thread_local,
+                ..
+            } = ext
+            {
+                gen_global_var(ctx, name, typ, *thread_local)?;
+            }
         }
 
         add_metadata(ctx, &bc_mod.name, desc)?;

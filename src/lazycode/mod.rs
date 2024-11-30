@@ -1,5 +1,7 @@
 use std::{collections::BTreeMap, fmt};
 
+use crate::ast::External;
+
 pub use self::compiler::compile_to_byte_code;
 pub use self::function::ByteCodeFunction;
 pub use self::instruction::Instruction;
@@ -20,11 +22,18 @@ mod scope;
 mod stack;
 
 #[derive(Debug)]
+pub struct Global {
+    pub value: Constant,
+    pub thread_local: bool,
+}
+
+#[derive(Debug)]
 pub struct ByteCodeModule {
     pub name: String,
     pub functions: BTreeMap<String, ByteCodeFunction>,
     pub imported_functions: Vec<ByteCodeFunction>,
-    pub globals: BTreeMap<String, Constant>,
+    pub external_vars: BTreeMap<String, External>,
+    pub globals: BTreeMap<String, Global>,
     pub stack: StackPtr,
 }
 
@@ -40,8 +49,12 @@ impl ByteCodeModule {
 
 impl fmt::Display for ByteCodeModule {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        for (name, value) in &self.globals {
-            writeln!(f, "glob {} = {}", name, value)?;
+        for (name, global) in &self.globals {
+            if global.thread_local {
+                writeln!(f, "thread_local glob {} = {}", name, global.value)?;
+            } else {
+                writeln!(f, "glob {} = {}", name, global.value)?;
+            }
         }
 
         writeln!(f, " ")?;

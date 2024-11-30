@@ -54,16 +54,11 @@ impl Context {
     }
 
     pub fn set_variable(&mut self, name: &str, vr: ValueRef) -> CompileResult<()> {
-        if let Some(vi) = self.get_variable(name) {
-            vi.store(self, &vr)?;
-            Ok(())
-        } else {
-            let var = Rc::new(VariableInstance {
-                value: vr,
-                name: name.into(),
-            });
-            self.add_variable_instance(var)
-        }
+        let var = Rc::new(VariableInstance {
+            value: vr,
+            name: name.into(),
+        });
+        self.add_variable_instance(var)
     }
 
     fn add_variable_instance(&mut self, vi: VariableInstancePtr) -> CompileResult<()> {

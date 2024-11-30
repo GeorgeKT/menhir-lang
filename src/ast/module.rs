@@ -1,6 +1,6 @@
 use super::{
-    prefix, Call, Expression, ExternalFunction, Function, GlobalBinding, Import, ImportName, Symbol, SymbolPtr,
-    SymbolType, TreePrinter, TypeDeclaration,
+    prefix, Call, Expression, External, Function, GlobalBinding, Import, ImportName, Symbol, SymbolPtr, SymbolType,
+    TreePrinter, TypeDeclaration,
 };
 use crate::compileerror::CompileResult;
 use std::collections::{BTreeMap, HashSet};
@@ -9,7 +9,7 @@ pub struct Module {
     pub name: String,
     pub globals: BTreeMap<String, GlobalBinding>,
     pub functions: BTreeMap<String, Function>,
-    pub externals: BTreeMap<String, ExternalFunction>,
+    pub externals: BTreeMap<String, External>,
     pub types: BTreeMap<String, TypeDeclaration>,
     pub import_names: HashSet<ImportName>,
     pub type_checked: bool,
@@ -36,8 +36,8 @@ impl Module {
         let mut symbols = BTreeMap::new();
         for func in self.functions.values() {
             let mut find_imported_calls = |e: &Expression| -> CompileResult<()> {
-                match *e {
-                    Expression::Call(ref call) if self.is_imported_call(call) => {
+                match e {
+                    Expression::Call(call) if self.is_imported_call(call) => {
                         let typ = call.callee_type();
                         let symbol = Symbol::new(&call.callee.name, &typ, false, &call.span, SymbolType::External);
                         symbols.insert(call.callee.name.clone(), symbol);
@@ -72,10 +72,10 @@ impl Module {
             }
         }
 
-        for (name, function) in &self.externals {
+        for (name, ext) in &self.externals {
             import.symbols.insert(
                 name.clone(),
-                Symbol::new(name, &function.sig.typ, false, &function.span, SymbolType::External),
+                Symbol::new(name, &ext.get_type(), ext.mutable(), ext.span(), SymbolType::External),
             );
         }
 

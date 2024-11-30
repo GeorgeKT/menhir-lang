@@ -3,10 +3,7 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use crate::ast::FunctionSignature;
-use crate::compileerror::CompileResult;
 use crate::llvmbackend::valueref::ValueRef;
-
-use super::Context;
 
 pub struct FunctionInstance {
     pub function: LLVMValueRef,
@@ -27,12 +24,6 @@ impl FunctionInstance {
 pub struct VariableInstance {
     pub value: ValueRef,
     pub name: String,
-}
-
-impl VariableInstance {
-    pub fn store(&self, ctx: &Context, vr: &ValueRef) -> CompileResult<()> {
-        unsafe { self.value.store(ctx, vr) }
-    }
 }
 
 pub type VariableInstancePtr = Rc<VariableInstance>;

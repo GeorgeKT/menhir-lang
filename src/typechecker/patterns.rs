@@ -196,13 +196,17 @@ fn type_check_literal_pattern(
     };
 
     if !target_type.is_matchable(&m_type) {
-        return type_error_result(
-            &lit.span(),
-            format!(
-                "Pattern match of type {}, cannot match with an expression of type {}",
-                m_type, target_type
-            ),
-        );
+        if let Some(nlit) = lit.try_convert(target_type) {
+            *lit = nlit;
+        } else {
+            return type_error_result(
+                &lit.span(),
+                format!(
+                    "Pattern match of type {}, cannot match with an expression of type {}",
+                    m_type, target_type
+                ),
+            );
+        }
     }
 
     infer_matched_type(ctx, e, return_type, target)

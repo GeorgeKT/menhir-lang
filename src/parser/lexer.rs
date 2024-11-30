@@ -13,6 +13,9 @@ enum LexState {
     Comment,
     Identifier,
     Number,
+    HexNumber,
+    OctalNumber,
+    BinaryNumber,
     Operator,
     InString,
     InChar,
@@ -30,7 +33,9 @@ pub struct Lexer {
 }
 
 fn is_operator_start(c: char) -> bool {
-    for op in &['+', '-', '*', '/', '%', '>', '<', '=', '!', '.', '|', '&', ':'] {
+    for op in &[
+        '+', '-', '*', '/', '%', '>', '<', '=', '!', '.', '|', '&', ':', '^', '~',
+    ] {
         if *op == c {
             return true;
         }
@@ -41,6 +46,17 @@ fn is_operator_start(c: char) -> bool {
 
 fn is_identifier_start(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
+}
+
+fn is_end_of_number(c: char) -> bool {
+    c.is_whitespace()
+        || c == '}'
+        || c == ']'
+        || c == ')'
+        || c.is_alphabetic()
+        || is_operator_start(c)
+        || c == ';'
+        || c == ':'
 }
 
 impl Lexer {
@@ -176,6 +192,7 @@ impl Lexer {
             "if" => TokenKind::If,
             "else" => TokenKind::Else,
             "extern" => TokenKind::Extern,
+            "thread_local" => TokenKind::ThreadLocal,
             "new" => TokenKind::New,
             "delete" => TokenKind::Delete,
             "while" => TokenKind::While,
@@ -223,7 +240,19 @@ impl Lexer {
     }
 
     fn number(&mut self, c: char) -> CompileResult<()> {
-        if c.is_numeric() || c == '.' || c == 'e' {
+        if c == '_' {
+            Ok(()) // Ignore underscores
+        } else if self.data == "0" && (c == 'x' || c == 'o' || c == 'b') {
+            self.data.push(c);
+            if c == 'x' {
+                self.state = LexState::HexNumber;
+            } else if c == 'o' {
+                self.state = LexState::OctalNumber;
+            } else {
+                self.state = LexState::BinaryNumber;
+            }
+            Ok(())
+        } else if c.is_numeric() || c == '.' || c == 'e' {
             self.data.push(c);
             if self.data.ends_with("..") {
                 // Ranged expression
@@ -280,10 +309,14 @@ impl Lexer {
             "=>" => Ok(TokenKind::FatArrow),
             ":" => Ok(TokenKind::Colon),
             "::" => Ok(TokenKind::DoubleColon),
-            "|" => Ok(TokenKind::Pipe),
             "." => Ok(TokenKind::BinaryOperator(BinaryOperator::Dot)),
             ".." => Ok(TokenKind::DotDot),
-            "&" => Ok(TokenKind::Ampersand),
+            "&" => Ok(TokenKind::BinaryOperator(BinaryOperator::BitwiseAnd)),
+            "|" => Ok(TokenKind::BinaryOperator(BinaryOperator::BitwiseOr)),
+            "^" => Ok(TokenKind::BinaryOperator(BinaryOperator::BitwiseXor)),
+            ">>" => Ok(TokenKind::BinaryOperator(BinaryOperator::RightShift)),
+            "<<" => Ok(TokenKind::BinaryOperator(BinaryOperator::LeftShift)),
+            "~" => Ok(TokenKind::UnaryOperator(UnaryOperator::BitwiseNot)),
             _ => parse_error_result(&self.current_single_span(), format!("Invalid operator {}", self.data)),
         }
     }
@@ -389,6 +422,26 @@ impl Lexer {
         }
     }
 
+    fn zero_x_number(&mut self, c: char, radix: u32) -> CompileResult<()> {
+        if c == '_' {
+            Ok(()) // Ignore underscores
+        } else if c.is_digit(radix) {
+            self.data.push(c);
+            Ok(())
+        } else if is_end_of_number(c) {
+            self.state = LexState::Idle;
+            let span = self.current_span();
+            let num = std::mem::take(&mut self.data);
+            self.add(TokenKind::Number(num), span);
+            self.idle(c)
+        } else {
+            parse_error_result(
+                &self.current_single_span(),
+                format!("Invalid character {} in number {}", c, self.data),
+            )
+        }
+    }
+
     fn feed(&mut self, c: char) -> CompileResult<()> {
         match self.state {
             LexState::StartOfLine => self.start_of_line(c),
@@ -396,6 +449,9 @@ impl Lexer {
             LexState::Comment => self.comment(c),
             LexState::Identifier => self.identifier(c),
             LexState::Number => self.number(c),
+            LexState::HexNumber => self.zero_x_number(c, 16),
+            LexState::OctalNumber => self.zero_x_number(c, 8),
+            LexState::BinaryNumber => self.zero_x_number(c, 2),
             LexState::Operator => self.operator(c),
             LexState::InString => self.in_string(c),
             LexState::InChar => self.in_char(c),

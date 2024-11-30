@@ -1,13 +1,13 @@
-use std::ffi::{c_uint, c_ulonglong};
+use std::ffi::{c_uint, c_ulonglong, CString};
 
-use crate::ast::{BinaryOperator, Type, UnaryOperator};
+use crate::ast::{BinaryOperator, IntSize, Type, UnaryOperator};
 use crate::compileerror::CompileResult;
 use crate::compileerror::{code_gen_error, code_gen_result};
 use crate::lazycode::{ByteCodeProperty, CallArg, Constant, Operand, OPTIONAL_DATA_IDX};
 #[allow(unused)]
 use crate::llvmbackend::instructions::type_name;
 
-use super::types::native_llvm_int_type;
+use super::types::{llvm_int_type, native_llvm_int_type};
 use super::valueref::ValueRef;
 use super::Context;
 
@@ -26,20 +26,23 @@ pub fn get_const_usize(op: &Operand) -> CompileResult<usize> {
     }
 }
 
-pub unsafe fn const_int(ctx: &Context, v: i64) -> LLVMValueRef {
-    LLVMConstInt(
-        native_llvm_int_type(ctx.context, &ctx.target_machine),
-        v as c_ulonglong,
-        1,
-    )
+pub unsafe fn const_int(ctx: &Context, v: i64, int_size: IntSize) -> LLVMValueRef {
+    LLVMConstInt(llvm_int_type(ctx.context, int_size), v as c_ulonglong, 1)
 }
 
-pub unsafe fn const_uint(ctx: &Context, v: u64) -> LLVMValueRef {
-    LLVMConstInt(
-        native_llvm_int_type(ctx.context, &ctx.target_machine),
-        v as c_ulonglong,
-        0,
-    )
+pub unsafe fn const_uint(ctx: &Context, v: u64, int_size: IntSize) -> LLVMValueRef {
+    LLVMConstInt(llvm_int_type(ctx.context, int_size), v as c_ulonglong, 0)
+}
+
+#[allow(dead_code)]
+pub unsafe fn native_const_int(ctx: &Context, v: i64) -> LLVMValueRef {
+    let typ = native_llvm_int_type(ctx.context, &ctx.target_machine);
+    LLVMConstInt(typ, v as c_ulonglong, 1)
+}
+
+pub unsafe fn native_const_uint(ctx: &Context, v: u64) -> LLVMValueRef {
+    let typ = native_llvm_int_type(ctx.context, &ctx.target_machine);
+    LLVMConstInt(typ, v as c_ulonglong, 0)
 }
 
 pub unsafe fn const_bool(ctx: &Context, v: bool) -> LLVMValueRef {
@@ -56,7 +59,7 @@ pub unsafe fn const_char(ctx: &Context, c: char) -> LLVMValueRef {
 
 pub unsafe fn copy(ctx: &Context, dst: LLVMValueRef, src: LLVMValueRef, typ: LLVMTypeRef) -> CompileResult<()> {
     let align = ctx.target_machine.alignment_of_type(typ) as u32;
-    let size = const_uint(ctx, ctx.target_machine.size_of_type(typ) as u64);
+    let size = native_const_uint(ctx, ctx.target_machine.size_of_type(typ) as u64);
     //println!("size of {}: {}", type_name(typ), ctx.target_machine.size_of_type(typ));
     LLVMBuildMemCpy(ctx.builder, dst, align, src, align, size);
     Ok(())
@@ -75,6 +78,7 @@ unsafe fn gen_unary_op(
         }
         (UnaryOperator::Sub, &Type::Float(_)) => LLVMBuildFNeg(ctx.builder, src_value, cstr!("neg")),
         (UnaryOperator::Not, &Type::Bool) => LLVMBuildNot(ctx.builder, src_value, cstr!("not")),
+        (UnaryOperator::BitwiseNot, _) => LLVMBuildNot(ctx.builder, src_value, cstr!("bnot")),
         _ => return code_gen_result("Unsupported unary operator"),
     };
 
@@ -337,8 +341,15 @@ unsafe fn gen_binary_op(
             cstr!("bop"),
         ),
 
-        (BinaryOperator::And, Type::Bool) => LLVMBuildAnd(ctx.builder, left.value, right.value, cstr!("bop")),
-        (BinaryOperator::Or, Type::Bool) => LLVMBuildOr(ctx.builder, left.value, right.value, cstr!("bop")),
+        (BinaryOperator::And, _) | (BinaryOperator::BitwiseAnd, _) => {
+            LLVMBuildAnd(ctx.builder, left.value, right.value, cstr!("bop"))
+        }
+        (BinaryOperator::Or, _) | (BinaryOperator::BitwiseOr, _) => {
+            LLVMBuildOr(ctx.builder, left.value, right.value, cstr!("bop"))
+        }
+        (BinaryOperator::BitwiseXor, _) => LLVMBuildXor(ctx.builder, left.value, right.value, cstr!("bop")),
+        (BinaryOperator::RightShift, _) => LLVMBuildAShr(ctx.builder, left.value, right.value, cstr!("bop")),
+        (BinaryOperator::LeftShift, _) => LLVMBuildShl(ctx.builder, left.value, right.value, cstr!("bop")),
 
         (_, t) => return code_gen_result(format!("Operator {} not supported on type {}", op, t)),
     };
@@ -393,6 +404,8 @@ unsafe fn gen_cast(ctx: &mut Context, src: &Operand, typ: Type) -> CompileResult
         }
 
         (&Type::Bool, &Type::Pointer(_)) => LLVMBuildIsNotNull(ctx.builder, operand.value, cstr!("isnt_null")),
+
+        (&Type::Char, &Type::UInt(IntSize::I32)) | (&Type::UInt(IntSize::I32), &Type::Char) => operand.value, // Char is already a 32 bit int
 
         _ => {
             return code_gen_result(format!(
@@ -517,7 +530,7 @@ unsafe fn gen_sum(
 
 unsafe fn gen_enum(ctx: &mut Context, variant: usize, typ: &Type, dst: Option<ValueRef>) -> CompileResult<ValueRef> {
     let vr = get_dst(ctx, "enum", dst, typ)?;
-    vr.store(ctx, &ValueRef::new(const_uint(ctx, variant as u64), typ.clone()))?;
+    vr.store(ctx, &ValueRef::new(native_const_uint(ctx, variant as u64), typ.clone()))?;
     Ok(vr)
 }
 
@@ -618,6 +631,26 @@ pub unsafe fn gen_operand_dst(ctx: &mut Context, operand: &Operand, dst: &ValueR
     Ok(())
 }
 
+pub unsafe fn gen_adddress_of(ctx: &mut Context, inner: &Operand) -> CompileResult<ValueRef> {
+    match inner {
+        Operand::Var { name, typ } => {
+            let vr = ctx
+                .get_variable(name)
+                .ok_or_else(|| code_gen_error("Unknown variable {name}"))?;
+            if typ.is_pointer() {
+                Ok(vr.value.clone())
+            } else {
+                // We have a value instead of a pointer, so we need to store the value before we
+                // can take it's address
+                let name = CString::new(&name[..]).expect("Invalid name");
+                let ptr = LLVMBuildAlloca(ctx.builder, LLVMTypeOf(vr.value.value), name.as_ptr());
+                Ok(ValueRef::allocated(ptr, typ.ptr_of()))
+            }
+        }
+        _ => gen_operand(ctx, inner, None)?.address_of(),
+    }
+}
+
 pub unsafe fn gen_operand(ctx: &mut Context, operand: &Operand, dst: Option<ValueRef>) -> CompileResult<ValueRef> {
     match operand {
         Operand::Var { name, .. } => {
@@ -653,7 +686,7 @@ pub unsafe fn gen_operand(ctx: &mut Context, operand: &Operand, dst: Option<Valu
                 obj.get_member_ptr(ctx, &idx)
             }
         }
-        Operand::AddressOf { obj } => gen_operand(ctx, obj, None)?.address_of(),
+        Operand::AddressOf { obj } => gen_adddress_of(ctx, obj),
         Operand::Binary { op, left, right, typ } => gen_binary_op(ctx, *op, left, right, typ),
         Operand::Unary { op, inner, typ } => gen_unary_op(ctx, *op, inner, typ),
         Operand::Struct { members, typ } => gen_seq(ctx, members, typ, dst),

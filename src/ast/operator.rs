@@ -20,6 +20,11 @@ pub enum BinaryOperator {
     Or,
     Dot,
     As,
+    LeftShift,
+    RightShift,
+    BitwiseAnd,
+    BitwiseOr,
+    BitwiseXor,
 }
 
 impl fmt::Display for BinaryOperator {
@@ -40,6 +45,11 @@ impl fmt::Display for BinaryOperator {
             BinaryOperator::Or => write!(fmt, "||"),
             BinaryOperator::Dot => write!(fmt, "."),
             BinaryOperator::As => write!(fmt, "as"),
+            BinaryOperator::LeftShift => write!(fmt, "<<"),
+            BinaryOperator::RightShift => write!(fmt, ">>"),
+            BinaryOperator::BitwiseAnd => write!(fmt, "&"),
+            BinaryOperator::BitwiseOr => write!(fmt, "|"),
+            BinaryOperator::BitwiseXor => write!(fmt, "^"),
         }
     }
 }
@@ -50,6 +60,10 @@ impl BinaryOperator {
             BinaryOperator::Dot | BinaryOperator::As => TOP_PRECEDENCE,
             BinaryOperator::Mul | BinaryOperator::Div | BinaryOperator::Mod => TOP_PRECEDENCE - 100,
             BinaryOperator::Add | BinaryOperator::Sub => TOP_PRECEDENCE - 200,
+            BinaryOperator::LeftShift | BinaryOperator::RightShift => TOP_PRECEDENCE - 210,
+            BinaryOperator::BitwiseAnd => TOP_PRECEDENCE - 220,
+            BinaryOperator::BitwiseXor => TOP_PRECEDENCE - 230,
+            BinaryOperator::BitwiseOr => TOP_PRECEDENCE - 240,
             BinaryOperator::LessThan
             | BinaryOperator::GreaterThan
             | BinaryOperator::LessThanEquals
@@ -65,6 +79,7 @@ impl BinaryOperator {
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 pub enum UnaryOperator {
     Not,
+    BitwiseNot,
     Sub,
     TryResult,
     TryOptional,
@@ -74,6 +89,7 @@ impl fmt::Display for UnaryOperator {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
             UnaryOperator::Not => write!(fmt, "!"),
+            UnaryOperator::BitwiseNot => write!(fmt, "~"),
             UnaryOperator::Sub => write!(fmt, "-"),
             UnaryOperator::TryResult => write!(fmt, "!"),
             UnaryOperator::TryOptional => write!(fmt, "?"),

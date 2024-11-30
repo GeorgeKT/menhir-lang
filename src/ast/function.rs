@@ -156,21 +156,71 @@ pub fn sig(name: &str, ret: Type, args: Vec<Argument>, span: Span) -> FunctionSi
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct ExternalFunction {
-    pub sig: FunctionSignature,
-    pub span: Span,
+pub enum External {
+    Function {
+        sig: FunctionSignature,
+        span: Span,
+    },
+    Variable {
+        name: String,
+        span: Span,
+        typ: Type,
+        mutable: bool,
+        thread_local: bool,
+    },
 }
 
-impl ExternalFunction {
-    pub fn new(sig: FunctionSignature, span: Span) -> ExternalFunction {
-        ExternalFunction { sig, span }
+impl External {
+    pub fn name(&self) -> &str {
+        match self {
+            External::Function { sig, .. } => &sig.name,
+            External::Variable { name, .. } => name,
+        }
+    }
+
+    pub fn span(&self) -> &Span {
+        match self {
+            External::Function { span, .. } => span,
+            External::Variable { span, .. } => span,
+        }
+    }
+
+    pub fn get_type(&self) -> Type {
+        match self {
+            External::Function { sig, .. } => sig.typ.clone(),
+            External::Variable { typ, .. } => typ.clone(),
+        }
+    }
+
+    pub fn mutable(&self) -> bool {
+        match self {
+            External::Variable { mutable, .. } => *mutable,
+            External::Function { .. } => false,
+        }
     }
 }
 
-impl TreePrinter for ExternalFunction {
+impl TreePrinter for External {
     fn print(&self, level: usize) {
         let p = prefix(level);
-        println!("{}external function {} (span: {})", p, self.sig.name, self.span);
-        self.sig.print(level + 1);
+        match self {
+            External::Function { sig, span } => {
+                println!("{}external function {} (span: {})", p, sig.name, span);
+                sig.print(level + 1);
+            }
+            External::Variable {
+                name,
+                span,
+                typ,
+                mutable,
+                thread_local,
+            } => {
+                println!(
+                    "{p}external {} {} {name}: {typ} (span: {span})",
+                    if *thread_local { "thread_local" } else { "" },
+                    if *mutable { "var" } else { "let" }
+                );
+            }
+        }
     }
 }

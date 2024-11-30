@@ -9,7 +9,7 @@ use super::operand::{call_arg, ByteCodeProperty, CallArg, Operand};
 use super::patterns::{pattern_to_bc, RESULT_OK_PATTERN_MATCH_IDX};
 use super::scope::Scope;
 use super::stack::Stack;
-use super::{ByteCodeModule, OPTIONAL_DATA_IDX};
+use super::{ByteCodeModule, Global, OPTIONAL_DATA_IDX};
 use crate::ast::*;
 use crate::build::Package;
 use crate::compileerror::{code_gen_error, code_gen_result, type_error_result, CompileError, CompileResult};
@@ -890,8 +890,8 @@ fn address_of_to_bc(
             idx,
             typ: ptr_type(typ),
         },
-        Operand::VarPtr { .. } | Operand::Var { .. } => inner,
-        _ => Operand::AddressOf { obj: Box::new(inner) },
+        Operand::VarPtr { .. } => inner,
+        Operand::Var { .. } | _ => Operand::AddressOf { obj: Box::new(inner) },
     })
 }
 
@@ -1068,6 +1068,7 @@ pub fn expr_to_bc(
         Expression::Return(r) => return_to_bc(bc_mod, scope, r, target),
         Expression::Void => Ok(Operand::Void),
         Expression::Range(r) => range_to_bc(bc_mod, scope, r, None, target),
+        Expression::Enclosed(e) => expr_to_bc(bc_mod, scope, e, target),
     }
 }
 
@@ -1130,19 +1131,42 @@ pub fn compile_to_byte_code(pkg: &Package, target: &Target) -> CompileResult<Byt
         globals: BTreeMap::new(),
         imported_functions: Vec::new(),
         stack: Stack::new(),
+        external_vars: BTreeMap::new(),
     };
 
     for md in pkg.modules.values() {
-        for func in md.externals.values() {
-            ll_mod.functions.insert(
-                func.sig.name.clone(),
-                ByteCodeFunction::new(&func.sig, true, ll_mod.stack.clone()),
-            );
-        }
+        for ext in md.externals.values() {
+            match ext {
+                External::Function { sig, .. } => {
+                    ll_mod
+                        .functions
+                        .insert(sig.name.clone(), ByteCodeFunction::new(sig, true, ll_mod.stack.clone()));
+                }
 
+                External::Variable { name, typ, .. } => {
+                    ll_mod.external_vars.insert(name.clone(), ext.clone());
+                    ll_mod.stack.borrow_mut().add(
+                        name,
+                        Operand::Var {
+                            name: name.clone(),
+                            typ: typ.clone(),
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    for md in pkg.modules.values() {
         for global in md.globals.values() {
             if let Some(cst) = expr_to_const(&global.init) {
-                ll_mod.globals.insert(global.name.clone(), cst);
+                ll_mod.globals.insert(
+                    global.name.clone(),
+                    Global {
+                        value: cst,
+                        thread_local: global.thread_local,
+                    },
+                );
                 ll_mod.stack.borrow_mut().add(
                     &global.name,
                     Operand::VarPtr {

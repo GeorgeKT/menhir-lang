@@ -49,6 +49,7 @@ pub struct Return {
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub enum Expression {
     Literal(Literal),
+    Enclosed(Box<Expression>),
     UnaryOp(Box<UnaryOp>),
     BinaryOp(Box<BinaryOp>),
     Block(Box<Block>),
@@ -195,6 +196,7 @@ impl Expression {
             Expression::ToOkResult(r) => r.inner.span(),
             Expression::ToErrResult(r) => r.inner.span(),
             Expression::Range(r) => r.span.clone(),
+            Expression::Enclosed(e) => e.span(),
         }
     }
 
@@ -233,6 +235,7 @@ impl Expression {
             Expression::ToOkResult(r) => r.result_type.clone(),
             Expression::ToErrResult(r) => r.result_type.clone(),
             Expression::Range(r) => r.typ.clone(),
+            Expression::Enclosed(e) => e.get_type(),
         }
     }
 
@@ -388,6 +391,7 @@ impl Expression {
                 }
                 Ok(())
             }
+            Expression::Enclosed(e) => e.visit_mut(op),
         }
     }
 
@@ -544,6 +548,7 @@ impl Expression {
                 }
                 Ok(())
             }
+            Expression::Enclosed(e) => e.visit(op),
         }
     }
 }
@@ -636,6 +641,7 @@ impl TreePrinter for Expression {
                     println!("{} no end", p);
                 }
             }
+            Expression::Enclosed(e) => e.print(level),
         }
     }
 }

@@ -157,6 +157,27 @@ fn type_check_unary_op(ctx: &mut TypeCheckerContext, u: &mut UnaryOp, target: &T
             valid(Type::Bool)
         }
 
+        UnaryOperator::BitwiseNot => {
+            let e_type = type_check_expression(ctx, &mut u.expression, None, target)?;
+            if e_type.is_generic() {
+                u.typ = e_type.clone();
+                return valid(e_type);
+            }
+
+            if !e_type.can_do_bitwise_ops() {
+                type_error_result(
+                    &u.span,
+                    format!(
+                        "Unary operator {} expects an integer, bool, char or float type",
+                        u.operator
+                    ),
+                )
+            } else {
+                u.typ = e_type.clone();
+                valid(e_type)
+            }
+        }
+
         UnaryOperator::TryResult => {
             let e_type = type_check_expression(ctx, &mut u.expression, None, target)?;
             if let Type::Result(_rt) = e_type {
@@ -284,6 +305,39 @@ fn type_check_binary_op(ctx: &mut TypeCheckerContext, b: &mut BinaryOp, target: 
                 valid(Type::Bool)
             }
         }
+
+        BinaryOperator::LeftShift | BinaryOperator::RightShift => {
+            if !left_type.can_do_bitwise_ops() {
+                type_error_result(
+                    &b.left.span(),
+                    format!("Bitshift operators are not allowed on type {}", left_type),
+                )
+            } else if !right_type.is_integer() {
+                type_error_result(&b.right.span(), "The amount of bits to shift must be an integer type")
+            } else {
+                b.typ = left_type;
+                valid(b.typ.clone())
+            }
+        }
+
+        BinaryOperator::BitwiseOr | BinaryOperator::BitwiseAnd | BinaryOperator::BitwiseXor => {
+            if !left_type.can_do_bitwise_ops() {
+                type_error_result(
+                    &b.left.span(),
+                    format!("Bitwise operators are not supported on {left_type}"),
+                )
+            } else if !right_type.can_do_bitwise_ops() {
+                type_error_result(
+                    &b.right.span(),
+                    format!("Bitwise operators are not support on {right_type}"),
+                )
+            } else {
+                basic_bin_op_checks(ctx, b, left_type, right_type, target)?;
+                b.typ = b.left.get_type();
+                valid(b.typ.clone())
+            }
+        }
+
         BinaryOperator::Equals | BinaryOperator::NotEquals => {
             if left_type.is_optional_of(&Type::Unknown) && right_type.is_optional_of(&Type::Unknown) {
                 return if b.operator == BinaryOperator::Equals {
@@ -1412,6 +1466,8 @@ fn type_check_cast(ctx: &mut TypeCheckerContext, c: &mut TypeCast, target: &Targ
         (Type::Int(_), &Type::UInt(_))
         | (Type::Int(_), &Type::Float(_))
         | (Type::UInt(_), &Type::Int(_))
+        | (Type::UInt(_), &Type::UInt(_))
+        | (Type::Int(_), &Type::Int(_))
         | (Type::UInt(_), &Type::Float(_))
         | (Type::Float(_), &Type::Int(_))
         | (Type::Float(_), &Type::UInt(_)) => valid(c.destination_type.clone()),
@@ -1419,6 +1475,9 @@ fn type_check_cast(ctx: &mut TypeCheckerContext, c: &mut TypeCast, target: &Targ
         (Type::Pointer(from), &Type::Pointer(_)) if *from.deref() == Type::Void => valid(c.destination_type.clone()),
         (Type::Pointer(_), &Type::Bool) => valid(Type::Bool),
         (Type::Array(at), Type::Pointer(to)) if at.element_type == *to.deref() => valid(c.destination_type.clone()),
+        (Type::Char, Type::UInt(IntSize::I32)) | (Type::UInt(IntSize::I32), Type::Char) => {
+            valid(c.destination_type.clone())
+        }
         (inner_type, _) => type_error_result(
             &c.span,
             format!(
@@ -1779,6 +1838,10 @@ pub fn type_check_expression(
         Expression::ToOkResult(e) => type_check_to_ok_result(ctx, e, type_hint, target),
         Expression::ToErrResult(e) => type_check_to_err_result(ctx, e, type_hint, target),
         Expression::Range(r) => type_check_range(ctx, r, target),
+        Expression::Enclosed(e) => {
+            let typ = type_check_expression(ctx, e, type_hint, target)?;
+            valid(typ)
+        }
     };
 
     match type_check_result {

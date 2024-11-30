@@ -11,7 +11,7 @@ debug = true
 clap = { version = "4.2", features = ["derive"]}
 itertools = "0.10.5"
 uuid = { version = "0.2", features = ["v4"] }
-llvm-sys = "150"
+llvm-sys = {version = "150", features = ["prefer-static"]}
 libc = "*"
 toml = "0.7.3"
 serde_derive = "1.0"
@@ -21,3 +21,4 @@ either = "1.0"
 sha256 = {version = "1.4", default-features = false}
 console = "0.15.7"
 pretty_assertions = "1.4.0"
+litrs = "0.4"

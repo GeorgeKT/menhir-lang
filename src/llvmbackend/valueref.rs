@@ -7,11 +7,13 @@ use llvm_sys::LLVMLinkage;
 use llvm_sys::LLVMTypeKind;
 
 use super::context::Context;
+use super::operand::native_const_uint;
 use super::operand::{const_bool, const_char, const_float, const_int, const_uint, copy};
 use crate::ast::*;
 use crate::compileerror::{code_gen_error, code_gen_result, CompileResult};
 use crate::lazycode::OPTIONAL_DATA_IDX;
 use crate::lazycode::{ByteCodeProperty, Constant};
+use crate::llvmbackend::instructions::type_name;
 //use crate::llvmbackend::instructions::type_name;
 
 #[derive(Debug, Clone)]
@@ -72,7 +74,7 @@ impl ValueRef {
 
     pub fn const_uint(ctx: &Context, value: u64) -> ValueRef {
         ValueRef::new(
-            unsafe { const_uint(ctx, value) },
+            unsafe { native_const_uint(ctx, value) },
             ctx.target_machine.target.native_uint_type.clone(),
         )
     }
@@ -80,8 +82,8 @@ impl ValueRef {
     pub unsafe fn from_const(ctx: &Context, cst: &Constant) -> CompileResult<ValueRef> {
         match cst {
             Constant::String(s) => ValueRef::const_string(ctx, s),
-            Constant::Int(v, int_size) => Ok(ValueRef::new(const_int(ctx, *v), Type::Int(*int_size))),
-            Constant::UInt(v, int_size) => Ok(ValueRef::new(const_uint(ctx, *v), Type::UInt(*int_size))),
+            Constant::Int(v, int_size) => Ok(ValueRef::new(const_int(ctx, *v, *int_size), Type::Int(*int_size))),
+            Constant::UInt(v, int_size) => Ok(ValueRef::new(const_uint(ctx, *v, *int_size), Type::UInt(*int_size))),
             Constant::Float(v, float_size) => Ok(ValueRef::new(const_float(ctx, *v), Type::Float(*float_size))),
             Constant::Char(v) => Ok(ValueRef::new(const_char(ctx, *v), Type::Char)),
             Constant::Bool(v) => Ok(ValueRef::new(const_bool(ctx, *v), Type::Bool)),
@@ -100,7 +102,7 @@ impl ValueRef {
                 let str_data = ValueRef::const_string_data(ctx, s)?;
                 let mut data = [
                     LLVMConstPointerCast(str_data, LLVMPointerType(char_type, 0)),
-                    const_uint(ctx, s.len() as u64),
+                    native_const_uint(ctx, s.len() as u64),
                 ];
                 let cs = LLVMConstStructInContext(ctx.context, data.as_mut_ptr(), 2, 0);
                 Ok(ValueRef::new(cs, Type::String))
@@ -143,7 +145,11 @@ impl ValueRef {
         );
 
         let string_len_ptr = dst.slice_len_ptr(ctx)?;
-        LLVMBuildStore(ctx.builder, const_uint(ctx, s.len() as u64), string_len_ptr.value);
+        LLVMBuildStore(
+            ctx.builder,
+            native_const_uint(ctx, s.len() as u64),
+            string_len_ptr.value,
+        );
         Ok(dst)
     }
 
@@ -208,7 +214,7 @@ impl ValueRef {
                         copy(ctx, dst_data_ptr, src_data_ptr, ctx.resolve_type(inner)?)
                     }
                 } else {
-                    LLVMBuildStore(ctx.builder, const_uint(ctx, 0), dst_opt_flag_ptr);
+                    LLVMBuildStore(ctx.builder, native_const_uint(ctx, 0), dst_opt_flag_ptr);
                     if inner.pass_by_value() {
                         LLVMBuildStore(ctx.builder, val.load(ctx)?.value, dst_data_ptr);
                         Ok(())
@@ -303,6 +309,11 @@ impl ValueRef {
         }
     }
 
+    #[allow(dead_code)]
+    pub fn type_name(&self) -> String {
+        unsafe { type_name(LLVMTypeOf(self.value)) }
+    }
+
     pub fn address_of(&self) -> CompileResult<ValueRef> {
         match self.typ {
             Type::Array(_)
@@ -313,6 +324,11 @@ impl ValueRef {
             | Type::Optional(_)
             | Type::Pointer(_)
             | Type::String => Ok(self.clone()),
+
+            Type::Int(_) | Type::UInt(_) | Type::Char | Type::Bool | Type::Float(_) => unsafe {
+                println!("Type: {}", type_name(LLVMTypeOf(self.value)));
+                code_gen_result(format!("Address of not allowed on value of type {}", self.typ))
+            },
 
             _ => code_gen_result(format!("Address of not allowed on value of type {}", self.typ)),
         }
@@ -466,7 +482,7 @@ impl ValueRef {
         let native_uint_type = ctx.target_machine.target.native_uint_type.clone();
         Ok(match (element_type, prop) {
             (Type::Array(a), ByteCodeProperty::Len) => unsafe {
-                ValueRef::new(const_uint(ctx, a.len as u64), native_uint_type)
+                ValueRef::new(native_const_uint(ctx, a.len as u64), native_uint_type)
             },
 
             (Type::Slice(_), ByteCodeProperty::Len) | (Type::String, ByteCodeProperty::Len) => unsafe {
@@ -539,21 +555,21 @@ impl ValueRef {
                 let self_type = ctx.resolve_type(element_type)?;
                 let sti_ptr =
                     LLVMBuildStructGEP2(ctx.builder, self_type, self.value, SUM_TYPE_TAG_IDX, cstr!("sti_ptr"));
-                LLVMBuildStore(ctx.builder, const_uint(ctx, value as u64), sti_ptr);
+                LLVMBuildStore(ctx.builder, native_const_uint(ctx, value as u64), sti_ptr);
                 Ok(())
             },
             (Type::Result(_), ByteCodeProperty::SumTypeIndex) => unsafe {
                 let self_type = ctx.resolve_type(element_type)?;
                 let rti_ptr =
                     LLVMBuildStructGEP2(ctx.builder, self_type, self.value, SUM_TYPE_TAG_IDX, cstr!("rti_ptr"));
-                LLVMBuildStore(ctx.builder, const_uint(ctx, value as u64), rti_ptr);
+                LLVMBuildStore(ctx.builder, native_const_uint(ctx, value as u64), rti_ptr);
                 Ok(())
             },
             (Type::Optional(_), ByteCodeProperty::SumTypeIndex) => unsafe {
                 let self_type = ctx.resolve_type(element_type)?;
                 let sti_ptr =
                     LLVMBuildStructGEP2(ctx.builder, self_type, self.value, SUM_TYPE_TAG_IDX, cstr!("rti_ptr"));
-                LLVMBuildStore(ctx.builder, const_uint(ctx, value as u64), sti_ptr);
+                LLVMBuildStore(ctx.builder, native_const_uint(ctx, value as u64), sti_ptr);
                 Ok(())
             },
             _ => code_gen_result("Set property not allowed"),

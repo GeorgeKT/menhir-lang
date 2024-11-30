@@ -5,6 +5,8 @@ mod tokens;
 #[cfg(test)]
 mod tests;
 
+use litrs::{FloatLit, IntegerLit};
+
 #[cfg(test)]
 pub use self::tests::{th_expr, th_mod};
 
@@ -54,13 +56,9 @@ fn number_to_literal(
     let mut selected_int_size = IntSize::I8;
     for int_size in &int_sizes {
         let lim = if force_unsigned {
-            if int_size.size_in_bits() == 64 {
-                u64::MAX
-            } else {
-                2u64.pow(int_size.size_in_bits()) - 1
-            }
+            int_size.max_unsigned()
         } else {
-            2u64.pow(int_size.size_in_bits() - 1) - 1
+            int_size.max_signed() as u64
         };
 
         if number <= lim {
@@ -82,7 +80,7 @@ fn number_to_literal(
 
 fn parse_number(tq: &mut TokenQueue, num: &str, span: &Span, target: &Target) -> CompileResult<Literal> {
     if num.find('.').is_some() || num.find('e').is_some() {
-        match num.parse::<f64>() {
+        match FloatLit::parse(num) {
             Ok(_) => Ok(Literal::Float(span.clone(), num.into(), FloatSize::F64)),
             Err(_) => parse_error_result(span, format!("{} is not a valid floating point number", num)),
         }
@@ -95,9 +93,15 @@ fn parse_number(tq: &mut TokenQueue, num: &str, span: &Span, target: &Target) ->
         };
 
         // Should be an integer
-        match num.parse::<u64>() {
-            Ok(i) => number_to_literal(i, force_unsigned, span, target.int_size),
-            Err(_) => parse_error_result(span, format!("{} is not a valid integer", num)),
+        match IntegerLit::parse(num) {
+            Ok(i) => {
+                if let Some(v) = i.value() {
+                    number_to_literal(v, force_unsigned, span, target.int_size)
+                } else {
+                    parse_error_result(span, format!("{num} overflows a u64"))
+                }
+            }
+            Err(_) => parse_error_result(span, format!("{num} is not a valid integer")),
         }
     }
 }
@@ -500,12 +504,12 @@ fn parse_external_function(
     span: &Span,
     indent_level: usize,
     target: &Target,
-) -> CompileResult<ExternalFunction> {
+) -> CompileResult<External> {
     tq.expect(&TokenKind::Func)?;
-    Ok(ExternalFunction::new(
-        parse_function_signature(tq, &Type::Unknown, indent_level, target)?,
-        span.expanded(tq.pos()),
-    ))
+    Ok(External::Function {
+        sig: parse_function_signature(tq, &Type::Unknown, indent_level, target)?,
+        span: span.expanded(tq.pos()),
+    })
 }
 
 fn parse_function_declaration(
@@ -600,9 +604,9 @@ pub fn parse_pattern(tq: &mut TokenQueue, indent_level: usize, target: &Target) 
             if tq.is_next(&TokenKind::CloseBracket) {
                 tq.pop()?;
                 Ok(empty_array_pattern(tok.span.expanded(tq.pos())))
-            } else if tq.is_next_at(1, &TokenKind::Pipe) {
+            } else if tq.is_next_at(1, &TokenKind::BinaryOperator(BinaryOperator::BitwiseOr)) {
                 let (head, _head_span) = tq.expect_identifier()?;
-                tq.expect(&TokenKind::Pipe)?;
+                tq.expect(&TokenKind::BinaryOperator(BinaryOperator::BitwiseOr))?;
                 let (tail, _) = tq.expect_identifier()?;
                 tq.expect(&TokenKind::CloseBracket)?;
                 Ok(array_pattern(&head, &tail, tok.span.expanded(tq.pos())))
@@ -1143,7 +1147,7 @@ fn parse_expression_start(
         TokenKind::OpenParen => {
             let inner = parse_block(tq, &tok.span, indent_level, target)?;
             tq.expect(&TokenKind::CloseParen)?;
-            inner
+            Expression::Enclosed(Box::new(inner))
         }
 
         TokenKind::OpenCurly => {
@@ -1184,7 +1188,7 @@ fn parse_expression_start(
             parse_unary_expression(tq, UnaryOperator::Sub, &tok.span, indent_level, target)?
         }
 
-        TokenKind::Ampersand => {
+        TokenKind::BinaryOperator(BinaryOperator::BitwiseAnd) => {
             let inner = parse_expression(tq, indent_level, target)?;
             address_of(inner, tok.span.expanded(tq.pos()))
         }
@@ -1278,6 +1282,7 @@ fn parse_global_bindings(
     module: &mut Module,
     tq: &mut TokenQueue,
     mutable: bool,
+    thread_local: bool,
     indent_level: usize,
     namespace: &str,
     target: &Target,
@@ -1296,7 +1301,7 @@ fn parse_global_bindings(
         let full_name = namespaced(namespace, &name);
         module.globals.insert(
             full_name.clone(),
-            global_binding(full_name, init, mutable, typ, span.expanded(tq.pos())),
+            global_binding(full_name, init, mutable, thread_local, typ, span.expanded(tq.pos())),
         );
         eat_comma(tq)?;
     }
@@ -1365,6 +1370,66 @@ fn add_function(module: &mut Module, func: Function) -> CompileResult<()> {
     Ok(())
 }
 
+fn parse_external_var(
+    tq: &mut TokenQueue,
+    module: &mut Module,
+    indent_level: &mut usize,
+    target: &Target,
+    start: &Span,
+    thread_local: bool,
+) -> CompileResult<()> {
+    let mutable = tq.pop()?.kind == TokenKind::Var;
+    let (name, span) = tq.expect_identifier()?;
+    if module.externals.contains_key(&name) {
+        return parse_error_result(&span, format!("External {} redefined", name));
+    }
+
+    tq.expect(&TokenKind::Colon)?;
+    let (typ, typ_span) = parse_type(tq, *indent_level, target)?;
+    let span = start.expanded(typ_span.end());
+    module.externals.insert(
+        name.clone(),
+        External::Variable {
+            name,
+            span,
+            typ,
+            mutable,
+            thread_local,
+        },
+    );
+    Ok(())
+}
+
+fn parse_extern(
+    tq: &mut TokenQueue,
+    module: &mut Module,
+    indent_level: &mut usize,
+    target: &Target,
+    start: &Span,
+) -> CompileResult<()> {
+    if tq.is_next(&TokenKind::Func) {
+        let ext_func = parse_external_function(tq, start, *indent_level, target)?;
+        if module.externals.contains_key(ext_func.name()) {
+            return parse_error_result(ext_func.span(), format!("External {} redefined", ext_func.name()));
+        }
+        module
+            .externals
+            .insert(ext_func.name().to_owned(), ext_func);
+        Ok(())
+    } else if tq.is_next(&TokenKind::Let) || tq.is_next(&TokenKind::Var) {
+        parse_external_var(tq, module, indent_level, target, start, false)
+    } else if tq.is_next(&TokenKind::ThreadLocal) {
+        tq.pop()?;
+        parse_external_var(tq, module, indent_level, target, start, true)
+    } else {
+        let tok = tq.pop()?;
+        return parse_error_result(
+            &tok.span,
+            format!("Expecting fn, let or var after extern got {}", tok.kind),
+        );
+    }
+}
+
 fn parse_top_level(
     tq: &mut TokenQueue,
     module: &mut Module,
@@ -1382,12 +1447,28 @@ fn parse_top_level(
             parse_interface(module, tq, namespace, &tok.span, *indent_level, target)?;
         }
 
+        TokenKind::ThreadLocal => {
+            let mode = tq.pop()?;
+            match mode.kind {
+                TokenKind::Let => {
+                    parse_global_bindings(module, tq, false, true, *indent_level, namespace, target)?;
+                }
+
+                TokenKind::Var => {
+                    parse_global_bindings(module, tq, true, true, *indent_level, namespace, target)?;
+                }
+                _ => {
+                    return parse_error_result(&mode.span, format!("Expected let or var found token {}", mode));
+                }
+            }
+        }
+
         TokenKind::Let => {
-            parse_global_bindings(module, tq, false, *indent_level, namespace, target)?;
+            parse_global_bindings(module, tq, false, false, *indent_level, namespace, target)?;
         }
 
         TokenKind::Var => {
-            parse_global_bindings(module, tq, true, *indent_level, namespace, target)?;
+            parse_global_bindings(module, tq, true, false, *indent_level, namespace, target)?;
         }
 
         TokenKind::Struct => {
@@ -1415,16 +1496,7 @@ fn parse_top_level(
             panic!("NYI");
         }
 
-        TokenKind::Extern => {
-            let ext_func = parse_external_function(tq, &tok.span, *indent_level, target)?;
-            if module.externals.contains_key(&ext_func.sig.name) {
-                return parse_error_result(
-                    &ext_func.span,
-                    format!("External function {} redefined", ext_func.sig.name),
-                );
-            }
-            module.externals.insert(ext_func.sig.name.clone(), ext_func);
-        }
+        TokenKind::Extern => parse_extern(tq, module, indent_level, target, &tok.span)?,
 
         TokenKind::Import => loop {
             let import = parse_import_name(tq)?;

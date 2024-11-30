@@ -4,10 +4,10 @@ use crate::span::Span;
 use crate::target::Target;
 use itertools::free::join;
 use serde_derive::{Deserialize, Serialize};
-use std::fmt;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::Deref;
 use std::rc::Rc;
+use std::{fmt, i64};
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash, Serialize, Deserialize)]
 pub struct SumTypeCase {
@@ -142,6 +142,33 @@ impl IntSize {
             IntSize::I16 => 16,
             IntSize::I32 => 32,
             IntSize::I64 => 64,
+        }
+    }
+
+    pub fn min_signed(&self) -> i64 {
+        match *self {
+            IntSize::I8 => i8::min_value() as i64,
+            IntSize::I16 => i16::min_value() as i64,
+            IntSize::I32 => i32::min_value() as i64,
+            IntSize::I64 => i64::min_value() as i64,
+        }
+    }
+
+    pub fn max_signed(&self) -> i64 {
+        match *self {
+            IntSize::I8 => i8::max_value() as i64,
+            IntSize::I16 => i16::max_value() as i64,
+            IntSize::I32 => i32::max_value() as i64,
+            IntSize::I64 => i64::max_value() as i64,
+        }
+    }
+
+    pub fn max_unsigned(&self) -> u64 {
+        match *self {
+            IntSize::I8 => u8::max_value() as u64,
+            IntSize::I16 => u16::max_value() as u64,
+            IntSize::I32 => u32::max_value() as u64,
+            IntSize::I64 => u64::max_value() as u64,
         }
     }
 }
@@ -344,6 +371,12 @@ impl Type {
             BinaryOperator::LessThanEquals,
         ];
 
+        const BITWISE_OPERATORS: [BinaryOperator; 3] = [
+            BinaryOperator::BitwiseOr,
+            BinaryOperator::BitwiseAnd,
+            BinaryOperator::BitwiseXor,
+        ];
+
         const COMPARISON_OPERATORS: [BinaryOperator; 6] = [
             BinaryOperator::Equals,
             BinaryOperator::NotEquals,
@@ -354,10 +387,17 @@ impl Type {
         ];
 
         match *self {
-            Type::Int(_) | Type::UInt(_) => op == BinaryOperator::Mod || GENERAL_NUMERIC_OPERATORS.contains(&op),
-            Type::Float(_) => GENERAL_NUMERIC_OPERATORS.contains(&op),
-            Type::Char => COMPARISON_OPERATORS.contains(&op),
-            Type::Bool => COMPARISON_OPERATORS.contains(&op) || op == BinaryOperator::And || op == BinaryOperator::Or,
+            Type::Int(_) | Type::UInt(_) => {
+                op == BinaryOperator::Mod || GENERAL_NUMERIC_OPERATORS.contains(&op) || BITWISE_OPERATORS.contains(&op)
+            }
+            Type::Float(_) => GENERAL_NUMERIC_OPERATORS.contains(&op) || BITWISE_OPERATORS.contains(&op),
+            Type::Char => COMPARISON_OPERATORS.contains(&op) || BITWISE_OPERATORS.contains(&op),
+            Type::Bool => {
+                COMPARISON_OPERATORS.contains(&op)
+                    || op == BinaryOperator::And
+                    || op == BinaryOperator::Or
+                    || BITWISE_OPERATORS.contains(&op)
+            }
             Type::String | Type::Pointer(_) | Type::Optional(_) => {
                 op == BinaryOperator::Equals || op == BinaryOperator::NotEquals
             }
@@ -386,6 +426,17 @@ impl Type {
 
     pub fn is_numeric(&self) -> bool {
         matches!(*self, Type::Int(_) | Type::UInt(_) | Type::Float(_))
+    }
+
+    pub fn is_integer(&self) -> bool {
+        matches!(*self, Type::Int(_) | Type::UInt(_))
+    }
+
+    pub fn can_do_bitwise_ops(&self) -> bool {
+        matches!(
+            *self,
+            Type::Int(_) | Type::UInt(_) | Type::Bool | Type::Char | Type::Float(_)
+        )
     }
 
     pub fn is_unknown(&self) -> bool {

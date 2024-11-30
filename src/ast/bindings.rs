@@ -30,6 +30,7 @@ impl Binding {
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct GlobalBinding {
     pub mutable: bool,
+    pub thread_local: bool,
     pub name: String,
     pub init: Expression,
     pub typ: Type,
@@ -70,9 +71,17 @@ pub fn binding(bt: BindingType, init: Expression, mutable: bool, typ: Type, span
     }
 }
 
-pub fn global_binding(name: String, init: Expression, mutable: bool, typ: Type, span: Span) -> GlobalBinding {
+pub fn global_binding(
+    name: String,
+    init: Expression,
+    mutable: bool,
+    thread_local: bool,
+    typ: Type,
+    span: Span,
+) -> GlobalBinding {
     GlobalBinding {
         mutable,
+        thread_local,
         name,
         init,
         typ,
