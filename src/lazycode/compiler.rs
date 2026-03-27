@@ -621,9 +621,9 @@ fn if_to_bc(
     if_expr: &IfExpression,
     target: &Target,
 ) -> CompileResult<Operand> {
-    let dst = scope.declare("$dst", None, if_expr.typ.clone())?;
     let true_bb = scope.label();
     let end_bb = scope.label();
+    let dst = scope.declare(&format!("$dst{}", true_bb.id), None, if_expr.typ.clone())?;
 
     let cond = expr_to_bc(bc_mod, scope, &if_expr.condition, target)?;
 

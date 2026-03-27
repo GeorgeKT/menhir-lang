@@ -637,7 +637,9 @@ pub unsafe fn gen_adddress_of(ctx: &mut Context, inner: &Operand) -> CompileResu
             let vr = ctx
                 .get_variable(name)
                 .ok_or_else(|| code_gen_error("Unknown variable {name}"))?;
-            if typ.is_pointer() {
+            if typ.is_pointer() || vr.value.typ.is_pointer() {
+                // The variable is already stored as a pointer (either it's a pointer type,
+                // or it's a non-pass-by-value parameter stored by reference in LLVM)
                 Ok(vr.value.clone())
             } else {
                 // We have a value instead of a pointer, so we need to store the value before we

@@ -1846,7 +1846,7 @@ pub fn type_check_expression(
 
     match type_check_result {
         Ok(TypeCheckAction::Valid(typ)) => {
-            if !typ.is_valid() {
+            if typ != Type::Unknown && !typ.is_valid() {
                 return type_error_result(
                     &e.span(),
                     format!("The type {} is not a valid type for this expression", typ),
